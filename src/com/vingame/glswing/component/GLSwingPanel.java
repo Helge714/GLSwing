@@ -14,7 +14,6 @@ import com.jogamp.opengl.GLEventListener;
 import com.jogamp.opengl.GLProfile;
 import com.jogamp.opengl.awt.GLJPanel;
 import com.jogamp.opengl.util.FPSAnimator;
-import com.jogamp.opengl.util.glsl.ShaderUtil;
 import com.vingame.glswing.rendering.batch.BatchManager;
 import com.vingame.glswing.rendering.context.GLContext;
 import com.vingame.glswing.rendering.context.GLProgram;

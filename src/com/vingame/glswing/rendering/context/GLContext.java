@@ -3,6 +3,7 @@ package com.vingame.glswing.rendering.context;
 import java.awt.Color;
 
 import com.jogamp.opengl.GL2;
+import com.vingame.glswing.rendering.FBO;
 import com.vingame.glswing.rendering.batch.BatchManager;
 
 public class GLContext {
@@ -41,8 +42,8 @@ public class GLContext {
 	public void drawPolygon(float[] pts, boolean closed, int id) {
 		manager.drawLine(pts, closed, colorToRGBA(color), id);
 	}
-	
-	//TODO vertexColor
+
+	// TODO vertexColor
 
 	public void fillPolygon(float[] pts) {
 		fillPolygon(pts, 0);
@@ -65,13 +66,13 @@ public class GLContext {
 			manager.drawFilled(tri, col, id);
 		}
 	}
-	
+
 	public void fillPolygon(float[] pts, float[] vertexColors, int id) {
 		var triangles = PolygonTriangulator.triangulate(pts);
 		var colors = PolygonTriangulator.triangulateColors(pts, vertexColors);
 		for (int i = 0; i < triangles.size(); i++) {
-		    float[] triangle = triangles.get(i);
-		    float[] color    = colors.get(i);
+			float[] triangle = triangles.get(i);
+			float[] color = colors.get(i);
 			manager.drawFilled(triangle, color, id);
 		}
 	}
@@ -91,7 +92,7 @@ public class GLContext {
 	public void drawRect(float x, float y, float w, float h, Color c, int id) {
 		drawPolygon(new float[] { x, y, x + w, y, x + w, y + h, x, y + h }, true, c, id);
 	}
-	
+
 //	//TODO color as vertexColor;
 
 	public void fillRect(float x, float y, float w, float h) {
@@ -109,11 +110,11 @@ public class GLContext {
 	public void fillRect(float x, float y, float w, float h, Color c, int id) {
 		fillPolygon(new float[] { x, y, x + w, y, x + w, y + h, x, y + h }, c, id);
 	}
-	
+
 	public void fillRect(float x, float y, float w, float h, float[] c) {
 		fillPolygon(new float[] { x, y, x + w, y, x + w, y + h, x, y + h }, c, 0);
 	}
-	
+
 	public void fillRect(float x, float y, float w, float h, float[] c, int id) {
 		fillPolygon(new float[] { x, y, x + w, y, x + w, y + h, x, y + h }, c, id);
 	}
@@ -151,12 +152,12 @@ public class GLContext {
 		float[] col = color != null ? colorToRGBA(color) : defaultTextureColor;
 		manager.drawTexture(texture, geometry, col, ID);
 	}
-	
-	public void drawTexture(GLTexture texture, float x, float y, float [] vertexColor) {
+
+	public void drawTexture(GLTexture texture, float x, float y, float[] vertexColor) {
 		drawTexture(texture, x, y, texture.width, texture.height, vertexColor, 0);
 	}
-	
-	public void drawTexture(GLTexture texture, float x, float y, float [] vertexColor, int ID) {
+
+	public void drawTexture(GLTexture texture, float x, float y, float[] vertexColor, int ID) {
 		drawTexture(texture, x, y, texture.width, texture.height, vertexColor, ID);
 	}
 
@@ -166,6 +167,19 @@ public class GLContext {
 			throw new IllegalArgumentException("length " + vertexColor.length
 					+ " is not valid for colors (4 for whole vertex, 16 for individual vertex)");
 		manager.drawTexture(texture, geometry, vertexColor, ID);
+	}
+
+	public void drawFBO(FBO fbo) {
+		drawFBO(fbo, defaultTextureColor);
+	}
+
+	public void drawFBO(FBO fbo, float[] vertexColor) {
+		float[] geometry = { 0, fbo.height, fbo.width, fbo.height, fbo.width, 0, 0, 0 };
+		if (vertexColor.length != 4 && vertexColor.length != 16)
+			throw new IllegalArgumentException("length " + vertexColor.length
+					+ " is not valid for colors (4 for whole vertex, 16 for individual vertex)");
+		float[] uv = { 0, 0, 1, 0, 1, 1, 0, 1 };
+		manager.drawFBO(fbo, uv, geometry, vertexColor, 0);
 	}
 
 	private float[] colorToRGBA(Color c) {
@@ -182,7 +196,7 @@ public class GLContext {
 	public void setStroke(GLStroke stroke) {
 		manager.setStroke(stroke);
 	}
-	
+
 	public void getStroke() {
 		manager.getStroke();
 	}
@@ -259,7 +273,7 @@ public class GLContext {
 	public void setColorProgram(BatchManager.Type type, GLProgram program) {
 		manager.setColorProgram(type, program);
 	}
-	
+
 	public void setTextureProgramUniform(String uniformID, float... values) {
 		setColorUniform(BatchManager.Type.TEXTURE, uniformID, values);
 	}
@@ -279,7 +293,7 @@ public class GLContext {
 	public void clearStencil(boolean drawOutside) {
 		manager.clearStencil(drawOutside);
 	}
-	
+
 	public void setStencilMode(boolean drawOutside) {
 		manager.setStencilMode(drawOutside);
 	}
@@ -304,7 +318,23 @@ public class GLContext {
 	public void disableStencil() {
 		manager.setStencil(false);
 	}
-	
+
+	public FBO getFBO() {
+		return manager.getFBO();
+	}
+
+	public void enableFBO(FBO fbo) {
+		manager.setFBO(fbo);
+	}
+
+	public void disableFBO() {
+		manager.setFBO(null);
+	}
+
+	public void clearFBO(Color color) {
+		manager.clearFBO(colorToRGBA(color));
+	}
+
 	public void enableColorRendering() {
 		manager.setColorRendering(true);
 	};

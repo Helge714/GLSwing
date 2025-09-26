@@ -7,7 +7,8 @@ import java.util.Map;
 
 import com.jogamp.opengl.GL;
 import com.jogamp.opengl.GL2;
-import com.vingame.glswing.rendering.IDBuffer;
+import com.vingame.glswing.rendering.FBO;
+import com.vingame.glswing.rendering.IdFBO;
 import com.vingame.glswing.rendering.context.GLProgram;
 import com.vingame.glswing.rendering.context.GLProjection;
 import com.vingame.glswing.rendering.context.GLShaderUtil;
@@ -29,7 +30,9 @@ public class BatchManager {
 	private final TextureBatch textureBatch = new TextureBatch(this);
 	private final LineBatch lineBatch = new LineBatch(this);
 	private final FilledBatch filledBatch = new FilledBatch(this);
-	public final IDBuffer idBuffer = new IDBuffer();
+	public final IdFBO idBuffer = new IdFBO();
+
+	protected FBO currentFBO = null;
 
 	protected Map<BufferedImage, Integer> textureCache = new IdentityHashMap<>();
 	protected Map<GLProgram, Integer> programCache = new HashMap<>();
@@ -56,7 +59,7 @@ public class BatchManager {
 	public GL2 gl;
 
 	public void init(GL2 gl, int width, int height) {
-		idBuffer.init(gl, width, height);
+		idBuffer.init(gl, width, height, 8);
 
 		// init shaders
 		defaultTextureProgram = getOrUploadProgram(gl, GLProgram.createDefault("texture.vert", "texture.frag"));
@@ -115,8 +118,11 @@ public class BatchManager {
 	public void begin(GL2 gl) {
 		this.gl = gl;
 
+		// reset drawCalls
 		drawCalls = 0;
 
+		// reset current values, fbo, stroke, stencil ...
+		currentFBO = null;
 		projection = GLProjection.DEFAULT_PROJECTION;
 		colorRendering = true;
 		idRendering = false;
@@ -125,9 +131,11 @@ public class BatchManager {
 		setStencil(false);
 		setStencilDrawing(false);
 
+		// clearFBO
 		gl.glClearColor(1, 1, 1, 1);
 		gl.glClear(GL.GL_COLOR_BUFFER_BIT | GL.GL_DEPTH_BUFFER_BIT | GL.GL_STENCIL_BUFFER_BIT);
 
+		// clearIdFBO
 		idBuffer.bind(gl);
 		gl.glClearColor(0, 0, 0, 1);
 		gl.glClearStencil(1);
@@ -139,18 +147,28 @@ public class BatchManager {
 		textureBatch.begin(gl);
 		filledBatch.begin(gl);
 		lineBatch.begin(gl);
+
 	}
 
 	public void drawTexture(GLTexture texture, float[] geom, float[] cs, int ID) {
 		switchBatch(Type.TEXTURE);
 		int textureID = getOrUploadTexture(gl, texture.img);
+		drawTexture(textureID, texture.uv, geom, cs, ID);
+	}
+
+	public void drawTexture(int textureID, float[] uv, float[] geom, float[] cs, int ID) {
 		if (textureBatch.textureId != textureID) {
 			flush();
 			textureBatch.textureId = textureID;
 		}
 		if (!textureBatch.canAdd())
 			flush();
-		textureBatch.addQuad(geom, texture.uv, cs, ID);
+		textureBatch.addQuad(geom, uv, cs, ID);
+	}
+
+	public void drawFBO(FBO fbo, float[] uv, float[] geom, float[] cs, int ID) {
+		switchBatch(Type.TEXTURE);
+		drawTexture(fbo.getResolvedTexture(gl), uv, geom, cs, ID);
 	}
 
 	public void drawLine(float[] geom, boolean closed, float[] cs, int ID) {
@@ -279,6 +297,25 @@ public class BatchManager {
 		if (!this.projection.equals(projection))
 			flush();
 		this.projection = projection;
+	}
+
+	public void setFBO(FBO fbo) {
+		flush();
+		currentFBO = fbo;
+	}
+
+	public void clearFBO(float[] color) {
+		if (currentFBO == null)
+			return;
+		flush();
+		currentFBO.bind(gl);
+		gl.glClearColor(color[0], color[1], color[2], color[3]);
+		gl.glClear(GL.GL_COLOR_BUFFER_BIT | GL.GL_DEPTH_BUFFER_BIT | GL.GL_STENCIL_BUFFER_BIT);
+		currentFBO.unbind(gl);
+	}
+
+	public FBO getFBO() {
+		return currentFBO;
 	}
 
 	public void setColorRendering(boolean colorRendering) {

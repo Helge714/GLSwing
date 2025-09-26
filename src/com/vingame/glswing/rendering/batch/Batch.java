@@ -119,9 +119,13 @@ abstract class Batch {
 			boolean idRendering) {
 		int drawCalls = 0;
 		if (colorRendering && vertexCount > 0) {
+			if (manager.currentFBO != null)
+				manager.currentFBO.bind(gl);
 			setProgram(gl, ProgramType.COLOR);
 			drawCalls += flushMeshes(gl, projection, meshVbo, meshIbo);
 			setProgram(gl, null);
+			if (manager.currentFBO != null)
+				manager.currentFBO.unbind(gl);
 		}
 		if (idRendering && vertexCount > 0) {
 			manager.idBuffer.bind(gl);
