@@ -248,10 +248,14 @@ public class GLContext {
 		projection = projection.preTranslate(x, y);
 		manager.setProjection(projection);
 	}
+	
+	public void clearProjection() {
+		projection = GLProjection.DEFAULT_PROJECTION;
+	}
 
 	public void setProjection(GLProjection projection) {
-		projection = projection == null ? GLProjection.DEFAULT_PROJECTION : projection;
-		manager.setProjection(projection);
+		this.projection = projection == null ? GLProjection.DEFAULT_PROJECTION : projection;
+		manager.setProjection(this.projection);
 	}
 
 	public GLProjection getProjection() {
