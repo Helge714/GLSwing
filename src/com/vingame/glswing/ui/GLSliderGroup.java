@@ -3,7 +3,9 @@ package com.vingame.glswing.ui;
 import java.awt.Color;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import com.vingame.glswing.component.GLContainer;
@@ -22,6 +24,8 @@ public final class GLSliderGroup extends GLContainer {
 
 	private final List<GLSlider> sliders = new ArrayList<>();
 	private final Set<GLSlider> gestureSliders = new LinkedHashSet<>();
+	private final Map<GLSlider, Double> gestureStartValues =
+			new LinkedHashMap<>();
 	private GLSlider gestureSource;
 	private float gestureAnchorY;
 	private float gestureHorizontalDistance;
@@ -146,6 +150,7 @@ public final class GLSliderGroup extends GLContainer {
 	void pointerPressed(GLSlider source, GLMouseEvent event) {
 		gestureSource = source;
 		gestureSliders.clear();
+		gestureStartValues.clear();
 		addGestureSlider(source);
 		gestureAnchorY = source.getY() + event.getLocalY();
 		gestureHorizontalDistance = 0;
@@ -179,8 +184,10 @@ public final class GLSliderGroup extends GLContainer {
 	}
 
 	private void addGestureSlider(GLSlider slider) {
-		if (gestureSliders.add(slider))
+		if (gestureSliders.add(slider)) {
+			gestureStartValues.put(slider, slider.getValue());
 			slider.setGroupGesturePressed(true);
+		}
 	}
 
 	private void updateGestureSelection(float currentY) {
@@ -194,6 +201,7 @@ public final class GLSliderGroup extends GLContainer {
 		for (GLSlider slider : List.copyOf(gestureSliders))
 			if (!selected.contains(slider)) {
 				gestureSliders.remove(slider);
+				gestureStartValues.remove(slider);
 				slider.setGroupGesturePressed(false);
 			}
 		for (GLSlider slider : selected)
@@ -218,7 +226,11 @@ public final class GLSliderGroup extends GLContainer {
 			return;
 		boolean editSelection = startEditing && !gestureSliding;
 		List<GLSlider> selected = List.copyOf(gestureSliders);
+		Map<GLSlider, Double> before = new LinkedHashMap<>(gestureStartValues);
+		boolean changedValues = gestureSliding;
 		clearGesture();
+		if (changedValues)
+			recordValues("Drag slider group", before, currentValues(before.keySet()));
 		if (editSelection && !selected.isEmpty())
 			startLinkedEditing(source, selected);
 	}
@@ -237,6 +249,7 @@ public final class GLSliderGroup extends GLContainer {
 			slider.setGroupGesturePressed(false);
 		gestureSource = null;
 		gestureSliders.clear();
+		gestureStartValues.clear();
 		gestureHorizontalDistance = 0;
 		gestureSliding = false;
 	}
@@ -288,8 +301,10 @@ public final class GLSliderGroup extends GLContainer {
 			Double value = GLSlider.parseEditorNumber(activeEditor.getText());
 			if (value == null)
 				return;
+			Map<GLSlider, Double> before = currentValues(sliders);
 			for (GLSlider slider : sliders)
 				slider.setValue(value);
+			recordValues("Edit slider group", before, currentValues(sliders));
 			close();
 		}
 
@@ -311,6 +326,30 @@ public final class GLSliderGroup extends GLContainer {
 			if (linkedEditorSession == this)
 				linkedEditorSession = null;
 		}
+	}
+
+	private Map<GLSlider, Double> currentValues(
+			Iterable<GLSlider> affected) {
+		Map<GLSlider, Double> values = new LinkedHashMap<>();
+		for (GLSlider slider : affected)
+			values.put(slider, slider.getValue());
+		return values;
+	}
+
+	private void recordValues(String name, Map<GLSlider, Double> before,
+			Map<GLSlider, Double> after) {
+		boolean changed = before.entrySet().stream().anyMatch(entry ->
+				Double.compare(entry.getValue(), after.get(entry.getKey())) != 0);
+		if (!changed)
+			return;
+		var manager = getGLSaveManager();
+		if (manager != null)
+			manager.record(name, () -> applyValues(before), () -> applyValues(after));
+	}
+
+	private static void applyValues(Map<GLSlider, Double> values) {
+		for (Map.Entry<GLSlider, Double> entry : values.entrySet())
+			entry.getKey().setValue(entry.getValue());
 	}
 
 	private void groupStructureChanged() {

@@ -15,6 +15,7 @@ import com.vingame.glswing.ui.GLThemeValues;
 import com.vingame.glswing.ui.GLThemes;
 import com.vingame.glswing.ui.GLUiKeys;
 import com.vingame.glswing.node.GLNodeEditorStyle;
+import com.vingame.glswing.rendering.GLColorInterpolation;
 
 /** CPU checks for locale fallback, formatting and external theme resolution. */
 public final class GLLocalizationThemeSelfTest {
@@ -90,13 +91,22 @@ public final class GLLocalizationThemeSelfTest {
 		check(!dark.buttonStyle().background()
 				.equals(light.buttonStyle().background()),
 				"Light theme did not override the inherited dark palette");
+		check(defaults.labelStyle().font().equals(defaults.sliderStyle().font())
+				&& defaults.labelStyle().font().equals(
+						defaults.comboBoxStyle().font())
+				&& defaults.labelStyle().font().equals(
+						defaults.checkBoxStyle().font())
+				&& defaults.labelStyle().font().size() == 12,
+				"Standard control typography is no longer uniform");
 		GLNodeEditorStyle nodeEditor = GLNodeEditorStyle.fromTheme(defaults);
 		check(defaults.values().getColor("node.activeSelectedBorder", Color.BLACK)
 				.equals(com.vingame.glswing.node.GLNodeStyle.fromTheme(defaults)
 						.activeSelectedBorder()),
 				"Active node-selection border did not reach its style");
 		check(nodeEditor.connectionSnapDistance() == 18
-				&& nodeEditor.connectionCurveTolerance() == 0.15f
+				&& nodeEditor.connectionColorInterpolator()
+						== GLColorInterpolation.SRGB
+				&& nodeEditor.connectionCurveTolerance() == 0.01f
 				&& nodeEditor.connectionHandleFactor() == 0.55f
 				&& nodeEditor.minimumConnectionHandleLength() == 50
 				&& nodeEditor.connectionWidth() == 3
@@ -108,7 +118,7 @@ public final class GLLocalizationThemeSelfTest {
 						defaults.values().getColor("palette.selection", Color.BLACK)
 								.getGreen(),
 						defaults.values().getColor("palette.selection", Color.BLACK)
-								.getBlue(), 70))
+								.getBlue(), 96))
 				&& nodeEditor.connectionBorder().equals(
 						defaults.values().getColor("palette.border", Color.BLACK))
 				&& nodeEditor.selectedConnectionBorder().equals(
@@ -151,6 +161,7 @@ public final class GLLocalizationThemeSelfTest {
 					slider.pressed=${palette.accent}
 					nodeEditor.connectionCurveTolerance=0.08
 					nodeEditor.connectionHandleFactor=0.8
+					nodeEditor.connectionColorInterpolation=oklab
 					""", StandardCharsets.UTF_8);
 			GLTheme loaded = GLThemeLoader.load(file);
 			Color brand = new Color(1f, 0.5f, 0.5f, 0.75f);
@@ -177,7 +188,9 @@ public final class GLLocalizationThemeSelfTest {
 					"Component-specific corner radius was not applied");
 			GLNodeEditorStyle nodeEditor = GLNodeEditorStyle.fromTheme(loaded);
 			check(nodeEditor.connectionCurveTolerance() == 0.08f
-					&& nodeEditor.connectionHandleFactor() == 0.8f,
+					&& nodeEditor.connectionHandleFactor() == 0.8f
+					&& nodeEditor.connectionColorInterpolator()
+							== GLColorInterpolation.OKLAB,
 					"External node-editor curve tokens did not reach its style");
 
 			Files.writeString(cycle, """

@@ -26,7 +26,6 @@ metrics.borderWidth=1
 metrics.controlHeight=22
 metrics.padding=1,6,1,6
 
-label.font.size=16
 label.text=${palette.text}
 label.padding=0,0,0,0
 
@@ -136,16 +135,17 @@ tabbedPane.tabGap=2
 tabbedPane.tabHorizontalPadding=12
 tabbedPane.contentPadding=8,8,8,8
 
-nodeEditor.background=rgba(35, 38, 46, 255)
+nodeEditor.background=rgba(35, 35, 35, 255)
 nodeEditor.connectionSnapDistance=18
-nodeEditor.connectionCurveTolerance=0.15
+nodeEditor.connectionCurveTolerance=0.01
 nodeEditor.connectionHandleFactor=0.55
 nodeEditor.minimumConnectionHandleLength=50
 nodeEditor.connectionWidth=3
 nodeEditor.connectionBorder=${palette.border}
 nodeEditor.selectedConnectionBorder=${palette.accent}
 nodeEditor.connectionBorderWidth=1
-nodeEditor.marqueeFill=derive(${palette.selection}, alpha*=0.1)
+nodeEditor.connectionColorInterpolation=srgb
+nodeEditor.marqueeFill=derive(${palette.selection}, alpha*=0.5)
 nodeEditor.marqueeBorder=${palette.accent}
 nodeEditor.marqueeBorderWidth=1
 node.background=${palette.surface}
@@ -154,8 +154,8 @@ node.titleGradientLight=rgba(103, 103, 103, 255)
 node.titleGradientDark=rgba(77, 77, 77, 255)
 node.titleText=${palette.text}
 node.border=${palette.border}
-node.selectedBorder=${palette.accent}
-node.activeSelectedBorder=rgba(125, 170, 245, 255)
+node.selectedBorder=rgba(190, 70, 70, 255)
+node.activeSelectedBorder=rgba(200, 200, 200, 255)
 node.shadow=rgba(0, 0, 0, 105)
 node.inputPort=rgba(112, 174, 232, 255)
 node.outputPort=rgba(237, 157, 91, 255)

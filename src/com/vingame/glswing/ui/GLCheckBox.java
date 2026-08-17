@@ -243,7 +243,18 @@ public class GLCheckBox extends GLControl {
 	}
 
 	private void toggleAndFire() {
-		setSelected(!selected);
+		boolean before = selected;
+		boolean after = !before;
+		applySelectionAndFire(after);
+		var manager = getGLSaveManager();
+		if (manager != null)
+			manager.record("Toggle checkbox",
+					() -> applySelectionAndFire(before),
+					() -> applySelectionAndFire(after));
+	}
+
+	private void applySelectionAndFire(boolean selected) {
+		setSelected(selected);
 		ActionEvent event = new ActionEvent(this, ActionEvent.ACTION_PERFORMED, actionCommand,
 				System.currentTimeMillis(), 0);
 		for (ActionListener listener : actionListeners)

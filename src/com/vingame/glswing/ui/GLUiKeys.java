@@ -5,6 +5,8 @@ public final class GLUiKeys {
 	public static final String SLIDER_RESET = "glswing.slider.reset";
 	public static final String NODE_EDIT_TITLE = "glswing.node.editTitle";
 	public static final String NODE_DELETE = "glswing.node.delete";
+	public static final String NODE_DELETE_MULTIPLE =
+			"glswing.node.deleteMultiple";
 	public static final String NODE_DELETE_CONNECTION =
 			"glswing.node.deleteConnection";
 

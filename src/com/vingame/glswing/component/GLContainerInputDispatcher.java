@@ -26,6 +26,8 @@ import com.vingame.glswing.input.GLPickResult;
 import com.vingame.glswing.input.GLImmediateHoverRegistry;
 import com.vingame.glswing.input.GLPointerController;
 import com.vingame.glswing.input.GLPointerControllers;
+import com.vingame.glswing.history.GLSaveManager;
+import com.vingame.glswing.ui.GLTextEditor;
 
 /** Input bridge shared by retained controls hosted on a direct GL canvas. */
 final class GLContainerInputDispatcher {
@@ -461,9 +463,18 @@ final class GLContainerInputDispatcher {
 	private void installKeyboardDispatch() {
 		host.setFocusable(true);
 		host.setFocusTraversalKeysEnabled(false);
-		host.addKeyListener(new KeyAdapter() {
+			host.addKeyListener(new KeyAdapter() {
 			@Override
 			public void keyPressed(KeyEvent event) {
+				if (GLSaveManager.isHistoryShortcut(event)
+						&& host.focusedGLTarget() instanceof GLTextEditor editor
+						&& editor.hasUncommittedChanges()
+						&& !editor.commit())
+					return;
+				if (host.getGLSaveManager().handleKeyPressed(event)) {
+					host.repaintColorOnly();
+					return;
+				}
 				if (event.getKeyCode() == KeyEvent.VK_TAB) {
 					focusNext((event.getModifiersEx()
 							& InputEvent.SHIFT_DOWN_MASK) != 0);
@@ -503,11 +514,26 @@ final class GLContainerInputDispatcher {
 		}
 		GLKeyEvent glEvent = new GLKeyEvent(event);
 		switch (dispatch) {
-		case PRESSED -> target.keyPressed(glEvent);
+		case PRESSED -> dispatchKeyPressed(target, glEvent);
 		case RELEASED -> target.keyReleased(glEvent);
 		case TYPED -> target.keyTyped(glEvent);
 		}
 		host.repaintColorOnly();
+	}
+
+	private static void dispatchKeyPressed(GLKeyTarget target,
+			GLKeyEvent event) {
+		target.keyPressed(event);
+		if (event.isConsumed() || !(target instanceof GLContainer container))
+			return;
+		for (GLParent parent = container.getGLParent();
+				parent instanceof GLContainer ancestor;
+				parent = ancestor.getGLParent()) {
+			if (ancestor instanceof GLKeyTarget keyTarget)
+				keyTarget.keyPressed(event);
+			if (event.isConsumed())
+				return;
+		}
 	}
 
 	private void focusNext(boolean backwards) {

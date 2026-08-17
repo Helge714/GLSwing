@@ -17,6 +17,7 @@ import com.vingame.glswing.node.GLNodeResizeMode;
 import com.vingame.glswing.input.GLMouseEvent;
 import com.vingame.glswing.input.GLMouseWheelEvent;
 import com.vingame.glswing.input.GLPickResult;
+import com.vingame.glswing.rendering.GLColorInterpolation;
 import com.vingame.glswing.rendering.GLTransform;
 import com.vingame.glswing.rendering.internal.UIQuadInstanceFormat;
 import com.vingame.glswing.ui.GLLabel;
@@ -39,6 +40,7 @@ public final class GLNodeSelfTest {
 		testConnectionPolicyAndReplacement();
 		testComponentNamesAndConnectedPresentation();
 		testLocalizedTitleAction();
+		testMultipleNodeContextDeletion();
 		testAnalyticShadowInstance();
 		System.out.println("GL node self-test passed.");
 	}
@@ -135,6 +137,25 @@ public final class GLNodeSelfTest {
 				"The node delete action is not localized in German");
 	}
 
+	private static void testMultipleNodeContextDeletion() {
+		GLNodeEditor editor = new GLNodeEditor();
+		GLNode first = new GLNode("First");
+		GLNode second = new GLNode("Second");
+		editor.addNode(first, 10, 10);
+		editor.addNode(second, 200, 10);
+		editor.setSelectedNodes(List.of(first, second));
+		check("Delete nodes".equals(
+				first.getContextMenu().getItems().get(1).getText()),
+				"A multi-selection retained the singular node delete text");
+		first.setGLLocalizer(GLLocalizer.GERMAN);
+		check("Nodes löschen".equals(
+				first.getContextMenu().getItems().get(1).getText()),
+				"The plural node delete text was not localized");
+		first.getContextMenu().getItems().get(1).doClick();
+		check(editor.getNodes().isEmpty(),
+				"The plural node delete action did not remove the selection");
+	}
+
 	private static void testZoomTitleEditingAndConnections() {
 		GLNodeEditor editor = new GLNodeEditor();
 		float defaultSnapDistance = editor.getConnectionSnapDistance();
@@ -145,6 +166,7 @@ public final class GLNodeSelfTest {
 		Color defaultConnectionBorder = editor.getConnectionBorder();
 		Color defaultSelectedConnectionBorder = editor.getSelectedConnectionBorder();
 		float defaultConnectionBorderWidth = editor.getConnectionBorderWidth();
+		var defaultColorInterpolation = editor.getConnectionColorInterpolator();
 		editor.setConnectionSnapDistance(24);
 		editor.setConnectionCurveTolerance(0.12f);
 		editor.setConnectionHandleFactor(0.65f);
@@ -153,6 +175,7 @@ public final class GLNodeSelfTest {
 		editor.setConnectionBorder(Color.BLACK);
 		editor.setSelectedConnectionBorder(Color.WHITE);
 		editor.setConnectionBorderWidth(2);
+		editor.setConnectionColorInterpolator(GLColorInterpolation.OKLAB);
 		check(editor.getConnectionSnapDistance() == 24
 				&& editor.getConnectionCurveTolerance() == 0.12f
 				&& editor.getConnectionHandleFactor() == 0.65f
@@ -160,7 +183,9 @@ public final class GLNodeSelfTest {
 				&& editor.getConnectionWidth() == 4
 				&& editor.getConnectionBorder().equals(Color.BLACK)
 				&& editor.getSelectedConnectionBorder().equals(Color.WHITE)
-				&& editor.getConnectionBorderWidth() == 2,
+				&& editor.getConnectionBorderWidth() == 2
+				&& editor.getConnectionColorInterpolator()
+						== GLColorInterpolation.OKLAB,
 				"Editor did not retain its connection curve configuration");
 		editor.clearConnectionSnapDistance();
 		editor.clearConnectionCurveTolerance();
@@ -170,6 +195,7 @@ public final class GLNodeSelfTest {
 		editor.clearConnectionBorder();
 		editor.clearSelectedConnectionBorder();
 		editor.clearConnectionBorderWidth();
+		editor.clearConnectionColorInterpolator();
 		check(editor.getConnectionSnapDistance() == defaultSnapDistance
 				&& editor.getConnectionCurveTolerance() == defaultCurveTolerance
 				&& editor.getConnectionHandleFactor() == defaultHandleFactor
@@ -179,7 +205,9 @@ public final class GLNodeSelfTest {
 				&& editor.getSelectedConnectionBorder().equals(
 						defaultSelectedConnectionBorder)
 				&& editor.getConnectionBorderWidth()
-						== defaultConnectionBorderWidth,
+						== defaultConnectionBorderWidth
+				&& editor.getConnectionColorInterpolator()
+						== defaultColorInterpolation,
 				"Clearing connection overrides did not restore theme defaults");
 		editor.setConnectionHandleFactor(0);
 		editor.setMinimumConnectionHandleLength(0);

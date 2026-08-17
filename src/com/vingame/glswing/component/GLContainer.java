@@ -9,6 +9,7 @@ import com.vingame.glswing.layout.GLConstraints;
 import com.vingame.glswing.layout.GLInsets;
 import com.vingame.glswing.layout.GLLayout;
 import com.vingame.glswing.layout.GLSize;
+import com.vingame.glswing.history.GLSaveManager;
 import com.vingame.glswing.rendering.GLContext2D;
 import com.vingame.glswing.rendering.GLComposite;
 import com.vingame.glswing.rendering.GLDropShadowEffect;
@@ -471,6 +472,12 @@ public abstract class GLContainer implements GLParent, GLMouseTarget {
 		GLParent parent = glParent;
 		return parent == null ? specification.measurementFont()
 				: parent.getGLFont(specification);
+	}
+
+	@Override
+	public final GLSaveManager getGLSaveManager() {
+		GLParent parent = glParent;
+		return parent == null ? null : parent.getGLSaveManager();
 	}
 
 	@Override

@@ -428,13 +428,13 @@ public class GLComboBox<T> extends GLControl
 		case KeyEvent.VK_UP -> {
 			int selectedIndex = getSelectedIndex();
 			if (!items.isEmpty())
-				setSelectedIndex(Math.max(0, selectedIndex - 1));
+				selectIndexFromUser(Math.max(0, selectedIndex - 1));
 			event.consume();
 		}
 		case KeyEvent.VK_DOWN -> {
 			int selectedIndex = getSelectedIndex();
 			if (!items.isEmpty())
-				setSelectedIndex(Math.min(items.size() - 1, selectedIndex + 1));
+				selectIndexFromUser(Math.min(items.size() - 1, selectedIndex + 1));
 			event.consume();
 		}
 		default -> {
@@ -545,11 +545,19 @@ public class GLComboBox<T> extends GLControl
 	}
 
 	private void selectEntry(ValueEntry<T> entry) {
-		if (selectedEntry == entry)
+		selectIndexFromUser(items.indexOf(entry));
+	}
+
+	private void selectIndexFromUser(int index) {
+		int before = getSelectedIndex();
+		if (before == index)
 			return;
-		selectedEntry = entry;
-		updatePresentation();
-		fireActionPerformed();
+		setSelectedIndex(index);
+		var manager = getGLSaveManager();
+		if (manager != null)
+			manager.record("Change combo-box selection",
+					() -> setSelectedIndex(before),
+					() -> setSelectedIndex(index));
 	}
 
 	private int indexOfValue(T value) {

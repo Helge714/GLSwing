@@ -2,6 +2,7 @@ package com.vingame.glswing.node;
 
 import java.awt.Color;
 import java.awt.event.InputEvent;
+import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -15,10 +16,13 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import com.vingame.glswing.component.GLContainer;
 import com.vingame.glswing.component.GLParent;
 import com.vingame.glswing.input.GLMouseEvent;
+import com.vingame.glswing.input.GLKeyEvent;
+import com.vingame.glswing.input.GLKeyTarget;
 import com.vingame.glswing.input.GLMouseWheelEvent;
 import com.vingame.glswing.input.GLMouseWheelCaptureTarget;
 import com.vingame.glswing.input.GLPointerController;
 import com.vingame.glswing.input.GLPointerCursor;
+import com.vingame.glswing.rendering.GLColorInterpolator;
 import com.vingame.glswing.rendering.GLContext2D;
 import com.vingame.glswing.rendering.GLStroke;
 import com.vingame.glswing.rendering.GLTransform;
@@ -32,7 +36,7 @@ import com.vingame.glswing.ui.GLUiKeys;
  * selection, viewport navigation and interactive graph connections.
  */
 public class GLNodeEditor extends GLContainer
-		implements GLMouseWheelCaptureTarget {
+		implements GLMouseWheelCaptureTarget, GLKeyTarget {
 	private static final float CONNECTION_DRAG_THRESHOLD = 4;
 	private static final float MARQUEE_DRAG_THRESHOLD = 3;
 	private final List<GLNode> nodes = new ArrayList<>();
@@ -48,6 +52,7 @@ public class GLNodeEditor extends GLContainer
 	private GLNodePort fixedGesturePort;
 	private GLNodePort candidatePort;
 	private GLNodeConnection detachedConnection;
+	private List<GLNodeConnection> connectionGestureBefore = List.of();
 	private boolean connectionDragging;
 	private float connectionPressScreenX;
 	private float connectionPressScreenY;
@@ -64,6 +69,7 @@ public class GLNodeEditor extends GLContainer
 	private Color connectionBorder;
 	private Color selectedConnectionBorder;
 	private Float connectionBorderWidth;
+	private GLColorInterpolator connectionColorInterpolator;
 	private float zoom = 1;
 	private float minimumZoom = 0.25f;
 	private float maximumZoom = 4;
@@ -159,12 +165,20 @@ public class GLNodeEditor extends GLContainer
 			removeNode(node);
 	}
 
+	void removeSelectedNodesFromUser() {
+		removeNodesFromUser(getSelectedNodes());
+	}
+
+	void removeNodeFromUser(GLNode node) {
+		removeNodesFromUser(List.of(node));
+	}
+
 	/** Removes either the selected connection or all selected nodes. */
 	public void deleteSelection() {
 		if (selectedConnection != null)
-			removeConnection(selectedConnection);
+			removeConnectionFromUser(selectedConnection);
 		else
-			removeSelectedNodes();
+			removeSelectedNodesFromUser();
 	}
 
 	public GLNodeConnection connect(GLNodePort output, GLNodePort input) {
@@ -466,6 +480,30 @@ public class GLNodeEditor extends GLContainer
 		repaintGL();
 	}
 
+	public GLColorInterpolator getConnectionColorInterpolator() {
+		return connectionColorInterpolator != null ? connectionColorInterpolator
+				: getGLStyle().connectionColorInterpolator();
+	}
+
+	/** Overrides how output and input colors are mixed along connections. */
+	public void setConnectionColorInterpolator(
+			GLColorInterpolator interpolation) {
+		if (interpolation == null)
+			throw new IllegalArgumentException(
+					"Connection color interpolation must not be null");
+		if (connectionColorInterpolator == interpolation)
+			return;
+		connectionColorInterpolator = interpolation;
+		repaintGL();
+	}
+
+	public void clearConnectionColorInterpolator() {
+		if (connectionColorInterpolator == null)
+			return;
+		connectionColorInterpolator = null;
+		repaintGL();
+	}
+
 	int connectionCount(GLNodePort port) {
 		int count = 0;
 		for (GLNodeConnection connection : connections)
@@ -682,6 +720,7 @@ public class GLNodeEditor extends GLContainer
 
 	@Override
 	public void mousePressed(GLMouseEvent event) {
+		requestGLFocus(this);
 		if (event.getButton() == MouseEvent.BUTTON2) {
 			beginPan(event);
 			return;
@@ -738,6 +777,15 @@ public class GLNodeEditor extends GLContainer
 	}
 
 	@Override
+	public void keyPressed(GLKeyEvent event) {
+		if (event.getKeyCode() != KeyEvent.VK_DELETE
+				|| selectedConnection == null && selectedNodes.isEmpty())
+			return;
+		deleteSelection();
+		event.consume();
+	}
+
+	@Override
 	protected void themeChanged() {
 		cachedTheme = null;
 		cachedThemeStyle = null;
@@ -761,6 +809,7 @@ public class GLNodeEditor extends GLContainer
 	void activate(GLNode node, int modifiersEx, boolean contextClick) {
 		if (!nodes.contains(node))
 			return;
+		requestGLFocus(this);
 		boolean shift = (modifiersEx & InputEvent.SHIFT_DOWN_MASK) != 0;
 		if (contextClick) {
 			if (!selectedNodes.contains(node))
@@ -794,6 +843,7 @@ public class GLNodeEditor extends GLContainer
 			boolean contextClick) {
 		if (!connections.contains(connection))
 			return;
+		requestGLFocus(this);
 		boolean toggle = !contextClick
 				&& (modifiersEx & InputEvent.SHIFT_DOWN_MASK) != 0;
 		if (toggle && selectedConnection == connection)
@@ -810,7 +860,7 @@ public class GLNodeEditor extends GLContainer
 					event -> {
 						GLNodeConnection connection = contextConnection;
 						if (connection != null && connections.contains(connection))
-							removeConnection(connection);
+							removeConnectionFromUser(connection);
 					});
 		}
 		return connectionContextMenu;
@@ -853,8 +903,14 @@ public class GLNodeEditor extends GLContainer
 	}
 
 	void endNodeMove(GLNode source) {
-		if (moveStartLocations.containsKey(source))
+		if (moveStartLocations.containsKey(source)) {
+			Map<GLNode, float[]> before = copyLocations(moveStartLocations);
+			Map<GLNode, float[]> after = new LinkedHashMap<>();
+			for (GLNode node : moveStartLocations.keySet())
+				after.put(node, new float[] { node.getX(), node.getY() });
 			moveStartLocations.clear();
+			recordLocations(before, after);
+		}
 	}
 
 	private void bringSelectedNodesToFront() {
@@ -865,6 +921,7 @@ public class GLNodeEditor extends GLContainer
 
 	void beginConnectionGesture(GLNodePort source, GLMouseEvent event) {
 		cancelConnectionGesture(true);
+		connectionGestureBefore = List.copyOf(connections);
 		gestureSource = source;
 		fixedGesturePort = source;
 		connectionPressScreenX = event.getScreenX();
@@ -923,6 +980,9 @@ public class GLNodeEditor extends GLContainer
 		} else if (captureLost && detached != null) {
 			addConnection(detached);
 		}
+		recordConnectionChange(connectionGestureBefore,
+				List.copyOf(connections));
+		connectionGestureBefore = List.of();
 		repaintGL();
 		if (event != null)
 			event.consume();
@@ -986,6 +1046,7 @@ public class GLNodeEditor extends GLContainer
 		clearConnectionGestureState();
 		if (restoreDetached && detached != null)
 			addConnection(detached);
+		connectionGestureBefore = List.of();
 	}
 
 	private void clearConnectionGestureState() {
@@ -1161,6 +1222,119 @@ public class GLNodeEditor extends GLContainer
 		};
 	}
 
+	private void removeNodesFromUser(Collection<GLNode> requested) {
+		List<GLNode> removed = requested.stream().filter(nodes::contains).toList();
+		if (removed.isEmpty())
+			return;
+		RemovedNodes snapshot = captureRemovedNodes(removed);
+		for (GLNode node : removed)
+			removeNode(node);
+		var manager = getGLSaveManager();
+		if (manager != null)
+			manager.record(removed.size() == 1 ? "Delete node" : "Delete nodes",
+					() -> restoreRemovedNodes(snapshot),
+					() -> {
+						for (NodeState state : snapshot.nodes())
+							removeNode(state.node());
+					});
+	}
+
+	private RemovedNodes captureRemovedNodes(List<GLNode> removed) {
+		List<NodeState> states = new ArrayList<>();
+		for (GLNode node : removed)
+			states.add(new NodeState(node, nodes.indexOf(node), node.getX(),
+					node.getY(), node.getWidth(), node.getHeight()));
+		Set<GLNode> removedSet = Set.copyOf(removed);
+		List<GLNodeConnection> removedConnections = connections.stream()
+				.filter(connection -> removedSet.contains(connection.getInput().getNode())
+						|| removedSet.contains(connection.getOutput().getNode()))
+				.toList();
+		return new RemovedNodes(List.copyOf(states), removedConnections,
+				getGLChildrenInPaintOrder(), List.copyOf(selectedNodes), selectedNode);
+	}
+
+	private void restoreRemovedNodes(RemovedNodes snapshot) {
+		for (NodeState state : snapshot.nodes().stream()
+				.sorted((first, second) -> Integer.compare(first.index(), second.index()))
+				.toList()) {
+			GLNode node = state.node();
+			node.setBounds(state.x(), state.y(), state.width(), state.height());
+			nodes.add(Math.min(state.index(), nodes.size()), node);
+			addGL(node);
+		}
+		for (int index = 0; index < snapshot.paintOrder().size(); index++) {
+			GLContainer child = snapshot.paintOrder().get(index);
+			if (child.getGLParent() == this)
+				setGLZOrder(child, index);
+		}
+		for (GLNodeConnection connection : snapshot.connections())
+			addConnection(connection);
+		applySelection(snapshot.selection(), null, snapshot.active());
+	}
+
+	private void removeConnectionFromUser(GLNodeConnection connection) {
+		if (connection == null || !connections.contains(connection))
+			return;
+		List<GLNodeConnection> before = List.copyOf(connections);
+		removeConnection(connection);
+		recordConnectionChange(before, List.copyOf(connections));
+	}
+
+	private void recordConnectionChange(List<GLNodeConnection> before,
+			List<GLNodeConnection> after) {
+		if (before.equals(after))
+			return;
+		var manager = getGLSaveManager();
+		if (manager != null)
+			manager.record("Change node connection",
+					() -> applyConnections(before), () -> applyConnections(after));
+	}
+
+	private void applyConnections(List<GLNodeConnection> desired) {
+		for (GLNodeConnection connection : List.copyOf(connections))
+			removeConnection(connection);
+		for (GLNodeConnection connection : desired)
+			addConnection(connection);
+	}
+
+	private void recordLocations(Map<GLNode, float[]> before,
+			Map<GLNode, float[]> after) {
+		boolean changed = before.entrySet().stream().anyMatch(entry -> {
+			float[] next = after.get(entry.getKey());
+			return entry.getValue()[0] != next[0] || entry.getValue()[1] != next[1];
+		});
+		if (!changed)
+			return;
+		var manager = getGLSaveManager();
+		if (manager != null)
+			manager.record(before.size() == 1 ? "Move node" : "Move nodes",
+					() -> applyLocations(before), () -> applyLocations(after));
+	}
+
+	private static Map<GLNode, float[]> copyLocations(
+			Map<GLNode, float[]> locations) {
+		Map<GLNode, float[]> copy = new LinkedHashMap<>();
+		for (Map.Entry<GLNode, float[]> entry : locations.entrySet())
+			copy.put(entry.getKey(), entry.getValue().clone());
+		return copy;
+	}
+
+	private static void applyLocations(Map<GLNode, float[]> locations) {
+		for (Map.Entry<GLNode, float[]> entry : locations.entrySet()) {
+			float[] point = entry.getValue();
+			entry.getKey().setLocation(point[0], point[1]);
+		}
+	}
+
+	private record NodeState(GLNode node, int index, float x, float y,
+			float width, float height) {
+	}
+
+	private record RemovedNodes(List<NodeState> nodes,
+			List<GLNodeConnection> connections, List<GLContainer> paintOrder,
+			List<GLNode> selection, GLNode active) {
+	}
+
 	private enum WorkspaceGesture { NONE, PAN, MARQUEE }
 
 	private void drawConnections(GLContext2D context) {
@@ -1241,8 +1415,13 @@ public class GLNodeEditor extends GLContainer
 			else
 				context.drawPolyline(points, border, mouseTarget);
 			context.setStroke(connectionStroke(width));
-			context.drawPolyline(points, new Color[] { start, end },
-					GLContext2D.NO_PICK_ID);
+			float firstThirdX = x0 + (x1 - x0) / 3;
+			float firstThirdY = y0 + (y1 - y0) / 3;
+			float secondThirdX = x0 + (x1 - x0) * 2 / 3;
+			float secondThirdY = y0 + (y1 - y0) * 2 / 3;
+			context.drawCubicBezier(x0, y0, firstThirdX, firstThirdY,
+					secondThirdX, secondThirdY, x1, y1, start, end,
+					getConnectionColorInterpolator(), GLContext2D.NO_PICK_ID);
 		} else {
 			if (mouseTarget == null)
 				context.drawCubicBezier(x0, y0, x0 + handle, y0,
@@ -1254,7 +1433,7 @@ public class GLNodeEditor extends GLContainer
 			context.setStroke(connectionStroke(width));
 			context.drawCubicBezier(x0, y0, x0 + handle, y0,
 					x1 - handle, y1, x1, y1, start, end,
-					GLContext2D.NO_PICK_ID);
+					getConnectionColorInterpolator(), GLContext2D.NO_PICK_ID);
 		}
 	}
 

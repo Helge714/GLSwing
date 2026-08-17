@@ -6,6 +6,7 @@ import com.vingame.glswing.layout.GLConstraints;
 import com.vingame.glswing.layout.GLInsets;
 import com.vingame.glswing.layout.GLLayout;
 import com.vingame.glswing.layout.GLSize;
+import com.vingame.glswing.history.GLSaveManager;
 import com.vingame.glswing.rendering.GLFont;
 import com.vingame.glswing.ui.GLFontSpec;
 import com.vingame.glswing.ui.GLLocalizer;
@@ -83,6 +84,9 @@ public interface GLParent {
 	GLLocalizer getGLLocalizer();
 
 	GLFont getGLFont(GLFontSpec specification);
+
+	/** Undo/redo and saved-state history shared by this retained tree. */
+	GLSaveManager getGLSaveManager();
 
 	void requestGLFocus(GLKeyTarget target);
 

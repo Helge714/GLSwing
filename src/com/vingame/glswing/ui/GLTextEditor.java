@@ -65,6 +65,7 @@ public class GLTextEditor extends GLControl {
 	private boolean invalid;
 	private boolean ending;
 	private boolean commitOnFocusLost = true;
+	private boolean historyEnabled = true;
 	private GLCornerRadii containerRadii;
 	private boolean containerBorderVisible = true;
 	private Predicate<String> inputFilter = GLTextInputFormats.ANY;
@@ -214,6 +215,19 @@ public class GLTextEditor extends GLControl {
 		this.commitOnFocusLost = commitOnFocusLost;
 	}
 
+	/** Whether successful commits create undoable document-history entries. */
+	public final boolean isHistoryEnabled() {
+		return historyEnabled;
+	}
+
+	public final void setHistoryEnabled(boolean historyEnabled) {
+		this.historyEnabled = historyEnabled;
+	}
+
+	public final boolean hasUncommittedChanges() {
+		return !text.equals(editBaseline);
+	}
+
 	/** Overrides the outer editor shape without changing its reusable style. */
 	public final void setContainerShape(GLCornerRadii radii,
 			boolean borderVisible) {
@@ -292,6 +306,8 @@ public class GLTextEditor extends GLControl {
 			return false;
 		}
 		clearValidationFeedback();
+		String before = editBaseline;
+		String after = text;
 		ending = true;
 		try {
 			ActionEvent event = new ActionEvent(this, ActionEvent.ACTION_PERFORMED,
@@ -300,6 +316,12 @@ public class GLTextEditor extends GLControl {
 				listener.actionPerformed(event);
 			editBaseline = text;
 			lastValidText = text;
+			if (historyEnabled && !before.equals(after)) {
+				var manager = getGLSaveManager();
+				if (manager != null)
+					manager.record("Edit text", () -> setText(before),
+							() -> setText(after));
+			}
 			return true;
 		} finally {
 			ending = false;

@@ -31,6 +31,7 @@ import com.jogamp.opengl.GLEventListener;
 import com.jogamp.opengl.GLProfile;
 import com.jogamp.opengl.awt.GLJPanel;
 import com.vingame.glswing.input.GLMouseEvent;
+import com.vingame.glswing.history.GLSaveManager;
 import com.vingame.glswing.input.GLKeyTarget;
 import com.vingame.glswing.input.GLMouseTarget;
 import com.vingame.glswing.input.GLMouseWheelEvent;
@@ -52,6 +53,7 @@ import com.vingame.glswing.rendering.internal.SceneFramebuffer;
 import com.vingame.glswing.ui.GLFontSpec;
 import com.vingame.glswing.ui.GLLocalizer;
 import com.vingame.glswing.ui.GLTheme;
+import com.vingame.glswing.ui.GLTextEditor;
 
 /**
  * Base class for event-driven OpenGL rendering inside Swing.
@@ -76,6 +78,7 @@ public abstract class GLSwingPanel extends GLJPanel
 	private final Map<GLFontSpec, GLFont> themedFonts = new LinkedHashMap<>();
 	private volatile GLTheme theme = GLTheme.DEFAULT;
 	private volatile GLLocalizer localizer = GLLocalizer.DEFAULT;
+	private volatile GLSaveManager saveManager = new GLSaveManager();
 	private volatile int actualAntialiasingSamples;
 	private volatile int lastSurfaceWidth;
 	private volatile int lastSurfaceHeight;
@@ -386,6 +389,17 @@ public abstract class GLSwingPanel extends GLJPanel
 		if (specification == null)
 			throw new IllegalArgumentException("Font specification must not be null");
 		return themedFonts.computeIfAbsent(specification, GLFontSpec::createFont);
+	}
+
+	@Override
+	public final GLSaveManager getGLSaveManager() {
+		return saveManager;
+	}
+
+	public final void setGLSaveManager(GLSaveManager saveManager) {
+		if (saveManager == null)
+			throw new IllegalArgumentException("Save manager must not be null");
+		this.saveManager = saveManager;
 	}
 
 	@Override
@@ -968,6 +982,15 @@ public abstract class GLSwingPanel extends GLJPanel
 		addKeyListener(new KeyAdapter() {
 			@Override
 			public void keyPressed(KeyEvent event) {
+				if (GLSaveManager.isHistoryShortcut(event)
+						&& focusedTarget instanceof GLTextEditor editor
+						&& editor.hasUncommittedChanges()
+						&& !editor.commit())
+					return;
+				if (saveManager.handleKeyPressed(event)) {
+					repaintColorOnly();
+					return;
+				}
 				if (event.getKeyCode() == KeyEvent.VK_TAB) {
 					focusNext((event.getModifiersEx() & InputEvent.SHIFT_DOWN_MASK) != 0);
 					event.consume();
@@ -1006,11 +1029,26 @@ public abstract class GLSwingPanel extends GLJPanel
 		com.vingame.glswing.input.GLKeyEvent glEvent =
 				new com.vingame.glswing.input.GLKeyEvent(event);
 		switch (dispatch) {
-		case PRESSED -> target.keyPressed(glEvent);
+		case PRESSED -> dispatchKeyPressed(target, glEvent);
 		case RELEASED -> target.keyReleased(glEvent);
 		case TYPED -> target.keyTyped(glEvent);
 		}
 		repaintColorOnly();
+	}
+
+	private static void dispatchKeyPressed(GLKeyTarget target,
+			com.vingame.glswing.input.GLKeyEvent event) {
+		target.keyPressed(event);
+		if (event.isConsumed() || !(target instanceof GLContainer container))
+			return;
+		for (GLParent parent = container.getGLParent();
+				parent instanceof GLContainer ancestor;
+				parent = ancestor.getGLParent()) {
+			if (ancestor instanceof GLKeyTarget keyTarget)
+				keyTarget.keyPressed(event);
+			if (event.isConsumed())
+				return;
+		}
 	}
 
 	private void focusNext(boolean backwards) {

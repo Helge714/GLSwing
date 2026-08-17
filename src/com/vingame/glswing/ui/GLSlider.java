@@ -81,6 +81,7 @@ public class GLSlider extends GLControl {
 	private GLSliderGroup sliderGroup;
 	private GLPointerController pointerController = GLPointerController.NONE;
 	private boolean groupGesturePressed;
+	private double gestureStartValue;
 
 	private GLSlider(String text, Mode mode, double minimum,
 			double maximum, double value) {
@@ -295,6 +296,7 @@ public class GLSlider extends GLControl {
 			valueEditor.selectAll();
 			return;
 		}
+		double valueBeforeEditing = value;
 		GLTextEditor editor = createValueEditor(valueText(), true);
 		if (editor == null)
 			return;
@@ -302,6 +304,8 @@ public class GLSlider extends GLControl {
 			Double parsed = parseNumber(editor.getText());
 			if (parsed != null) {
 				setValue(parsed);
+				recordValueChange(valueBeforeEditing, value,
+						"Edit slider value");
 				closeValueEditor(editor);
 			}
 		});
@@ -503,6 +507,7 @@ public class GLSlider extends GLControl {
 				|| !event.hasLocalPosition())
 			return;
 		pressedPart = hitPart(event.getLocalX());
+		gestureStartValue = value;
 		armedArrow = HitPart.NONE;
 		dragDistance = 0;
 		dragOccurred = false;
@@ -560,6 +565,8 @@ public class GLSlider extends GLControl {
 		}
 		if (sliderGroup != null)
 			sliderGroup.pointerReleased(this, true);
+		else
+			recordValueChange(gestureStartValue, value, "Drag slider");
 		pressedPart = HitPart.NONE;
 		updateArrowColors();
 	}
@@ -572,6 +579,8 @@ public class GLSlider extends GLControl {
 			endRelativeDrag(null, false);
 		if (sliderGroup != null)
 			sliderGroup.pointerReleased(this, false);
+		else
+			recordValueChange(gestureStartValue, value, "Drag slider");
 		pressedPart = HitPart.NONE;
 		hoverPart = HitPart.NONE;
 		updateArrowColors();
@@ -591,9 +600,9 @@ public class GLSlider extends GLControl {
 		HitPart action = armedArrow;
 		armedArrow = HitPart.NONE;
 		if (mode == Mode.FREE && action == HitPart.LEFT)
-			decrement();
+			changeValueFromUser(value - step, "Decrease slider");
 		else if (mode == Mode.FREE && action == HitPart.RIGHT)
-			increment();
+			changeValueFromUser(value + step, "Increase slider");
 		else if (!dragOccurred && event.hasLocalPosition()
 				&& hitPart(event.getLocalX()) == HitPart.CENTER)
 			startValueEditing();
@@ -614,22 +623,22 @@ public class GLSlider extends GLControl {
 	protected void controlKeyPressed(GLKeyEvent event) {
 		switch (event.getKeyCode()) {
 		case KeyEvent.VK_LEFT, KeyEvent.VK_DOWN -> {
-			decrement();
+			changeValueFromUser(value - step, "Decrease slider");
 			event.consume();
 		}
 		case KeyEvent.VK_RIGHT, KeyEvent.VK_UP -> {
-			increment();
+			changeValueFromUser(value + step, "Increase slider");
 			event.consume();
 		}
 		case KeyEvent.VK_HOME -> {
 			if (mode == Mode.FIXED) {
-				setValue(minimum);
+				changeValueFromUser(minimum, "Set slider to minimum");
 				event.consume();
 			}
 		}
 		case KeyEvent.VK_END -> {
 			if (mode == Mode.FIXED) {
-				setValue(maximum);
+				changeValueFromUser(maximum, "Set slider to maximum");
 				event.consume();
 			}
 		}
@@ -781,6 +790,7 @@ public class GLSlider extends GLControl {
 						return false;
 					}
 				};
+		editor.setHistoryEnabled(false);
 		editor.setInputFilter(GLTextInputFormats.DECIMAL_NUMBER);
 		editor.setInputVerifier(GLSlider::isValidNumber);
 		editor.setValidationFailureMode(
@@ -830,7 +840,11 @@ public class GLSlider extends GLControl {
 		GLPopupMenu menu = new GLPopupMenu();
 		GLMenuItem resetItem = menu.addItem(
 				getGLLocalizer().text(GLUiKeys.SLIDER_RESET),
-				event -> reset());
+				event -> {
+					double before = value;
+					reset();
+					recordValueChange(before, value, "Reset slider");
+				});
 		contextMenu = menu;
 		resetMenuItem = resetItem;
 	}
@@ -860,6 +874,20 @@ public class GLSlider extends GLControl {
 				&& container.getGLParent() != null)
 			current = container.getGLParent();
 		return current;
+	}
+
+	private void changeValueFromUser(double next, String name) {
+		double before = value;
+		setValue(next);
+		recordValueChange(before, value, name);
+	}
+
+	void recordValueChange(double before, double after, String name) {
+		if (Double.compare(before, after) == 0)
+			return;
+		var manager = getGLSaveManager();
+		if (manager != null)
+			manager.record(name, () -> setValue(before), () -> setValue(after));
 	}
 
 	private void beginRelativeDrag(GLMouseEvent event) {

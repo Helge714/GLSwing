@@ -16,6 +16,7 @@ public final class GLContext2D {
 	public static final int NO_PICK_ID = 0;
 	public static final Color DEFAULT_CLEAR_COLOR = new Color(15, 20, 31);
 	public static final float DEFAULT_TEXTURE_PICK_ALPHA_THRESHOLD = 0.1f;
+	private static final int MINIMUM_NONLINEAR_GRADIENT_SEGMENTS = 16;
 
 	private final GLRenderer2D renderer;
 	private Color color = Color.BLACK;
@@ -850,14 +851,59 @@ public final class GLContext2D {
 			float control1Y, float control2X, float control2Y,
 			float x1, float y1, Color startColor, Color endColor,
 			int pickId, GLMouseTarget mouseTarget) {
+		drawCubicBezier(x0, y0, control1X, control1Y, control2X,
+				control2Y, x1, y1, startColor, endColor,
+				GLColorInterpolation.SRGB, pickId, mouseTarget);
+	}
+
+	/** Draws a color-gradient cubic Bezier with a custom interpolation strategy. */
+	public void drawCubicBezier(float x0, float y0, float control1X,
+			float control1Y, float control2X, float control2Y,
+			float x1, float y1, Color startColor, Color endColor,
+			GLColorInterpolator interpolation) {
+		drawCubicBezier(x0, y0, control1X, control1Y, control2X,
+				control2Y, x1, y1, startColor, endColor, interpolation,
+				pickId, mouseTarget);
+	}
+
+	public void drawCubicBezier(float x0, float y0, float control1X,
+			float control1Y, float control2X, float control2Y,
+			float x1, float y1, Color startColor, Color endColor,
+			GLColorInterpolator interpolation, int pickId) {
+		drawCubicBezier(x0, y0, control1X, control1Y, control2X,
+				control2Y, x1, y1, startColor, endColor, interpolation,
+				requirePickId(pickId), null);
+	}
+
+	public void drawCubicBezier(float x0, float y0, float control1X,
+			float control1Y, float control2X, float control2Y,
+			float x1, float y1, Color startColor, Color endColor,
+			GLColorInterpolator interpolation, GLMouseTarget mouseTarget) {
+		drawCubicBezier(x0, y0, control1X, control1Y, control2X,
+				control2Y, x1, y1, startColor, endColor, interpolation,
+				NO_PICK_ID, requireMouseTarget(mouseTarget));
+	}
+
+	private void drawCubicBezier(float x0, float y0, float control1X,
+			float control1Y, float control2X, float control2Y,
+			float x1, float y1, Color startColor, Color endColor,
+			GLColorInterpolator interpolation, int pickId,
+			GLMouseTarget mouseTarget) {
 		startColor = requireColor(startColor);
 		endColor = requireColor(endColor);
+		if (interpolation == null)
+			throw new IllegalArgumentException(
+					"Color interpolation must not be null");
 		float[] points = cubicBezierPoints(x0, y0, control1X, control1Y,
-				control2X, control2Y, x1, y1);
+				control2X, control2Y, x1, y1,
+				interpolation == GLColorInterpolation.SRGB ? 1
+						: MINIMUM_NONLINEAR_GRADIENT_SEGMENTS);
 		Color[] colors = new Color[points.length / 2];
-		for (int point = 0; point < colors.length; point++)
-			colors[point] = interpolateColor(startColor, endColor,
-					point / (float) (colors.length - 1));
+		for (int point = 0; point < colors.length; point++) {
+			float amount = point / (float) (colors.length - 1);
+			colors[point] = requireColor(interpolation.interpolate(
+					startColor, endColor, amount));
+		}
 		drawPolyline(points, colors, pickId, mouseTarget);
 	}
 
@@ -1847,13 +1893,20 @@ public final class GLContext2D {
 	private float[] cubicBezierPoints(float x0, float y0, float control1X,
 			float control1Y, float control2X, float control2Y,
 			float x1, float y1) {
+		return cubicBezierPoints(x0, y0, control1X, control1Y, control2X,
+				control2Y, x1, y1, 1);
+	}
+
+	private float[] cubicBezierPoints(float x0, float y0, float control1X,
+			float control1Y, float control2X, float control2Y,
+			float x1, float y1, int minimumSegments) {
 		float[] controls = { x0, y0, control1X, control1Y, control2X,
 				control2Y, x1, y1 };
 		for (float value : controls)
 			if (!Float.isFinite(value))
 				throw new IllegalArgumentException(
 						"Bezier coordinates must be finite");
-		int segments = cubicBezierSegments(controls);
+		int segments = Math.max(minimumSegments, cubicBezierSegments(controls));
 		float[] points = new float[(segments + 1) * 2];
 		for (int segment = 0; segment <= segments; segment++) {
 			float t = segment / (float) segments;
@@ -1871,15 +1924,6 @@ public final class GLContext2D {
 					+ third * control2Y + fourth * y1;
 		}
 		return points;
-	}
-
-	private static Color interpolateColor(Color start, Color end, float amount) {
-		float inverse = 1 - amount;
-		return new Color(
-				Math.round(start.getRed() * inverse + end.getRed() * amount),
-				Math.round(start.getGreen() * inverse + end.getGreen() * amount),
-				Math.round(start.getBlue() * inverse + end.getBlue() * amount),
-				Math.round(start.getAlpha() * inverse + end.getAlpha() * amount));
 	}
 
 	private int curveSegments(float localRadius) {

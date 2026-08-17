@@ -14,8 +14,10 @@ import com.vingame.glswing.node.GLNodeEditor;
 import com.vingame.glswing.node.GLNodePort;
 import com.vingame.glswing.node.GLNodePorts;
 import com.vingame.glswing.node.GLNodeResizeMode;
+import com.vingame.glswing.rendering.GLColorInterpolation;
 import com.vingame.glswing.ui.GLButton;
 import com.vingame.glswing.ui.GLComboBox;
+import com.vingame.glswing.ui.GLCheckBox;
 import com.vingame.glswing.ui.GLLabel;
 import com.vingame.glswing.ui.GLSlider;
 
@@ -73,6 +75,8 @@ public final class NodeEditorDemo {
 		surface.setConnectionValidator((own, other) -> !"uv".equals(other.getId()));
 		editor.connect(material.findPort("result"), surface);
 
+		editor.setConnectionColorInterpolator(GLColorInterpolation.OKLAB);
+
 		frame.setVisible(true);
 	}
 
@@ -82,10 +86,13 @@ public final class NodeEditorDemo {
 				"Ziehen: Auswahlrahmen | Mitte: Pan | Mausrad: Zoom"));
 		node.addContent(new GLLabel(
 				"Shift: Auswahl | Strg/Shift+Rad: horizontal/vertikal"));
+		node.addContent(new GLLabel(
+				"Strg+Z: Undo | Strg+Shift+Z: Redo"));
 
 		GLSlider roughness = GLSlider.fixed("Roughness", 0, 1, 0.42);
 		roughness.setStep(0.01);
 		node.addInput("roughness", roughness);
+		node.addInput("enabled", new GLCheckBox("Enabled", true));
 
 		GLComboBox<String> blend = new GLComboBox<>(
 				List.of("Linear", "Multiply", "Screen"));

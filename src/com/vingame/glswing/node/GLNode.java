@@ -52,10 +52,12 @@ public class GLNode extends GLContainer {
 	private float startHeight;
 	private float computedMinimumWidth;
 	private float computedMinimumHeight;
+	private String titleBeforeEditing;
 
 	public GLNode(String title) {
 		this.title = requireTitle(title);
 		titleEditor = new GLTextEditor(title);
+		titleEditor.setHistoryEnabled(false);
 		titleEditor.setVisible(false);
 		titleEditor.setCommitOnFocusLost(true);
 		titleEditor.addActionListener(event -> finishTitleEditing(true));
@@ -111,12 +113,14 @@ public class GLNode extends GLContainer {
 
 	public GLPopupMenu getContextMenu() {
 		ensureContextMenu();
+		updateContextMenuText();
 		return contextMenu;
 	}
 
 	public void editTitle() {
 		if (!titleEditable || titleEditor.isVisible())
 			return;
+		titleBeforeEditing = title;
 		titleEditor.setText(title);
 		configureTitleEditor(getGLStyle());
 		titleEditor.setVisible(true);
@@ -650,13 +654,22 @@ public class GLNode extends GLContainer {
 	private void finishTitleEditing(boolean commit) {
 		if (!titleEditor.isVisible())
 			return;
+		String before = titleBeforeEditing == null ? title : titleBeforeEditing;
 		if (commit)
 			setTitle(titleEditor.getText());
 		else
 			titleEditor.setText(title);
 		titleEditor.setVisible(false);
+		titleBeforeEditing = null;
 		requestGLFocus(null);
 		invalidateRecording();
+		if (commit && !before.equals(title)) {
+			String after = title;
+			var manager = getGLSaveManager();
+			if (manager != null)
+				manager.record("Edit node title", () -> setTitle(before),
+						() -> setTitle(after));
+		}
 	}
 
 	private void ensureContextMenu() {
@@ -678,16 +691,23 @@ public class GLNode extends GLContainer {
 					getGLLocalizer().text(GLUiKeys.NODE_EDIT_TITLE));
 		if (deleteNodeMenuItem != null)
 			deleteNodeMenuItem.setText(
-					getGLLocalizer().text(GLUiKeys.NODE_DELETE));
+					getGLLocalizer().text(deleteMenuKey()));
+	}
+
+	private String deleteMenuKey() {
+		return getGLParent() instanceof GLNodeEditor editor
+				&& isSelected() && editor.getSelectedNodes().size() > 1
+						? GLUiKeys.NODE_DELETE_MULTIPLE
+						: GLUiKeys.NODE_DELETE;
 	}
 
 	private void deleteFromEditor() {
 		if (!(getGLParent() instanceof GLNodeEditor editor))
 			return;
 		if (isSelected())
-			editor.removeSelectedNodes();
+			editor.removeSelectedNodesFromUser();
 		else
-			editor.removeNode(this);
+			editor.removeNodeFromUser(this);
 	}
 
 	private void showContextMenu(GLMouseEvent event) {
@@ -789,10 +809,32 @@ public class GLNode extends GLContainer {
 		if (finished == Gesture.MOVE
 				&& getGLParent() instanceof GLNodeEditor editor)
 			editor.endNodeMove(this);
+		else if (finished != Gesture.NONE)
+			recordBoundsChange(finished == Gesture.MOVE
+					? "Move node" : "Resize node");
 		if (event != null && hovered)
 			updateCursor(event);
 		else
-			clearCursor();
+		clearCursor();
+	}
+
+	private void recordBoundsChange(String name) {
+		float beginX = startX;
+		float beginY = startY;
+		float beginWidth = startWidth;
+		float beginHeight = startHeight;
+		float endX = getX();
+		float endY = getY();
+		float endWidth = getWidth();
+		float endHeight = getHeight();
+		if (beginX == endX && beginY == endY && beginWidth == endWidth
+				&& beginHeight == endHeight)
+			return;
+		var manager = getGLSaveManager();
+		if (manager != null)
+			manager.record(name,
+					() -> setBounds(beginX, beginY, beginWidth, beginHeight),
+					() -> setBounds(endX, endY, endWidth, endHeight));
 	}
 
 	private void clearCursor() {

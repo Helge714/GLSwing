@@ -26,6 +26,21 @@ bewusst verworfen wurde.
   - Große Datenmengen durch Virtualisierung auf sichtbare Einträge begrenzen.
 - Auf dem Listen- und Auswahlmodell später `GLTree<T>` und `GLTable` aufbauen.
 
+## Rendering und Farbräume
+
+- Allgemeine GPU-Farbrauminterpolation für Vertexverläufe entwickeln.
+  - Für beliebige Dreiecke und Polygone mindestens `SRGB`, `LINEAR_RGB` und
+    `OKLAB` unterstützen.
+  - Den Interpolationsmodus möglichst als Vertexattribut transportieren, damit
+    ein Wechsel das Batching nicht durch zusätzliche Flushes unterbricht.
+  - Farbattribute vor der Rasterizer-Interpolation in den gewählten Farbraum
+    überführen und im Fragmentshader wieder nach sRGB konvertieren.
+  - Eindimensionale Verläufe zusätzlich über Endfarben und einen
+    Verlaufsparameter `t` abbilden, damit zyklische `HSV`- und
+    `OKLCH`-Interpolation eindeutig möglich ist.
+  - Zusätzliche Vertexbandbreite, Fragmentshader-Kosten, Gamut-Clipping und die
+    Kompatibilität mit eigenen Filled-Shadern messen und dokumentieren.
+
 ## Später prüfen
 
 - Barrierefreiheits-Schnittstellen für GPU-gerenderte Controls untersuchen.
