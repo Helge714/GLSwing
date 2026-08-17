@@ -47,6 +47,8 @@ public final class StrokeTessellator {
 		validateGeometry(points, closed, stroke);
 		if (color == null)
 			throw new IllegalArgumentException("Stroke color must not be null");
+		if (stroke.isDashed())
+			return tessellateDashed(points, null, closed, stroke, color);
 		StrokeOutline outline = createOutline(points, null, closed, stroke);
 		if (outline == null || outline.contours.isEmpty())
 			return new float[0];
@@ -57,12 +59,37 @@ public final class StrokeTessellator {
 			GLStroke stroke, Color[] colors) {
 		validateGeometry(points, closed, stroke);
 		validateColors(colors, points.length / 2);
+		if (stroke.isDashed())
+			return tessellateDashed(points, colors, closed, stroke, null);
 		StrokeOutline outline = createOutline(points, colors, closed, stroke);
 		if (outline == null || outline.contours.isEmpty())
 			return new float[0];
 		List<Color[]> contourColors = createContourColors(
 				outline.contours, outline.centerline, outline.pointColors, closed);
 		return PolygonTessellator.tessellateContours(outline.contours, contourColors);
+	}
+
+	private static float[] tessellateDashed(float[] points, Color[] colors,
+			boolean closed, GLStroke stroke, Color uniformColor) {
+		List<StrokeDashSplitter.DashRun> runs = StrokeDashSplitter.split(
+				points, colors, closed, stroke);
+		GLStroke solidStroke = stroke.withoutDash();
+		List<float[]> geometries = new ArrayList<>(runs.size());
+		int totalLength = 0;
+		for (StrokeDashSplitter.DashRun run : runs) {
+			float[] geometry = colors == null
+					? tessellateUniform(run.points(), run.closed(), solidStroke, uniformColor)
+					: tessellateColored(run.points(), run.closed(), solidStroke, run.colors());
+			geometries.add(geometry);
+			totalLength += geometry.length;
+		}
+		float[] result = new float[totalLength];
+		int offset = 0;
+		for (float[] geometry : geometries) {
+			System.arraycopy(geometry, 0, result, offset, geometry.length);
+			offset += geometry.length;
+		}
+		return result;
 	}
 
 	private static StrokeOutline createOutline(float[] points, Color[] colors,

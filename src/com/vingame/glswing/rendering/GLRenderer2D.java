@@ -58,7 +58,9 @@ public final class GLRenderer2D {
 	private final GLTransform recordingLocalTransform = new GLTransform();
 	private final GLTransform recordingParameterTransform = new GLTransform();
 	private final GLTransform recordingVertexTransform = new GLTransform();
+	private final GLTransform recordingColorTransform = new GLTransform();
 	private final VertexModifier recordingVertexModifier = new VertexModifier();
+	private final VertexModifier recordingColorModifier = new VertexModifier();
 	private ReplayParameterState[] replayParameterStack = new ReplayParameterState[8];
 	private int replayParameterDepth;
 	private float replayTintRed = 1;
@@ -583,6 +585,23 @@ public final class GLRenderer2D {
 		addTriangleVerticesRaw(vertices, pickRecord);
 	}
 
+	/** Adds vertices already compiled in final replay/world space. */
+	void addReplayCompiledFilled(float[] vertices, int pickId,
+			GLMouseTarget mouseTarget, float automaticOriginX, float automaticOriginY) {
+		requireFrame();
+		if (recordingReplayBase == null)
+			throw new IllegalStateException(
+					"Replay-compiled geometry requires an active recording replay");
+		if (vertices == null || vertices.length % FilledBatch.FLOATS_PER_VERTEX != 0
+				|| vertices.length / FilledBatch.FLOATS_PER_VERTEX % 3 != 0)
+			throw new IllegalArgumentException("Filled vertex data is invalid");
+		if (vertices.length == 0)
+			return;
+		int pickRecord = createPickRecord(
+				pickId, mouseTarget, automaticOriginX, automaticOriginY);
+		addTriangleVerticesRaw(vertices, pickRecord, recordingColorModifier);
+	}
+
 	/** Internal live transform reference used by the shared geometry compiler. */
 	GLTransform currentTransform() {
 		requireFrame();
@@ -1035,6 +1054,12 @@ public final class GLRenderer2D {
 	}
 
 	private void addTriangleVerticesRaw(float[] triangleVertices, int pickId) {
+		addTriangleVerticesRaw(triangleVertices, pickId,
+				activeRecordingVertexModifier());
+	}
+
+	private void addTriangleVerticesRaw(float[] triangleVertices, int pickId,
+			VertexModifier modifier) {
 		activateBatch(BatchType.FILLED);
 		int remaining = triangleVertices.length / FilledBatch.FLOATS_PER_VERTEX;
 		int offset = 0;
@@ -1045,7 +1070,7 @@ public final class GLRenderer2D {
 				continue;
 			}
 			filledBatch.addVertices(triangleVertices, offset, chunk,
-					pickId, activeRecordingVertexModifier());
+					pickId, modifier);
 			offset += chunk * FilledBatch.FLOATS_PER_VERTEX;
 			remaining -= chunk;
 		}
@@ -1064,6 +1089,10 @@ public final class GLRenderer2D {
 		recordingVertexTransform.setTransform(recordingReplayBase)
 				.concatenate(recordingParameterTransform);
 		recordingVertexModifier.set(recordingVertexTransform,
+				replayTintRed, replayTintGreen, replayTintBlue, replayTintAlpha,
+				replayColorOverride, replayColorRed, replayColorGreen,
+				replayColorBlue, replayColorAlpha, replayOpacity);
+		recordingColorModifier.set(recordingColorTransform,
 				replayTintRed, replayTintGreen, replayTintBlue, replayTintAlpha,
 				replayColorOverride, replayColorRed, replayColorGreen,
 				replayColorBlue, replayColorAlpha, replayOpacity);

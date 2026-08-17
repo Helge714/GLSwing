@@ -21,10 +21,16 @@ public final class StrokeTessellatorSelfTest {
 		assertAllJoinsProduceFiniteTriangles();
 		assertCenterOffset();
 		assertOffsetChangesRoundJoinRadius();
+		assertDashPatternAndPhase();
+		assertOddDashPatternRepeats();
+		assertDashCaps();
+		assertDashColorsAreInterpolated();
+		assertClosedDashedStroke();
 		assertClosedStroke();
 		assertCollapsedInnerContourIsAccepted();
 		assertPerPointColorsReachVertices();
 		assertInvalidColorCountIsRejected();
+		assertInvalidDashPatternIsRejected();
 
 		System.out.println("Stroke tessellator self-test passed.");
 	}
@@ -104,13 +110,16 @@ public final class StrokeTessellatorSelfTest {
 
 	private static void assertImmutableStrokeStyle() {
 		GLStroke original = new GLStroke(4);
+		float[] dash = { 9, 3 };
 		GLStroke styled = original.withWidth(12)
 				.withCap(GLStroke.Cap.ROUND)
 				.withJoin(GLStroke.Join.BEVEL)
 				.withMiterLimit(5)
 				.withOffset(3)
 				.withCurveTolerance(0.4f)
-				.withWidthSpace(GLStroke.WidthSpace.SCREEN);
+				.withWidthSpace(GLStroke.WidthSpace.SCREEN)
+				.withDash(dash, 2);
+		dash[0] = 999;
 		if (original.getWidth() != 4 || original.getCap() != GLStroke.Cap.BUTT
 				|| original.getJoin() != GLStroke.Join.MITER || original.getOffset() != 0
 				|| original.getWidthSpace() != GLStroke.WidthSpace.WORLD)
@@ -118,8 +127,76 @@ public final class StrokeTessellatorSelfTest {
 		if (styled.getWidth() != 12 || styled.getCap() != GLStroke.Cap.ROUND
 				|| styled.getJoin() != GLStroke.Join.BEVEL || styled.getMiterLimit() != 5
 				|| styled.getOffset() != 3 || styled.getCurveTolerance() != 0.4f
-				|| styled.getWidthSpace() != GLStroke.WidthSpace.SCREEN)
+				|| styled.getWidthSpace() != GLStroke.WidthSpace.SCREEN
+				|| styled.getDashPhase() != 2 || styled.getDashArray()[0] != 9)
 			throw new AssertionError("GLStroke fluent copy lost style values");
+		float[] returnedDash = styled.getDashArray();
+		returnedDash[0] = 777;
+		if (styled.getDashArray()[0] != 9)
+			throw new AssertionError("GLStroke exposed its internal dash array");
+		if (styled.withCap(GLStroke.Cap.SQUARE).getDashPhase() != 2)
+			throw new AssertionError("GLStroke copy lost its dash pattern");
+		if (styled.withoutDash().isDashed())
+			throw new AssertionError("GLStroke.withoutDash() kept a dash pattern");
+	}
+
+	private static void assertDashPatternAndPhase() {
+		GLStroke dashed = new GLStroke(10).withDash(new float[] { 20, 10 }, 0);
+		float[] vertices = StrokeTessellator.tessellateLine(
+				0, 0, 100, 0, dashed, Color.WHITE);
+		assertCompleteFiniteTriangles("dashed line", vertices);
+		assertContainsX("first dash end", vertices, 20);
+		assertContainsX("second dash start", vertices, 30);
+		assertNoXBetween("first dash gap", vertices, 20, 30);
+
+		float[] phased = StrokeTessellator.tessellateLine(0, 0, 100, 0,
+				dashed.withDashPhase(5), Color.WHITE);
+		assertContainsX("phased first dash end", phased, 15);
+		assertContainsX("phased second dash start", phased, 25);
+		assertNoXBetween("phased first dash gap", phased, 15, 25);
+	}
+
+	private static void assertDashCaps() {
+		GLStroke round = new GLStroke(10)
+				.withCap(GLStroke.Cap.ROUND)
+				.withDash(20, 20);
+		float[] vertices = StrokeTessellator.tessellateLine(
+				0, 0, 100, 0, round, Color.WHITE);
+		Bounds bounds = bounds(vertices);
+		assertNear("round dashed start", -5, bounds.minimumX);
+		assertNear("round dashed end", 105, bounds.maximumX);
+		assertContainsX("round cap at first dash end", vertices, 25);
+		assertContainsX("round cap at second dash start", vertices, 35);
+	}
+
+	private static void assertOddDashPatternRepeats() {
+		float[] vertices = StrokeTessellator.tessellateLine(0, 0, 60, 0,
+				new GLStroke(4).withDash(10, 5, 2), Color.WHITE);
+		assertContainsX("odd pattern first run end", vertices, 10);
+		assertContainsX("odd pattern second run start", vertices, 15);
+		assertContainsX("odd pattern second run end", vertices, 17);
+		assertContainsX("repeated odd pattern third run start", vertices, 27);
+	}
+
+	private static void assertDashColorsAreInterpolated() {
+		float[] vertices = StrokeTessellator.tessellateLine(
+				0, 0, Color.RED, 100, 0, Color.BLUE,
+				new GLStroke(10).withDash(20, 10));
+		for (int index = 0; index < vertices.length; index += FLOATS_PER_VERTEX) {
+			if (Math.abs(vertices[index] - 20) <= EPSILON
+					&& Math.abs(vertices[index + 2] - 0.8f) <= EPSILON
+					&& Math.abs(vertices[index + 4] - 0.2f) <= EPSILON)
+				return;
+		}
+		throw new AssertionError("Dash boundary did not interpolate its point color");
+	}
+
+	private static void assertClosedDashedStroke() {
+		float[] vertices = StrokeTessellator.tessellatePolygon(new float[] {
+				0, 0, 100, 0, 100, 100, 0, 100
+		}, new GLStroke(8).withCap(GLStroke.Cap.ROUND).withDash(27, 11),
+				Color.WHITE);
+		assertCompleteFiniteTriangles("closed dashed stroke", vertices);
 	}
 
 	private static void assertCurveToleranceControlsTriangleCount() {
@@ -161,6 +238,21 @@ public final class StrokeTessellatorSelfTest {
 		}
 	}
 
+	private static void assertInvalidDashPatternIsRejected() {
+		try {
+			new GLStroke(4).withDash(10, 0);
+			throw new AssertionError("Stroke accepted a zero dash length");
+		} catch (IllegalArgumentException expected) {
+			// Zero-length runs are intentionally unsupported; use a short round run for dots.
+		}
+		try {
+			new GLStroke(4).withDash(-1, 3);
+			throw new AssertionError("Stroke accepted a negative dash length");
+		} catch (IllegalArgumentException expected) {
+			// Expected.
+		}
+	}
+
 	private static void assertCompleteFiniteTriangles(String name, float[] vertices) {
 		if (vertices.length == 0 || vertices.length % (FLOATS_PER_VERTEX * 3) != 0)
 			throw new AssertionError(name + " did not produce complete triangles");
@@ -196,6 +288,22 @@ public final class StrokeTessellatorSelfTest {
 	private static void assertNear(String name, float expected, float actual) {
 		if (Math.abs(expected - actual) > EPSILON)
 			throw new AssertionError(name + ": expected " + expected + ", but got " + actual);
+	}
+
+	private static void assertContainsX(String name, float[] vertices, float expected) {
+		for (int index = 0; index < vertices.length; index += FLOATS_PER_VERTEX)
+			if (Math.abs(vertices[index] - expected) <= EPSILON)
+				return;
+		throw new AssertionError(name + ": no vertex at x=" + expected);
+	}
+
+	private static void assertNoXBetween(String name, float[] vertices,
+			float minimum, float maximum) {
+		for (int index = 0; index < vertices.length; index += FLOATS_PER_VERTEX) {
+			float x = vertices[index];
+			if (x > minimum + EPSILON && x < maximum - EPSILON)
+				throw new AssertionError(name + ": unexpected vertex at x=" + x);
+		}
 	}
 
 	private static final class Bounds {

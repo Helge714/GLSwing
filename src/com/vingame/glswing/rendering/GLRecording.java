@@ -67,6 +67,11 @@ public final class GLRecording {
 		void replay(GLRenderer2D renderer);
 	}
 
+	@FunctionalInterface
+	interface FilledGeometryCompiler {
+		float[] compile(GLRenderer2D renderer);
+	}
+
 	static final class Builder {
 		private final GLRenderer2D owner;
 		private final GLRenderer2D.StateSnapshot initialState;
@@ -98,6 +103,15 @@ public final class GLRecording {
 			preparePending(PendingType.FILLED, null, 0,
 					pickId, mouseTarget, originX, originY);
 			pendingVertices.append(vertices);
+		}
+
+		/** Adds view-dependent geometry which must be compiled in replay space. */
+		void addDynamicFilled(FilledGeometryCompiler compiler,
+				int pickId, GLMouseTarget mouseTarget, float originX, float originY) {
+			if (compiler == null)
+				throw new IllegalArgumentException("Filled geometry compiler must not be null");
+			add(new DynamicFilledCommand(compiler, pickId,
+					TargetReference.of(mouseTarget), originX, originY));
 		}
 
 		void addFilledQuad(
@@ -260,6 +274,41 @@ public final class GLRecording {
 			pendingVertices = null;
 			pendingTexture = null;
 			pendingTarget = null;
+		}
+	}
+
+	/** Caches view-dependent geometry until model transform or projection changes. */
+	private static final class DynamicFilledCommand implements Command {
+		private final FilledGeometryCompiler compiler;
+		private final int pickId;
+		private final TargetReference target;
+		private final float originX;
+		private final float originY;
+		private GLTransform compiledTransform;
+		private GLTransform compiledWorldToScreen;
+		private float[] vertices;
+
+		DynamicFilledCommand(FilledGeometryCompiler compiler, int pickId,
+				TargetReference target, float originX, float originY) {
+			this.compiler = compiler;
+			this.pickId = pickId;
+			this.target = target;
+			this.originX = originX;
+			this.originY = originY;
+		}
+
+		@Override
+		public void replay(GLRenderer2D renderer) {
+			GLTransform transform = renderer.currentTransform().copy();
+			GLTransform worldToScreen = renderer.currentWorldToScreen().copy();
+			if (vertices == null || !transform.equals(compiledTransform)
+					|| !worldToScreen.equals(compiledWorldToScreen)) {
+				vertices = compiler.compile(renderer);
+				compiledTransform = transform;
+				compiledWorldToScreen = worldToScreen;
+			}
+			renderer.addReplayCompiledFilled(
+					vertices, pickId, target.get(), originX, originY);
 		}
 	}
 

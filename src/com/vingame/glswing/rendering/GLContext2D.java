@@ -477,6 +477,33 @@ public final class GLContext2D {
 		return stroke.getWidthSpace();
 	}
 
+	/** Uses alternating visible and empty lengths, starting with a visible run. */
+	public void setStrokeDash(float... dashArray) {
+		stroke = stroke.withDash(dashArray);
+	}
+
+	/** Uses the supplied dash pattern and advances its start by {@code dashPhase}. */
+	public void setStrokeDash(float[] dashArray, float dashPhase) {
+		stroke = stroke.withDash(dashArray, dashPhase);
+	}
+
+	/** Returns a defensive copy, or {@code null} while the stroke is solid. */
+	public float[] getStrokeDash() {
+		return stroke.getDashArray();
+	}
+
+	public void setStrokeDashPhase(float dashPhase) {
+		stroke = stroke.withDashPhase(dashPhase);
+	}
+
+	public float getStrokeDashPhase() {
+		return stroke.getDashPhase();
+	}
+
+	public void clearStrokeDash() {
+		stroke = stroke.withoutDash();
+	}
+
 	public void setStroke(GLStroke stroke) {
 		if (stroke == null)
 			throw new IllegalArgumentException("Stroke must not be null");
@@ -718,10 +745,21 @@ public final class GLContext2D {
 
 	private void drawLine(float x1, float y1, float x2, float y2,
 			Color color, int pickId, GLMouseTarget mouseTarget) {
+		GLStroke lineStroke = stroke;
+		Color lineColor = requireColor(color);
 		float[] vertices = StrokeGeometryCompiler.line(
-				x1, y1, x2, y2, stroke, requireColor(color),
+				x1, y1, x2, y2, lineStroke, lineColor,
 				renderer.currentTransform(), renderer.currentWorldToScreen(),
 				renderer.currentScreenToWorld());
+		if (lineStroke.getWidthSpace() == GLStroke.WidthSpace.SCREEN
+				&& recordDynamicScreenStroke(replayRenderer ->
+						StrokeGeometryCompiler.line(x1, y1, x2, y2,
+								lineStroke, lineColor,
+								replayRenderer.currentTransform(),
+								replayRenderer.currentWorldToScreen(),
+								replayRenderer.currentScreenToWorld()),
+						pickId, mouseTarget, x1, y1))
+			return;
 		emitPreparedFilledVertices(vertices, pickId, mouseTarget, x1, y1);
 	}
 
@@ -743,10 +781,22 @@ public final class GLContext2D {
 
 	private void drawLine(float x1, float y1, Color color1,
 			float x2, float y2, Color color2, int pickId, GLMouseTarget mouseTarget) {
+		GLStroke lineStroke = stroke;
+		Color firstColor = requireColor(color1);
+		Color secondColor = requireColor(color2);
 		float[] vertices = StrokeGeometryCompiler.line(
-				x1, y1, requireColor(color1), x2, y2, requireColor(color2), stroke,
+				x1, y1, firstColor, x2, y2, secondColor, lineStroke,
 				renderer.currentTransform(), renderer.currentWorldToScreen(),
 				renderer.currentScreenToWorld());
+		if (lineStroke.getWidthSpace() == GLStroke.WidthSpace.SCREEN
+				&& recordDynamicScreenStroke(replayRenderer ->
+						StrokeGeometryCompiler.line(x1, y1, firstColor,
+								x2, y2, secondColor, lineStroke,
+								replayRenderer.currentTransform(),
+								replayRenderer.currentWorldToScreen(),
+								replayRenderer.currentScreenToWorld()),
+						pickId, mouseTarget, x1, y1))
+			return;
 		emitPreparedFilledVertices(vertices, pickId, mouseTarget, x1, y1);
 	}
 
@@ -776,10 +826,24 @@ public final class GLContext2D {
 
 	private void drawPolyline(float[] points, Color color, int pickId,
 			GLMouseTarget mouseTarget) {
+		GLStroke pathStroke = stroke;
+		Color pathColor = requireColor(color);
 		float[] vertices = StrokeGeometryCompiler.path(
-				points, false, stroke, requireColor(color),
+				points, false, pathStroke, pathColor,
 				renderer.currentTransform(), renderer.currentWorldToScreen(),
 				renderer.currentScreenToWorld());
+		if (recording != null
+				&& pathStroke.getWidthSpace() == GLStroke.WidthSpace.SCREEN) {
+			float[] recordedPoints = points.clone();
+			if (recordDynamicScreenStroke(replayRenderer ->
+					StrokeGeometryCompiler.path(recordedPoints, false,
+							pathStroke, pathColor,
+							replayRenderer.currentTransform(),
+							replayRenderer.currentWorldToScreen(),
+							replayRenderer.currentScreenToWorld()),
+					pickId, mouseTarget, points[0], points[1]))
+				return;
+		}
 		emitPreparedFilledVertices(vertices, pickId, mouseTarget, points[0], points[1]);
 	}
 
@@ -922,10 +986,24 @@ public final class GLContext2D {
 
 	private void drawPolyline(float[] points, Color[] colors, int pickId,
 			GLMouseTarget mouseTarget) {
+		GLStroke pathStroke = stroke;
 		float[] vertices = StrokeGeometryCompiler.path(
-				points, false, stroke, colors,
+				points, false, pathStroke, colors,
 				renderer.currentTransform(), renderer.currentWorldToScreen(),
 				renderer.currentScreenToWorld());
+		if (recording != null
+				&& pathStroke.getWidthSpace() == GLStroke.WidthSpace.SCREEN) {
+			float[] recordedPoints = points.clone();
+			Color[] recordedColors = colors.clone();
+			if (recordDynamicScreenStroke(replayRenderer ->
+					StrokeGeometryCompiler.path(recordedPoints, false,
+							pathStroke, recordedColors,
+							replayRenderer.currentTransform(),
+							replayRenderer.currentWorldToScreen(),
+							replayRenderer.currentScreenToWorld()),
+					pickId, mouseTarget, points[0], points[1]))
+				return;
+		}
 		emitPreparedFilledVertices(vertices, pickId, mouseTarget, points[0], points[1]);
 	}
 
@@ -955,10 +1033,24 @@ public final class GLContext2D {
 
 	private void drawPolygon(float[] points, Color color, int pickId,
 			GLMouseTarget mouseTarget) {
+		GLStroke pathStroke = stroke;
+		Color pathColor = requireColor(color);
 		float[] vertices = StrokeGeometryCompiler.path(
-				points, true, stroke, requireColor(color),
+				points, true, pathStroke, pathColor,
 				renderer.currentTransform(), renderer.currentWorldToScreen(),
 				renderer.currentScreenToWorld());
+		if (recording != null
+				&& pathStroke.getWidthSpace() == GLStroke.WidthSpace.SCREEN) {
+			float[] recordedPoints = points.clone();
+			if (recordDynamicScreenStroke(replayRenderer ->
+					StrokeGeometryCompiler.path(recordedPoints, true,
+							pathStroke, pathColor,
+							replayRenderer.currentTransform(),
+							replayRenderer.currentWorldToScreen(),
+							replayRenderer.currentScreenToWorld()),
+					pickId, mouseTarget, points[0], points[1]))
+				return;
+		}
 		emitPreparedFilledVertices(vertices, pickId, mouseTarget, points[0], points[1]);
 	}
 
@@ -977,10 +1069,24 @@ public final class GLContext2D {
 
 	private void drawPolygon(float[] points, Color[] colors, int pickId,
 			GLMouseTarget mouseTarget) {
+		GLStroke pathStroke = stroke;
 		float[] vertices = StrokeGeometryCompiler.path(
-				points, true, stroke, colors,
+				points, true, pathStroke, colors,
 				renderer.currentTransform(), renderer.currentWorldToScreen(),
 				renderer.currentScreenToWorld());
+		if (recording != null
+				&& pathStroke.getWidthSpace() == GLStroke.WidthSpace.SCREEN) {
+			float[] recordedPoints = points.clone();
+			Color[] recordedColors = colors.clone();
+			if (recordDynamicScreenStroke(replayRenderer ->
+					StrokeGeometryCompiler.path(recordedPoints, true,
+							pathStroke, recordedColors,
+							replayRenderer.currentTransform(),
+							replayRenderer.currentWorldToScreen(),
+							replayRenderer.currentScreenToWorld()),
+					pickId, mouseTarget, points[0], points[1]))
+				return;
+		}
 		emitPreparedFilledVertices(vertices, pickId, mouseTarget, points[0], points[1]);
 	}
 
@@ -1864,10 +1970,24 @@ public final class GLContext2D {
 			GLMouseTarget mouseTarget, float originX, float originY) {
 		if (points.length == 0)
 			return;
+		GLStroke pathStroke = stroke;
+		Color pathColor = requireColor(color);
 		float[] vertices = StrokeGeometryCompiler.path(
-				points, true, stroke, requireColor(color),
+				points, true, pathStroke, pathColor,
 				renderer.currentTransform(), renderer.currentWorldToScreen(),
 				renderer.currentScreenToWorld());
+		if (recording != null
+				&& pathStroke.getWidthSpace() == GLStroke.WidthSpace.SCREEN) {
+			float[] recordedPoints = points.clone();
+			if (recordDynamicScreenStroke(replayRenderer ->
+					StrokeGeometryCompiler.path(recordedPoints, true,
+							pathStroke, pathColor,
+							replayRenderer.currentTransform(),
+							replayRenderer.currentWorldToScreen(),
+							replayRenderer.currentScreenToWorld()),
+					pickId, mouseTarget, originX, originY))
+				return;
+		}
 		emitPreparedFilledVertices(vertices, pickId, mouseTarget, originX, originY);
 	}
 
@@ -1971,6 +2091,21 @@ public final class GLContext2D {
 			recording.addFilled(vertices, pickId, mouseTarget,
 					automaticOriginX, automaticOriginY);
 		}
+	}
+
+	private boolean recordDynamicScreenStroke(
+			GLRecording.FilledGeometryCompiler compiler, int pickId,
+			GLMouseTarget mouseTarget, float automaticOriginX, float automaticOriginY) {
+		if (recording == null)
+			return false;
+		if (mouseTarget != null) {
+			resolveMouseOrigin(mouseTarget, automaticOriginX, automaticOriginY);
+			automaticOriginX = resolvedMouseOriginX;
+			automaticOriginY = resolvedMouseOriginY;
+		}
+		recording.addDynamicFilled(compiler, pickId, mouseTarget,
+				automaticOriginX, automaticOriginY);
+		return true;
 	}
 
 	private void submitFilled(float x1, float y1, float x2, float y2,

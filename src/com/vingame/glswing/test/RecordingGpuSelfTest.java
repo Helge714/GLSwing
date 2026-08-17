@@ -16,7 +16,9 @@ import com.vingame.glswing.input.GLPickResult;
 import com.vingame.glswing.rendering.GLContext2D;
 import com.vingame.glswing.rendering.GLFont;
 import com.vingame.glswing.rendering.GLRecording;
+import com.vingame.glswing.rendering.GLRenderParameters;
 import com.vingame.glswing.rendering.GLRenderer2D;
+import com.vingame.glswing.rendering.GLStroke;
 import com.vingame.glswing.rendering.GLTexture;
 import com.vingame.glswing.rendering.GLTransform;
 import com.vingame.glswing.rendering.Projection2D;
@@ -56,6 +58,7 @@ public final class RecordingGpuSelfTest {
 			testCompatibleBatchReplay(gl, renderer);
 			testTextureAndTextCoalescing(gl, renderer, texture, font);
 			testMixedRecording(gl, renderer, texture, font);
+			testRecordedScreenStrokeIgnoresReplayScale(gl, renderer);
 			testRenderOutputsAreAmbient(gl, renderer);
 			System.out.println("Recording GPU self-test passed.");
 		} finally {
@@ -207,6 +210,40 @@ public final class RecordingGpuSelfTest {
 		if (renderer.readPickResult(gl, 100, 30).isHit())
 			throw new AssertionError(
 					"Explicit setRenderOutputs command inside a recording was not preserved");
+	}
+
+	private static void testRecordedScreenStrokeIgnoresReplayScale(
+			GL3 gl, GLRenderer2D renderer) {
+		GLMouseTarget target = new GLMouseTarget() {
+		};
+		GLContext2D context = renderer.beginFrame(gl, WIDTH, HEIGHT,
+				Projection2D.TOP_LEFT_PIXELS.create(WIDTH, HEIGHT));
+		context.beginRecording();
+		context.setStroke(new GLStroke(6)
+				.withWidthSpace(GLStroke.WidthSpace.SCREEN)
+				.withCap(GLStroke.Cap.BUTT)
+				.withDash(10, 10));
+		context.drawLine(10, 20, 50, 20, Color.WHITE, target);
+		GLRecording recording = context.endRecording();
+
+		context.clear(Color.BLACK);
+		context.setTransform(new GLTransform().translate(20, 20).scale(3));
+		context.draw(recording,
+				new GLRenderParameters().setColor(Color.CYAN).setOpacity(0.75f));
+		renderer.endFrame();
+
+		checkColor(gl, 55, 80, new Color(0, 191, 191),
+				"recorded SCREEN dash visible run");
+		checkColor(gl, 65, 80, Color.BLACK,
+				"recorded SCREEN dash gap");
+		checkColor(gl, 55, 72, Color.BLACK,
+				"recorded SCREEN width scaled with its parent");
+		GLPickResult pick = renderer.readPickResult(gl, 55, 80);
+		if (pick.getTarget() != target || !pick.hasLocalPosition()
+				|| Math.abs(pick.getLocalX() - 1.666667f) > 0.02f
+				|| Math.abs(pick.getLocalY()) > 0.02f)
+			throw new AssertionError("Recorded SCREEN stroke picking is incorrect: "
+					+ pick.getLocalX() + "/" + pick.getLocalY());
 	}
 
 	private static void checkColor(GL3 gl, int x, int y,
