@@ -22,19 +22,23 @@ public final class TextureBatch {
 	private final FloatBuffer vertices = Buffers.newDirectFloatBuffer(
 			MAX_VERTICES * TexturedVertexFormat.FLOATS_PER_VERTEX);
 	private final IntBuffer pickIds = Buffers.newDirectIntBuffer(MAX_VERTICES);
+	private final IntBuffer textureSlots = Buffers.newDirectIntBuffer(MAX_VERTICES);
+	private final TextureSlotSet textures = new TextureSlotSet();
 	private final ShaderProgram program;
-	private GLTexture texture;
 	private int vao;
 	private int vbo;
 	private int pickVbo;
+	private int slotVbo;
 	private int vertexCount;
 	private boolean hasPickableVertices;
 
-	private TextureBatch(ShaderProgram program, int vao, int vbo, int pickVbo) {
+	private TextureBatch(ShaderProgram program, int vao, int vbo, int pickVbo,
+			int slotVbo) {
 		this.program = program;
 		this.vao = vao;
 		this.vbo = vbo;
 		this.pickVbo = pickVbo;
+		this.slotVbo = slotVbo;
 	}
 
 	public static TextureBatch create(GL3 gl) {
@@ -44,6 +48,7 @@ public final class TextureBatch {
 		int vao = 0;
 		int vbo = 0;
 		int pickVbo = 0;
+		int slotVbo = 0;
 		try {
 			gl.glGenVertexArrays(1, ids, 0);
 			vao = ids[0];
@@ -70,8 +75,18 @@ public final class TextureBatch {
 			gl.glEnableVertexAttribArray(3);
 			gl.glVertexAttribIPointer(3, 1, GL.GL_UNSIGNED_INT, Integer.BYTES, 0);
 
-			return new TextureBatch(program, vao, vbo, pickVbo);
+			gl.glGenBuffers(1, ids, 0);
+			slotVbo = ids[0];
+			gl.glBindBuffer(GL.GL_ARRAY_BUFFER, slotVbo);
+			gl.glBufferData(GL.GL_ARRAY_BUFFER,
+					(long) MAX_VERTICES * Integer.BYTES, null, GL.GL_DYNAMIC_DRAW);
+			gl.glEnableVertexAttribArray(4);
+			gl.glVertexAttribIPointer(4, 1, GL.GL_UNSIGNED_INT, Integer.BYTES, 0);
+
+			return new TextureBatch(program, vao, vbo, pickVbo, slotVbo);
 		} catch (RuntimeException error) {
+			if (slotVbo != 0)
+				gl.glDeleteBuffers(1, new int[] { slotVbo }, 0);
 			if (pickVbo != 0)
 				gl.glDeleteBuffers(1, new int[] { pickVbo }, 0);
 			if (vbo != 0)
@@ -89,8 +104,9 @@ public final class TextureBatch {
 	public void begin() {
 		vertices.clear();
 		pickIds.clear();
+		textureSlots.clear();
 		vertexCount = 0;
-		texture = null;
+		textures.clear();
 		hasPickableVertices = false;
 	}
 
@@ -103,7 +119,11 @@ public final class TextureBatch {
 	}
 
 	public boolean accepts(GLTexture candidate) {
-		return vertexCount == 0 || texture == candidate;
+		return accepts(candidate, TextureSlotSet.MAX_SLOTS);
+	}
+
+	public boolean accepts(GLTexture candidate, int textureLimit) {
+		return textures.accepts(candidate, textureLimit);
 	}
 
 	public void addQuad(GLTexture texture,
@@ -111,20 +131,31 @@ public final class TextureBatch {
 			float x3, float y3, float x4, float y4,
 			float u0, float v0, float u1, float v1,
 			float red, float green, float blue, float alpha, int pickId) {
+		addQuad(texture, x1, y1, x2, y2, x3, y3, x4, y4,
+				u0, v0, u1, v1, red, green, blue, alpha, pickId,
+				TextureSlotSet.MAX_SLOTS);
+	}
+
+	public void addQuad(GLTexture texture,
+			float x1, float y1, float x2, float y2,
+			float x3, float y3, float x4, float y4,
+			float u0, float v0, float u1, float v1,
+			float red, float green, float blue, float alpha, int pickId,
+			int textureLimit) {
 		if (texture == null || texture.isDisposed())
 			throw new IllegalArgumentException("Texture must be live");
-		if (!accepts(texture))
+		if (!accepts(texture, textureLimit))
 			throw new IllegalStateException("Texture batch requires a flush before changing texture");
 		if (!canAdd(6))
 			throw new IllegalStateException("Texture batch capacity exceeded");
 
-		this.texture = texture;
-		putVertex(x1, y1, u0, v0, red, green, blue, alpha, pickId);
-		putVertex(x2, y2, u1, v0, red, green, blue, alpha, pickId);
-		putVertex(x3, y3, u1, v1, red, green, blue, alpha, pickId);
-		putVertex(x1, y1, u0, v0, red, green, blue, alpha, pickId);
-		putVertex(x3, y3, u1, v1, red, green, blue, alpha, pickId);
-		putVertex(x4, y4, u0, v1, red, green, blue, alpha, pickId);
+		int slot = textures.slot(texture, textureLimit);
+		putVertex(x1, y1, u0, v0, red, green, blue, alpha, pickId, slot);
+		putVertex(x2, y2, u1, v0, red, green, blue, alpha, pickId, slot);
+		putVertex(x3, y3, u1, v1, red, green, blue, alpha, pickId, slot);
+		putVertex(x1, y1, u0, v0, red, green, blue, alpha, pickId, slot);
+		putVertex(x3, y3, u1, v1, red, green, blue, alpha, pickId, slot);
+		putVertex(x4, y4, u0, v1, red, green, blue, alpha, pickId, slot);
 		vertexCount += 6;
 	}
 
@@ -137,6 +168,13 @@ public final class TextureBatch {
 	/** Adds textured vertices and optionally transforms their x/y coordinates. */
 	public void addVertices(GLTexture texture, float[] texturedVertices,
 			int offset, int additionalVertices, int pickId, VertexModifier modifier) {
+		addVertices(texture, texturedVertices, offset, additionalVertices,
+				pickId, modifier, TextureSlotSet.MAX_SLOTS);
+	}
+
+	public void addVertices(GLTexture texture, float[] texturedVertices,
+			int offset, int additionalVertices, int pickId, VertexModifier modifier,
+			int textureLimit) {
 		if (texture == null || texture.isDisposed())
 			throw new IllegalArgumentException("Texture must be live");
 		if (texturedVertices == null
@@ -146,11 +184,11 @@ public final class TextureBatch {
 				|| offset + additionalVertices * TexturedVertexFormat.FLOATS_PER_VERTEX
 						> texturedVertices.length)
 			throw new IllegalArgumentException("Texture vertex range lies outside the array");
-		if (!accepts(texture))
+		if (!accepts(texture, textureLimit))
 			throw new IllegalStateException("Texture batch requires a flush before changing texture");
 		if (!canAdd(additionalVertices))
 			throw new IllegalStateException("Texture batch capacity exceeded");
-		this.texture = texture;
+		int slot = textures.slot(texture, textureLimit);
 		int stride = TexturedVertexFormat.FLOATS_PER_VERTEX;
 		if (modifier == null || modifier.isIdentity()) {
 			vertices.put(texturedVertices, offset, additionalVertices * stride);
@@ -175,8 +213,10 @@ public final class TextureBatch {
 				}
 			}
 		}
-		for (int vertex = 0; vertex < additionalVertices; vertex++)
+		for (int vertex = 0; vertex < additionalVertices; vertex++) {
 			pickIds.put(pickId);
+			textureSlots.put(slot);
+		}
 		hasPickableVertices |= pickId != 0;
 		vertexCount += additionalVertices;
 	}
@@ -195,7 +235,8 @@ public final class TextureBatch {
 
 		vertices.flip();
 		pickIds.flip();
-		texture.bind(gl, 0);
+		textureSlots.flip();
+		textures.bind(gl);
 		gl.glBindVertexArray(vao);
 		gl.glBindBuffer(GL.GL_ARRAY_BUFFER, vbo);
 		gl.glBufferData(GL.GL_ARRAY_BUFFER,
@@ -206,25 +247,32 @@ public final class TextureBatch {
 					(long) pickIds.remaining() * Integer.BYTES,
 					pickIds, GL3.GL_STREAM_DRAW);
 		}
+		gl.glBindBuffer(GL.GL_ARRAY_BUFFER, slotVbo);
+		gl.glBufferData(GL.GL_ARRAY_BUFFER,
+				(long) textureSlots.remaining() * Integer.BYTES,
+				textureSlots, GL3.GL_STREAM_DRAW);
 		int drawCalls = 0;
 		if (renderColor) {
 			ShaderProgram activeProgram = shaderOverride == null ? program : shaderOverride;
 			activeProgram.use(gl);
 			activeProgram.setMatrix4(gl, "uProjection", projection);
-			activeProgram.setInteger(gl, "uTexture", 0);
+			if (shaderOverride == null)
+				textures.setSamplerUniforms(gl, activeProgram, "uTextures");
+			else
+				activeProgram.setInteger(gl, "uTexture", 0);
 			for (Map.Entry<String, ShaderUniformValue> uniform : userUniforms.entrySet())
 				uniform.getValue().apply(gl, activeProgram, uniform.getKey());
 			gl.glDrawArrays(GL.GL_TRIANGLES, 0, vertexCount);
 			drawCalls++;
 		}
 		if (drawPicking) {
-			picking.drawTexture(
-					gl, vao, vertexCount, projection, texture, pickAlphaThreshold);
+			picking.drawTexture(gl, vao, vertexCount, projection,
+					textures.snapshot(), pickAlphaThreshold);
 			drawCalls++;
 		}
 		gl.glBindBuffer(GL.GL_ARRAY_BUFFER, 0);
 		gl.glBindVertexArray(0);
-		gl.glBindTexture(GL.GL_TEXTURE_2D, 0);
+		textures.unbind(gl);
 		gl.glUseProgram(0);
 
 		reset();
@@ -232,6 +280,10 @@ public final class TextureBatch {
 	}
 
 	public void dispose(GL3 gl) {
+		if (slotVbo != 0) {
+			gl.glDeleteBuffers(1, new int[] { slotVbo }, 0);
+			slotVbo = 0;
+		}
 		if (pickVbo != 0) {
 			gl.glDeleteBuffers(1, new int[] { pickVbo }, 0);
 			pickVbo = 0;
@@ -248,18 +300,20 @@ public final class TextureBatch {
 	}
 
 	private void putVertex(float x, float y, float u, float v,
-			float red, float green, float blue, float alpha, int pickId) {
+			float red, float green, float blue, float alpha, int pickId, int slot) {
 		vertices.put(x).put(y).put(u).put(v);
 		vertices.put(red).put(green).put(blue).put(alpha);
 		pickIds.put(pickId);
+		textureSlots.put(slot);
 		hasPickableVertices |= pickId != 0;
 	}
 
 	private void reset() {
 		vertices.clear();
 		pickIds.clear();
+		textureSlots.clear();
 		vertexCount = 0;
-		texture = null;
+		textures.clear();
 		hasPickableVertices = false;
 	}
 

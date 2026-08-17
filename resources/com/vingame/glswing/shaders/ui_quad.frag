@@ -6,11 +6,54 @@ in vec4 vColor;
 flat in vec4 vParameters;
 flat in vec2 vSize;
 flat in vec4 vSecondaryColor;
+flat in int vTextureSlot;
 
-uniform sampler2D uTexture;
+uniform sampler2D uTextures[16];
 uniform vec2 uDeviceScale;
 
 out vec4 fragColor;
+
+vec4 sampleTexture(int slot, vec2 uv) {
+    switch (slot) {
+    case 0: return texture(uTextures[0], uv);
+    case 1: return texture(uTextures[1], uv);
+    case 2: return texture(uTextures[2], uv);
+    case 3: return texture(uTextures[3], uv);
+    case 4: return texture(uTextures[4], uv);
+    case 5: return texture(uTextures[5], uv);
+    case 6: return texture(uTextures[6], uv);
+    case 7: return texture(uTextures[7], uv);
+    case 8: return texture(uTextures[8], uv);
+    case 9: return texture(uTextures[9], uv);
+    case 10: return texture(uTextures[10], uv);
+    case 11: return texture(uTextures[11], uv);
+    case 12: return texture(uTextures[12], uv);
+    case 13: return texture(uTextures[13], uv);
+    case 14: return texture(uTextures[14], uv);
+    default: return texture(uTextures[15], uv);
+    }
+}
+
+vec2 texturePixelSize(int slot) {
+    switch (slot) {
+    case 0: return vec2(textureSize(uTextures[0], 0));
+    case 1: return vec2(textureSize(uTextures[1], 0));
+    case 2: return vec2(textureSize(uTextures[2], 0));
+    case 3: return vec2(textureSize(uTextures[3], 0));
+    case 4: return vec2(textureSize(uTextures[4], 0));
+    case 5: return vec2(textureSize(uTextures[5], 0));
+    case 6: return vec2(textureSize(uTextures[6], 0));
+    case 7: return vec2(textureSize(uTextures[7], 0));
+    case 8: return vec2(textureSize(uTextures[8], 0));
+    case 9: return vec2(textureSize(uTextures[9], 0));
+    case 10: return vec2(textureSize(uTextures[10], 0));
+    case 11: return vec2(textureSize(uTextures[11], 0));
+    case 12: return vec2(textureSize(uTextures[12], 0));
+    case 13: return vec2(textureSize(uTextures[13], 0));
+    case 14: return vec2(textureSize(uTextures[14], 0));
+    default: return vec2(textureSize(uTextures[15], 0));
+    }
+}
 
 float roundedDistance(vec2 local, vec2 size, float requestedRadius) {
     vec2 halfSize = size * 0.5;
@@ -44,10 +87,10 @@ float resolvedStrokeWidth(float distance) {
 }
 
 float msdfCoverage() {
-    vec3 msdf = texture(uTexture, vTexCoord).rgb;
+    vec3 msdf = sampleTexture(vTextureSlot, vTexCoord).rgb;
     float distance = max(min(msdf.r, msdf.g),
             min(max(msdf.r, msdf.g), msdf.b)) - 0.5;
-    vec2 unitRange = vec2(vParameters.w) / vec2(textureSize(uTexture, 0));
+    vec2 unitRange = vec2(vParameters.w) / texturePixelSize(vTextureSlot);
     vec2 screenTextureSize = vec2(1.0)
             / max(fwidth(vTexCoord), vec2(0.000001));
     float pixelRange = max(0.5 * dot(unitRange, screenTextureSize), 1.0);
@@ -111,7 +154,7 @@ void main() {
     } else if (mode == 2) {
         coverage = msdfCoverage();
     } else if (mode == 3) {
-        vec4 sampled = texture(uTexture, vTexCoord);
+        vec4 sampled = sampleTexture(vTextureSlot, vTexCoord);
         color *= sampled;
         coverage = 1.0;
     } else if (mode == 4) {

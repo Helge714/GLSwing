@@ -26,22 +26,25 @@ public final class UIQuadBatch {
 	private final FloatBuffer instances = Buffers.newDirectFloatBuffer(
 			MAX_INSTANCES * STRIDE);
 	private final IntBuffer pickIds = Buffers.newDirectIntBuffer(MAX_INSTANCES);
+	private final IntBuffer textureSlots = Buffers.newDirectIntBuffer(MAX_INSTANCES);
+	private final TextureSlotSet textures = new TextureSlotSet();
 	private final ShaderProgram program;
 	private int vao;
 	private int cornerVbo;
 	private int instanceVbo;
 	private int pickVbo;
+	private int slotVbo;
 	private int instanceCount;
-	private GLTexture texture;
 	private boolean hasPickableInstances;
 
 	private UIQuadBatch(ShaderProgram program, int vao, int cornerVbo,
-			int instanceVbo, int pickVbo) {
+			int instanceVbo, int pickVbo, int slotVbo) {
 		this.program = program;
 		this.vao = vao;
 		this.cornerVbo = cornerVbo;
 		this.instanceVbo = instanceVbo;
 		this.pickVbo = pickVbo;
+		this.slotVbo = slotVbo;
 	}
 
 	public static UIQuadBatch create(GL3 gl) {
@@ -52,6 +55,7 @@ public final class UIQuadBatch {
 		int cornerVbo = 0;
 		int instanceVbo = 0;
 		int pickVbo = 0;
+		int slotVbo = 0;
 		try {
 			gl.glGenVertexArrays(1, ids, 0);
 			vao = ids[0];
@@ -90,8 +94,20 @@ public final class UIQuadBatch {
 			gl.glEnableVertexAttribArray(8);
 			gl.glVertexAttribIPointer(8, 1, GL.GL_UNSIGNED_INT, Integer.BYTES, 0);
 			gl.glVertexAttribDivisor(8, 1);
-			return new UIQuadBatch(program, vao, cornerVbo, instanceVbo, pickVbo);
+
+			gl.glGenBuffers(1, ids, 0);
+			slotVbo = ids[0];
+			gl.glBindBuffer(GL.GL_ARRAY_BUFFER, slotVbo);
+			gl.glBufferData(GL.GL_ARRAY_BUFFER,
+					(long) MAX_INSTANCES * Integer.BYTES, null, GL.GL_DYNAMIC_DRAW);
+			gl.glEnableVertexAttribArray(10);
+			gl.glVertexAttribIPointer(10, 1, GL.GL_UNSIGNED_INT, Integer.BYTES, 0);
+			gl.glVertexAttribDivisor(10, 1);
+			return new UIQuadBatch(program, vao, cornerVbo, instanceVbo, pickVbo,
+					slotVbo);
 		} catch (RuntimeException error) {
+			if (slotVbo != 0)
+				gl.glDeleteBuffers(1, new int[] { slotVbo }, 0);
 			if (pickVbo != 0)
 				gl.glDeleteBuffers(1, new int[] { pickVbo }, 0);
 			if (instanceVbo != 0)
@@ -119,8 +135,9 @@ public final class UIQuadBatch {
 	public void begin() {
 		instances.clear();
 		pickIds.clear();
+		textureSlots.clear();
 		instanceCount = 0;
-		texture = null;
+		textures.clear();
 		hasPickableInstances = false;
 	}
 
@@ -134,7 +151,7 @@ public final class UIQuadBatch {
 
 	/** Texture-less instances remain compatible with an already selected atlas. */
 	public boolean accepts(GLTexture candidate) {
-		return candidate == null || texture == null || texture == candidate;
+		return textures.accepts(candidate, TextureSlotSet.MAX_SLOTS);
 	}
 
 	public void add(GLTexture candidate, float[] values, int offset,
@@ -148,12 +165,12 @@ public final class UIQuadBatch {
 			throw new IllegalStateException("UI batch requires a flush before changing texture");
 		if (!canAdd(count))
 			throw new IllegalStateException("UI batch capacity exceeded");
-		if (candidate != null)
-			texture = candidate;
+		int slot = textures.slot(candidate, TextureSlotSet.MAX_SLOTS);
 		for (int instance = 0; instance < count; instance++) {
 			int source = offset + instance * STRIDE;
 			putInstance(values, source, modifier);
 			pickIds.put(pickId);
+			textureSlots.put(slot);
 		}
 		hasPickableInstances |= pickId != 0;
 		instanceCount += count;
@@ -206,6 +223,7 @@ public final class UIQuadBatch {
 		}
 		instances.flip();
 		pickIds.flip();
+		textureSlots.flip();
 		gl.glBindVertexArray(vao);
 		gl.glBindBuffer(GL.GL_ARRAY_BUFFER, instanceVbo);
 		gl.glBufferData(GL.GL_ARRAY_BUFFER,
@@ -217,25 +235,28 @@ public final class UIQuadBatch {
 					(long) pickIds.remaining() * Integer.BYTES,
 					pickIds, GL3.GL_STREAM_DRAW);
 		}
-		if (texture != null)
-			texture.bind(gl, 0);
+		gl.glBindBuffer(GL.GL_ARRAY_BUFFER, slotVbo);
+		gl.glBufferData(GL.GL_ARRAY_BUFFER,
+				(long) textureSlots.remaining() * Integer.BYTES,
+				textureSlots, GL3.GL_STREAM_DRAW);
+		textures.bind(gl);
 		int drawCalls = 0;
 		if (renderColor) {
 			program.use(gl);
 			program.setMatrix4(gl, "uProjection", projection);
-			program.setInteger(gl, "uTexture", 0);
+			textures.setSamplerUniforms(gl, program, "uTextures");
 			program.setVector2(gl, "uDeviceScale", deviceScaleX, deviceScaleY);
 			gl.glDrawArraysInstanced(GL.GL_TRIANGLES, 0, 6, instanceCount);
 			drawCalls++;
 		}
 		if (drawPicking) {
-			picking.drawUI(gl, vao, instanceCount, projection, texture,
+			picking.drawUI(gl, vao, instanceCount, projection, textures.snapshot(),
 					TEXT_PICK_ALPHA_THRESHOLD, textureAlphaThreshold);
 			drawCalls++;
 		}
 		gl.glBindBuffer(GL.GL_ARRAY_BUFFER, 0);
 		gl.glBindVertexArray(0);
-		gl.glBindTexture(GL.GL_TEXTURE_2D, 0);
+		textures.unbind(gl);
 		gl.glUseProgram(0);
 		reset();
 		return drawCalls;
@@ -244,12 +265,15 @@ public final class UIQuadBatch {
 	private void reset() {
 		instances.clear();
 		pickIds.clear();
+		textureSlots.clear();
 		instanceCount = 0;
-		texture = null;
+		textures.clear();
 		hasPickableInstances = false;
 	}
 
 	public void dispose(GL3 gl) {
+		if (slotVbo != 0)
+			gl.glDeleteBuffers(1, new int[] { slotVbo }, 0);
 		if (pickVbo != 0)
 			gl.glDeleteBuffers(1, new int[] { pickVbo }, 0);
 		if (instanceVbo != 0)
@@ -259,6 +283,7 @@ public final class UIQuadBatch {
 		if (vao != 0)
 			gl.glDeleteVertexArrays(1, new int[] { vao }, 0);
 		pickVbo = 0;
+		slotVbo = 0;
 		instanceVbo = 0;
 		cornerVbo = 0;
 		vao = 0;

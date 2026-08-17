@@ -32,6 +32,7 @@ public final class GLRenderer2D {
 	private final UIQuadBatch uiQuadBatch;
 	private final PickFramebuffer picking;
 	private final LayerStack layers;
+	private final GLTextureManager textureManager = new GLTextureManager();
 	private final PickFrameRecords pickRecords = new PickFrameRecords();
 	private final GLContext2D context;
 	private GL3 gl;
@@ -499,6 +500,12 @@ public final class GLRenderer2D {
 		uiQuadBatch.dispose(gl);
 		picking.dispose(gl);
 		layers.dispose(gl);
+		textureManager.dispose(gl);
+	}
+
+	GLTextureRegion resolveImage(GLImage image) {
+		requireFrame();
+		return textureManager.resolve(gl, image);
 	}
 
 	public int readPickId(GL3 gl, int x, int y) {
@@ -805,7 +812,8 @@ public final class GLRenderer2D {
 		int pickRecord = createPickRecord(
 				pickId, mouseTarget, automaticOriginX, automaticOriginY);
 		activateBatch(BatchType.TEXTURE);
-		if (!textureBatch.accepts(texture) || !textureBatch.canAdd(6))
+		int textureLimit = textureShaderOverride == null ? 16 : 1;
+		if (!textureBatch.accepts(texture, textureLimit) || !textureBatch.canAdd(6))
 			drawCallCount += textureBatch.flush(
 					gl, projectionMatrix, textureShaderOverride, textureUniforms, picking,
 					colorRenderingEnabled, pickingRenderingEnabled,
@@ -813,7 +821,8 @@ public final class GLRenderer2D {
 
 		textureBatch.addQuad(texture,
 				x1, y1, x2, y2, x3, y3, x4, y4,
-				u0, v0, u1, v1, red, green, blue, alpha, pickRecord);
+				u0, v0, u1, v1, red, green, blue, alpha, pickRecord,
+				textureLimit);
 	}
 
 	void addTextured(GLTexture texture, float[] vertices,
@@ -829,10 +838,11 @@ public final class GLRenderer2D {
 		int pickRecord = createPickRecord(
 				pickId, mouseTarget, automaticOriginX, automaticOriginY);
 		activateBatch(BatchType.TEXTURE);
+		int textureLimit = textureShaderOverride == null ? 16 : 1;
 		int remaining = vertices.length / TexturedVertexFormat.FLOATS_PER_VERTEX;
 		int offset = 0;
 		while (remaining > 0) {
-			if (!textureBatch.accepts(texture))
+			if (!textureBatch.accepts(texture, textureLimit))
 				drawCallCount += flushBatch(BatchType.TEXTURE);
 			int chunk = triangleChunk(textureBatch.remainingCapacity(), remaining);
 			if (chunk == 0) {
@@ -840,7 +850,7 @@ public final class GLRenderer2D {
 				continue;
 			}
 			textureBatch.addVertices(texture, vertices, offset, chunk,
-					pickRecord, activeRecordingVertexModifier());
+					pickRecord, activeRecordingVertexModifier(), textureLimit);
 			offset += chunk * TexturedVertexFormat.FLOATS_PER_VERTEX;
 			remaining -= chunk;
 		}

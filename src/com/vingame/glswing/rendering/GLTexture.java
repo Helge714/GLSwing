@@ -22,6 +22,11 @@ public final class GLTexture {
 
 	/** Creates a linearly filtered RGBA texture. Must run with a current GL context. */
 	public static GLTexture create(GL3 gl, BufferedImage image) {
+		return create(gl, image, true, false);
+	}
+
+	static GLTexture create(GL3 gl, BufferedImage image,
+			boolean linearFiltering, boolean repeating) {
 		if (gl == null)
 			throw new IllegalArgumentException("GL context must not be null");
 		if (image == null)
@@ -29,7 +34,19 @@ public final class GLTexture {
 		if (image.getWidth() <= 0 || image.getHeight() <= 0)
 			throw new IllegalArgumentException("Texture image must have a positive size");
 
-		ByteBuffer pixels = rgbaPixels(image);
+		return create(gl, image.getWidth(), image.getHeight(), rgbaPixels(image),
+				linearFiltering, repeating);
+	}
+
+	static GLTexture createEmpty(GL3 gl, int width, int height,
+			boolean linearFiltering) {
+		if (width <= 0 || height <= 0)
+			throw new IllegalArgumentException("Texture dimensions must be positive");
+		return create(gl, width, height, null, linearFiltering, false);
+	}
+
+	private static GLTexture create(GL3 gl, int width, int height,
+			ByteBuffer pixels, boolean linearFiltering, boolean repeating) {
 		int[] textureId = new int[1];
 		gl.glGenTextures(1, textureId, 0);
 		if (textureId[0] == 0)
@@ -46,13 +63,15 @@ public final class GLTexture {
 		try {
 			gl.glBindTexture(GL.GL_TEXTURE_2D, textureId[0]);
 			gl.glPixelStorei(GL.GL_UNPACK_ALIGNMENT, 1);
-			gl.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MIN_FILTER, GL.GL_LINEAR);
-			gl.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MAG_FILTER, GL.GL_LINEAR);
-			gl.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_WRAP_S, GL.GL_CLAMP_TO_EDGE);
-			gl.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_WRAP_T, GL.GL_CLAMP_TO_EDGE);
-			gl.glTexImage2D(GL.GL_TEXTURE_2D, 0, GL.GL_RGBA8, image.getWidth(), image.getHeight(),
+			int filter = linearFiltering ? GL.GL_LINEAR : GL.GL_NEAREST;
+			int wrap = repeating ? GL.GL_REPEAT : GL.GL_CLAMP_TO_EDGE;
+			gl.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MIN_FILTER, filter);
+			gl.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MAG_FILTER, filter);
+			gl.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_WRAP_S, wrap);
+			gl.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_WRAP_T, wrap);
+			gl.glTexImage2D(GL.GL_TEXTURE_2D, 0, GL.GL_RGBA8, width, height,
 					0, GL.GL_RGBA, GL.GL_UNSIGNED_BYTE, pixels);
-			return new GLTexture(textureId[0], image.getWidth(), image.getHeight());
+			return new GLTexture(textureId[0], width, height);
 		} catch (RuntimeException error) {
 			gl.glDeleteTextures(1, textureId, 0);
 			throw error;
@@ -60,6 +79,32 @@ public final class GLTexture {
 			gl.glPixelStorei(GL.GL_UNPACK_ALIGNMENT, previousUnpackAlignment[0]);
 			gl.glBindTexture(GL.GL_TEXTURE_2D, previousBinding[0]);
 			gl.glActiveTexture(previousActiveTexture[0]);
+		}
+	}
+
+	void upload(GL3 gl, int x, int y, BufferedImage image) {
+		if (id == 0)
+			throw new IllegalStateException("Texture has already been disposed");
+		if (image == null || x < 0 || y < 0
+				|| x + image.getWidth() > width || y + image.getHeight() > height)
+			throw new IllegalArgumentException("Texture upload lies outside the texture");
+		int[] previousActive = new int[1];
+		int[] previousBinding = new int[1];
+		int[] previousAlignment = new int[1];
+		gl.glGetIntegerv(GL.GL_ACTIVE_TEXTURE, previousActive, 0);
+		gl.glActiveTexture(GL.GL_TEXTURE0);
+		gl.glGetIntegerv(GL.GL_TEXTURE_BINDING_2D, previousBinding, 0);
+		gl.glGetIntegerv(GL.GL_UNPACK_ALIGNMENT, previousAlignment, 0);
+		try {
+			gl.glBindTexture(GL.GL_TEXTURE_2D, id);
+			gl.glPixelStorei(GL.GL_UNPACK_ALIGNMENT, 1);
+			gl.glTexSubImage2D(GL.GL_TEXTURE_2D, 0, x, y,
+					image.getWidth(), image.getHeight(), GL.GL_RGBA,
+					GL.GL_UNSIGNED_BYTE, rgbaPixels(image));
+		} finally {
+			gl.glPixelStorei(GL.GL_UNPACK_ALIGNMENT, previousAlignment[0]);
+			gl.glBindTexture(GL.GL_TEXTURE_2D, previousBinding[0]);
+			gl.glActiveTexture(previousActive[0]);
 		}
 	}
 
@@ -93,7 +138,7 @@ public final class GLTexture {
 		}
 	}
 
-	private static ByteBuffer rgbaPixels(BufferedImage image) {
+	static ByteBuffer rgbaPixels(BufferedImage image) {
 		ByteBuffer pixels = Buffers.newDirectByteBuffer(image.getWidth() * image.getHeight() * 4);
 		for (int y = 0; y < image.getHeight(); y++) {
 			for (int x = 0; x < image.getWidth(); x++) {

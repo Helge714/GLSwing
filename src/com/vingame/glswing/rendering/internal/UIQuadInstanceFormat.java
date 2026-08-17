@@ -291,6 +291,43 @@ public final class UIQuadInstanceFormat {
 		return result;
 	}
 
+	/** Builds one atlas or standalone RGBA image instance. */
+	public static float[] texture(float x, float y, float width, float height,
+			float u0, float v0, float u1, float v1, Color tint,
+			GLTransform transform) {
+		return sampledQuad(x, y, width, height, u0, v0, u1, v1,
+				tint, MODE_TEXTURE, 0, transform);
+	}
+
+	/** Builds one monochrome distance-field icon instance. */
+	public static float[] distanceField(float x, float y, float width, float height,
+			float u0, float v0, float u1, float v1, float pixelRange,
+			Color color, GLTransform transform) {
+		if (!Float.isFinite(pixelRange) || pixelRange <= 0)
+			throw new IllegalArgumentException("Distance-field pixel range must be positive");
+		return sampledQuad(x, y, width, height, u0, v0, u1, v1,
+				color, MODE_MSDF_TEXT, pixelRange, transform);
+	}
+
+	private static float[] sampledQuad(float x, float y, float width, float height,
+			float u0, float v0, float u1, float v1, Color color,
+			float mode, float pixelRange, GLTransform transform) {
+		if (!Float.isFinite(x) || !Float.isFinite(y) || !Float.isFinite(width)
+				|| !Float.isFinite(height) || width == 0 || height == 0)
+			throw new IllegalArgumentException("Sampled UI bounds must be finite and non-zero");
+		if (color == null || transform == null)
+			throw new IllegalArgumentException("Sampled UI color and transform are required");
+		float[] result = new float[FLOATS_PER_INSTANCE];
+		putGeometry(result, 0, x, y, width, height, transform);
+		putUv(result, 0, u0, v0, u1, v1);
+		putColor(result, 0, color);
+		result[14] = mode;
+		result[17] = pixelRange;
+		result[18] = Math.abs(width);
+		result[19] = Math.abs(height);
+		return result;
+	}
+
 	private static void putGeometry(float[] target, int offset, float x, float y,
 			float width, float height, GLTransform transform) {
 		putCorners(target, offset,

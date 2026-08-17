@@ -115,6 +115,44 @@ CPU-, GPU- und Robot-Regressionstests. Sie bleiben bewusst getrennt von den
 Demos, damit Fehler in Rendering, Recording und Eingabeverarbeitung gezielt
 reproduzierbar sind.
 
+## Bilder, Icons und Texturatlanten
+
+`GLImage` ist die empfohlene High-Level-Ressource fuer normale Bilder. Sie kann
+ohne aktuellen OpenGL-Kontext geladen werden. Beim ersten Zeichnen entscheidet
+der jeweilige Renderer automatisch: kleine statische Clamp-Bilder werden in
+RGBA-Atlasseiten gepackt, grosse, wiederholte oder dynamische Bilder erhalten
+eine eigene Textur. `GLTexture` bleibt als explizite Low-Level-API erhalten.
+
+```java
+GLImage photo = GLImage.loadResource(MyApp.class, "/images/photo.png");
+GLImage pixels = GLImage.load(path, GLImageOptions.pixelArt());
+
+context.drawImage(photo, 20, 20, 320, 180);       // normaler TextureBatch
+context.drawUIImage(pixels, 360, 20, 32, 32);     // gemeinsamer UI-Batch
+```
+
+Mit `GLImageOptions.atlas()`, `standalone()`, `pixelArt()`, `dynamic()` und
+`repeating()` kann die Automatik gezielt ueberschrieben werden. Ein Batch kann
+bis zu 16 unterschiedliche Texturen gleichzeitig binden; weitere Texturen
+erzeugen automatisch den naechsten Drawcall. Picking nutzt dieselben Slots.
+
+`GLIcon` importiert SVGs als Icon-Ressource. `AUTO` verwendet fuer einfarbige
+SVGs ein frei einfaerbbares MSDF und fuer mehrfarbige SVGs ein RGBA-Bild:
+
+```java
+GLIcon link = GLIcon.fromSvgResource("com/example/icons/link.svg");
+GLIcon logo = GLIcon.fromSvgResource("com/example/icons/logo.svg",
+        GLIcon.Format.RGBA);
+
+context.drawIcon(link, 20, 220, 24, 24, accentColor);
+context.drawIcon(logo, 60, 210, 96, 96);
+```
+
+UI-Flächen, MSDF-Text, RGBA-Icons und MSDF-Icons bleiben dabei im selben
+universellen UI-Batch. `Image Atlas Demo.launch` zeigt alle Varianten samt Zoom
+und Drawcall-Anzeige; `ImageAtlasGpuSelfTest` prueft Atlaswahl, Slotgrenze und
+Picking auf einer Offscreen-GL3-Instanz.
+
 ## Gruppierte Slider
 
 Kompatible Slider koennen als vertikaler Block mit gemeinsamem Rahmen angelegt

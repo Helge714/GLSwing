@@ -147,18 +147,18 @@ public final class PickFramebuffer {
 	}
 
 	public void drawTexture(GL3 gl, int vao, int vertexCount, float[] projection,
-			GLTexture texture, float alphaThreshold) {
+			GLTexture[] textures, float alphaThreshold) {
 		ensureSize(gl, width, height);
 		captureCurrentTarget(gl);
 		bindForPicking(gl);
 		clearPendingFrame(gl);
 		textureProgram.use(gl);
 		textureProgram.setMatrix4(gl, "uProjection", projection);
-		textureProgram.setInteger(gl, "uTexture", 0);
+		setTextureSamplers(gl, textureProgram);
 		textureProgram.setFloat(gl, "uAlphaThreshold", alphaThreshold);
-		texture.bind(gl, 0);
+		bindTextures(gl, textures);
 		draw(gl, vao, vertexCount);
-		gl.glBindTexture(GL.GL_TEXTURE_2D, 0);
+		unbindTextures(gl, textures);
 		restoreAfterPicking(gl);
 	}
 
@@ -180,7 +180,7 @@ public final class PickFramebuffer {
 	}
 
 	public void drawUI(GL3 gl, int vao, int instanceCount, float[] projection,
-			GLTexture texture, float textAlphaThreshold,
+			GLTexture[] textures, float textAlphaThreshold,
 			float textureAlphaThreshold) {
 		ensureSize(gl, width, height);
 		captureCurrentTarget(gl);
@@ -188,16 +188,15 @@ public final class PickFramebuffer {
 		clearPendingFrame(gl);
 		uiProgram.use(gl);
 		uiProgram.setMatrix4(gl, "uProjection", projection);
-		uiProgram.setInteger(gl, "uTexture", 0);
+		setTextureSamplers(gl, uiProgram);
 		uiProgram.setFloat(gl, "uTextAlphaThreshold", textAlphaThreshold);
 		uiProgram.setFloat(gl, "uTextureAlphaThreshold", textureAlphaThreshold);
 		// Picking is rendered into a one-pixel-per-logical-pixel framebuffer.
 		uiProgram.setVector2(gl, "uDeviceScale", 1, 1);
-		if (texture != null)
-			texture.bind(gl, 0);
+		bindTextures(gl, textures);
 		gl.glBindVertexArray(vao);
 		gl.glDrawArraysInstanced(GL.GL_TRIANGLES, 0, 6, instanceCount);
-		gl.glBindTexture(GL.GL_TEXTURE_2D, 0);
+		unbindTextures(gl, textures);
 		restoreAfterPicking(gl);
 	}
 
@@ -536,5 +535,23 @@ public final class PickFramebuffer {
 	private static void draw(GL3 gl, int vao, int vertexCount) {
 		gl.glBindVertexArray(vao);
 		gl.glDrawArrays(GL.GL_TRIANGLES, 0, vertexCount);
+	}
+
+	private static void setTextureSamplers(GL3 gl, ShaderProgram program) {
+		for (int slot = 0; slot < 16; slot++)
+			program.setInteger(gl, "uTextures[" + slot + "]", slot);
+	}
+
+	private static void bindTextures(GL3 gl, GLTexture[] textures) {
+		for (int slot = 0; slot < textures.length; slot++)
+			textures[slot].bind(gl, slot);
+	}
+
+	private static void unbindTextures(GL3 gl, GLTexture[] textures) {
+		for (int slot = 0; slot < textures.length; slot++) {
+			gl.glActiveTexture(GL.GL_TEXTURE0 + slot);
+			gl.glBindTexture(GL.GL_TEXTURE_2D, 0);
+		}
+		gl.glActiveTexture(GL.GL_TEXTURE0);
 	}
 }

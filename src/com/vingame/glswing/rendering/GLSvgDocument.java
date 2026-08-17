@@ -1,7 +1,10 @@
 package com.vingame.glswing.rendering;
 
 import java.awt.Color;
+import java.awt.Shape;
 import java.awt.geom.Area;
+import java.awt.geom.AffineTransform;
+import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -108,6 +111,98 @@ public final class GLSvgDocument {
 	public float getViewBoxWidth() { return viewWidth; }
 	public float getViewBoxHeight() { return viewHeight; }
 	public int getShapeCount() { return shapes.size(); }
+
+	/** Rasterizes all supported SVG paints with aspect-preserving transparent padding. */
+	public BufferedImage rasterize(int width, int height) {
+		if (width <= 0 || height <= 0)
+			throw new IllegalArgumentException("SVG raster size must be positive");
+		BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+		float scale = Math.min(width / viewWidth, height / viewHeight);
+		float offsetX = (width - viewWidth * scale) * 0.5f - viewX * scale;
+		float offsetY = (height - viewHeight * scale) * 0.5f - viewY * scale;
+		Shape[] outlines = new Shape[shapes.size()];
+		for (int index = 0; index < shapes.size(); index++)
+			outlines[index] = shapes.get(index).path().toAwtPath();
+		for (int y = 0; y < height; y++) {
+			for (int x = 0; x < width; x++) {
+				float red = 0;
+				float green = 0;
+				float blue = 0;
+				float alpha = 0;
+				for (int sampleY = 0; sampleY < 2; sampleY++) {
+					for (int sampleX = 0; sampleX < 2; sampleX++) {
+						float documentX = (x + (sampleX + 0.5f) * 0.5f - offsetX) / scale;
+						float documentY = (y + (sampleY + 0.5f) * 0.5f - offsetY) / scale;
+						float sampleRed = 0;
+						float sampleGreen = 0;
+						float sampleBlue = 0;
+						float sampleAlpha = 0;
+						for (int index = 0; index < shapes.size(); index++) {
+							if (!outlines[index].contains(documentX, documentY))
+								continue;
+							Color color = shapes.get(index).paint().colorAt(documentX, documentY);
+							float sourceAlpha = color.getAlpha() / 255f;
+							float resultAlpha = sourceAlpha + sampleAlpha * (1 - sourceAlpha);
+							if (resultAlpha > 0) {
+								sampleRed = (color.getRed() / 255f * sourceAlpha
+										+ sampleRed * sampleAlpha * (1 - sourceAlpha)) / resultAlpha;
+								sampleGreen = (color.getGreen() / 255f * sourceAlpha
+										+ sampleGreen * sampleAlpha * (1 - sourceAlpha)) / resultAlpha;
+								sampleBlue = (color.getBlue() / 255f * sourceAlpha
+										+ sampleBlue * sampleAlpha * (1 - sourceAlpha)) / resultAlpha;
+							}
+							sampleAlpha = resultAlpha;
+						}
+						red += sampleRed * sampleAlpha;
+						green += sampleGreen * sampleAlpha;
+						blue += sampleBlue * sampleAlpha;
+						alpha += sampleAlpha;
+					}
+				}
+				alpha *= 0.25f;
+				if (alpha > 0) {
+					int a = Math.round(alpha * 255);
+					int r = Math.round(Math.min(1, red * 0.25f / alpha) * 255);
+					int g = Math.round(Math.min(1, green * 0.25f / alpha) * 255);
+					int b = Math.round(Math.min(1, blue * 0.25f / alpha) * 255);
+					image.setRGB(x, y, a << 24 | r << 16 | g << 8 | b);
+				}
+			}
+		}
+		return image;
+	}
+
+	/** True when all visible samples share one RGB color and may be tinted as MSDF. */
+	public boolean isMonochrome() {
+		BufferedImage sample = rasterize(32, 32);
+		int reference = -1;
+		for (int y = 0; y < sample.getHeight(); y++) {
+			for (int x = 0; x < sample.getWidth(); x++) {
+				int argb = sample.getRGB(x, y);
+				if ((argb >>> 24) < 32)
+					continue;
+				int rgb = argb & 0xffffff;
+				if (reference < 0)
+					reference = rgb;
+				else if (rgb != reference)
+					return false;
+			}
+		}
+		return reference >= 0;
+	}
+
+	Area monochromeOutline(int resolution, float margin) {
+		Area outline = new Area();
+		for (SvgShape shape : shapes)
+			outline.add(new Area(shape.path().toAwtPath()));
+		float availableWidth = resolution - margin * 2;
+		float availableHeight = resolution - margin * 2;
+		float scale = Math.min(availableWidth / viewWidth, availableHeight / viewHeight);
+		float offsetX = (resolution - viewWidth * scale) * 0.5f - viewX * scale;
+		float offsetY = (resolution - viewHeight * scale) * 0.5f - viewY * scale;
+		outline.transform(new AffineTransform(scale, 0, 0, scale, offsetX, offsetY));
+		return outline;
+	}
 
 	/** Draws the document centered and aspect-preserving inside the target box. */
 	public void draw(GLContext2D context, float x, float y, float width, float height) {

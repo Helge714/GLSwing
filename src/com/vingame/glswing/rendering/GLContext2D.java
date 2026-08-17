@@ -1630,6 +1630,91 @@ public final class GLContext2D {
 		submitUI(null, instances, pickId, mouseTarget, x, y);
 	}
 
+	/** Draws a high-level image using automatic atlas or standalone storage. */
+	public void drawImage(GLImage image, float x, float y) {
+		drawImage(image, x, y, imageWidth(image), imageHeight(image), Color.WHITE);
+	}
+
+	public void drawImage(GLImage image, float x, float y,
+			float width, float height) {
+		drawImage(image, x, y, width, height, Color.WHITE);
+	}
+
+	public void drawImage(GLImage image, float x, float y,
+			float width, float height, Color tint) {
+		GLTextureRegion region = renderer.resolveImage(requireImage(image));
+		drawResolvedImage(region, x, y, width, height, requireColor(tint),
+				pickId, mouseTarget);
+	}
+
+	/**
+	 * Draws an image through the universal UI batch, allowing it to share one
+	 * draw call with standard controls and MSDF text.
+	 */
+	public void drawUIImage(GLImage image, float x, float y,
+			float width, float height, Color tint) {
+		GLTextureRegion region = renderer.resolveImage(requireImage(image));
+		float[] instance = UIQuadInstanceFormat.texture(x, y, width, height,
+				region.u0(), region.v0(), region.u1(), region.v1(), requireColor(tint),
+				renderer.currentTransform());
+		submitUI(region.texture(), instance, pickId, mouseTarget,
+				Math.min(x, x + width), Math.min(y, y + height));
+	}
+
+	public void drawUIImage(GLImage image, float x, float y,
+			float width, float height) {
+		drawUIImage(image, x, y, width, height, Color.WHITE);
+	}
+
+	/** Draws an RGBA or tintable MSDF icon through the shared UI batch. */
+	public void drawIcon(GLIcon icon, float x, float y,
+			float width, float height, Color color) {
+		if (icon == null)
+			throw new IllegalArgumentException("Icon must not be null");
+		GLTextureRegion region = renderer.resolveImage(icon.image());
+		float[] instance = icon.getFormat() == GLIcon.Format.MSDF
+				? UIQuadInstanceFormat.distanceField(x, y, width, height,
+						region.u0(), region.v0(), region.u1(), region.v1(),
+						icon.pixelRange(), requireColor(color), renderer.currentTransform())
+				: UIQuadInstanceFormat.texture(x, y, width, height,
+						region.u0(), region.v0(), region.u1(), region.v1(),
+						requireColor(color), renderer.currentTransform());
+		submitUI(region.texture(), instance, pickId, mouseTarget,
+				Math.min(x, x + width), Math.min(y, y + height));
+	}
+
+	public void drawIcon(GLIcon icon, float x, float y,
+			float width, float height) {
+		drawIcon(icon, x, y, width, height, Color.WHITE);
+	}
+
+	private void drawResolvedImage(GLTextureRegion region, float x, float y,
+			float width, float height, Color tint, int pickId,
+			GLMouseTarget mouseTarget) {
+		if (!Float.isFinite(x) || !Float.isFinite(y) || !Float.isFinite(width)
+				|| !Float.isFinite(height))
+			throw new IllegalArgumentException("Image bounds must be finite");
+		if (width == 0 || height == 0)
+			return;
+		GLTransform transform = renderer.currentTransform();
+		float x2 = x + width;
+		float y2 = y + height;
+		float x1t = transform.transformX(x, y);
+		float y1t = transform.transformY(x, y);
+		float x2t = transform.transformX(x2, y);
+		float y2t = transform.transformY(x2, y);
+		float x3t = transform.transformX(x2, y2);
+		float y3t = transform.transformY(x2, y2);
+		float x4t = transform.transformX(x, y2);
+		float y4t = transform.transformY(x, y2);
+		requireFiniteCoordinates(x1t, y1t, x2t, y2t, x3t, y3t, x4t, y4t);
+		submitTextured(region.texture(), x1t, y1t, x2t, y2t, x3t, y3t, x4t, y4t,
+				region.u0(), region.v0(), region.u1(), region.v1(),
+				tint.getRed() / 255f, tint.getGreen() / 255f,
+				tint.getBlue() / 255f, tint.getAlpha() / 255f,
+				pickId, mouseTarget, Math.min(x, x2), Math.min(y, y2));
+	}
+
 	public void drawTexture(GLTexture texture, float x, float y) {
 		drawTexture(texture, x, y, textureWidth(texture), textureHeight(texture),
 				Color.WHITE, pickId, mouseTarget);
@@ -2399,6 +2484,20 @@ public final class GLContext2D {
 		if (texture == null)
 			throw new IllegalArgumentException("Texture must not be null");
 		return texture.getWidth();
+	}
+
+	private static GLImage requireImage(GLImage image) {
+		if (image == null)
+			throw new IllegalArgumentException("Image must not be null");
+		return image;
+	}
+
+	private static int imageWidth(GLImage image) {
+		return requireImage(image).getWidth();
+	}
+
+	private static int imageHeight(GLImage image) {
+		return requireImage(image).getHeight();
 	}
 
 	private static int textureHeight(GLTexture texture) {
