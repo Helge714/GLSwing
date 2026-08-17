@@ -8,6 +8,7 @@ import com.jogamp.opengl.GL;
 import com.jogamp.opengl.glu.GLU;
 import com.jogamp.opengl.glu.GLUtessellator;
 import com.jogamp.opengl.glu.GLUtessellatorCallbackAdapter;
+import com.vingame.glswing.rendering.GLPath2D;
 
 /** Converts possibly concave or self-intersecting polygons to colored triangles. */
 public final class PolygonTessellator {
@@ -32,10 +33,18 @@ public final class PolygonTessellator {
 
 	/** Tessellates multiple uniformly colored contours using the non-zero winding rule. */
 	public static float[] tessellateContours(List<float[]> contours, Color color) {
+		return tessellateContours(contours, color, GLPath2D.FillRule.NON_ZERO);
+	}
+
+	/** Tessellates uniformly colored contours using the selected winding rule. */
+	public static float[] tessellateContours(List<float[]> contours, Color color,
+			GLPath2D.FillRule fillRule) {
 		if (contours == null || contours.isEmpty())
 			throw new IllegalArgumentException("Polygon contours must not be empty");
 		if (color == null)
 			throw new IllegalArgumentException("Polygon color must not be null");
+		if (fillRule == null)
+			throw new IllegalArgumentException("Polygon fill rule must not be null");
 
 		List<Vertex[]> vertexContours = new ArrayList<>(contours.size());
 		for (float[] contour : contours) {
@@ -45,7 +54,7 @@ public final class PolygonTessellator {
 				vertices[i] = new Vertex(contour[i * 2], contour[i * 2 + 1], color);
 			vertexContours.add(vertices);
 		}
-		return tessellateVertexContours(vertexContours, GLU.GLU_TESS_WINDING_NONZERO);
+		return tessellateVertexContours(vertexContours, windingRule(fillRule));
 	}
 
 	/** Tessellates multiple contours with one interpolated color per contour point. */
@@ -74,6 +83,11 @@ public final class PolygonTessellator {
 		for (int i = 0; i < colors.length; i++)
 			vertices[i] = new Vertex(points[i * 2], points[i * 2 + 1], colors[i]);
 		return tessellateVertexContours(List.<Vertex[]>of(vertices), GLU.GLU_TESS_WINDING_ODD);
+	}
+
+	private static int windingRule(GLPath2D.FillRule fillRule) {
+		return fillRule == GLPath2D.FillRule.EVEN_ODD
+				? GLU.GLU_TESS_WINDING_ODD : GLU.GLU_TESS_WINDING_NONZERO;
 	}
 
 	private static float[] tessellateVertexContours(List<Vertex[]> contours, int windingRule) {

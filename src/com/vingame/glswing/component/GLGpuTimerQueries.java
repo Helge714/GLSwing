@@ -34,19 +34,21 @@ final class GLGpuTimerQueries {
 		int slot = cursor[phase];
 		if (pending[phase][slot])
 			return;
+		gl.glBeginQuery(GL3.GL_TIME_ELAPSED, ids[phase][slot]);
 		activePhase = phase;
 		activeSlot = slot;
-		gl.glBeginQuery(GL3.GL_TIME_ELAPSED, ids[phase][slot]);
 	}
 
 	void end(GL3 gl) {
 		if (activePhase < 0)
 			return;
-		gl.glEndQuery(GL3.GL_TIME_ELAPSED);
-		pending[activePhase][activeSlot] = true;
-		cursor[activePhase] = (activeSlot + 1) % RING_SIZE;
+		int phase = activePhase;
+		int slot = activeSlot;
 		activePhase = -1;
 		activeSlot = -1;
+		gl.glEndQuery(GL3.GL_TIME_ELAPSED);
+		pending[phase][slot] = true;
+		cursor[phase] = (slot + 1) % RING_SIZE;
 	}
 
 	void poll(GL3 gl) {

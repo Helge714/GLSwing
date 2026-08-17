@@ -1217,11 +1217,16 @@ public abstract class GLSwingPanel extends GLJPanel
 			presentNanos = System.nanoTime() - presentStartNanos;
 		} finally {
 			try {
-				if (frameBegan)
-					renderer.endFrame();
+				try {
+					if (frameBegan)
+						renderer.endFrame();
+				} finally {
+					if (scene.isUpdating())
+						scene.endUpdate(gl);
+				}
 			} finally {
-				if (scene.isUpdating())
-					scene.endUpdate(gl);
+				// Keep timer-query state recoverable when user rendering throws.
+				gpuTimers.end(gl);
 			}
 			updateFrameStatistics(frameStartNanos, System.nanoTime(),
 					housekeepingEndNanos - frameStartNanos, sceneNanos, presentNanos);

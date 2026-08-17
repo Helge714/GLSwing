@@ -752,7 +752,7 @@ public final class GLContext2D {
 				renderer.currentTransform(), renderer.currentWorldToScreen(),
 				renderer.currentScreenToWorld());
 		if (lineStroke.getWidthSpace() == GLStroke.WidthSpace.SCREEN
-				&& recordDynamicScreenStroke(replayRenderer ->
+				&& recordDynamicFilled(replayRenderer ->
 						StrokeGeometryCompiler.line(x1, y1, x2, y2,
 								lineStroke, lineColor,
 								replayRenderer.currentTransform(),
@@ -789,7 +789,7 @@ public final class GLContext2D {
 				renderer.currentTransform(), renderer.currentWorldToScreen(),
 				renderer.currentScreenToWorld());
 		if (lineStroke.getWidthSpace() == GLStroke.WidthSpace.SCREEN
-				&& recordDynamicScreenStroke(replayRenderer ->
+				&& recordDynamicFilled(replayRenderer ->
 						StrokeGeometryCompiler.line(x1, y1, firstColor,
 								x2, y2, secondColor, lineStroke,
 								replayRenderer.currentTransform(),
@@ -835,7 +835,7 @@ public final class GLContext2D {
 		if (recording != null
 				&& pathStroke.getWidthSpace() == GLStroke.WidthSpace.SCREEN) {
 			float[] recordedPoints = points.clone();
-			if (recordDynamicScreenStroke(replayRenderer ->
+			if (recordDynamicFilled(replayRenderer ->
 					StrokeGeometryCompiler.path(recordedPoints, false,
 							pathStroke, pathColor,
 							replayRenderer.currentTransform(),
@@ -995,7 +995,7 @@ public final class GLContext2D {
 				&& pathStroke.getWidthSpace() == GLStroke.WidthSpace.SCREEN) {
 			float[] recordedPoints = points.clone();
 			Color[] recordedColors = colors.clone();
-			if (recordDynamicScreenStroke(replayRenderer ->
+			if (recordDynamicFilled(replayRenderer ->
 					StrokeGeometryCompiler.path(recordedPoints, false,
 							pathStroke, recordedColors,
 							replayRenderer.currentTransform(),
@@ -1042,7 +1042,7 @@ public final class GLContext2D {
 		if (recording != null
 				&& pathStroke.getWidthSpace() == GLStroke.WidthSpace.SCREEN) {
 			float[] recordedPoints = points.clone();
-			if (recordDynamicScreenStroke(replayRenderer ->
+			if (recordDynamicFilled(replayRenderer ->
 					StrokeGeometryCompiler.path(recordedPoints, true,
 							pathStroke, pathColor,
 							replayRenderer.currentTransform(),
@@ -1078,7 +1078,7 @@ public final class GLContext2D {
 				&& pathStroke.getWidthSpace() == GLStroke.WidthSpace.SCREEN) {
 			float[] recordedPoints = points.clone();
 			Color[] recordedColors = colors.clone();
-			if (recordDynamicScreenStroke(replayRenderer ->
+			if (recordDynamicFilled(replayRenderer ->
 					StrokeGeometryCompiler.path(recordedPoints, true,
 							pathStroke, recordedColors,
 							replayRenderer.currentTransform(),
@@ -1088,6 +1088,130 @@ public final class GLContext2D {
 				return;
 		}
 		emitPreparedFilledVertices(vertices, pickId, mouseTarget, points[0], points[1]);
+	}
+
+	public void fillPath(GLPath2D path) {
+		fillPath(path, color, pickId, mouseTarget);
+	}
+
+	public void fillPath(GLPath2D path, Color color) {
+		fillPath(path, color, pickId, mouseTarget);
+	}
+
+	public void fillPath(GLPath2D path, int pickId) {
+		fillPath(path, color, requirePickId(pickId), null);
+	}
+
+	public void fillPath(GLPath2D path, Color color, int pickId) {
+		fillPath(path, color, requirePickId(pickId), null);
+	}
+
+	public void fillPath(GLPath2D path, GLMouseTarget mouseTarget) {
+		fillPath(path, color, NO_PICK_ID, requireMouseTarget(mouseTarget));
+	}
+
+	public void fillPath(GLPath2D path, Color color, GLMouseTarget mouseTarget) {
+		fillPath(path, color, NO_PICK_ID, requireMouseTarget(mouseTarget));
+	}
+
+	/** Fills a path with a color source evaluated in local path coordinates. */
+	public void fillPath(GLPath2D path, GLPaint2D paint) {
+		if (path == null)
+			throw new IllegalArgumentException("Path must not be null");
+		if (paint == null)
+			throw new IllegalArgumentException("Path paint must not be null");
+		if (path.isEmpty())
+			return;
+		float tolerance = curveTolerance;
+		GLPath2D.Bounds bounds = path.getBounds();
+		float[] vertices = PathGeometryCompiler.fill(path, paint, tolerance,
+				renderer.currentTransform(), renderer.currentWorldToScreen());
+		if (recording != null) {
+			GLPath2D recordedPath = path.copy();
+			if (recordDynamicFilled(replayRenderer -> PathGeometryCompiler.fill(
+					recordedPath, paint, tolerance,
+					replayRenderer.currentTransform(),
+					replayRenderer.currentWorldToScreen()),
+					pickId, mouseTarget, bounds.x(), bounds.y()))
+				return;
+		}
+		emitPreparedFilledVertices(vertices, pickId, mouseTarget,
+				bounds.x(), bounds.y());
+	}
+
+	private void fillPath(GLPath2D path, Color color, int pickId,
+			GLMouseTarget mouseTarget) {
+		if (path == null)
+			throw new IllegalArgumentException("Path must not be null");
+		Color pathColor = requireColor(color);
+		if (path.isEmpty())
+			return;
+		float tolerance = curveTolerance;
+		GLPath2D.Bounds bounds = path.getBounds();
+		float[] vertices = PathGeometryCompiler.fill(path, pathColor, tolerance,
+				renderer.currentTransform(), renderer.currentWorldToScreen());
+		if (recording != null) {
+			GLPath2D recordedPath = path.copy();
+			if (recordDynamicFilled(replayRenderer -> PathGeometryCompiler.fill(
+					recordedPath, pathColor, tolerance,
+					replayRenderer.currentTransform(),
+					replayRenderer.currentWorldToScreen()),
+					pickId, mouseTarget, bounds.x(), bounds.y()))
+				return;
+		}
+		emitPreparedFilledVertices(vertices, pickId, mouseTarget,
+				bounds.x(), bounds.y());
+	}
+
+	public void drawPath(GLPath2D path) {
+		drawPath(path, color, pickId, mouseTarget);
+	}
+
+	public void drawPath(GLPath2D path, Color color) {
+		drawPath(path, color, pickId, mouseTarget);
+	}
+
+	public void drawPath(GLPath2D path, int pickId) {
+		drawPath(path, color, requirePickId(pickId), null);
+	}
+
+	public void drawPath(GLPath2D path, Color color, int pickId) {
+		drawPath(path, color, requirePickId(pickId), null);
+	}
+
+	public void drawPath(GLPath2D path, GLMouseTarget mouseTarget) {
+		drawPath(path, color, NO_PICK_ID, requireMouseTarget(mouseTarget));
+	}
+
+	public void drawPath(GLPath2D path, Color color, GLMouseTarget mouseTarget) {
+		drawPath(path, color, NO_PICK_ID, requireMouseTarget(mouseTarget));
+	}
+
+	private void drawPath(GLPath2D path, Color color, int pickId,
+			GLMouseTarget mouseTarget) {
+		if (path == null)
+			throw new IllegalArgumentException("Path must not be null");
+		Color pathColor = requireColor(color);
+		if (path.isEmpty())
+			return;
+		GLStroke pathStroke = stroke;
+		float tolerance = curveTolerance;
+		GLPath2D.Bounds bounds = path.getBounds();
+		float[] vertices = PathGeometryCompiler.stroke(path, pathStroke,
+				pathColor, tolerance, renderer.currentTransform(),
+				renderer.currentWorldToScreen(), renderer.currentScreenToWorld());
+		if (recording != null) {
+			GLPath2D recordedPath = path.copy();
+			if (recordDynamicFilled(replayRenderer -> PathGeometryCompiler.stroke(
+					recordedPath, pathStroke, pathColor, tolerance,
+					replayRenderer.currentTransform(),
+					replayRenderer.currentWorldToScreen(),
+					replayRenderer.currentScreenToWorld()),
+					pickId, mouseTarget, bounds.x(), bounds.y()))
+				return;
+		}
+		emitPreparedFilledVertices(vertices, pickId, mouseTarget,
+				bounds.x(), bounds.y());
 	}
 
 	public void drawRect(float x, float y, float width, float height) {
@@ -1979,7 +2103,7 @@ public final class GLContext2D {
 		if (recording != null
 				&& pathStroke.getWidthSpace() == GLStroke.WidthSpace.SCREEN) {
 			float[] recordedPoints = points.clone();
-			if (recordDynamicScreenStroke(replayRenderer ->
+			if (recordDynamicFilled(replayRenderer ->
 					StrokeGeometryCompiler.path(recordedPoints, true,
 							pathStroke, pathColor,
 							replayRenderer.currentTransform(),
@@ -2093,7 +2217,7 @@ public final class GLContext2D {
 		}
 	}
 
-	private boolean recordDynamicScreenStroke(
+	private boolean recordDynamicFilled(
 			GLRecording.FilledGeometryCompiler compiler, int pickId,
 			GLMouseTarget mouseTarget, float automaticOriginX, float automaticOriginY) {
 		if (recording == null)

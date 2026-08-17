@@ -307,11 +307,17 @@ public abstract class GLSwingCanvas extends GLCanvas implements GLEventListener 
 			}
 		} finally {
 			try {
-				if (frameBegan)
-					renderer.endFrame();
+				try {
+					if (frameBegan)
+						renderer.endFrame();
+				} finally {
+					if (scene != null && scene.isUpdating())
+						scene.endUpdate(gl);
+				}
 			} finally {
-				if (scene != null && scene.isUpdating())
-					scene.endUpdate(gl);
+				// A render callback may throw while a scene or presentation query is
+				// active. Always close it so a later repaint can start a clean frame.
+				gpuTimers.end(gl);
 			}
 			long frameEndNanos = System.nanoTime();
 			updateFrameStatistics(frameStartNanos, frameEndNanos,

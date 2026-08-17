@@ -1,6 +1,7 @@
 module GLSwingNext {
 	requires transitive java.desktop;
 	requires java.management;
+	requires java.xml;
 	requires transitive jogamp.fat;
 
 	exports com.vingame.glswing.component;
