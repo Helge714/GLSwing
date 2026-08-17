@@ -1,0 +1,134 @@
+theme.name=Default
+
+font.family=SansSerif
+font.style=plain
+font.size=12
+
+palette.surface=rgba(57, 57, 57, 255)
+palette.text=rgba(224, 224, 224, 255)
+palette.textDisabled=rgba(136, 136, 136, 255)
+palette.textSecondary=rgba(170, 170, 170, 255)
+palette.border=rgba(37, 37, 37, 255)
+palette.accent=rgba(84, 120, 181, 255)
+palette.selection=rgba(69, 105, 166, 191)
+palette.invalid=rgba(190, 70, 70, 255)
+
+state.normal=rgba(90, 90, 90, 255)
+state.hover=rgba(110, 110, 110, 255)
+state.pressed=${palette.accent}
+state.disabled=rgba(48, 48, 48, 255)
+
+metrics.cornerRadius=4
+metrics.borderWidth=1
+metrics.controlHeight=22
+metrics.padding=1,6,1,6
+
+label.font.size=16
+label.text=${palette.text}
+label.padding=0,0,0,0
+
+checkBox.boxSize=14
+checkBox.gap=6
+checkBox.checkStrokeWidth=1.5
+checkBox.padding=0,0,0,0
+
+slider.hover=${state.hover}
+slider.pressed=rgba(125, 125, 125, 255)
+slider.progressTop=rgba(105, 145, 210, 255)
+slider.progressBottom=rgba(68, 104, 165, 255)
+slider.arrowBackground=${state.normal}
+slider.arrowHover=${state.hover}
+slider.arrowPressed=${palette.accent}
+slider.arrowDisabled=${state.disabled}
+slider.arrow=${palette.text}
+slider.arrowTextDisabled=${palette.textDisabled}
+slider.preferredWidth=180
+slider.arrowButtonWidth=14
+slider.arrowInset=2
+slider.arrowStrokeWidth=1.5
+
+textEditor.background=rgba(42, 42, 42, 255)
+textEditor.text=${palette.text}
+textEditor.textDisabled=${palette.textDisabled}
+textEditor.selection=${palette.selection}
+textEditor.caret=${palette.text}
+textEditor.border=${palette.border}
+textEditor.focus=${palette.accent}
+textEditor.invalid=${palette.invalid}
+textEditor.cornerRadius=${metrics.cornerRadius}
+textEditor.height=20
+textEditor.preferredWidth=120
+textEditor.overflowFadeWidth=10
+textEditor.padding=1,4,1,4
+
+menu.background=${palette.surface}
+menu.hover=${state.hover}
+menu.pressed=${state.pressed}
+menu.text=${palette.text}
+menu.textDisabled=${palette.textDisabled}
+menu.accelerator=${palette.textSecondary}
+menu.border=${palette.border}
+menu.separator=${palette.border}
+menu.arrow=${palette.text}
+menu.cornerRadius=${metrics.cornerRadius}
+menu.itemHeight=27
+menu.separatorHeight=9
+menu.minimumWidth=170
+menu.itemHorizontalPadding=10
+menu.columnGap=18
+menu.padding=4,4,4,4
+
+menuBar.background=rgba(45, 45, 45, 255)
+menuBar.text=${palette.text}
+menuBar.textDisabled=${palette.textDisabled}
+menuBar.hover=${state.hover}
+menuBar.pressed=${state.pressed}
+menuBar.active=${palette.accent}
+menuBar.border=${palette.border}
+menuBar.height=26
+menuBar.itemHorizontalPadding=10
+menuBar.itemGap=1
+menuBar.cornerRadius=${metrics.cornerRadius}
+
+comboBox.text=${palette.text}
+comboBox.arrow=${palette.text}
+comboBox.cornerRadius=4
+comboBox.minimumWidth=120
+comboBox.arrowAreaWidth=22
+comboBox.padding=1,7,1,7
+
+scrollBar.track=rgba(37, 37, 37, 160)
+scrollBar.thumb=${palette.textSecondary}
+scrollBar.thumbHover=${palette.text}
+scrollBar.thumbPressed=${palette.accent}
+scrollBar.thumbDisabled=${state.disabled}
+scrollBar.thickness=9
+scrollBar.minimumThumbLength=18
+scrollBar.trackPadding=2
+scrollBar.cornerRadius=4
+
+scrollPane.background=${palette.surface}
+scrollPane.border=${palette.border}
+scrollPane.borderWidth=${metrics.borderWidth}
+scrollPane.cornerRadius=${metrics.cornerRadius}
+scrollPane.scrollBarGap=2
+scrollPane.padding=4,4,4,4
+
+tabbedPane.background=${palette.surface}
+tabbedPane.tabBarBackground=${menuBar.background}
+tabbedPane.tab=${state.normal}
+tabbedPane.tabHover=${state.hover}
+tabbedPane.tabPressed=${state.pressed}
+tabbedPane.tabSelected=${palette.accent}
+tabbedPane.tabDisabled=${state.disabled}
+tabbedPane.text=${palette.text}
+tabbedPane.textDisabled=${palette.textDisabled}
+tabbedPane.border=${palette.border}
+tabbedPane.borderWidth=${metrics.borderWidth}
+tabbedPane.cornerRadius=${metrics.cornerRadius}
+tabbedPane.tabHeight=28
+tabbedPane.minimumTabWidth=72
+tabbedPane.maximumTabWidth=220
+tabbedPane.tabGap=2
+tabbedPane.tabHorizontalPadding=12
+tabbedPane.contentPadding=8,8,8,8

@@ -1,0 +1,724 @@
+package com.vingame.glswing.ui;
+
+import java.awt.Color;
+import java.awt.Toolkit;
+import java.awt.datatransfer.DataFlavor;
+import java.awt.datatransfer.StringSelection;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.awt.event.InputEvent;
+import java.awt.event.KeyEvent;
+import java.awt.event.MouseEvent;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Predicate;
+
+import javax.swing.Timer;
+import javax.swing.event.ChangeEvent;
+import javax.swing.event.ChangeListener;
+
+import com.vingame.glswing.component.GLParent;
+import com.vingame.glswing.input.GLKeyEvent;
+import com.vingame.glswing.input.GLMouseEvent;
+import com.vingame.glswing.input.GLPointerController;
+import com.vingame.glswing.input.GLPointerCursor;
+import com.vingame.glswing.layout.GLInsets;
+import com.vingame.glswing.layout.GLSize;
+import com.vingame.glswing.rendering.GLContext2D;
+import com.vingame.glswing.rendering.GLCornerRadii;
+import com.vingame.glswing.rendering.GLFont;
+import com.vingame.glswing.rendering.GLRenderParameters;
+import com.vingame.glswing.rendering.GLStroke;
+
+/** Reusable single-line GPU text editor with selection and validation. */
+public class GLTextEditor extends GLControl {
+
+	public enum ValidationFailureMode {
+		/** Leaves invalid text in place until it is corrected or cancelled. */
+		KEEP_INVALID,
+		/** Restores the last valid text and briefly flashes the invalid border. */
+		RESTORE_LAST_VALID
+	}
+
+	private final CopyOnWriteArrayList<ActionListener> actionListeners =
+			new CopyOnWriteArrayList<>();
+	private final CopyOnWriteArrayList<ActionListener> cancelListeners =
+			new CopyOnWriteArrayList<>();
+	private final CopyOnWriteArrayList<ActionListener> validationFailureListeners =
+			new CopyOnWriteArrayList<>();
+	private final CopyOnWriteArrayList<ChangeListener> textChangeListeners =
+			new CopyOnWriteArrayList<>();
+	private final GLRenderParameters backgroundParameters = new GLRenderParameters();
+	private final GLRenderParameters textParameters = new GLRenderParameters();
+	private final GLRenderParameters selectionParameters = new GLRenderParameters();
+	private final GLRenderParameters caretParameters = new GLRenderParameters();
+	private final GLRenderParameters borderParameters = new GLRenderParameters();
+	private final Timer caretTimer;
+	private final Timer validationFeedbackTimer;
+
+	private String text;
+	private String editBaseline;
+	private String lastValidText;
+	private int caret;
+	private int anchor;
+	private float scrollX;
+	private boolean selecting;
+	private boolean invalid;
+	private boolean ending;
+	private boolean commitOnFocusLost = true;
+	private GLCornerRadii containerRadii;
+	private boolean containerBorderVisible = true;
+	private Predicate<String> inputFilter = GLTextInputFormats.ANY;
+	private Predicate<String> inputVerifier = value -> true;
+	private ValidationFailureMode validationFailureMode =
+			ValidationFailureMode.KEEP_INVALID;
+	private GLPointerController pointerController = GLPointerController.NONE;
+	private GLTextEditorStyle localStyle;
+	private GLTextEditorStyle appliedStyle;
+
+	public GLTextEditor() {
+		this("");
+	}
+
+	public GLTextEditor(String text) {
+		super(true);
+		this.text = requireText(text);
+		editBaseline = text;
+		lastValidText = text;
+		caret = anchor = text.length();
+		caretTimer = new Timer(500, event -> {
+			caretParameters.setOpacity(
+					caretParameters.getOpacity() > 0 ? 0 : 1);
+			repaintGL();
+		});
+		caretTimer.setRepeats(true);
+		validationFeedbackTimer = new Timer(450, event -> setInvalid(false));
+		validationFeedbackTimer.setRepeats(false);
+		caretParameters.setOpacity(0);
+		updatePresentation(true);
+	}
+
+	public final String getText() {
+		return text;
+	}
+
+	public final void setText(String text) {
+		text = requireText(text);
+		if (this.text.equals(text))
+			return;
+		this.text = text;
+		caret = Math.min(caret, text.length());
+		anchor = Math.min(anchor, text.length());
+		if (inputVerifier.test(text))
+			lastValidText = text;
+		clearValidationFeedback();
+		contentChanged();
+	}
+
+	public final int getCaretPosition() {
+		return caret;
+	}
+
+	public final void setCaretPosition(int position) {
+		moveCaret(position, false);
+	}
+
+	public final int getSelectionStart() {
+		return Math.min(anchor, caret);
+	}
+
+	public final int getSelectionEnd() {
+		return Math.max(anchor, caret);
+	}
+
+	public final void selectAll() {
+		anchor = 0;
+		caret = text.length();
+		ensureCaretVisible();
+		showCaret();
+		invalidateRecording();
+	}
+
+	/** Restricts intermediate edits without replacing final validation. */
+	public final void setInputFilter(Predicate<String> filter) {
+		if (filter == null)
+			throw new IllegalArgumentException("Input filter must not be null");
+		inputFilter = filter;
+	}
+
+	public final Predicate<String> getInputFilter() {
+		return inputFilter;
+	}
+
+	public final void setInputVerifier(Predicate<String> verifier) {
+		if (verifier == null)
+			throw new IllegalArgumentException("Input verifier must not be null");
+		inputVerifier = verifier;
+		boolean valid = verifier.test(text);
+		if (valid)
+			lastValidText = text;
+		setInvalid(!valid);
+	}
+
+	public final Predicate<String> getInputVerifier() {
+		return inputVerifier;
+	}
+
+	public final ValidationFailureMode getValidationFailureMode() {
+		return validationFailureMode;
+	}
+
+	public final void setValidationFailureMode(ValidationFailureMode mode) {
+		if (mode == null)
+			throw new IllegalArgumentException(
+					"Validation failure mode must not be null");
+		validationFailureMode = mode;
+	}
+
+	public final int getValidationFeedbackDuration() {
+		return validationFeedbackTimer.getInitialDelay();
+	}
+
+	public final void setValidationFeedbackDuration(int milliseconds) {
+		if (milliseconds < 0)
+			throw new IllegalArgumentException(
+					"Validation feedback duration must not be negative");
+		validationFeedbackTimer.setInitialDelay(milliseconds);
+		validationFeedbackTimer.setDelay(milliseconds);
+	}
+
+	public final String getLastValidText() {
+		return lastValidText;
+	}
+
+	public final boolean isInvalid() {
+		return invalid;
+	}
+
+	public final void setInvalid(boolean invalid) {
+		if (this.invalid == invalid)
+			return;
+		this.invalid = invalid;
+		updateColors();
+	}
+
+	public final boolean isCommitOnFocusLost() {
+		return commitOnFocusLost;
+	}
+
+	public final void setCommitOnFocusLost(boolean commitOnFocusLost) {
+		this.commitOnFocusLost = commitOnFocusLost;
+	}
+
+	/** Overrides the outer editor shape without changing its reusable style. */
+	public final void setContainerShape(GLCornerRadii radii,
+			boolean borderVisible) {
+		if (radii == null)
+			throw new IllegalArgumentException("Editor corner radii must not be null");
+		if (radii.equals(containerRadii)
+				&& containerBorderVisible == borderVisible)
+			return;
+		containerRadii = radii;
+		containerBorderVisible = borderVisible;
+		invalidateRecording();
+	}
+
+	public final void addActionListener(ActionListener listener) {
+		if (listener == null)
+			throw new IllegalArgumentException("Action listener must not be null");
+		actionListeners.addIfAbsent(listener);
+	}
+
+	public final void removeActionListener(ActionListener listener) {
+		actionListeners.remove(listener);
+	}
+
+	public final void addCancelListener(ActionListener listener) {
+		if (listener == null)
+			throw new IllegalArgumentException("Cancel listener must not be null");
+		cancelListeners.addIfAbsent(listener);
+	}
+
+	public final void removeCancelListener(ActionListener listener) {
+		cancelListeners.remove(listener);
+	}
+
+	public final void addValidationFailureListener(ActionListener listener) {
+		if (listener == null)
+			throw new IllegalArgumentException(
+					"Validation failure listener must not be null");
+		validationFailureListeners.addIfAbsent(listener);
+	}
+
+	public final void removeValidationFailureListener(ActionListener listener) {
+		validationFailureListeners.remove(listener);
+	}
+
+	/** Notifies whenever the editable text changes, including programmatic changes. */
+	public final void addTextChangeListener(ChangeListener listener) {
+		if (listener == null)
+			throw new IllegalArgumentException("Text change listener must not be null");
+		textChangeListeners.addIfAbsent(listener);
+	}
+
+	public final void removeTextChangeListener(ChangeListener listener) {
+		textChangeListeners.remove(listener);
+	}
+
+	public final boolean commit() {
+		if (ending)
+			return !invalid;
+		if (!inputVerifier.test(text)) {
+			if (validationFailureMode
+					== ValidationFailureMode.RESTORE_LAST_VALID) {
+				ending = true;
+				try {
+					text = lastValidText;
+					caret = anchor = text.length();
+					contentChanged();
+					showValidationFailure(true);
+					fireValidationFailed();
+					requestGLFocus(null);
+				} finally {
+					ending = false;
+				}
+				return false;
+			}
+			showValidationFailure(false);
+			return false;
+		}
+		clearValidationFeedback();
+		ending = true;
+		try {
+			ActionEvent event = new ActionEvent(this, ActionEvent.ACTION_PERFORMED,
+					text, System.currentTimeMillis(), 0);
+			for (ActionListener listener : actionListeners)
+				listener.actionPerformed(event);
+			editBaseline = text;
+			lastValidText = text;
+			return true;
+		} finally {
+			ending = false;
+		}
+	}
+
+	public final void cancel() {
+		if (ending)
+			return;
+		ending = true;
+		try {
+			text = editBaseline;
+			caret = anchor = text.length();
+			clearValidationFeedback();
+			contentChanged();
+			ActionEvent event = new ActionEvent(this, ActionEvent.ACTION_PERFORMED,
+					"cancel", System.currentTimeMillis(), 0);
+			for (ActionListener listener : cancelListeners)
+				listener.actionPerformed(event);
+		} finally {
+			ending = false;
+		}
+	}
+
+	public final void setGLStyle(GLTextEditorStyle style) {
+		if (style == null)
+			throw new IllegalArgumentException("Text editor style must not be null");
+		if (localStyle == style)
+			return;
+		localStyle = style;
+		updatePresentation(true);
+	}
+
+	public final void clearGLStyle() {
+		if (localStyle == null)
+			return;
+		localStyle = null;
+		updatePresentation(true);
+	}
+
+	public final GLTextEditorStyle getGLStyle() {
+		return localStyle != null ? localStyle : getGLTheme().textEditorStyle();
+	}
+
+	@Override
+	protected void record(GLContext2D context) {
+		GLTextEditorStyle style = getGLStyle();
+		float width = getWidth();
+		float height = getHeight();
+		if (width <= 0 || height <= 0)
+			return;
+		GLFont font = getGLFont(style.font());
+		GLInsets padding = style.padding();
+		GLCornerRadii radii = containerRadii == null
+				? GLCornerRadii.all(style.cornerRadius()) : containerRadii;
+		context.withParameters(backgroundParameters, () ->
+				context.fillUIRoundRect(0, 0, width, height, radii, Color.WHITE));
+
+		float clipInset = style.borderWidth() > 0
+				? style.borderWidth() + 1 : 0;
+		context.beginLayer(0, 0, width, height, clipInset);
+		float textOrigin = padding.left() - scrollX;
+		float baseline = (height - font.getLineHeight()) * 0.5f + font.getAscent();
+		if (anchor != caret) {
+			float selectionStart = textOrigin
+					+ font.measureText(text.substring(0, getSelectionStart()));
+			float selectionEnd = textOrigin
+					+ font.measureText(text.substring(0, getSelectionEnd()));
+			float clippedStart = Math.max(padding.left(), selectionStart);
+			float clippedEnd = Math.min(width - padding.right(), selectionEnd);
+			if (clippedEnd > clippedStart)
+				context.withParameters(selectionParameters, () ->
+						context.fillUIRoundRect(clippedStart,
+								baseline - font.getAscent(),
+								clippedEnd - clippedStart, font.getLineHeight(),
+								1, Color.WHITE));
+		}
+
+		context.withParameters(textParameters, () ->
+				context.drawUIText(font, text, textOrigin, baseline, Color.WHITE));
+		float caretX = textOrigin
+				+ font.measureText(text.substring(0, caret));
+		if (caretX >= padding.left() - 1 && caretX <= width - padding.right() + 1)
+			context.withParameters(caretParameters, () ->
+					context.fillUIRoundRect(caretX, baseline - font.getAscent(),
+							1, font.getLineHeight(), 0, Color.WHITE));
+
+		float availableWidth = Math.max(0, width - padding.horizontal());
+		float textWidth = font.measureText(text);
+		float fadeWidth = Math.min(style.overflowFadeWidth(),
+				Math.max(0, width * 0.5f - clipInset));
+		if (fadeWidth > 0 && scrollX > 0.01f)
+			drawOverflowFade(context, style, clipInset,
+					clipInset + fadeWidth, height, true);
+		if (fadeWidth > 0 && textWidth - scrollX > availableWidth + 0.01f)
+			drawOverflowFade(context, style,
+					width - clipInset - fadeWidth,
+					width - clipInset, height, false);
+		context.endLayer();
+		if (containerBorderVisible && style.borderWidth() > 0)
+			context.withParameters(borderParameters, () ->
+					context.drawUIRoundRect(0, 0, width, height,
+							radii, style.borderWidth(), Color.WHITE,
+							GLStroke.WidthSpace.SCREEN));
+	}
+
+	private static void drawOverflowFade(GLContext2D context,
+			GLTextEditorStyle style, float x0, float x1, float height,
+			boolean leftEdge) {
+		Color opaque = style.backgroundColor();
+		Color transparent = new Color(opaque.getRed(), opaque.getGreen(),
+				opaque.getBlue(), 0);
+		if (leftEdge) {
+			// The framebuffer scissor rounds its left edge outward. Cover that
+			// possible physical-pixel sliver before starting the soft gradient.
+			context.fillRect(x0 - 2, 0, 2.5f, height, opaque);
+		}
+		Color inner = leftEdge ? transparent : opaque;
+		Color outer = leftEdge ? opaque : transparent;
+		context.fillPolygon(new float[] {
+				x0, 0, x1, 0, x1, height, x0, height
+		}, new Color[] { outer, inner, inner, outer });
+	}
+
+	@Override
+	protected void resized(float width, float height) {
+		ensureCaretVisible();
+		invalidateRecording();
+	}
+
+	@Override
+	protected void controlMouseEntered(GLMouseEvent event) {
+		installTextCursor(event.getPointerController());
+	}
+
+	@Override
+	protected void controlMouseExited(GLMouseEvent event) {
+		restoreCursor();
+	}
+
+	@Override
+	protected void controlMousePressed(GLMouseEvent event) {
+		if (!isEnabled() || event.getButton() != MouseEvent.BUTTON1
+				|| !event.hasLocalPosition())
+			return;
+		selecting = true;
+		boolean extend = (event.getModifiersEx() & InputEvent.SHIFT_DOWN_MASK) != 0;
+		moveCaret(positionAt(event.getLocalX()), extend);
+	}
+
+	@Override
+	protected void controlMouseDragged(GLMouseEvent event) {
+		if (selecting && event.hasLocalPosition())
+			moveCaret(positionAt(event.getLocalX()), true);
+	}
+
+	@Override
+	protected void controlMouseReleased(GLMouseEvent event) {
+		selecting = false;
+	}
+
+	@Override
+	protected void controlKeyPressed(GLKeyEvent event) {
+		int modifiers = event.getModifiersEx();
+		boolean shift = (modifiers & InputEvent.SHIFT_DOWN_MASK) != 0;
+		boolean shortcut = (modifiers & InputEvent.CTRL_DOWN_MASK) != 0;
+		if (shortcut) {
+			switch (event.getKeyCode()) {
+			case KeyEvent.VK_A -> selectAll();
+			case KeyEvent.VK_C -> copySelection();
+			case KeyEvent.VK_X -> cutSelection();
+			case KeyEvent.VK_V -> pasteClipboard();
+			default -> {
+				return;
+			}
+			}
+			event.consume();
+			return;
+		}
+		switch (event.getKeyCode()) {
+		case KeyEvent.VK_LEFT -> moveCaret(caret - 1, shift);
+		case KeyEvent.VK_RIGHT -> moveCaret(caret + 1, shift);
+		case KeyEvent.VK_HOME -> moveCaret(0, shift);
+		case KeyEvent.VK_END -> moveCaret(text.length(), shift);
+		case KeyEvent.VK_BACK_SPACE -> backspace();
+		case KeyEvent.VK_DELETE -> deleteForward();
+		case KeyEvent.VK_ENTER -> commit();
+		case KeyEvent.VK_ESCAPE -> cancel();
+		default -> {
+			return;
+		}
+		}
+		event.consume();
+	}
+
+	@Override
+	protected void controlKeyTyped(GLKeyEvent event) {
+		char character = event.getKeyChar();
+		int modifiers = event.getModifiersEx();
+		if (character == KeyEvent.CHAR_UNDEFINED || Character.isISOControl(character)
+				|| (modifiers & (InputEvent.CTRL_DOWN_MASK
+						| InputEvent.ALT_DOWN_MASK)) != 0)
+			return;
+		replaceSelection(Character.toString(character));
+		event.consume();
+	}
+
+	@Override
+	protected void controlFocusChanged(boolean focused) {
+		if (focused) {
+			editBaseline = text;
+			showCaret();
+			caretTimer.start();
+		} else {
+			caretTimer.stop();
+			caretParameters.setOpacity(0);
+			if (!ending && commitOnFocusLost && !commit())
+				cancel();
+		}
+		updateColors();
+	}
+
+	@Override
+	protected void controlStateChanged(GLControlState oldState,
+			GLControlState newState) {
+		updateColors();
+	}
+
+	@Override
+	protected void detached(GLParent formerParent) {
+		caretTimer.stop();
+		validationFeedbackTimer.stop();
+		restoreCursor();
+		super.detached(formerParent);
+	}
+
+	@Override
+	protected void themeChanged() {
+		if (localStyle == null && !getGLStyle().equals(appliedStyle))
+			updatePresentation(true);
+	}
+
+	private void moveCaret(int position, boolean extend) {
+		position = Math.max(0, Math.min(text.length(), position));
+		if (!extend)
+			anchor = position;
+		caret = position;
+		ensureCaretVisible();
+		showCaret();
+		invalidateRecording();
+	}
+
+	private void installTextCursor(GLPointerController controller) {
+		restoreCursor();
+		pointerController = controller == null
+				? GLPointerController.NONE : controller;
+		pointerController.setCursor(this, GLPointerCursor.TEXT);
+	}
+
+	private void restoreCursor() {
+		pointerController.clearCursor(this);
+		pointerController = GLPointerController.NONE;
+	}
+
+	private int positionAt(float localX) {
+		GLFont font = measurementFont(getGLStyle().font());
+		float target = localX - getGLStyle().padding().left() + scrollX;
+		if (target <= 0)
+			return 0;
+		for (int index = 1; index <= text.length(); index++) {
+			float previous = font.measureText(text.substring(0, index - 1));
+			float current = font.measureText(text.substring(0, index));
+			if (target < (previous + current) * 0.5f)
+				return index - 1;
+		}
+		return text.length();
+	}
+
+	private void backspace() {
+		if (anchor != caret)
+			replaceSelection("");
+		else if (caret > 0) {
+			anchor = caret - 1;
+			replaceSelection("");
+		}
+	}
+
+	private void deleteForward() {
+		if (anchor != caret)
+			replaceSelection("");
+		else if (caret < text.length()) {
+			anchor = caret + 1;
+			replaceSelection("");
+		}
+	}
+
+	private void replaceSelection(String replacement) {
+		int start = getSelectionStart();
+		int end = getSelectionEnd();
+		String candidate = text.substring(0, start) + replacement
+				+ text.substring(end);
+		if (!inputFilter.test(candidate)) {
+			showValidationFailure(true);
+			return;
+		}
+		text = candidate;
+		caret = anchor = start + replacement.length();
+		clearValidationFeedback();
+		contentChanged();
+	}
+
+	private void copySelection() {
+		if (anchor == caret)
+			return;
+		try {
+			Toolkit.getDefaultToolkit().getSystemClipboard().setContents(
+					new StringSelection(text.substring(
+							getSelectionStart(), getSelectionEnd())), null);
+		} catch (RuntimeException ignored) {
+		}
+	}
+
+	private void cutSelection() {
+		if (anchor == caret)
+			return;
+		copySelection();
+		replaceSelection("");
+	}
+
+	private void pasteClipboard() {
+		try {
+			Object value = Toolkit.getDefaultToolkit().getSystemClipboard()
+					.getData(DataFlavor.stringFlavor);
+			if (value instanceof String string)
+				replaceSelection(string.replace("\r", "").replace("\n", ""));
+		} catch (Exception ignored) {
+		}
+	}
+
+	private void contentChanged() {
+		ensureCaretVisible();
+		showCaret();
+		invalidateRecording();
+		ChangeEvent event = new ChangeEvent(this);
+		for (ChangeListener listener : textChangeListeners)
+			listener.stateChanged(event);
+	}
+
+	private void showValidationFailure(boolean transientFeedback) {
+		validationFeedbackTimer.stop();
+		setInvalid(true);
+		showCaret();
+		if (transientFeedback) {
+			if (validationFeedbackTimer.getInitialDelay() == 0)
+				setInvalid(false);
+			else
+				validationFeedbackTimer.restart();
+		}
+	}
+
+	private void clearValidationFeedback() {
+		validationFeedbackTimer.stop();
+		setInvalid(false);
+	}
+
+	private void fireValidationFailed() {
+		ActionEvent event = new ActionEvent(this, ActionEvent.ACTION_PERFORMED,
+				"validationFailed", System.currentTimeMillis(), 0);
+		for (ActionListener listener : validationFailureListeners)
+			listener.actionPerformed(event);
+	}
+
+	private void ensureCaretVisible() {
+		GLTextEditorStyle style = getGLStyle();
+		GLFont font = measurementFont(style.font());
+		float caretPosition = font.measureText(text.substring(0, caret));
+		float available = Math.max(1,
+				getWidth() - style.padding().horizontal() - 2);
+		if (caretPosition - scrollX > available)
+			scrollX = caretPosition - available;
+		else if (caretPosition < scrollX)
+			scrollX = caretPosition;
+		float textWidth = font.measureText(text);
+		scrollX = Math.max(0, Math.min(scrollX, Math.max(0, textWidth - available)));
+	}
+
+	private void showCaret() {
+		caretParameters.setOpacity(isFocused() ? 1 : 0);
+		if (isFocused())
+			caretTimer.restart();
+	}
+
+	private void updatePresentation(boolean geometryChanged) {
+		GLTextEditorStyle style = getGLStyle();
+		appliedStyle = style;
+		setIntrinsicPreferredGLSize(new GLSize(style.preferredWidth(), style.height()));
+		updateColors();
+		if (geometryChanged)
+			invalidateRecording();
+	}
+
+	private void updateColors() {
+		GLTextEditorStyle style = getGLStyle();
+		backgroundParameters.setColor(style.backgroundColor());
+		textParameters.setColor(isEnabled()
+				? style.textColor() : style.disabledTextColor());
+		selectionParameters.setColor(style.selectionColor());
+		caretParameters.setColor(style.caretColor());
+		borderParameters.setColor(invalid ? style.invalidBorderColor()
+				: isFocused() ? style.focusedBorderColor() : style.borderColor());
+		repaintGL();
+	}
+
+	private GLFont measurementFont(GLFontSpec specification) {
+		try {
+			return getGLFont(specification);
+		} catch (IllegalStateException unattached) {
+			return specification.measurementFont();
+		}
+	}
+
+	private static String requireText(String text) {
+		if (text == null)
+			throw new IllegalArgumentException("Editor text must not be null");
+		return text;
+	}
+}

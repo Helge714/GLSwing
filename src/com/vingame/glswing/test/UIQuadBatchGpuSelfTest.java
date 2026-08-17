@@ -1,0 +1,321 @@
+package com.vingame.glswing.test;
+
+import java.awt.Color;
+import java.nio.ByteBuffer;
+
+import com.jogamp.opengl.GL;
+import com.jogamp.opengl.GL3;
+import com.jogamp.opengl.GLCapabilities;
+import com.jogamp.opengl.GLContext;
+import com.jogamp.opengl.GLDrawableFactory;
+import com.jogamp.opengl.GLOffscreenAutoDrawable;
+import com.jogamp.opengl.GLProfile;
+import com.vingame.glswing.input.GLMouseTarget;
+import com.vingame.glswing.input.GLPickResult;
+import com.vingame.glswing.rendering.GLContext2D;
+import com.vingame.glswing.rendering.GLCornerRadii;
+import com.vingame.glswing.rendering.GLFont;
+import com.vingame.glswing.rendering.GLRecording;
+import com.vingame.glswing.rendering.GLRenderer2D;
+import com.vingame.glswing.rendering.GLStroke;
+import com.vingame.glswing.rendering.GLTransform;
+import com.vingame.glswing.rendering.Projection2D;
+
+/** GPU checks for the shared instanced standard-control batch. */
+public final class UIQuadBatchGpuSelfTest {
+
+	private static final int WIDTH = 180;
+	private static final int HEIGHT = 90;
+
+	private UIQuadBatchGpuSelfTest() {
+	}
+
+	public static void main(String[] args) {
+		GLProfile profile = GLProfile.get(GLProfile.GL3);
+		GLCapabilities capabilities = new GLCapabilities(profile);
+		capabilities.setOnscreen(false);
+		GLOffscreenAutoDrawable drawable = GLDrawableFactory.getFactory(profile)
+				.createOffscreenAutoDrawable(null, capabilities, null, WIDTH, HEIGHT);
+		drawable.display();
+		GLContext nativeContext = drawable.getContext();
+		if (nativeContext.makeCurrent() == GLContext.CONTEXT_NOT_CURRENT)
+			throw new IllegalStateException("Could not make OpenGL context current");
+
+		GLRenderer2D renderer = null;
+		GLFont font = null;
+		try {
+			GL3 gl = drawable.getGL().getGL3();
+			gl.glViewport(0, 0, WIDTH, HEIGHT);
+			renderer = GLRenderer2D.create(gl);
+			font = new GLFont(GLFont.SANS_SERIF, GLFont.BOLD, 24);
+			try {
+				testMixedRecordedInstances(gl, renderer, font);
+				testAsymmetricRoundedFill(gl, renderer);
+				testScreenSpaceBorderUnderZoom(gl, renderer);
+				testSliderPrimitives(gl, renderer);
+				testThousandRecordedControls(gl, renderer, font);
+			} catch (RuntimeException | Error failure) {
+				try {
+					renderer.endFrame();
+				} catch (RuntimeException cleanupFailure) {
+					failure.addSuppressed(cleanupFailure);
+				}
+				throw failure;
+			}
+			System.out.println("UI quad batch GPU self-test passed.");
+		} finally {
+			GL3 gl = drawable.getGL().getGL3();
+			if (font != null)
+				font.dispose(gl);
+			if (renderer != null)
+				renderer.dispose(gl);
+			nativeContext.release();
+			drawable.destroy();
+		}
+	}
+
+	private static void testAsymmetricRoundedFill(GL3 gl,
+			GLRenderer2D renderer) {
+		GLMouseTarget target = new GLMouseTarget() {
+		};
+		GLContext2D context = renderer.beginFrame(gl, WIDTH, HEIGHT,
+				Projection2D.TOP_LEFT_PIXELS.create(WIDTH, HEIGHT));
+		context.clear(Color.BLACK);
+		context.setMouseTarget(target, 10, 10);
+		context.fillUIRoundRect(10, 10, 60, 40,
+				new GLCornerRadii(12, 0, 12, 0), Color.RED);
+		context.clearMouseTarget();
+		renderer.endFrame();
+
+		checkColor(gl, 10, 10, Color.BLACK,
+				"asymmetric rounded top-left corner");
+		checkColor(gl, 68, 11, Color.RED,
+				"asymmetric square top-right corner");
+		checkColor(gl, 68, 48, Color.BLACK,
+				"asymmetric rounded bottom-right corner");
+		checkColor(gl, 11, 48, Color.RED,
+				"asymmetric square bottom-left corner");
+		if (renderer.readPickResult(gl, 10, 10).isHit())
+			throw new AssertionError(
+					"Transparent asymmetric UI corner was pickable");
+		if (renderer.readPickResult(gl, 68, 11).getTarget() != target)
+			throw new AssertionError(
+					"Square asymmetric UI corner was not pickable");
+	}
+
+	private static void testSliderPrimitives(GL3 gl, GLRenderer2D renderer) {
+		GLContext2D context = renderer.beginFrame(gl, WIDTH, HEIGHT,
+				Projection2D.TOP_LEFT_PIXELS.create(WIDTH, HEIGHT));
+		context.clear(Color.BLACK);
+		context.fillUIProgressRoundRect(10, 10, 100, 32, 8, 0.5f,
+				new Color(120, 170, 235), new Color(45, 80, 145));
+		context.fillUIProgressRoundRect(10, 50, 100, 30, 0, 8, 0.5f,
+				new Color(120, 170, 235), new Color(45, 80, 145));
+		context.drawUIChevron(125, 10, 18, 32, false, 2, Color.WHITE,
+				GLStroke.WidthSpace.SCREEN);
+		context.drawUIChevron(150, 10, 18, 32, true, 2, Color.WHITE,
+				GLStroke.WidthSpace.SCREEN);
+		renderer.endFrame();
+
+		checkGradient(gl, 25, 15, 25, 36);
+		checkColor(gl, 80, 26, Color.BLACK, "progress clipping");
+		checkColor(gl, 10, 79, Color.BLACK,
+				"vertical-corner progress bottom rounding");
+		checkVisibleBrightPixels(gl, 125, 10, 18, 32, "left chevron");
+		checkVisibleBrightPixels(gl, 150, 10, 18, 32, "right chevron");
+	}
+
+	private static void testScreenSpaceBorderUnderZoom(GL3 gl,
+			GLRenderer2D renderer) {
+		GLContext2D context = renderer.beginFrame(gl, WIDTH, HEIGHT,
+				Projection2D.TOP_LEFT_PIXELS.create(WIDTH, HEIGHT));
+		context.clear(Color.BLACK);
+		context.fillAndDrawUIRoundRect(10, 10, 30, 20, 0, 2,
+				Color.RED, Color.BLUE, GLStroke.WidthSpace.SCREEN);
+		context.setTransform(new GLTransform().translate(70, 10).scale(3));
+		context.fillAndDrawUIRoundRect(0, 0, 20, 20, 0, 2,
+				Color.RED, Color.BLUE, GLStroke.WidthSpace.SCREEN);
+		renderer.endFrame();
+
+		checkDominantColor(gl, 11, 20, Color.BLUE,
+				"unscaled screen-space border");
+		checkDominantColor(gl, 14, 20, Color.RED,
+				"unscaled border interior");
+		checkDominantColor(gl, 71, 40, Color.BLUE,
+				"zoomed screen-space border");
+		checkDominantColor(gl, 74, 40, Color.RED,
+				"zoomed border interior");
+	}
+
+	private static void testThousandRecordedControls(GL3 gl,
+			GLRenderer2D renderer, GLFont font) {
+		final int controlCount = 1_000;
+		GLRecording[] recordings = new GLRecording[controlCount];
+		GLMouseTarget target = new GLMouseTarget() {
+		};
+		GLContext2D context = renderer.beginFrame(gl, WIDTH, HEIGHT,
+				Projection2D.TOP_LEFT_PIXELS.create(WIDTH, HEIGHT));
+		context.setMouseTarget(target, 0, 0);
+		for (int index = 0; index < controlCount; index++) {
+			context.beginRecording();
+			context.fillUIRoundRect(0, 0, 28, 16, 3, Color.WHITE);
+			context.drawUIText(font, Integer.toString(index % 100),
+					3, 13, Color.BLACK);
+			recordings[index] = context.endRecording();
+		}
+		context.clearMouseTarget();
+		context.clear(Color.BLACK);
+		for (int index = 0; index < controlCount; index++) {
+			float x = (index % 50) * 3;
+			float y = (index / 50) * 3;
+			context.setTransform(new GLTransform().translate(x, y));
+			context.draw(recordings[index]);
+		}
+		renderer.endFrame();
+
+		if (renderer.drawCallCount() != 2)
+			throw new AssertionError(controlCount + " recorded controls used "
+					+ renderer.drawCallCount()
+					+ " draw calls instead of one color and one picking call");
+	}
+
+	private static void testMixedRecordedInstances(GL3 gl,
+			GLRenderer2D renderer, GLFont font) {
+		GLMouseTarget target = new GLMouseTarget() {
+		};
+		GLContext2D context = renderer.beginFrame(gl, WIDTH, HEIGHT,
+				Projection2D.TOP_LEFT_PIXELS.create(WIDTH, HEIGHT));
+		context.beginRecording();
+		context.setMouseTarget(target);
+		context.fillAndDrawUIRoundRect(
+				10, 10, 40, 32, 9, 3, Color.RED, Color.BLUE);
+		context.drawUIText(font, "UI", 65, 36, Color.WHITE);
+		context.fillUIRoundRect(120, 10, 40, 32, 9, Color.GREEN);
+		context.drawUICheckMark(80, 54, 12, 12, 2, Color.CYAN);
+		context.addUIHitArea(75, 50, 40, 22);
+		GLRecording recording = context.endRecording();
+		context.clearMouseTarget();
+		context.clear(Color.BLACK);
+		context.draw(recording);
+		renderer.endFrame();
+
+		if (renderer.drawCallCount() != 2)
+			throw new AssertionError("Mixed UI shapes and text used "
+					+ renderer.drawCallCount()
+					+ " draw calls instead of one color and one picking call");
+		checkColor(gl, 30, 26, Color.RED, "first rounded rectangle");
+		checkColor(gl, 30, 11, Color.BLUE, "combined rounded border");
+		checkColor(gl, 140, 26, Color.GREEN, "second rounded rectangle");
+		checkColor(gl, 10, 10, Color.BLACK, "rounded transparent corner");
+		checkVisibleText(gl, 60, 8, 50, 40);
+		checkVisibleCheckMark(gl, 80, 54, 12, 12);
+
+		GLPickResult pick = renderer.readPickResult(gl, 30, 26);
+		if (pick.getTarget() != target)
+			throw new AssertionError("UI instance did not preserve its mouse target");
+		if (!pick.hasLocalPosition()
+				|| Math.abs(pick.getLocalX() - 20) > 0.01f
+				|| Math.abs(pick.getLocalY() - 16) > 0.01f)
+			throw new AssertionError("Unexpected UI-local pick position: "
+					+ pick.getLocalX() + "/" + pick.getLocalY());
+		if (renderer.readPickResult(gl, 110, 68).getTarget() != target)
+			throw new AssertionError("Invisible UI hit area was not pickable");
+	}
+
+	private static void checkVisibleCheckMark(GL3 gl, int x, int y,
+			int width, int height) {
+		ByteBuffer pixels = ByteBuffer.allocateDirect(width * height * 4);
+		gl.glReadPixels(x, HEIGHT - y - height, width, height,
+				GL.GL_RGBA, GL.GL_UNSIGNED_BYTE, pixels);
+		for (int index = 0; index < width * height; index++) {
+			int offset = index * 4;
+			if ((pixels.get(offset) & 0xff) < 80
+					&& (pixels.get(offset + 1) & 0xff) > 120
+					&& (pixels.get(offset + 2) & 0xff) > 120)
+				return;
+		}
+		throw new AssertionError("Analytic UI check mark produced no visible pixels");
+	}
+
+	private static void checkVisibleText(GL3 gl, int x, int y,
+			int width, int height) {
+		ByteBuffer pixels = ByteBuffer.allocateDirect(width * height * 4);
+		gl.glReadPixels(x, HEIGHT - y - height, width, height,
+				GL.GL_RGBA, GL.GL_UNSIGNED_BYTE, pixels);
+		for (int index = 0; index < width * height; index++) {
+			int offset = index * 4;
+			if ((pixels.get(offset) & 0xff) > 80
+					&& (pixels.get(offset + 1) & 0xff) > 80
+					&& (pixels.get(offset + 2) & 0xff) > 80)
+				return;
+		}
+		throw new AssertionError("MSDF text produced no visible pixels");
+	}
+
+	private static void checkVisibleBrightPixels(GL3 gl, int x, int y,
+			int width, int height, String description) {
+		ByteBuffer pixels = ByteBuffer.allocateDirect(width * height * 4);
+		gl.glReadPixels(x, HEIGHT - y - height, width, height,
+				GL.GL_RGBA, GL.GL_UNSIGNED_BYTE, pixels);
+		for (int index = 0; index < width * height; index++) {
+			int offset = index * 4;
+			if ((pixels.get(offset) & 0xff) > 160
+					&& (pixels.get(offset + 1) & 0xff) > 160
+					&& (pixels.get(offset + 2) & 0xff) > 160)
+				return;
+		}
+		throw new AssertionError(description + " produced no visible pixels");
+	}
+
+	private static void checkGradient(GL3 gl, int topX, int topY,
+			int bottomX, int bottomY) {
+		ByteBuffer top = readPixel(gl, topX, topY);
+		ByteBuffer bottom = readPixel(gl, bottomX, bottomY);
+		int topBlue = top.get(2) & 0xff;
+		int bottomBlue = bottom.get(2) & 0xff;
+		if (topBlue <= bottomBlue + 30)
+			throw new AssertionError("Slider progress has no vertical gradient: "
+					+ topBlue + " versus " + bottomBlue);
+	}
+
+	private static ByteBuffer readPixel(GL3 gl, int x, int y) {
+		ByteBuffer pixel = ByteBuffer.allocateDirect(4);
+		gl.glReadPixels(x, HEIGHT - 1 - y, 1, 1,
+				GL.GL_RGBA, GL.GL_UNSIGNED_BYTE, pixel);
+		return pixel;
+	}
+
+	private static void checkColor(GL3 gl, int x, int y,
+			Color expected, String description) {
+		ByteBuffer pixel = ByteBuffer.allocateDirect(4);
+		gl.glReadPixels(x, HEIGHT - 1 - y, 1, 1,
+				GL.GL_RGBA, GL.GL_UNSIGNED_BYTE, pixel);
+		int red = pixel.get(0) & 0xff;
+		int green = pixel.get(1) & 0xff;
+		int blue = pixel.get(2) & 0xff;
+		if (Math.abs(red - expected.getRed()) > 3
+				|| Math.abs(green - expected.getGreen()) > 3
+				|| Math.abs(blue - expected.getBlue()) > 3)
+			throw new AssertionError(description + ": expected "
+					+ expected.getRed() + "/" + expected.getGreen() + "/"
+					+ expected.getBlue() + ", got " + red + "/" + green + "/" + blue);
+	}
+
+	private static void checkDominantColor(GL3 gl, int x, int y,
+			Color expected, String description) {
+		ByteBuffer pixel = ByteBuffer.allocateDirect(4);
+		gl.glReadPixels(x, HEIGHT - 1 - y, 1, 1,
+				GL.GL_RGBA, GL.GL_UNSIGNED_BYTE, pixel);
+		int red = pixel.get(0) & 0xff;
+		int green = pixel.get(1) & 0xff;
+		int blue = pixel.get(2) & 0xff;
+		int expectedChannel = expected.getRed() > 0 ? red
+				: expected.getGreen() > 0 ? green : blue;
+		int otherMaximum = expected.getRed() > 0 ? Math.max(green, blue)
+				: expected.getGreen() > 0 ? Math.max(red, blue)
+						: Math.max(red, green);
+		if (expectedChannel < 160 || expectedChannel <= otherMaximum)
+			throw new AssertionError(description + ": expected dominant "
+					+ expected + ", got " + red + "/" + green + "/" + blue);
+	}
+}
