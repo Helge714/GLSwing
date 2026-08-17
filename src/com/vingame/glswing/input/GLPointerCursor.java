@@ -4,6 +4,10 @@ package com.vingame.glswing.input;
 public enum GLPointerCursor {
 	DEFAULT,
 	TEXT,
+	MOVE,
 	HORIZONTAL_RESIZE,
+	VERTICAL_RESIZE,
+	DIAGONAL_NW_SE_RESIZE,
+	DIAGONAL_NE_SW_RESIZE,
 	HIDDEN
 }

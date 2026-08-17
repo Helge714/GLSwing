@@ -21,8 +21,27 @@ public final class GLLayoutSelfTest {
 		testExplicitWeightedGrid();
 		testAutomaticGridAndVisibility();
 		testNestedMeasurementAndDirtyPropagation();
+		testOverlayExcludedFromLayout();
 		testPanelPack();
 		System.out.println("GL layout self-test passed.");
+	}
+
+	private static void testOverlayExcludedFromLayout() {
+		Box root = new Box();
+		root.setGLLayout(new GLGridLayout());
+		Box content = box(120, 80);
+		Box overlay = box(500, 400);
+		overlay.setBounds(0, 0, 500, 400);
+		root.addGL(content, GLConstraints.auto().weight(1, 1).fillBoth());
+		root.addGL(overlay, GLConstraints.overlay());
+		assertSize(root.getPreferredGLSize(), 120, 80,
+				"overlay excluded from measurement");
+		root.setSize(300, 200);
+		root.layoutGL();
+		assertBounds(content, 0, 0, 300, 200,
+				"managed content retained complete layout area");
+		assertBounds(overlay, 0, 0, 500, 400,
+				"overlay retained explicit bounds");
 	}
 
 	private static void testExplicitWeightedGrid() {

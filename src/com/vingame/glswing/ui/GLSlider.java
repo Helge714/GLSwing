@@ -124,6 +124,11 @@ public class GLSlider extends GLControl {
 		return text;
 	}
 
+	@Override
+	protected String defaultName() {
+		return text;
+	}
+
 	public final void setText(String text) {
 		text = requireText(text);
 		if (this.text.equals(text))
@@ -358,19 +363,19 @@ public class GLSlider extends GLControl {
 
 		if (mode == Mode.FIXED) {
 			float progress = (float) ((value - minimum) / (maximum - minimum));
-			Color progressBottom = style.progressBottomColor();
-			Color progressTop = sliderGroup == null
+			Color progressDark = style.progressDarkColor();
+			Color progressLight = sliderGroup == null
 					|| sliderGroup.usesProgressGradient(this)
-					? style.progressTopColor() : progressBottom;
+					? style.progressLightColor() : progressDark;
 			context.withParameters(progressParameters, () -> {
 				if (sliderGroup == null)
 					context.fillUIProgressRoundRect(0, 0, width, height,
 							style.cornerRadius(), progress,
-							progressTop, progressBottom);
+							progressLight, progressDark);
 				else
 					context.fillUIProgressRoundRect(0, 0, width, height,
 							radii.topLeft(), radii.bottomLeft(), progress,
-							progressTop, progressBottom);
+							progressLight, progressDark);
 			});
 		} else {
 			recordArrowButton(context, style, radii, true);

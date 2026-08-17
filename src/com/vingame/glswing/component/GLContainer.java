@@ -33,6 +33,7 @@ public abstract class GLContainer implements GLParent, GLMouseTarget {
 	private final GLRecordingCache recordingCache = new GLRecordingCache();
 	private final GLLayoutSupport layoutSupport = new GLLayoutSupport(this);
 	private volatile GLParent glParent;
+	private volatile String name;
 	private volatile float x;
 	private volatile float y;
 	private volatile float width;
@@ -189,6 +190,42 @@ public abstract class GLContainer implements GLParent, GLMouseTarget {
 
 	public final GLParent getGLParent() {
 		return glParent;
+	}
+
+	/**
+	 * Returns the explicit component name, or a control-specific default such as
+	 * its visible text. Unnamed custom containers fall back to their class name.
+	 */
+	public final String getName() {
+		String resolved = name;
+		if (resolved == null || resolved.isBlank())
+			resolved = defaultName();
+		return resolved == null || resolved.isBlank()
+				? getClass().getSimpleName() : resolved;
+	}
+
+	/** Sets a stable semantic name; {@code null} restores the automatic name. */
+	public final void setName(String name) {
+		if (name != null && name.isBlank())
+			throw new IllegalArgumentException(
+					"Component name must not be blank");
+		if (java.util.Objects.equals(this.name, name))
+			return;
+		this.name = name;
+		repaintGL();
+	}
+
+	public final void clearName() {
+		setName(null);
+	}
+
+	public final boolean hasExplicitName() {
+		return name != null;
+	}
+
+	/** Supplies the automatic name used until {@link #setName(String)} is called. */
+	protected String defaultName() {
+		return getClass().getSimpleName();
 	}
 
 	/** Moves this node above all of its siblings. */

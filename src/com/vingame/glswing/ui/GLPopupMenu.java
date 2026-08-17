@@ -20,6 +20,7 @@ import com.vingame.glswing.input.GLMouseWheelEvent;
 import com.vingame.glswing.input.GLPickResult;
 import com.vingame.glswing.input.GLImmediateHoverRegistry;
 import com.vingame.glswing.layout.GLInsets;
+import com.vingame.glswing.layout.GLConstraints;
 import com.vingame.glswing.layout.GLSize;
 import com.vingame.glswing.rendering.GLComposite;
 import com.vingame.glswing.rendering.GLContext2D;
@@ -1300,7 +1301,7 @@ public class GLPopupMenu extends GLContainer {
 
 		private void openRoot(float x, float y) {
 			resizeOverlay();
-			host.addGL(sessionOverlay);
+			host.addGL(sessionOverlay, GLConstraints.overlay());
 			if (componentHost != null)
 				componentHost.addComponentListener(resizeListener);
 			attach(rootMenu);

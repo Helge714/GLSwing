@@ -101,6 +101,11 @@ public class GLTextEditor extends GLControl {
 		return text;
 	}
 
+	@Override
+	protected String defaultName() {
+		return text;
+	}
+
 	public final void setText(String text) {
 		text = requireText(text);
 		if (this.text.equals(text))

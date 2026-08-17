@@ -21,6 +21,7 @@ public final class UIQuadInstanceFormat {
 	public static final float MODE_ASYMMETRIC_ROUNDED_FILL = 9;
 	public static final float MODE_ASYMMETRIC_ROUNDED_STROKE = 10;
 	public static final float MODE_VERTICAL_CORNER_PROGRESS_GRADIENT = 11;
+	public static final float MODE_ROUNDED_SHADOW = 12;
 
 	private UIQuadInstanceFormat() {
 	}
@@ -109,6 +110,48 @@ public final class UIQuadInstanceFormat {
 		result[18] = width;
 		result[19] = height;
 		putSecondaryColor(result, 0, borderColor);
+		return result;
+	}
+
+	/**
+	 * Builds a soft analytic shadow around an offset rounded rectangle. The
+	 * returned quad contains only the shadow and is intended to be followed by
+	 * the opaque UI body in the same ordered batch.
+	 */
+	public static float[] roundedRectangleShadow(float x, float y,
+			float width, float height, float radius, float softness,
+			float offsetX, float offsetY, Color color, GLTransform transform) {
+		if (!Float.isFinite(x) || !Float.isFinite(y)
+				|| !Float.isFinite(width) || !Float.isFinite(height)
+				|| width <= 0 || height <= 0)
+			throw new IllegalArgumentException(
+					"UI shadow bounds must be finite and positive");
+		if (!Float.isFinite(radius) || radius < 0
+				|| !Float.isFinite(softness) || softness < 0
+				|| !Float.isFinite(offsetX) || !Float.isFinite(offsetY))
+			throw new IllegalArgumentException(
+					"UI shadow geometry must be finite and non-negative");
+		if (color == null || transform == null)
+			throw new IllegalArgumentException(
+					"UI shadow color and transform must not be null");
+
+		float padding = Math.max(softness, 0.5f);
+		float outerX = x + offsetX - padding;
+		float outerY = y + offsetY - padding;
+		float outerWidth = width + padding * 2;
+		float outerHeight = height + padding * 2;
+		float[] result = roundedRectangle(outerX, outerY,
+				outerWidth, outerHeight, 0, 0, false, false, color, transform);
+		result[14] = MODE_ROUNDED_SHADOW;
+		result[15] = radius;
+		result[16] = softness;
+		result[18] = outerWidth;
+		result[19] = outerHeight;
+		// Secondary slots carry the rounded caster bounds within the outer quad.
+		result[20] = padding;
+		result[21] = padding;
+		result[22] = width;
+		result[23] = height;
 		return result;
 	}
 

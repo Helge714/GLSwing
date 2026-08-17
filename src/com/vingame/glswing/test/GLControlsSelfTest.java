@@ -6,6 +6,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import com.vingame.glswing.component.GLContainer;
 import com.vingame.glswing.component.GLSwingPanel;
 import com.vingame.glswing.layout.GLSize;
+import com.vingame.glswing.node.GLNodeStyle;
 import com.vingame.glswing.rendering.GLContext2D;
 import com.vingame.glswing.ui.GLButton;
 import com.vingame.glswing.ui.GLCheckBox;
@@ -55,7 +56,8 @@ public final class GLControlsSelfTest {
 				&& rounded.textEditorStyle().cornerRadius() == 9
 				&& rounded.menuStyle().cornerRadius() == 9
 				&& rounded.menuBarStyle().itemCornerRadius() == 9
-				&& rounded.comboBoxStyle().cornerRadius() == 9,
+				&& rounded.comboBoxStyle().cornerRadius() == 9
+				&& GLNodeStyle.fromTheme(rounded).cornerRadius() == 9,
 				"Theme-wide corner radius did not reach every control style");
 	}
 

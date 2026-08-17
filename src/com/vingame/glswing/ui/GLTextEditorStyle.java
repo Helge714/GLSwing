@@ -45,6 +45,14 @@ public record GLTextEditorStyle(
 				borderWidth, height, preferredWidth, overflowFadeWidth, padding);
 	}
 
+	public GLTextEditorStyle withColors(Color background, Color text,
+			Color disabledText, Color selection, Color caret) {
+		return new GLTextEditorStyle(font, background, text, disabledText,
+				selection, caret, borderColor, focusedBorderColor,
+				invalidBorderColor, cornerRadius, borderWidth, height,
+				preferredWidth, overflowFadeWidth, padding);
+	}
+
 	public GLTextEditorStyle withBorderColors(Color normal, Color focused,
 			Color invalid) {
 		return new GLTextEditorStyle(font, backgroundColor, textColor,

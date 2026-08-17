@@ -15,8 +15,6 @@ state.hover=rgba(105, 105, 116, 255)
 state.disabled=rgba(46, 46, 50, 255)
 
 slider.pressed=rgba(119, 119, 131, 255)
-slider.progressTop=rgba(105, 145, 210, 255)
-slider.progressBottom=rgba(68, 104, 165, 255)
 
 textEditor.background=rgba(40, 40, 44, 255)
 

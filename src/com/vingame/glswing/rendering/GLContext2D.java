@@ -782,6 +782,85 @@ public final class GLContext2D {
 		emitPreparedFilledVertices(vertices, pickId, mouseTarget, points[0], points[1]);
 	}
 
+	/** Draws a cubic Bezier curve using the current stroke and color. */
+	public void drawCubicBezier(float x0, float y0, float control1X,
+			float control1Y, float control2X, float control2Y,
+			float x1, float y1) {
+		drawCubicBezier(x0, y0, control1X, control1Y, control2X,
+				control2Y, x1, y1, color, pickId, mouseTarget);
+	}
+
+	public void drawCubicBezier(float x0, float y0, float control1X,
+			float control1Y, float control2X, float control2Y,
+			float x1, float y1, Color color) {
+		drawCubicBezier(x0, y0, control1X, control1Y, control2X,
+				control2Y, x1, y1, color, pickId, mouseTarget);
+	}
+
+	public void drawCubicBezier(float x0, float y0, float control1X,
+			float control1Y, float control2X, float control2Y,
+			float x1, float y1, Color color, int pickId) {
+		drawCubicBezier(x0, y0, control1X, control1Y, control2X,
+				control2Y, x1, y1, color, requirePickId(pickId), null);
+	}
+
+	public void drawCubicBezier(float x0, float y0, float control1X,
+			float control1Y, float control2X, float control2Y,
+			float x1, float y1, Color color, GLMouseTarget mouseTarget) {
+		drawCubicBezier(x0, y0, control1X, control1Y, control2X,
+				control2Y, x1, y1, color, NO_PICK_ID,
+				requireMouseTarget(mouseTarget));
+	}
+
+	private void drawCubicBezier(float x0, float y0, float control1X,
+			float control1Y, float control2X, float control2Y,
+			float x1, float y1, Color color, int pickId,
+			GLMouseTarget mouseTarget) {
+		float[] points = cubicBezierPoints(x0, y0, control1X, control1Y,
+				control2X, control2Y, x1, y1);
+		drawPolyline(points, color, pickId, mouseTarget);
+	}
+
+	/** Draws a cubic Bezier with colors interpolated from start to end. */
+	public void drawCubicBezier(float x0, float y0, float control1X,
+			float control1Y, float control2X, float control2Y,
+			float x1, float y1, Color startColor, Color endColor) {
+		drawCubicBezier(x0, y0, control1X, control1Y, control2X,
+				control2Y, x1, y1, startColor, endColor, pickId, mouseTarget);
+	}
+
+	public void drawCubicBezier(float x0, float y0, float control1X,
+			float control1Y, float control2X, float control2Y,
+			float x1, float y1, Color startColor, Color endColor, int pickId) {
+		drawCubicBezier(x0, y0, control1X, control1Y, control2X,
+				control2Y, x1, y1, startColor, endColor,
+				requirePickId(pickId), null);
+	}
+
+	public void drawCubicBezier(float x0, float y0, float control1X,
+			float control1Y, float control2X, float control2Y,
+			float x1, float y1, Color startColor, Color endColor,
+			GLMouseTarget mouseTarget) {
+		drawCubicBezier(x0, y0, control1X, control1Y, control2X,
+				control2Y, x1, y1, startColor, endColor, NO_PICK_ID,
+				requireMouseTarget(mouseTarget));
+	}
+
+	private void drawCubicBezier(float x0, float y0, float control1X,
+			float control1Y, float control2X, float control2Y,
+			float x1, float y1, Color startColor, Color endColor,
+			int pickId, GLMouseTarget mouseTarget) {
+		startColor = requireColor(startColor);
+		endColor = requireColor(endColor);
+		float[] points = cubicBezierPoints(x0, y0, control1X, control1Y,
+				control2X, control2Y, x1, y1);
+		Color[] colors = new Color[points.length / 2];
+		for (int point = 0; point < colors.length; point++)
+			colors[point] = interpolateColor(startColor, endColor,
+					point / (float) (colors.length - 1));
+		drawPolyline(points, colors, pickId, mouseTarget);
+	}
+
 	/** Draws an open path using one interpolated color per x/y point pair. */
 	public void drawPolyline(float[] points, Color[] colors) {
 		drawPolyline(points, colors, pickId, mouseTarget);
@@ -1178,6 +1257,18 @@ public final class GLContext2D {
 		submitUI(null, instances, pickId, mouseTarget, x, y);
 	}
 
+	/**
+	 * Draws an unpickable soft shadow for a rounded UI rectangle through the
+	 * shared instanced UI batch. No layer, framebuffer or blur pass is created.
+	 */
+	public void drawUIRoundRectShadow(float x, float y, float width, float height,
+			float radius, float softness, float offsetX, float offsetY, Color color) {
+		float[] instances = UIQuadInstanceFormat.roundedRectangleShadow(
+				x, y, width, height, radius, softness, offsetX, offsetY,
+				requireColor(color), renderer.currentTransform());
+		submitUI(null, instances, NO_PICK_ID, null, x, y);
+	}
+
 	/** Adds MSDF glyph instances without switching away from standard UI shapes. */
 	public void drawUIText(GLFont font, String text, float x, float baselineY,
 			Color color) {
@@ -1212,6 +1303,21 @@ public final class GLContext2D {
 				requireColor(topColor), requireColor(bottomColor),
 				renderer.currentTransform());
 		submitUI(null, instances, pickId, mouseTarget, x, y);
+	}
+
+	/** Draws a complete vertical light-to-dark gradient in one UI instance. */
+	public void fillUIVerticalGradientRoundRect(float x, float y, float width,
+			float height, float radius, Color lightColor, Color darkColor) {
+		fillUIProgressRoundRect(x, y, width, height, radius, 1,
+				lightColor, darkColor);
+	}
+
+	/** Vertical gradient with independently rounded top and bottom edges. */
+	public void fillUIVerticalGradientRoundRect(float x, float y, float width,
+			float height, float topRadius, float bottomRadius,
+			Color lightColor, Color darkColor) {
+		fillUIProgressRoundRect(x, y, width, height, topRadius, bottomRadius,
+				1, lightColor, darkColor);
 	}
 
 	/** Progress gradient clipped to independently rounded top and bottom edges. */
@@ -1717,6 +1823,63 @@ public final class GLContext2D {
 				renderer.currentTransform(), renderer.currentWorldToScreen(),
 				renderer.currentScreenToWorld());
 		emitPreparedFilledVertices(vertices, pickId, mouseTarget, originX, originY);
+	}
+
+	private int cubicBezierSegments(float[] controlPoints) {
+		GLTransform screenTransform = renderer.currentWorldToScreen().copy()
+				.concatenate(renderer.currentTransform());
+		float[] screen = controlPoints.clone();
+		screenTransform.transform(screen, 0, 4);
+		float firstSecondX = screen[0] - 2 * screen[2] + screen[4];
+		float firstSecondY = screen[1] - 2 * screen[3] + screen[5];
+		float secondSecondX = screen[2] - 2 * screen[4] + screen[6];
+		float secondSecondY = screen[3] - 2 * screen[5] + screen[7];
+		float maximumSecondDifference = Math.max(
+				(float) Math.hypot(firstSecondX, firstSecondY),
+				(float) Math.hypot(secondSecondX, secondSecondY));
+		if (!(maximumSecondDifference > 0))
+			return 1;
+		int segments = (int) Math.ceil(Math.sqrt(
+				3 * maximumSecondDifference / (8 * curveTolerance)));
+		return Math.max(2, Math.min(2048, segments));
+	}
+
+	private float[] cubicBezierPoints(float x0, float y0, float control1X,
+			float control1Y, float control2X, float control2Y,
+			float x1, float y1) {
+		float[] controls = { x0, y0, control1X, control1Y, control2X,
+				control2Y, x1, y1 };
+		for (float value : controls)
+			if (!Float.isFinite(value))
+				throw new IllegalArgumentException(
+						"Bezier coordinates must be finite");
+		int segments = cubicBezierSegments(controls);
+		float[] points = new float[(segments + 1) * 2];
+		for (int segment = 0; segment <= segments; segment++) {
+			float t = segment / (float) segments;
+			float inverse = 1 - t;
+			float inverse2 = inverse * inverse;
+			float t2 = t * t;
+			float first = inverse2 * inverse;
+			float second = 3 * inverse2 * t;
+			float third = 3 * inverse * t2;
+			float fourth = t2 * t;
+			int index = segment * 2;
+			points[index] = first * x0 + second * control1X
+					+ third * control2X + fourth * x1;
+			points[index + 1] = first * y0 + second * control1Y
+					+ third * control2Y + fourth * y1;
+		}
+		return points;
+	}
+
+	private static Color interpolateColor(Color start, Color end, float amount) {
+		float inverse = 1 - amount;
+		return new Color(
+				Math.round(start.getRed() * inverse + end.getRed() * amount),
+				Math.round(start.getGreen() * inverse + end.getGreen() * amount),
+				Math.round(start.getBlue() * inverse + end.getBlue() * amount),
+				Math.round(start.getAlpha() * inverse + end.getAlpha() * amount));
 	}
 
 	private int curveSegments(float localRadius) {

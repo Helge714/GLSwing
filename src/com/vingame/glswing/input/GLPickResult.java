@@ -117,4 +117,16 @@ public final class GLPickResult {
 		return new GLPickResult(id, target, newScreenX, newScreenY, newLocalX, newLocalY,
 				inverseM00, inverseM10, inverseM01, inverseM11, inverseM02, inverseM12);
 	}
+
+	/**
+	 * Retargets this hit while retaining its captured transform. Useful for
+	 * bubbling screen-coordinate gestures to a retained parent.
+	 */
+	public GLPickResult retarget(GLMouseTarget newTarget) {
+		if (newTarget == null)
+			throw new IllegalArgumentException("Retargeted mouse target must not be null");
+		return new GLPickResult(0, newTarget, screenX, screenY, localX, localY,
+				inverseM00, inverseM10, inverseM01, inverseM11,
+				inverseM02, inverseM12);
+	}
 }

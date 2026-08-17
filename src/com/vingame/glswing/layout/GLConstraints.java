@@ -29,10 +29,12 @@ public final class GLConstraints {
 	private final Alignment alignX;
 	private final Alignment alignY;
 	private final GLInsets margin;
+	private final boolean layoutManaged;
 
 	private GLConstraints(int gridX, int gridY, int columnSpan, int rowSpan,
 			float weightX, float weightY, Fill fill,
-			Alignment alignX, Alignment alignY, GLInsets margin) {
+			Alignment alignX, Alignment alignY, GLInsets margin,
+			boolean layoutManaged) {
 		if (gridX < AUTO || gridY < AUTO)
 			throw new IllegalArgumentException("Grid coordinates must be automatic or non-negative");
 		if (columnSpan < 1 || rowSpan < 1)
@@ -52,16 +54,23 @@ public final class GLConstraints {
 		this.alignX = alignX;
 		this.alignY = alignY;
 		this.margin = margin;
+		this.layoutManaged = layoutManaged;
 	}
 
 	public static GLConstraints auto() {
 		return new GLConstraints(AUTO, AUTO, 1, 1, 0, 0,
-				Fill.NONE, Alignment.CENTER, Alignment.CENTER, GLInsets.ZERO);
+				Fill.NONE, Alignment.CENTER, Alignment.CENTER, GLInsets.ZERO, true);
+	}
+
+	/** Preserves explicit bounds and excludes an overlay from layout measurement. */
+	public static GLConstraints overlay() {
+		return new GLConstraints(AUTO, AUTO, 1, 1, 0, 0,
+				Fill.NONE, Alignment.CENTER, Alignment.CENTER, GLInsets.ZERO, false);
 	}
 
 	public static GLConstraints at(int gridX, int gridY) {
 		return new GLConstraints(gridX, gridY, 1, 1, 0, 0,
-				Fill.NONE, Alignment.CENTER, Alignment.CENTER, GLInsets.ZERO);
+				Fill.NONE, Alignment.CENTER, Alignment.CENTER, GLInsets.ZERO, true);
 	}
 
 	public GLConstraints span(int columns, int rows) {
@@ -153,10 +162,14 @@ public final class GLConstraints {
 		return margin;
 	}
 
-	private static GLConstraints copy(int gridX, int gridY,
+	public boolean isLayoutManaged() {
+		return layoutManaged;
+	}
+
+	private GLConstraints copy(int gridX, int gridY,
 			int columnSpan, int rowSpan, float weightX, float weightY,
 			Fill fill, Alignment alignX, Alignment alignY, GLInsets margin) {
 		return new GLConstraints(gridX, gridY, columnSpan, rowSpan,
-				weightX, weightY, fill, alignX, alignY, margin);
+				weightX, weightY, fill, alignX, alignY, margin, layoutManaged);
 	}
 }

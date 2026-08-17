@@ -34,6 +34,7 @@ import com.vingame.glswing.input.GLMouseEvent;
 import com.vingame.glswing.input.GLKeyTarget;
 import com.vingame.glswing.input.GLMouseTarget;
 import com.vingame.glswing.input.GLMouseWheelEvent;
+import com.vingame.glswing.input.GLMouseWheelCaptureTarget;
 import com.vingame.glswing.input.GLPickResult;
 import com.vingame.glswing.input.GLImmediateHoverRegistry;
 import com.vingame.glswing.input.GLPointerController;
@@ -494,7 +495,8 @@ public abstract class GLSwingPanel extends GLJPanel
 			@Override
 			public void mouseExited(MouseEvent event) {
 				cancelHoverRead();
-				cancelPointerCapture(event);
+				if (!hasPressedMouseButton(event))
+					cancelPointerCapture(event);
 				leaveHover(event);
 			}
 
@@ -564,7 +566,21 @@ public abstract class GLSwingPanel extends GLJPanel
 		addMouseWheelListener(dispatcher);
 	}
 
+	private static boolean hasPressedMouseButton(MouseEvent event) {
+		int buttons = MouseEvent.BUTTON1_DOWN_MASK
+				| MouseEvent.BUTTON2_DOWN_MASK | MouseEvent.BUTTON3_DOWN_MASK;
+		return (event.getModifiersEx() & buttons) != 0;
+	}
+
 	private void dispatchMouseWheel(MouseWheelEvent event, GLPickResult result) {
+		GLMouseTarget capture = wheelCaptureTarget(result.getTarget());
+		if (capture != null && capture != result.getTarget()) {
+			GLMouseWheelEvent captured = new GLMouseWheelEvent(event,
+					result.retarget(capture));
+			capture.mouseWheelMoved(captured);
+			if (captured.isConsumed())
+				return;
+		}
 		GLMouseWheelEvent translated = new GLMouseWheelEvent(event, result);
 		GLMouseTarget target = result.getTarget();
 		while (target != null) {
@@ -577,19 +593,47 @@ public abstract class GLSwingPanel extends GLJPanel
 		}
 	}
 
+	private static GLMouseTarget wheelCaptureTarget(GLMouseTarget target) {
+		for (GLMouseTarget current = target; current instanceof GLContainer child;) {
+			if (current instanceof GLMouseWheelCaptureTarget)
+				return current;
+			GLParent parent = child.getGLParent();
+			current = parent instanceof GLMouseTarget mouseTarget
+					? mouseTarget : null;
+		}
+		return target instanceof GLMouseWheelCaptureTarget ? target : null;
+	}
+
 	private void dispatchMousePressed(MouseEvent event, GLPickResult result) {
 		GLMouseTarget hitTarget = result.getTarget();
 		requestGLFocus(hitTarget instanceof GLKeyTarget keyTarget
 				&& keyTarget.isFocusTraversable() ? keyTarget : null);
 		updateHover(event, result, false);
-		capturedPick = result.hasTarget() ? result : GLPickResult.none();
 		lastDragX = event.getX();
 		lastDragY = event.getY();
-		if (capturedPick.hasTarget()) {
-			capturedPick.getTarget().mousePressed(
-					mouseEvent(event, capturedPick, 0, 0));
+		capturedPick = result.hasTarget() ? dispatchPress(event, result)
+				: GLPickResult.none();
+		if (capturedPick.hasTarget())
 			repaintColorOnly();
+	}
+
+	private GLPickResult dispatchPress(MouseEvent event, GLPickResult initial) {
+		GLPickResult current = initial;
+		GLMouseTarget target = current.getTarget();
+		GLMouseEvent translated = mouseEvent(event, current, 0, 0);
+		target.mousePressed(translated);
+		if (event.getButton() != MouseEvent.BUTTON2)
+			return current;
+		while (!translated.isConsumed() && target instanceof GLContainer child) {
+			GLParent parent = child.getGLParent();
+			if (!(parent instanceof GLMouseTarget parentTarget))
+				break;
+			target = parentTarget;
+			current = current.retarget(target);
+			translated = mouseEvent(event, current, 0, 0);
+			target.mousePressed(translated);
 		}
+		return current;
 	}
 
 	private void dispatchMouseDragged(MouseEvent event) {

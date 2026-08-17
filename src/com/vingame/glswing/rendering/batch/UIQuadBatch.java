@@ -182,7 +182,8 @@ public final class UIQuadBatch {
 		instances.put(values, source + 14, 6);
 		int mode = (int) values[source + 14];
 		if (mode == (int) UIQuadInstanceFormat.MODE_ASYMMETRIC_ROUNDED_FILL
-				|| mode == (int) UIQuadInstanceFormat.MODE_ASYMMETRIC_ROUNDED_STROKE) {
+				|| mode == (int) UIQuadInstanceFormat.MODE_ASYMMETRIC_ROUNDED_STROKE
+				|| mode == (int) UIQuadInstanceFormat.MODE_ROUNDED_SHADOW) {
 			// These four slots carry geometry rather than a secondary color.
 			instances.put(values, source + 20, 4);
 		} else {

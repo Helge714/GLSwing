@@ -174,6 +174,8 @@ public final class GLGridLayout implements GLLayout {
 			if (!child.isVisible())
 				continue;
 			GLConstraints constraints = parent.getGLConstraints(child);
+			if (!constraints.isLayoutManaged())
+				continue;
 			if (constraints.gridX() == GLConstraints.AUTO
 					|| constraints.gridY() == GLConstraints.AUTO) {
 				automatic.add(new PendingItem(child, constraints));

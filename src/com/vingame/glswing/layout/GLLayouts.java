@@ -14,7 +14,8 @@ public final class GLLayouts {
 			float requiredWidth = padding.left();
 			float requiredHeight = padding.top();
 			for (GLContainer child : parent.getGLChildren()) {
-				if (!child.isVisible())
+				if (!child.isVisible()
+						|| !parent.getGLConstraints(child).isLayoutManaged())
 					continue;
 				requiredWidth = Math.max(requiredWidth,
 						child.getX() + child.getWidth());

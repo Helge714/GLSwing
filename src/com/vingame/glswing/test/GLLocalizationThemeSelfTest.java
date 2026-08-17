@@ -14,6 +14,7 @@ import com.vingame.glswing.ui.GLThemeLoadException;
 import com.vingame.glswing.ui.GLThemeValues;
 import com.vingame.glswing.ui.GLThemes;
 import com.vingame.glswing.ui.GLUiKeys;
+import com.vingame.glswing.node.GLNodeEditorStyle;
 
 /** CPU checks for locale fallback, formatting and external theme resolution. */
 public final class GLLocalizationThemeSelfTest {
@@ -55,6 +56,22 @@ public final class GLLocalizationThemeSelfTest {
 				new Color(1f, 0.5f, 0.5f, 0f)), "Normalized rgba parsing failed");
 		check(GLThemeValues.parseColor("rgba(100%, 50%, 0%, 25%)").equals(
 				new Color(1f, 0.5f, 0f, 0.25f)), "Percentage rgba parsing failed");
+		check(GLThemeValues.parseColor(
+				"derive(rgba(100, 150, 200, 128), alpha*=50%)").equals(
+						new Color(100, 150, 200, 64)),
+				"Relative derive alpha failed");
+		check(GLThemeValues.parseColor(
+				"derive(rgb(255, 0, 0), hue+=120deg)").equals(
+						new Color(0, 255, 0)),
+				"Relative derive hue failed");
+		check(GLThemeValues.parseColor(
+				"derive(rgb(255, 0, 0), saturation=50%, value=50%)").equals(
+						new Color(128, 64, 64)),
+				"Absolute derive HSV channels failed");
+		check(GLThemeValues.parseColor(
+				"derive(rgb(120, 80, 40), saturation*=0%, brightness+=10%)")
+						.equals(new Color(146, 146, 146)),
+				"Combined derive HSV aliases failed");
 	}
 
 	private static void testBundledThemes() {
@@ -65,12 +82,38 @@ public final class GLLocalizationThemeSelfTest {
 				&& "Dark".equals(dark.values().get("theme.name", ""))
 				&& "Light".equals(light.values().get("theme.name", "")),
 				"Bundled themes were not loaded as resources");
-		check(dark.buttonStyle().pressedBackground()
-				.equals(dark.values().getColor("palette.accent", Color.BLACK)),
-				"Semantic pressed token did not reach the button style");
+		check(dark.buttonStyle().pressedLightColor()
+				.equals(dark.values().getColor("button.pressedLight", Color.BLACK))
+				&& dark.buttonStyle().pressedDarkColor().equals(
+						dark.values().getColor("button.pressedDark", Color.BLACK)),
+				"Explicit button gradient tokens did not reach the style");
 		check(!dark.buttonStyle().background()
 				.equals(light.buttonStyle().background()),
 				"Light theme did not override the inherited dark palette");
+		GLNodeEditorStyle nodeEditor = GLNodeEditorStyle.fromTheme(defaults);
+		check(defaults.values().getColor("node.activeSelectedBorder", Color.BLACK)
+				.equals(com.vingame.glswing.node.GLNodeStyle.fromTheme(defaults)
+						.activeSelectedBorder()),
+				"Active node-selection border did not reach its style");
+		check(nodeEditor.connectionSnapDistance() == 18
+				&& nodeEditor.connectionCurveTolerance() == 0.15f
+				&& nodeEditor.connectionHandleFactor() == 0.55f
+				&& nodeEditor.minimumConnectionHandleLength() == 50
+				&& nodeEditor.connectionWidth() == 3
+				&& nodeEditor.connectionBorderWidth() == 1
+				&& nodeEditor.marqueeBorderWidth() == 1
+				&& nodeEditor.marqueeFill().equals(new Color(
+						defaults.values().getColor("palette.selection", Color.BLACK)
+								.getRed(),
+						defaults.values().getColor("palette.selection", Color.BLACK)
+								.getGreen(),
+						defaults.values().getColor("palette.selection", Color.BLACK)
+								.getBlue(), 70))
+				&& nodeEditor.connectionBorder().equals(
+						defaults.values().getColor("palette.border", Color.BLACK))
+				&& nodeEditor.selectedConnectionBorder().equals(
+						defaults.values().getColor("palette.accent", Color.BLACK)),
+				"Default node-editor connection tokens did not reach its style");
 	}
 
 	private static void testMissingFilePolicy() throws Exception {
@@ -97,22 +140,45 @@ public final class GLLocalizationThemeSelfTest {
 			Files.writeString(file, """
 					theme.extends=light
 					custom.brand=rgba(1f, 0.5f, 0.5f, 0.75f)
+					custom.derived=derive(${custom.brand}, alpha=64)
+					custom.derivedFloat=derive(${custom.brand}, alpha=0.25f)
+					custom.relative=derive(${custom.brand}, alpha*=50%)
+					custom.shifted=derive(${custom.brand}, hue+=120deg, value*=90%)
 					palette.accent=${custom.brand}
+					button.pressedLight=${custom.brand}
+					button.pressedDark=${custom.brand}
 					button.cornerRadius=11
 					slider.pressed=${palette.accent}
+					nodeEditor.connectionCurveTolerance=0.08
+					nodeEditor.connectionHandleFactor=0.8
 					""", StandardCharsets.UTF_8);
 			GLTheme loaded = GLThemeLoader.load(file);
 			Color brand = new Color(1f, 0.5f, 0.5f, 0.75f);
 			check(brand.equals(loaded.values().getColor("custom.brand", Color.BLACK)),
 					"Custom theme token was not retained");
-			check(brand.equals(loaded.buttonStyle().pressedBackground()),
-					"Accent did not reach button pressed color: "
-							+ loaded.buttonStyle().pressedBackground());
+			check(new Color(255, 128, 128, 64).equals(
+					loaded.values().getColor("custom.derived", Color.BLACK))
+					&& new Color(255, 128, 128, 64).equals(
+							loaded.values().getColor("custom.derivedFloat", Color.BLACK)),
+					"Derived theme alpha did not retain the base RGB color");
+			check(loaded.values().getColor("custom.relative", Color.BLACK)
+					.getAlpha() == 96,
+					"Relative derived alpha did not use the base alpha");
+			check(loaded.values().getColor("custom.shifted", Color.BLACK)
+					.getAlpha() == brand.getAlpha(),
+					"HSV derivation unexpectedly changed alpha");
+			check(brand.equals(loaded.buttonStyle().pressedLightColor())
+					&& brand.equals(loaded.buttonStyle().pressedDarkColor()),
+					"Theme did not reach both button gradient colors");
 			check(brand.equals(loaded.sliderStyle().pressedBackground()),
 					"Accent did not reach slider pressed color: "
 							+ loaded.sliderStyle().pressedBackground());
 			check(loaded.buttonStyle().cornerRadius() == 11,
 					"Component-specific corner radius was not applied");
+			GLNodeEditorStyle nodeEditor = GLNodeEditorStyle.fromTheme(loaded);
+			check(nodeEditor.connectionCurveTolerance() == 0.08f
+					&& nodeEditor.connectionHandleFactor() == 0.8f,
+					"External node-editor curve tokens did not reach its style");
 
 			Files.writeString(cycle, """
 					token.a=${token.b}

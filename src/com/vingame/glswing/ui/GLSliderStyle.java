@@ -14,8 +14,8 @@ public record GLSliderStyle(
 		Color textColor,
 		Color disabledTextColor,
 		Color borderColor,
-		Color progressTopColor,
-		Color progressBottomColor,
+		Color progressLightColor,
+		Color progressDarkColor,
 		Color arrowBackground,
 		Color arrowHoverBackground,
 		Color arrowPressedBackground,
@@ -37,8 +37,8 @@ public record GLSliderStyle(
 		if (font == null || background == null || hoverBackground == null
 				|| pressedBackground == null || disabledBackground == null
 				|| textColor == null || disabledTextColor == null
-				|| borderColor == null || progressTopColor == null
-				|| progressBottomColor == null || arrowBackground == null
+				|| borderColor == null || progressLightColor == null
+				|| progressDarkColor == null || arrowBackground == null
 				|| arrowHoverBackground == null || arrowPressedBackground == null
 				|| arrowDisabledBackground == null || arrowColor == null
 				|| disabledArrowColor == null || padding == null)
@@ -50,6 +50,10 @@ public record GLSliderStyle(
 			throw new IllegalArgumentException(
 					"Slider geometry must be finite and non-negative");
 	}
+
+	/** Compatibility aliases for the former position-based names. */
+	public Color progressTopColor() { return progressLightColor; }
+	public Color progressBottomColor() { return progressDarkColor; }
 
 	public Color background(GLControlState state) {
 		return switch (state) {
@@ -67,7 +71,7 @@ public record GLSliderStyle(
 	public GLSliderStyle withFont(GLFontSpec value) {
 		return copy(value, background, hoverBackground, pressedBackground,
 				disabledBackground, textColor, disabledTextColor, borderColor,
-				progressTopColor, progressBottomColor, arrowBackground,
+				progressLightColor, progressDarkColor, arrowBackground,
 				arrowHoverBackground, arrowPressedBackground,
 				arrowDisabledBackground, arrowColor, disabledArrowColor,
 				cornerRadius, borderWidth, height, preferredWidth,
@@ -86,7 +90,7 @@ public record GLSliderStyle(
 	public GLSliderStyle withBorder(float width, Color color) {
 		return copy(font, background, hoverBackground, pressedBackground,
 				disabledBackground, textColor, disabledTextColor, color,
-				progressTopColor, progressBottomColor, arrowBackground,
+				progressLightColor, progressDarkColor, arrowBackground,
 				arrowHoverBackground, arrowPressedBackground,
 				arrowDisabledBackground, arrowColor, disabledArrowColor,
 				cornerRadius, width, height, preferredWidth, arrowButtonWidth,
@@ -96,7 +100,7 @@ public record GLSliderStyle(
 	public GLSliderStyle withGeometry(float radius, float height, float width) {
 		return copy(font, background, hoverBackground, pressedBackground,
 				disabledBackground, textColor, disabledTextColor, borderColor,
-				progressTopColor, progressBottomColor, arrowBackground,
+				progressLightColor, progressDarkColor, arrowBackground,
 				arrowHoverBackground, arrowPressedBackground,
 				arrowDisabledBackground, arrowColor, disabledArrowColor,
 				radius, borderWidth, height, width, arrowButtonWidth,
@@ -106,7 +110,7 @@ public record GLSliderStyle(
 	public GLSliderStyle withPadding(GLInsets value) {
 		return copy(font, background, hoverBackground, pressedBackground,
 				disabledBackground, textColor, disabledTextColor, borderColor,
-				progressTopColor, progressBottomColor, arrowBackground,
+				progressLightColor, progressDarkColor, arrowBackground,
 				arrowHoverBackground, arrowPressedBackground,
 				arrowDisabledBackground, arrowColor, disabledArrowColor,
 				cornerRadius, borderWidth, height, preferredWidth,
@@ -116,7 +120,7 @@ public record GLSliderStyle(
 	private static GLSliderStyle copy(GLFontSpec font,
 			Color background, Color hoverBackground, Color pressedBackground,
 			Color disabledBackground, Color textColor, Color disabledTextColor,
-			Color borderColor, Color progressTopColor, Color progressBottomColor,
+			Color borderColor, Color progressLightColor, Color progressDarkColor,
 			Color arrowBackground, Color arrowHoverBackground,
 			Color arrowPressedBackground, Color arrowDisabledBackground,
 			Color arrowColor, Color disabledArrowColor, float cornerRadius,
@@ -125,7 +129,7 @@ public record GLSliderStyle(
 			GLInsets padding) {
 		return new GLSliderStyle(font, background, hoverBackground,
 				pressedBackground, disabledBackground, textColor, disabledTextColor,
-				borderColor, progressTopColor, progressBottomColor, arrowBackground,
+				borderColor, progressLightColor, progressDarkColor, arrowBackground,
 				arrowHoverBackground, arrowPressedBackground,
 				arrowDisabledBackground, arrowColor, disabledArrowColor,
 				cornerRadius, borderWidth, height, preferredWidth,

@@ -3,13 +3,13 @@ package com.vingame.glswing.ui;
 import com.vingame.glswing.rendering.GLFont;
 
 /** Small shared text fitting helpers used by lightweight controls. */
-final class GLTextFitter {
+public final class GLTextFitter {
 	private static final String ELLIPSIS = "...";
 
 	private GLTextFitter() {
 	}
 
-	static String ellipsize(GLFont font, String text, float maximumWidth) {
+	public static String ellipsize(GLFont font, String text, float maximumWidth) {
 		if (text == null || text.isEmpty() || maximumWidth <= 0)
 			return "";
 		if (font.measureText(text) <= maximumWidth)

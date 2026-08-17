@@ -45,6 +45,11 @@ public class GLButton extends GLControl {
 		return text;
 	}
 
+	@Override
+	protected String defaultName() {
+		return text;
+	}
+
 	public final void setText(String text) {
 		text = requireText(text);
 		if (this.text.equals(text))
@@ -117,12 +122,10 @@ public class GLButton extends GLControl {
 		context.withParameters(backgroundParameters, () ->
 				context.fillUIRoundRect(0, 0, width, height,
 						style.cornerRadius(), Color.WHITE));
-		Color pressed = style.pressedBackground();
 		context.withParameters(pressedGradientParameters, () ->
-				context.fillUIProgressRoundRect(0, 0, width, height,
-						style.cornerRadius(), 1,
-						mix(pressed, Color.WHITE, 0.12f),
-						mix(pressed, Color.BLACK, 0.12f)));
+				context.fillUIVerticalGradientRoundRect(0, 0, width, height,
+						style.cornerRadius(), style.pressedLightColor(),
+						style.pressedDarkColor()));
 		if (border > 0)
 			context.drawUIRoundRect(0, 0, width, height,
 					style.cornerRadius(), border, style.borderColor(),
@@ -220,15 +223,6 @@ public class GLButton extends GLControl {
 				state == GLControlState.PRESSED ? 1 : 0);
 		textParameters.setColor(style.text(state));
 		repaintGL();
-	}
-
-	private static Color mix(Color first, Color second, float amount) {
-		float inverse = 1 - amount;
-		return new Color(
-				Math.round(first.getRed() * inverse + second.getRed() * amount),
-				Math.round(first.getGreen() * inverse + second.getGreen() * amount),
-				Math.round(first.getBlue() * inverse + second.getBlue() * amount),
-				first.getAlpha());
 	}
 
 	private GLFont measurementFont(GLFontSpec specification) {

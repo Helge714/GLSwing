@@ -16,6 +16,16 @@ bewusst verworfen wurde.
     weitergeben.
   - Theme-konfigurierbaren Fokusring anbieten.
 
+## Datenansichten
+
+- `GLScrollPane` im allgemeinen GUI-Showcase vollständig demonstrieren und
+  Resize, Mausrad, Scrollbar-Dragging sowie verschachteltes Clipping testen.
+- Generische `GLList<T>` entwickeln.
+  - Single- und später Multi-Selection unterstützen.
+  - Austauschbaren `GLListCellRenderer<T>` vorsehen.
+  - Große Datenmengen durch Virtualisierung auf sichtbare Einträge begrenzen.
+- Auf dem Listen- und Auswahlmodell später `GLTree<T>` und `GLTable` aufbauen.
+
 ## Später prüfen
 
 - Barrierefreiheits-Schnittstellen für GPU-gerenderte Controls untersuchen.

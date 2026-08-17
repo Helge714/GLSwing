@@ -161,6 +161,15 @@ void main() {
 		coverage = outer * progressCoverage;
 		color = mix(vColor, vSecondaryColor,
 				clamp(vLocal.y / max(vSize.y, 0.0001), 0.0, 1.0));
+	} else if (mode == 12) {
+		vec2 casterOrigin = vSecondaryColor.xy;
+		vec2 casterSize = vSecondaryColor.zw;
+		float distance = roundedDistance(vLocal - casterOrigin,
+				casterSize, vParameters.y);
+		float softness = max(vParameters.z, 0.0);
+		coverage = softness > 0.0001
+				? 1.0 - smoothstep(-softness, softness, distance)
+				: edgeCoverage(distance);
     } else {
         discard;
     }

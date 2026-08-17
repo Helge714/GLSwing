@@ -1,7 +1,9 @@
 package com.vingame.glswing.ui;
 
 import java.awt.Color;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
@@ -86,6 +88,13 @@ public final class GLThemeValues {
 				parseFloat(parts[2], key), parseFloat(parts[3], key));
 	}
 
+	/**
+	 * Parses hex, RGB(A), and derived colors. A {@code derive} expression can
+	 * set ({@code =}), scale ({@code *=}), add ({@code +=}), or subtract
+	 * ({@code -=}) the alpha, hue, saturation, and value/brightness channels.
+	 * Hue accepts degrees via {@code deg}; unit channels accept percentages,
+	 * normalized {@code f} values, or 0..255 integers.
+	 */
 	public static Color parseColor(String text) {
 		if (text == null)
 			throw new IllegalArgumentException("Color text must not be null");
@@ -93,11 +102,219 @@ public final class GLThemeValues {
 		if (value.startsWith("#"))
 			return parseHex(value);
 		String lower = value.toLowerCase(Locale.ROOT);
+		if (lower.startsWith("derive(") && value.endsWith(")"))
+			return parseDerived(value.substring(7, value.length() - 1));
 		if (lower.startsWith("rgba(") && value.endsWith(")"))
 			return parseFunctional(value.substring(5, value.length() - 1), true);
 		if (lower.startsWith("rgb(") && value.endsWith(")"))
 			return parseFunctional(value.substring(4, value.length() - 1), false);
 		throw new IllegalArgumentException("Unsupported theme color: " + text);
+	}
+
+	private static Color parseDerived(String body) {
+		List<String> parts = splitTopLevel(body);
+		if (parts.size() < 2)
+			throw new IllegalArgumentException(
+					"derive requires a base color and at least one override");
+		Color base = parseColor(parts.get(0));
+		float[] hsv = Color.RGBtoHSB(base.getRed(), base.getGreen(),
+				base.getBlue(), null);
+		float alpha = base.getAlpha() / 255f;
+		boolean[] changed = new boolean[DeriveChannel.values().length];
+		for (int index = 1; index < parts.size(); index++) {
+			DeriveOverride override = parseDeriveOverride(parts.get(index));
+			DeriveChannel channel = override.channel();
+			if (changed[channel.ordinal()])
+				throw new IllegalArgumentException("derive " + channel.key
+						+ " may only be specified once");
+			changed[channel.ordinal()] = true;
+			float current = channel == DeriveChannel.ALPHA ? alpha
+					: hsv[channel.hsvIndex];
+			float changedValue = applyDerive(current, override);
+			if (channel == DeriveChannel.HUE)
+				hsv[0] = wrapUnit(changedValue);
+			else if (channel == DeriveChannel.ALPHA)
+				alpha = clampUnit(changedValue);
+			else
+				hsv[channel.hsvIndex] = clampUnit(changedValue);
+		}
+		int rgb = Color.HSBtoRGB(hsv[0], hsv[1], hsv[2]);
+		return new Color((rgb >>> 16) & 0xff, (rgb >>> 8) & 0xff, rgb & 0xff,
+				Math.round(alpha * 255));
+	}
+
+	private static DeriveOverride parseDeriveOverride(String source) {
+		String part = source.trim();
+		int separator = part.indexOf('=');
+		if (separator <= 0 || separator == part.length() - 1)
+			throw new IllegalArgumentException(
+					"Invalid derive override: " + part);
+		String left = part.substring(0, separator).trim();
+		DeriveOperation operation = DeriveOperation.SET;
+		if (!left.isEmpty()) {
+			operation = switch (left.charAt(left.length() - 1)) {
+			case '*' -> DeriveOperation.MULTIPLY;
+			case '+' -> DeriveOperation.ADD;
+			case '-' -> DeriveOperation.SUBTRACT;
+			default -> DeriveOperation.SET;
+			};
+			if (operation != DeriveOperation.SET)
+				left = left.substring(0, left.length() - 1).trim();
+		}
+		DeriveChannel channel = DeriveChannel.forName(left);
+		String amount = part.substring(separator + 1).trim();
+		return new DeriveOverride(channel, operation, amount);
+	}
+
+	private static float applyDerive(float current, DeriveOverride override) {
+		float amount = switch (override.operation()) {
+		case MULTIPLY -> multiplier(override.amount());
+		case SET, ADD, SUBTRACT -> override.channel() == DeriveChannel.HUE
+				? hueAmount(override.amount())
+				: unitAmount(override.amount(), override.operation() == DeriveOperation.SET);
+		};
+		return switch (override.operation()) {
+		case SET -> amount;
+		case MULTIPLY -> current * amount;
+		case ADD -> current + amount;
+		case SUBTRACT -> current - amount;
+		};
+	}
+
+	private static float hueAmount(String text) {
+		String value = text.trim();
+		String lower = value.toLowerCase(Locale.ROOT);
+		try {
+			if (lower.endsWith("deg"))
+				return finite(Float.parseFloat(
+						value.substring(0, value.length() - 3)) / 360f, text);
+			if (value.endsWith("%"))
+				return finite(Float.parseFloat(
+						value.substring(0, value.length() - 1)) / 100f, text);
+			if (hasFloatSuffix(value))
+				return finite(Float.parseFloat(
+						value.substring(0, value.length() - 1)), text);
+			float result = Float.parseFloat(value);
+			return finite(Math.abs(result) > 1 ? result / 360f : result, text);
+		} catch (NumberFormatException error) {
+			throw new IllegalArgumentException("Invalid hue amount: " + text, error);
+		}
+	}
+
+	private static float unitAmount(String text, boolean requireUnitRange) {
+		String value = text.trim();
+		try {
+			float result;
+			if (value.endsWith("%"))
+				result = Float.parseFloat(
+						value.substring(0, value.length() - 1)) / 100f;
+			else if (hasFloatSuffix(value))
+				result = Float.parseFloat(value.substring(0, value.length() - 1));
+			else {
+				result = Float.parseFloat(value);
+				if (Math.abs(result) > 1)
+					result /= 255f;
+			}
+			result = finite(result, text);
+			return requireUnitRange ? unit(result, text) : result;
+		} catch (NumberFormatException error) {
+			throw new IllegalArgumentException(
+					"Invalid derive channel amount: " + text, error);
+		}
+	}
+
+	private static float multiplier(String text) {
+		String value = text.trim();
+		try {
+			float result;
+			if (value.endsWith("%"))
+				result = Float.parseFloat(
+						value.substring(0, value.length() - 1)) / 100f;
+			else if (hasFloatSuffix(value))
+				result = Float.parseFloat(value.substring(0, value.length() - 1));
+			else
+				result = Float.parseFloat(value);
+			result = finite(result, text);
+			if (result < 0)
+				throw new IllegalArgumentException(
+						"derive multiplier must not be negative: " + text);
+			return result;
+		} catch (NumberFormatException error) {
+			throw new IllegalArgumentException(
+					"Invalid derive multiplier: " + text, error);
+		}
+	}
+
+	private static float finite(float value, String source) {
+		if (!Float.isFinite(value))
+			throw new IllegalArgumentException(
+					"Color amount must be finite: " + source);
+		return value;
+	}
+
+	private static float clampUnit(float value) {
+		return Math.max(0, Math.min(1, value));
+	}
+
+	private static float wrapUnit(float value) {
+		float wrapped = value % 1;
+		return wrapped < 0 ? wrapped + 1 : wrapped;
+	}
+
+	private enum DeriveChannel {
+		HUE("hue", 0), SATURATION("saturation", 1), VALUE("value", 2),
+		ALPHA("alpha", -1);
+
+		private final String key;
+		private final int hsvIndex;
+
+		DeriveChannel(String key, int hsvIndex) {
+			this.key = key;
+			this.hsvIndex = hsvIndex;
+		}
+
+		private static DeriveChannel forName(String name) {
+			return switch (name.toLowerCase(Locale.ROOT)) {
+			case "h", "hue" -> HUE;
+			case "s", "saturation" -> SATURATION;
+			case "v", "value", "brightness" -> VALUE;
+			case "a", "alpha" -> ALPHA;
+			default -> throw new IllegalArgumentException(
+					"Unsupported derive channel: " + name);
+			};
+		}
+	}
+
+	private enum DeriveOperation {
+		SET, MULTIPLY, ADD, SUBTRACT
+	}
+
+	private record DeriveOverride(DeriveChannel channel,
+			DeriveOperation operation, String amount) {
+	}
+
+	private static List<String> splitTopLevel(String value) {
+		List<String> parts = new ArrayList<>();
+		int depth = 0;
+		int start = 0;
+		for (int index = 0; index < value.length(); index++) {
+			char character = value.charAt(index);
+			if (character == '(')
+				depth++;
+			else if (character == ')') {
+				if (--depth < 0)
+					throw new IllegalArgumentException(
+							"Unbalanced parentheses in derive color: " + value);
+			} else if (character == ',' && depth == 0) {
+				parts.add(value.substring(start, index).trim());
+				start = index + 1;
+			}
+		}
+		if (depth != 0)
+			throw new IllegalArgumentException(
+					"Unbalanced parentheses in derive color: " + value);
+		parts.add(value.substring(start).trim());
+		return parts;
 	}
 
 	private static Color parseHex(String value) {

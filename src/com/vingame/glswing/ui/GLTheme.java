@@ -163,7 +163,8 @@ public record GLTheme(GLLabelStyle labelStyle, GLButtonStyle buttonStyle,
 				.with("metrics.cornerRadius", Float.toString(radius))
 				.with("scrollBar.cornerRadius", Float.toString(radius))
 				.with("scrollPane.cornerRadius", Float.toString(radius))
-				.with("tabbedPane.cornerRadius", Float.toString(radius));
+				.with("tabbedPane.cornerRadius", Float.toString(radius))
+				.with("node.cornerRadius", Float.toString(radius));
 		return new GLTheme(labelStyle,
 				buttonStyle.withCornerRadius(radius),
 				checkBoxStyle.withCornerRadius(radius),

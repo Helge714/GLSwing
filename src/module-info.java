@@ -6,6 +6,7 @@ module GLSwingNext {
 	exports com.vingame.glswing.component;
 	exports com.vingame.glswing.input;
 	exports com.vingame.glswing.layout;
+	exports com.vingame.glswing.node;
 	exports com.vingame.glswing.rendering;
 	exports com.vingame.glswing.ui;
 }

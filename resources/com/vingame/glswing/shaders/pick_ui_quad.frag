@@ -103,7 +103,9 @@ float chevronCoverage() {
 void main() {
     if (vPickId == uint(0))
         discard;
-    int mode = int(vParameters.x + 0.5);
+	int mode = int(vParameters.x + 0.5);
+	if (mode == 12)
+		discard;
 	if (mode == 5) {
 		if (vAlpha < uTextAlphaThreshold)
 			discard;

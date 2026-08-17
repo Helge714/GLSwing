@@ -187,6 +187,8 @@ public final class UIQuadBatchGpuSelfTest {
 				Projection2D.TOP_LEFT_PIXELS.create(WIDTH, HEIGHT));
 		context.beginRecording();
 		context.setMouseTarget(target);
+		context.drawUIRoundRectShadow(10, 10, 40, 32, 9, 8, 0, 3,
+				new Color(255, 0, 255, 210));
 		context.fillAndDrawUIRoundRect(
 				10, 10, 40, 32, 9, 3, Color.RED, Color.BLUE);
 		context.drawUIText(font, "UI", 65, 36, Color.WHITE);
@@ -206,7 +208,9 @@ public final class UIQuadBatchGpuSelfTest {
 		checkColor(gl, 30, 26, Color.RED, "first rounded rectangle");
 		checkColor(gl, 30, 11, Color.BLUE, "combined rounded border");
 		checkColor(gl, 140, 26, Color.GREEN, "second rounded rectangle");
-		checkColor(gl, 10, 10, Color.BLACK, "rounded transparent corner");
+		checkVisibleMagentaShadow(gl, 10, 10,
+				"shadow behind rounded transparent corner");
+		checkVisibleMagentaShadow(gl, 30, 47, "analytic rounded shadow");
 		checkVisibleText(gl, 60, 8, 50, 40);
 		checkVisibleCheckMark(gl, 80, 54, 12, 12);
 
@@ -220,6 +224,8 @@ public final class UIQuadBatchGpuSelfTest {
 					+ pick.getLocalX() + "/" + pick.getLocalY());
 		if (renderer.readPickResult(gl, 110, 68).getTarget() != target)
 			throw new AssertionError("Invisible UI hit area was not pickable");
+		if (renderer.readPickResult(gl, 30, 47).isHit())
+			throw new AssertionError("Analytic UI shadow was pickable");
 	}
 
 	private static void checkVisibleCheckMark(GL3 gl, int x, int y,
@@ -299,6 +305,18 @@ public final class UIQuadBatchGpuSelfTest {
 			throw new AssertionError(description + ": expected "
 					+ expected.getRed() + "/" + expected.getGreen() + "/"
 					+ expected.getBlue() + ", got " + red + "/" + green + "/" + blue);
+	}
+
+	private static void checkVisibleMagentaShadow(GL3 gl, int x, int y,
+			String description) {
+		ByteBuffer pixel = readPixel(gl, x, y);
+		int red = pixel.get(0) & 0xff;
+		int green = pixel.get(1) & 0xff;
+		int blue = pixel.get(2) & 0xff;
+		if (red < 10 || blue < 10 || green >= Math.min(red, blue))
+			throw new AssertionError(description
+					+ ": expected a visible magenta shadow, got "
+					+ red + "/" + green + "/" + blue);
 	}
 
 	private static void checkDominantColor(GL3 gl, int x, int y,
