@@ -64,7 +64,7 @@ public final class DamageRenderingGpuSelfTest {
 			scene.beginUpdate(gl, WIDTH, HEIGHT, samples[0], WIDTH, HEIGHT, damage);
 			context = renderer.beginFrame(gl, WIDTH, HEIGHT,
 					Projection2D.TOP_LEFT_PIXELS.create(WIDTH, HEIGHT), false);
-			context.setRenderOutputs(true, false);
+			context.setOutputMask(true, false);
 			renderer.setRedrawBounds(damage);
 			context.clear(Color.BLACK);
 			context.fillRect(100, 20, 30, 30, Color.BLUE);
@@ -84,7 +84,7 @@ public final class DamageRenderingGpuSelfTest {
 			scene.beginUpdate(gl, WIDTH, HEIGHT, samples[0], WIDTH, HEIGHT, null);
 			context = renderer.beginFrame(gl, WIDTH, HEIGHT,
 					Projection2D.TOP_LEFT_PIXELS.create(WIDTH, HEIGHT), false);
-			context.setRenderOutputs(true, false);
+			context.setOutputMask(true, false);
 			context.clear(Color.BLACK);
 			context.fillRect(10, 60, 80, 20, Color.RED);
 			context.fillRect(80, 60, 30, 20, Color.GREEN);
@@ -96,7 +96,7 @@ public final class DamageRenderingGpuSelfTest {
 					touchingDamage);
 			context = renderer.beginFrame(gl, WIDTH, HEIGHT,
 					Projection2D.TOP_LEFT_PIXELS.create(WIDTH, HEIGHT), false);
-			context.setRenderOutputs(true, false);
+			context.setOutputMask(true, false);
 			renderer.setRedrawBounds(touchingDamage);
 			context.clear(Color.BLACK);
 			context.fillRect(10, 60, 80, 20, Color.BLUE);
@@ -115,7 +115,7 @@ public final class DamageRenderingGpuSelfTest {
 					WIDTH, HEIGHT, null);
 			context = renderer.beginFrame(gl, WIDTH, HEIGHT,
 					Projection2D.TOP_LEFT_PIXELS.create(WIDTH, HEIGHT), false);
-			context.setRenderOutputs(true, false);
+			context.setOutputMask(true, false);
 			context.clear(Color.BLACK);
 			context.fillRect(0, 0, WIDTH / 2f, HEIGHT, Color.MAGENTA);
 			context.fillRect(WIDTH / 2f, 0, WIDTH / 2f, HEIGHT, Color.CYAN);

@@ -140,17 +140,19 @@ Standardtext und rein analytische UI-Geometrie sind nicht betroffen.
 ## Color und Picking getrennt schreiben
 
 ```java
-g.setRenderOutputs(true, false);
+g.setOutputMask(true, false);
 drawDecorationOnly(g);
 
-g.setRenderOutputs(false, true);
+g.setOutputMask(false, true);
 g.addUIHitArea(20, 20, 260, 50);
 
-g.setRenderOutputs(true, true);
+g.setOutputMask(true, true);
 ```
 
 Zustandswechsel flushen und sind recordbar. Beide Outputs sind zu Framebeginn
-aktiv. `addUIHitArea` schreibt keine sichtbare Farbe.
+aktiv. Die Outputmaske steuert jede nachfolgende Geometrie. `addUIHitArea` ist
+dagegen ein konkreter unsichtbarer UI-Zeichenbefehl: Er erzeugt eine
+rechteckige Pickingfläche, aber absichtlich keine Farbausgabe.
 
 ## Asynchroner Snapshot
 
@@ -174,7 +176,7 @@ ein eingesammeltes Ziel einfach nicht mehr interaktiv.
 ## Grenzen und typische Fehler
 
 - Pick-ID/MouseTarget nach temporärem Einsatz löschen oder bewusst ersetzen.
-- Nach `setRenderOutputs(false,true)` den Normalzustand restaurieren.
+- Nach `setOutputMask(false,true)` den Normalzustand restaurieren.
 - Bei mehreren sichtbaren Treffern gewinnt der zuletzt darüber gezeichnete
   Pixel; Z-Order ist daher automatisch berücksichtigt.
 - Ein Layer-Schatten/Glow ist nicht pickbar, weil Effekte den Picking-FBO nicht

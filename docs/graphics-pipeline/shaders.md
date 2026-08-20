@@ -2,7 +2,7 @@
 
 [Zur API-Landkarte](../graphics-pipeline.md) · [Recording](recording.md) · [Weiter: Layer und Effekte](layers-effects.md)
 
-GLSwing trennt Filled-, Texture-, Text- und Layer-Shader, weil ihre
+GLSwing trennt Filled-, Texture-, Text-, UI- und Layer-Shader, weil ihre
 Vertexlayouts und verwalteten Uniforms verschieden sind. Der Renderer validiert
 den Vertrag beim ersten Einsatz und meldet fehlende Attribute, falsche
 Locations oder inaktive Pflichtuniforms als Exception.
@@ -12,6 +12,7 @@ Locations oder inaktive Pflichtuniforms als Exception.
 - [Erzeugen und freigeben](#erzeugen-und-freigeben)
 - [Shaderverträge](#shaderverträge)
 - [Standardpipeline-Beispiele](#filled-beispiel)
+- [Eigener UI-Shader](#eigener-ui-shader)
 - [Context-Uniforms](#context-uniforms)
 - [Shader in Recordings](#shader-in-recordings)
 - [Eigene Layer-Shader](#eigener-layer-shader)
@@ -37,6 +38,7 @@ dem internen GLSwing-Shaderordner und ist hauptsächlich für Bibliothekscode.
 | Filled | `aPosition` Location 0, `aColor` Location 1 | `uProjection` |
 | Texture | `aPosition` 0, `aTexCoord` 1, `aColor` 2 | `uProjection`, `uTexture` |
 | Text | wie Texture | `uProjection`, `uTexture`, `uMsdfPixelRange` |
+| UI | eingebauter instanzierter Vertexshader; Locations `0..7`, `9`, `10` wie unten | `uProjection`, `uDeviceScale`, alle `uTextures[0..15]` |
 | Layer | interner Fullscreen-Vertexshader | `uTexture`, `uOpacity` |
 
 Attribute und Pflichtuniforms müssen aktiv sein. Ein GLSL-Compiler darf
@@ -105,7 +107,8 @@ void main() {
 
 Der passende Vertexshader verwendet die Texture-Attributtabelle oben.
 `setTextureShader` wirkt auf `drawTexture`, `drawImage` und
-`drawRenderTarget`, nicht auf `drawUIImage` oder `drawIcon`.
+`drawIcon` sowie `drawRenderTarget`, nicht auf `drawUIImage` oder
+`drawUIIcon`.
 
 ## Text-Shader
 
@@ -125,6 +128,69 @@ fragColor = vec4(vColor.rgb, vColor.a * coverage);
 
 `setTextShader` betrifft `drawText`, nicht `drawUIText`.
 
+## Eigener UI-Shader
+
+```java
+// Vollständige eigene Variante des mitgelieferten ui_quad.frag:
+uiShader = ShaderProgram.fromUIFragmentSource(gl, myUIFragmentSource);
+
+g.setUIShader(uiShader);
+g.setUIUniform("uAccentStrength", 0.35f);
+drawMyControls(g);
+g.useDefaultUIShader();
+```
+
+`fromUIFragmentSource` kombiniert den eigenen Fragmentshader mit dem
+eingebauten instanzierten UI-Vertexshader. Der Fragmentshader erhält:
+
+| Eingang | GLSL-Typ | Inhalt |
+|---|---|---|
+| `vLocal` | `vec2` | Lokale Position innerhalb des Instanzquads |
+| `vTexCoord` | `vec2` | Atlas-/Textur-UV |
+| `vColor` | `vec4` | Primärfarbe |
+| `vParameters` | `flat vec4` | Modus und modusspezifische Werte |
+| `vSize` | `flat vec2` | Lokale Instanzgröße |
+| `vSecondaryColor` | `flat vec4` | Zweitfarbe, Eckradien oder Schattenbounds je Modus |
+| `vTextureSlot` | `flat int` | Index in `uTextures` |
+
+Der vollständige Vertexvertrag verwendet `aCorner`, `aP00`, `aP10`, `aP01`,
+`aUvRect`, `aColor`, `aParameters`, `aSize`, `aSecondaryColor` und
+`aTextureSlot` an den Locations `0,1,2,3,4,5,6,7,9,10`. Verwaltet werden die
+Projektionsmatrix `uProjection`, der logische-zu-physische Faktor
+`uDeviceScale` sowie alle 16 Sampler `uTextures[0]` bis `uTextures[15]`.
+Sämtliche Werte müssen im gelinkten Programm **aktiv** bleiben; andernfalls
+weist `setUIShader` den Shader mit einer verständlichen Vertragsverletzung
+zurück.
+
+Ein eigener UI-Shader ist ein kompletter Ersatz. Er muss alle Modi des
+mitgelieferten `ui_quad.frag` behandeln: runde und asymmetrische Flächen und
+Border, Fill+Border, MSDF-Text, RGBA-Texturen, Checkmark, Chevron,
+Fortschrittsverläufe, Hit-Area und analytischen Schatten. Der praktikable
+Startpunkt ist daher eine Kopie von
+`resources/com/vingame/glswing/shaders/ui_quad.frag`, in die nur der gewünschte
+Effekt eingebaut wird. Das interne Picking bleibt unabhängig davon erhalten.
+
+Der Shaderwechsel selbst erzeugt nur dann einen Flush, wenn gerade UI-Instanzen
+offen sind und sich das Programm wirklich ändert. Wiederholtes Setzen derselben
+Instanz und desselben Uniformwerts ist günstig. Unterschiedliche Uniformwerte
+pro Control bilden hingegen jeweils eine Batchgrenze.
+
+### Was mit einem Materialsystem gemeint ist
+
+Ein Material würde Shader und dessen Parameter als wiederverwendbaren,
+möglichst unveränderlichen Stilwert bündeln, etwa
+`GLUIMaterial(shader, uniforms)`. Viele Controls könnten dasselbe Material
+referenzieren; der Renderer sortiert nicht um, könnte aber benachbarte gleiche
+Materialien ohne Wechsel gemeinsam zeichnen. Eine fortgeschrittene Variante
+würde kleine Materialparameter als Instanzdaten oder über einen GPU-Puffer
+liefern, sodass sogar verschiedene Looks mit einem gemeinsamen Shader im
+selben Drawcall bleiben.
+
+Eine solche Abstraktion existiert derzeit bewusst noch nicht. Die jetzige
+`setUIShader`-/`setUIUniform`-API ist der direkte, flexible Grundbaustein. Für
+einzelne Control- oder Gruppeneffekte ohne Nachbau des kompletten UI-Shaders
+bleibt ein Layer mit `GLShaderEffect` die einfachere Wahl.
+
 ## Context-Uniforms
 
 Jede Pipeline bietet:
@@ -138,7 +204,7 @@ g.setFilledUniform("uMode", 2);
 g.setFilledUniformMatrix4("uExtraMatrix", matrix16);
 ```
 
-Ersetze `Filled` durch `Texture` oder `Text` für die anderen Batches. Uniforms
+Ersetze `Filled` durch `Texture`, `Text` oder `UI` für die anderen Batches. Uniforms
 werden typgeprüft: `float`, `vec2`, `vec3`, `vec4`, `int`/`bool` und `mat4`.
 Name muss aktiv sein und zum Typ passen.
 

@@ -28,6 +28,18 @@ bewusst verworfen wurde.
 
 ## Rendering und Farbräume
 
+- UI-Materialsystem auf Basis des Universal-UI-Shaders entwickeln.
+  - Shader und immutable Uniform-/Stilwerte in einem wiederverwendbaren
+    `GLUIMaterial` bündeln.
+  - Benachbarte Instanzen mit demselben Material ohne zusätzlichen Flush
+    gemeinsam zeichnen und Materialwechsel als klare Batchgrenze behandeln.
+  - Prüfen, welche Materialparameter als UI-Instanzdaten oder über einen
+    GPU-Puffer transportiert werden können, damit unterschiedliche Looks mit
+    demselben Basis-Shader im selben Drawcall bleiben.
+  - Zusammenspiel mit Themes, Recordings, Picking und dem vollständigen
+    `setUIShader`-Vertrag festlegen.
+  - Eine einfache Material-API beibehalten; Shader-/Uniformzustände bleiben
+    der flexible Low-Level-Weg.
 - Allgemeine GPU-Farbrauminterpolation für Vertexverläufe entwickeln.
   - Für beliebige Dreiecke und Polygone mindestens `SRGB`, `LINEAR_RGB` und
     `OKLAB` unterstützen.

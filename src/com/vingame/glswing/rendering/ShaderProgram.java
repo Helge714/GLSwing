@@ -69,6 +69,21 @@ public final class ShaderProgram {
 				"built-in layer vertex shader", "custom layer fragment shader");
 	}
 
+	/**
+	 * Creates a universal-UI shader using GLSwing's built-in instanced vertex
+	 * shader. The fragment shader must implement the complete public UI shader
+	 * contract, including all supported instance modes and the sixteen active
+	 * {@code uTextures} samplers.
+	 */
+	public static ShaderProgram fromUIFragmentSource(GL3 gl, String fragmentSource) {
+		if (gl == null)
+			throw new IllegalArgumentException("GL context must not be null");
+		if (fragmentSource == null || fragmentSource.isBlank())
+			throw new IllegalArgumentException("UI fragment shader source must not be blank");
+		return create(gl, loadResource(BUILT_IN_SHADER_ROOT + "ui_quad.vert"),
+				fragmentSource, "built-in UI vertex shader", "custom UI fragment shader");
+	}
+
 	public void use(GL3 gl) {
 		if (id == 0)
 			throw new IllegalStateException("Shader program has already been disposed");
@@ -161,6 +176,27 @@ public final class ShaderProgram {
 				new AttributeRequirement("aTexCoord", 1),
 				new AttributeRequirement("aColor", 2)
 		}, new String[] { "uProjection", "uTexture", "uMsdfPixelRange" });
+	}
+
+	void validateForUIBatch(GL3 gl) {
+		validateLayout(gl, "UI", new AttributeRequirement[] {
+				new AttributeRequirement("aCorner", 0),
+				new AttributeRequirement("aP00", 1),
+				new AttributeRequirement("aP10", 2),
+				new AttributeRequirement("aP01", 3),
+				new AttributeRequirement("aUvRect", 4),
+				new AttributeRequirement("aColor", 5),
+				new AttributeRequirement("aParameters", 6),
+				new AttributeRequirement("aSize", 7),
+				new AttributeRequirement("aSecondaryColor", 9),
+				new AttributeRequirement("aTextureSlot", 10)
+		}, new String[] {
+				"uProjection", "uDeviceScale",
+				"uTextures[0]", "uTextures[1]", "uTextures[2]", "uTextures[3]",
+				"uTextures[4]", "uTextures[5]", "uTextures[6]", "uTextures[7]",
+				"uTextures[8]", "uTextures[9]", "uTextures[10]", "uTextures[11]",
+				"uTextures[12]", "uTextures[13]", "uTextures[14]", "uTextures[15]"
+		});
 	}
 
 	void validateForLayerComposite(GL3 gl) {

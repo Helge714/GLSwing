@@ -27,6 +27,7 @@ public final class GLContext2D {
 	private ShaderProgram filledShader;
 	private ShaderProgram textureShader;
 	private ShaderProgram textShader;
+	private ShaderProgram uiShader;
 	private int pickId = NO_PICK_ID;
 	private GLMouseTarget mouseTarget;
 	private boolean mouseOriginDefined;
@@ -52,6 +53,7 @@ public final class GLContext2D {
 		filledShader = null;
 		textureShader = null;
 		textShader = null;
+		uiShader = null;
 		pickId = NO_PICK_ID;
 		mouseTarget = null;
 		mouseOriginDefined = false;
@@ -169,6 +171,7 @@ public final class GLContext2D {
 			filledShader = renderer.currentFilledShader();
 			textureShader = renderer.currentTextureShader();
 			textShader = renderer.currentTextShader();
+			uiShader = renderer.currentUIShader();
 		}
 	}
 
@@ -233,9 +236,10 @@ public final class GLContext2D {
 	}
 
 	/**
-	 * Starts a transparent offscreen color layer. Layers may be nested; picking
-	 * continues to be written directly to the independent picking framebuffer.
-	 * Pending geometry is flushed before the render target changes.
+	 * Starts a transparent offscreen color layer whose affected screen bounds
+	 * are collected from the color geometry drawn into it. Layers may be nested;
+	 * picking continues to be written directly to the independent picking
+	 * framebuffer. Pending geometry is flushed before the render target changes.
 	 */
 	public void beginLayer() {
 		if (recording == null) {
@@ -315,8 +319,9 @@ public final class GLContext2D {
 
 	/**
 	 * Starts drawing into a persistent RGBA render target. Target coordinates use
-	 * top-left pixels, picking is disabled and the surrounding state is restored
-	 * by {@link #endRenderTarget()}.
+	 * top-left pixels. Picking is available when the target was created with
+	 * {@link GLRenderTargetOptions#withPicking(boolean)}. The surrounding state is
+	 * restored by {@link #endRenderTarget()}.
 	 */
 	public void beginRenderTarget(GLRenderTarget target) {
 		if (recording != null)
@@ -360,16 +365,16 @@ public final class GLContext2D {
 	}
 
 	/**
-	 * Selects which targets receive subsequent draw commands. A changed selection
+	 * Selects which framebuffer outputs receive subsequent draw commands. A change
 	 * flushes pending geometry first. Both outputs are enabled at the start of each
 	 * frame and both may be disabled temporarily.
 	 */
-	public void setRenderOutputs(boolean renderColor, boolean renderPicking) {
-		executeAndRecord(renderer -> renderer.setRenderOutputs(renderColor, renderPicking));
+	public void setOutputMask(boolean renderColor, boolean renderPicking) {
+		executeAndRecord(renderer -> renderer.setOutputMask(renderColor, renderPicking));
 	}
 
 	public void setColorRenderingEnabled(boolean enabled) {
-		setRenderOutputs(enabled, isPickingRenderingEnabled());
+		setOutputMask(enabled, isPickingRenderingEnabled());
 	}
 
 	public boolean isColorRenderingEnabled() {
@@ -377,7 +382,7 @@ public final class GLContext2D {
 	}
 
 	public void setPickingRenderingEnabled(boolean enabled) {
-		setRenderOutputs(isColorRenderingEnabled(), enabled);
+		setOutputMask(isColorRenderingEnabled(), enabled);
 	}
 
 	public boolean isPickingRenderingEnabled() {
@@ -682,6 +687,24 @@ public final class GLContext2D {
 		setTextShader(null);
 	}
 
+	/**
+	 * Sets a complete shader replacement for the universal instanced UI batch.
+	 * The shader must implement every UI instance mode and the documented UI
+	 * attribute/uniform contract. Picking continues to use the internal pick shader.
+	 */
+	public void setUIShader(ShaderProgram shader) {
+		executeAndRecord(renderer -> renderer.setUIShader(shader));
+		uiShader = shader;
+	}
+
+	public ShaderProgram getUIShader() {
+		return uiShader;
+	}
+
+	public void useDefaultUIShader() {
+		setUIShader(null);
+	}
+
 	public void setFilledUniform(String name, float value) {
 		setFilledUniform(name, ShaderUniformValue.of(value));
 	}
@@ -754,6 +777,30 @@ public final class GLContext2D {
 		setTextUniform(name, ShaderUniformValue.matrix4(matrix));
 	}
 
+	public void setUIUniform(String name, float value) {
+		setUIUniform(name, ShaderUniformValue.of(value));
+	}
+
+	public void setUIUniform(String name, float x, float y) {
+		setUIUniform(name, ShaderUniformValue.of(x, y));
+	}
+
+	public void setUIUniform(String name, float x, float y, float z) {
+		setUIUniform(name, ShaderUniformValue.of(x, y, z));
+	}
+
+	public void setUIUniform(String name, float x, float y, float z, float w) {
+		setUIUniform(name, ShaderUniformValue.of(x, y, z, w));
+	}
+
+	public void setUIUniform(String name, int value) {
+		setUIUniform(name, ShaderUniformValue.of(value));
+	}
+
+	public void setUIUniformMatrix4(String name, float[] matrix) {
+		setUIUniform(name, ShaderUniformValue.matrix4(matrix));
+	}
+
 	private void setFilledUniform(String name, ShaderUniformValue value) {
 		executeAndRecord(renderer -> renderer.setFilledUniform(name, value));
 	}
@@ -764,6 +811,10 @@ public final class GLContext2D {
 
 	private void setTextUniform(String name, ShaderUniformValue value) {
 		executeAndRecord(renderer -> renderer.setTextUniform(name, value));
+	}
+
+	private void setUIUniform(String name, ShaderUniformValue value) {
+		executeAndRecord(renderer -> renderer.setUIUniform(name, value));
 	}
 
 	public void drawLine(float x1, float y1, float x2, float y2) {
@@ -1717,8 +1768,33 @@ public final class GLContext2D {
 	}
 
 	/** Draws an RGBA or tintable MSDF icon through the shared UI batch. */
+	public void drawUIIcon(GLIcon icon, float x, float y,
+			float width, float height, Color color) {
+		submitIcon(icon, x, y, width, height, color, true);
+	}
+
+	public void drawUIIcon(GLIcon icon, float x, float y,
+			float width, float height) {
+		drawUIIcon(icon, x, y, width, height, Color.WHITE);
+	}
+
+	/**
+	 * Draws an icon as an RGBA texture through the freely shaderable texture batch.
+	 * Vector-backed icons retain adaptive resolution selection; MSDF icons use a
+	 * lazily generated RGBA representation for this path.
+	 */
 	public void drawIcon(GLIcon icon, float x, float y,
 			float width, float height, Color color) {
+		submitIcon(icon, x, y, width, height, color, false);
+	}
+
+	public void drawIcon(GLIcon icon, float x, float y,
+			float width, float height) {
+		drawIcon(icon, x, y, width, height, Color.WHITE);
+	}
+
+	private void submitIcon(GLIcon icon, float x, float y,
+			float width, float height, Color color, boolean uiBatch) {
 		if (icon == null)
 			throw new IllegalArgumentException("Icon must not be null");
 		if (!Float.isFinite(x) || !Float.isFinite(y) || !Float.isFinite(width)
@@ -1733,17 +1809,20 @@ public final class GLContext2D {
 			originX = resolvedMouseOriginX;
 			originY = resolvedMouseOriginY;
 		}
-		if (recording == null)
-			renderer.addIcon(icon, x, y, width, height, actualColor,
+		if (recording == null) {
+			if (uiBatch)
+				renderer.addUIIcon(icon, x, y, width, height, actualColor,
+						pickId, mouseTarget, originX, originY);
+			else
+				renderer.addIcon(icon, x, y, width, height, actualColor,
+						pickId, mouseTarget, originX, originY);
+		} else if (uiBatch) {
+			recording.addUIIcon(icon, x, y, width, height, actualColor,
 					pickId, mouseTarget, originX, originY);
-		else
+		} else {
 			recording.addIcon(icon, x, y, width, height, actualColor,
 					pickId, mouseTarget, originX, originY);
-	}
-
-	public void drawIcon(GLIcon icon, float x, float y,
-			float width, float height) {
-		drawIcon(icon, x, y, width, height, Color.WHITE);
+		}
 	}
 
 	private void drawResolvedImage(GLTextureRegion region, float x, float y,
@@ -1833,12 +1912,32 @@ public final class GLContext2D {
 		requireFiniteCoordinates(x1t, y1t, x2t, y2t, x3t, y3t, x4t, y4t);
 		// FBO textures use OpenGL's bottom-left storage, while context coordinates
 		// are top-left. Reversing V preserves orientation across feedback passes.
+		boolean presentLocalPicking = target.isPickingEnabled()
+				&& renderer.isPickingRenderingEnabled();
+		if (presentLocalPicking)
+			renderer.flush();
 		submitTextured(texture,
 				x1t, y1t, x2t, y2t, x3t, y3t, x4t, y4t,
 				0, 1, 1, 0,
 				actualTint.getRed() / 255f, actualTint.getGreen() / 255f,
 				actualTint.getBlue() / 255f, actualTint.getAlpha() / 255f,
-				pickId, mouseTarget, Math.min(x, x2), Math.min(y, y2));
+				presentLocalPicking ? NO_PICK_ID : pickId,
+				presentLocalPicking ? null : mouseTarget,
+				Math.min(x, x2), Math.min(y, y2));
+		if (presentLocalPicking) {
+			float[] pickVertices = {
+				x1t, y1t, 0, 1,
+				x2t, y2t, 1, 1,
+				x3t, y3t, 1, 0,
+				x1t, y1t, 0, 1,
+				x3t, y3t, 1, 0,
+				x4t, y4t, 0, 0
+			};
+			renderer.addRenderTargetPicking(target, texture, pickVertices,
+					x, y, width, height, pickId, mouseTarget,
+					Math.min(x, x2), Math.min(y, y2),
+					actualTint.getAlpha() / 255f);
+		}
 	}
 
 	public void drawTexture(GLTexture texture, float x, float y) {
@@ -2666,6 +2765,7 @@ public final class GLContext2D {
 
 	private ContextState captureContextState() {
 		return new ContextState(color, stroke, filledShader, textureShader, textShader,
+				uiShader,
 				curveTolerance, pickId, mouseTarget,
 				mouseOriginDefined, mouseOriginX, mouseOriginY,
 				logicalWidth, logicalHeight);
@@ -2685,6 +2785,7 @@ public final class GLContext2D {
 		filledShader = state.filledShader;
 		textureShader = state.textureShader;
 		textShader = state.textShader;
+		uiShader = state.uiShader;
 		curveTolerance = state.curveTolerance;
 		pickId = state.pickId;
 		mouseTarget = state.mouseTarget;
@@ -2697,7 +2798,7 @@ public final class GLContext2D {
 
 	private record ContextState(Color color, GLStroke stroke,
 			ShaderProgram filledShader, ShaderProgram textureShader,
-			ShaderProgram textShader, float curveTolerance,
+			ShaderProgram textShader, ShaderProgram uiShader, float curveTolerance,
 			int pickId, GLMouseTarget mouseTarget,
 			boolean mouseOriginDefined, float mouseOriginX, float mouseOriginY,
 			float logicalWidth, float logicalHeight) {

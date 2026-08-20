@@ -3,6 +3,7 @@ package com.vingame.glswing.rendering;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.function.Consumer;
 
 import java.awt.geom.Path2D;
 import java.awt.geom.PathIterator;
@@ -11,7 +12,7 @@ import java.awt.geom.PathIterator;
  * Mutable, fluent description of a two-dimensional path containing straight,
  * quadratic and cubic segments and any number of independent subpaths.
  */
-public final class GLPath2D {
+public final class GLPath2D implements GLShape2D {
 
 	public enum FillRule {
 		/** Every crossing toggles whether a point lies inside the path. */
@@ -32,6 +33,7 @@ public final class GLPath2D {
 	private static final byte CUBIC = 3;
 	private static final byte CLOSE = 4;
 	private static final int MAXIMUM_FLATTENING_DEPTH = 12;
+	private static final float CUBIC_CIRCLE_FACTOR = 0.55228475f;
 
 	private byte[] commands = new byte[16];
 	private float[] coordinates = new float[48];
@@ -65,6 +67,120 @@ public final class GLPath2D {
 	/** Parses an SVG {@code d} attribute with the requested fill rule. */
 	public static GLPath2D fromSvgPath(String data, FillRule fillRule) {
 		return GLSvgPathParser.parse(data, fillRule);
+	}
+
+	/** Builds a non-zero path through a deliberately path-only callback. */
+	public static GLPath2D build(Consumer<GLPath2D> builder) {
+		return build(FillRule.NON_ZERO, builder);
+	}
+
+	/** Builds a path with the requested fill rule through a path-only callback. */
+	public static GLPath2D build(FillRule fillRule, Consumer<GLPath2D> builder) {
+		if (builder == null)
+			throw new IllegalArgumentException("Path builder must not be null");
+		GLPath2D path = new GLPath2D(fillRule);
+		builder.accept(path);
+		return path;
+	}
+
+	/** Appends the contours of all shapes to one non-zero path. */
+	public static GLPath2D combine(GLShape2D... shapes) {
+		if (shapes == null)
+			throw new IllegalArgumentException("Shapes must not be null");
+		GLPath2D result = new GLPath2D();
+		for (GLShape2D shape : shapes)
+			result.append(shape);
+		return result;
+	}
+
+	public static GLPath2D rectangle(float x, float y,
+			float width, float height) {
+		requireShapeBounds(x, y, width, height);
+		return new GLPath2D().moveTo(x, y)
+				.lineTo(x + width, y)
+				.lineTo(x + width, y + height)
+				.lineTo(x, y + height)
+				.closePath();
+	}
+
+	public static GLPath2D roundedRectangle(float x, float y,
+			float width, float height, float radius) {
+		return roundedRectangle(x, y, width, height, GLCornerRadii.all(radius));
+	}
+
+	public static GLPath2D roundedRectangle(float x, float y,
+			float width, float height, GLCornerRadii radii) {
+		requireShapeBounds(x, y, width, height);
+		if (radii == null)
+			throw new IllegalArgumentException("Corner radii must not be null");
+		float topLeft = radii.topLeft();
+		float topRight = radii.topRight();
+		float bottomRight = radii.bottomRight();
+		float bottomLeft = radii.bottomLeft();
+		float scale = Math.min(1, Math.min(
+				pairScale(width, topLeft, topRight),
+				Math.min(pairScale(width, bottomLeft, bottomRight),
+						Math.min(pairScale(height, topLeft, bottomLeft),
+								pairScale(height, topRight, bottomRight)))));
+		topLeft *= scale;
+		topRight *= scale;
+		bottomRight *= scale;
+		bottomLeft *= scale;
+
+		float maximumX = x + width;
+		float maximumY = y + height;
+		GLPath2D path = new GLPath2D().moveTo(x + topLeft, y)
+				.lineTo(maximumX - topRight, y);
+		appendTopRight(path, maximumX, y, topRight);
+		path.lineTo(maximumX, maximumY - bottomRight);
+		appendBottomRight(path, maximumX, maximumY, bottomRight);
+		path.lineTo(x + bottomLeft, maximumY);
+		appendBottomLeft(path, x, maximumY, bottomLeft);
+		path.lineTo(x, y + topLeft);
+		appendTopLeft(path, x, y, topLeft);
+		return path.closePath();
+	}
+
+	public static GLPath2D ellipse(float x, float y,
+			float width, float height) {
+		requireShapeBounds(x, y, width, height);
+		float centerX = x + width * 0.5f;
+		float centerY = y + height * 0.5f;
+		float radiusX = width * 0.5f;
+		float radiusY = height * 0.5f;
+		float controlX = radiusX * CUBIC_CIRCLE_FACTOR;
+		float controlY = radiusY * CUBIC_CIRCLE_FACTOR;
+		return new GLPath2D().moveTo(centerX, y)
+				.cubicTo(centerX + controlX, y,
+						x + width, centerY - controlY, x + width, centerY)
+				.cubicTo(x + width, centerY + controlY,
+						centerX + controlX, y + height, centerX, y + height)
+				.cubicTo(centerX - controlX, y + height,
+						x, centerY + controlY, x, centerY)
+				.cubicTo(x, centerY - controlY,
+						centerX - controlX, y, centerX, y)
+				.closePath();
+	}
+
+	public static GLPath2D circle(float centerX, float centerY, float radius) {
+		if (!Float.isFinite(centerX) || !Float.isFinite(centerY)
+				|| !Float.isFinite(radius) || radius <= 0)
+			throw new IllegalArgumentException(
+					"Circle center and radius must be finite and radius positive");
+		return ellipse(centerX - radius, centerY - radius, radius * 2, radius * 2);
+	}
+
+	public static GLPath2D polygon(float[] points) {
+		if (points == null || points.length < 6 || points.length % 2 != 0)
+			throw new IllegalArgumentException(
+					"A polygon requires at least three x/y coordinate pairs");
+		for (float value : points)
+			if (!Float.isFinite(value))
+				throw new IllegalArgumentException("Polygon coordinates must be finite");
+		GLPath2D path = new GLPath2D().moveTo(points[0], points[1]);
+		for (int index = 2; index < points.length; index += 2)
+			path.lineTo(points[index], points[index + 1]);
+		return path.closePath();
 	}
 
 	private GLPath2D(GLPath2D source) {
@@ -147,6 +263,45 @@ public final class GLPath2D {
 		return this;
 	}
 
+	/**
+	 * Appends every contour of {@code shape}. The receiving path keeps its own
+	 * fill rule; this operation concatenates contours and is not a boolean union.
+	 */
+	public GLPath2D append(GLShape2D shape) {
+		if (shape == null)
+			throw new IllegalArgumentException("Appended shape must not be null");
+		GLPath2D source = shape == this ? copy() : shape.toPath();
+		if (source == null)
+			throw new IllegalArgumentException("Shape returned a null path");
+		int coordinate = 0;
+		for (int command = 0; command < source.commandCount; command++) {
+			switch (source.commands[command]) {
+			case MOVE -> moveTo(source.coordinates[coordinate++],
+					source.coordinates[coordinate++]);
+			case LINE -> lineTo(source.coordinates[coordinate++],
+					source.coordinates[coordinate++]);
+			case QUAD -> quadTo(source.coordinates[coordinate++],
+					source.coordinates[coordinate++],
+					source.coordinates[coordinate++],
+					source.coordinates[coordinate++]);
+			case CUBIC -> cubicTo(source.coordinates[coordinate++],
+					source.coordinates[coordinate++],
+					source.coordinates[coordinate++],
+					source.coordinates[coordinate++],
+					source.coordinates[coordinate++],
+					source.coordinates[coordinate++]);
+			case CLOSE -> closePath();
+			default -> throw new IllegalStateException("Unknown path command");
+			}
+		}
+		return this;
+	}
+
+	/** Fluent synonym for {@link #append(GLShape2D)}. */
+	public GLPath2D add(GLShape2D shape) {
+		return append(shape);
+	}
+
 	public boolean isEmpty() {
 		return segmentCount == 0;
 	}
@@ -171,6 +326,12 @@ public final class GLPath2D {
 	/** Returns an independent mutable copy. */
 	public GLPath2D copy() {
 		return new GLPath2D(this);
+	}
+
+	/** Returns an independent mutable path representation of this shape. */
+	@Override
+	public GLPath2D toPath() {
+		return copy();
 	}
 
 	/** Returns a new path with every command transformed by {@code transform}. */
@@ -594,6 +755,65 @@ public final class GLPath2D {
 		return inverse * inverse * inverse * start
 				+ 3 * inverse * inverse * t * control1
 				+ 3 * inverse * t * t * control2 + t * t * t * end;
+	}
+
+	private static void requireShapeBounds(float x, float y,
+			float width, float height) {
+		if (!Float.isFinite(x) || !Float.isFinite(y)
+				|| !Float.isFinite(width) || !Float.isFinite(height)
+				|| width <= 0 || height <= 0)
+			throw new IllegalArgumentException(
+					"Shape bounds must be finite and have a positive size");
+	}
+
+	private static float pairScale(float available, float first, float second) {
+		float sum = first + second;
+		return sum <= 0 ? 1 : available / sum;
+	}
+
+	private static void appendTopRight(GLPath2D path,
+			float maximumX, float y, float radius) {
+		if (radius == 0) {
+			path.lineTo(maximumX, y);
+			return;
+		}
+		float control = radius * CUBIC_CIRCLE_FACTOR;
+		path.cubicTo(maximumX - radius + control, y,
+				maximumX, y + radius - control, maximumX, y + radius);
+	}
+
+	private static void appendBottomRight(GLPath2D path,
+			float maximumX, float maximumY, float radius) {
+		if (radius == 0) {
+			path.lineTo(maximumX, maximumY);
+			return;
+		}
+		float control = radius * CUBIC_CIRCLE_FACTOR;
+		path.cubicTo(maximumX, maximumY - radius + control,
+				maximumX - radius + control, maximumY,
+				maximumX - radius, maximumY);
+	}
+
+	private static void appendBottomLeft(GLPath2D path,
+			float x, float maximumY, float radius) {
+		if (radius == 0) {
+			path.lineTo(x, maximumY);
+			return;
+		}
+		float control = radius * CUBIC_CIRCLE_FACTOR;
+		path.cubicTo(x + radius - control, maximumY,
+				x, maximumY - radius + control, x, maximumY - radius);
+	}
+
+	private static void appendTopLeft(GLPath2D path,
+			float x, float y, float radius) {
+		if (radius == 0) {
+			path.lineTo(x, y);
+			return;
+		}
+		float control = radius * CUBIC_CIRCLE_FACTOR;
+		path.cubicTo(x, y + radius - control,
+				x + radius - control, y, x + radius, y);
 	}
 
 	static final class FlattenedPath {

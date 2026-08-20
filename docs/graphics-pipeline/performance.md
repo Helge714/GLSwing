@@ -52,6 +52,10 @@ Controls in wenigen Drawcalls.
 Verwende die UI-Pipeline nicht pauschal für beliebige Kunstgrafik: Ihre
 analytischen Formen sind absichtlich spezialisiert und ignorieren eigene
 Filled-/Texture-/Textshader.
+Ein eigener UI-Shader ist zwar möglich, muss aber den kompletten UI-Vertrag
+implementieren. Viele Instanzen mit demselben UI-Shader und identischen
+Uniforms bleiben zusammen; ein Shader- oder Uniformwechsel pro Objekt erzeugt
+dagegen eine Batchgrenze.
 
 ## Recording
 
@@ -82,8 +86,12 @@ Layerarbeit skaliert vor allem mit der bearbeiteten Pixelregion:
 - Blur/DropShadow/InnerShadow: zwei zusätzliche Passes je Effekt,
 - jeder weitere Effekt verarbeitet das Ergebnis des vorherigen.
 
-Deshalb immer `beginLayer(x,y,w,h)` verwenden, wenn Bounds bekannt sind.
-`beginLayer()` sollte eine bewusste Ausnahme bleiben.
+`beginLayer()` sammelt automatisch die tatsächlich beschriebenen Screenbounds
+und begrenzt Resolve, Effekte und Composite darauf. Explizites
+`beginLayer(x,y,w,h)` ist dennoch strikter: Der Scissor gilt schon beim
+Zeichnen des Inhalts und kann außerhalb liegende Geometrie früh verwerfen.
+Verwende daher automatische Bounds für flexible Inhalte und explizite Bounds,
+wenn die Region ohnehin bekannt ist oder bewusst clippen soll.
 
 ## RenderTargets
 

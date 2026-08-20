@@ -3,6 +3,9 @@ package com.vingame.glswing.rendering.internal;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.IntBuffer;
+import java.nio.FloatBuffer;
+import java.util.ArrayList;
+import java.util.List;
 
 import com.jogamp.common.nio.Buffers;
 import com.jogamp.opengl.GL;
@@ -23,8 +26,14 @@ public final class PickFramebuffer {
 	private final ShaderProgram textureProgram;
 	private final ShaderProgram textProgram;
 	private final ShaderProgram uiProgram;
+	private final ShaderProgram renderTargetProgram;
+	private final FloatBuffer renderTargetVertices =
+			Buffers.newDirectFloatBuffer(6 * 4);
+	private final List<ExternalSurface> externalSurfaces = new ArrayList<>();
 	private int framebuffer;
 	private int idTexture;
+	private int renderTargetVao;
+	private int renderTargetVbo;
 	private int width;
 	private int height;
 	private int allocatedWidth;
@@ -54,13 +63,18 @@ public final class PickFramebuffer {
 
 	private PickFramebuffer(ShaderProgram filledProgram, ShaderProgram textureProgram,
 			ShaderProgram textProgram, ShaderProgram uiProgram,
-			int framebuffer, int idTexture) {
+			ShaderProgram renderTargetProgram,
+			int framebuffer, int idTexture,
+			int renderTargetVao, int renderTargetVbo) {
 		this.filledProgram = filledProgram;
 		this.textureProgram = textureProgram;
 		this.textProgram = textProgram;
 		this.uiProgram = uiProgram;
+		this.renderTargetProgram = renderTargetProgram;
 		this.framebuffer = framebuffer;
 		this.idTexture = idTexture;
+		this.renderTargetVao = renderTargetVao;
+		this.renderTargetVbo = renderTargetVbo;
 	}
 
 	public static PickFramebuffer create(GL3 gl) {
@@ -69,8 +83,11 @@ public final class PickFramebuffer {
 		ShaderProgram texture = null;
 		ShaderProgram text = null;
 		ShaderProgram ui = null;
+		ShaderProgram renderTarget = null;
 		int framebuffer = 0;
 		int idTexture = 0;
+		int renderTargetVao = 0;
+		int renderTargetVbo = 0;
 		try {
 			texture = ShaderProgram.fromBuiltInResources(
 					gl, "pick_texture.vert", "pick_texture.frag");
@@ -78,13 +95,36 @@ public final class PickFramebuffer {
 					gl, "pick_text.vert", "pick_text.frag");
 			ui = ShaderProgram.fromBuiltInResources(
 					gl, "pick_ui_quad.vert", "pick_ui_quad.frag");
+			renderTarget = ShaderProgram.fromBuiltInResources(
+					gl, "pick_render_target.vert", "pick_render_target.frag");
 			int[] id = new int[1];
 			gl.glGenFramebuffers(1, id, 0);
 			framebuffer = id[0];
 			gl.glGenTextures(1, id, 0);
 			idTexture = id[0];
-			return new PickFramebuffer(filled, texture, text, ui, framebuffer, idTexture);
+			gl.glGenVertexArrays(1, id, 0);
+			renderTargetVao = id[0];
+			gl.glBindVertexArray(renderTargetVao);
+			gl.glGenBuffers(1, id, 0);
+			renderTargetVbo = id[0];
+			gl.glBindBuffer(GL.GL_ARRAY_BUFFER, renderTargetVbo);
+			gl.glBufferData(GL.GL_ARRAY_BUFFER, 6L * 4 * Float.BYTES,
+					null, GL3.GL_STREAM_DRAW);
+			int stride = 4 * Float.BYTES;
+			gl.glEnableVertexAttribArray(0);
+			gl.glVertexAttribPointer(0, 2, GL.GL_FLOAT, false, stride, 0);
+			gl.glEnableVertexAttribArray(1);
+			gl.glVertexAttribPointer(1, 2, GL.GL_FLOAT, false, stride,
+					2L * Float.BYTES);
+			gl.glBindBuffer(GL.GL_ARRAY_BUFFER, 0);
+			gl.glBindVertexArray(0);
+			return new PickFramebuffer(filled, texture, text, ui, renderTarget,
+					framebuffer, idTexture, renderTargetVao, renderTargetVbo);
 		} catch (RuntimeException error) {
+			if (renderTargetVbo != 0)
+				gl.glDeleteBuffers(1, new int[] { renderTargetVbo }, 0);
+			if (renderTargetVao != 0)
+				gl.glDeleteVertexArrays(1, new int[] { renderTargetVao }, 0);
 			if (idTexture != 0)
 				gl.glDeleteTextures(1, new int[] { idTexture }, 0);
 			if (framebuffer != 0)
@@ -95,9 +135,26 @@ public final class PickFramebuffer {
 				ui.dispose(gl);
 			if (texture != null)
 				texture.dispose(gl);
+			if (renderTarget != null)
+				renderTarget.dispose(gl);
 			filled.dispose(gl);
 			throw error;
 		}
+	}
+
+	/** Redirects subsequent picking draws into one persistent target-local ID FBO. */
+	public void pushExternalSurface(int targetFramebuffer,
+			int targetWidth, int targetHeight) {
+		if (targetFramebuffer == 0 || targetWidth <= 0 || targetHeight <= 0)
+			throw new IllegalArgumentException("External picking surface is invalid");
+		externalSurfaces.add(new ExternalSurface(
+				targetFramebuffer, targetWidth, targetHeight));
+	}
+
+	public void popExternalSurface() {
+		if (externalSurfaces.isEmpty())
+			throw new IllegalStateException("No external picking surface is active");
+		externalSurfaces.remove(externalSurfaces.size() - 1);
 	}
 
 	public void beginFrame(GL3 gl, int width, int height) {
@@ -135,10 +192,10 @@ public final class PickFramebuffer {
 	}
 
 	public void drawFilled(GL3 gl, int vao, int vertexCount, float[] projection) {
-		ensureSize(gl, width, height);
+		ensureActiveSurface(gl);
 		captureCurrentTarget(gl);
 		bindForPicking(gl);
-		clearPendingFrame(gl);
+		clearPendingFrameIfRequired(gl);
 		filledProgram.use(gl);
 		filledProgram.setMatrix4(gl, "uProjection", projection);
 		filledProgram.setFloat(gl, "uAlphaThreshold", DEFAULT_ALPHA_THRESHOLD);
@@ -148,10 +205,10 @@ public final class PickFramebuffer {
 
 	public void drawTexture(GL3 gl, int vao, int vertexCount, float[] projection,
 			GLTexture[] textures, float alphaThreshold) {
-		ensureSize(gl, width, height);
+		ensureActiveSurface(gl);
 		captureCurrentTarget(gl);
 		bindForPicking(gl);
-		clearPendingFrame(gl);
+		clearPendingFrameIfRequired(gl);
 		textureProgram.use(gl);
 		textureProgram.setMatrix4(gl, "uProjection", projection);
 		setTextureSamplers(gl, textureProgram);
@@ -164,10 +221,10 @@ public final class PickFramebuffer {
 
 	public void drawText(GL3 gl, int vao, int vertexCount, float[] projection,
 			GLTexture atlas, float msdfPixelRange) {
-		ensureSize(gl, width, height);
+		ensureActiveSurface(gl);
 		captureCurrentTarget(gl);
 		bindForPicking(gl);
-		clearPendingFrame(gl);
+		clearPendingFrameIfRequired(gl);
 		textProgram.use(gl);
 		textProgram.setMatrix4(gl, "uProjection", projection);
 		textProgram.setInteger(gl, "uTexture", 0);
@@ -182,10 +239,10 @@ public final class PickFramebuffer {
 	public void drawUI(GL3 gl, int vao, int instanceCount, float[] projection,
 			GLTexture[] textures, float textAlphaThreshold,
 			float textureAlphaThreshold) {
-		ensureSize(gl, width, height);
+		ensureActiveSurface(gl);
 		captureCurrentTarget(gl);
 		bindForPicking(gl);
-		clearPendingFrame(gl);
+		clearPendingFrameIfRequired(gl);
 		uiProgram.use(gl);
 		uiProgram.setMatrix4(gl, "uProjection", projection);
 		setTextureSamplers(gl, uiProgram);
@@ -197,6 +254,48 @@ public final class PickFramebuffer {
 		gl.glBindVertexArray(vao);
 		gl.glDrawArraysInstanced(GL.GL_TRIANGLES, 0, 6, instanceCount);
 		unbindTextures(gl, textures);
+		restoreAfterPicking(gl);
+	}
+
+	/** Draws one transformed color/ID target pair into the active picking surface. */
+	public void drawRenderTarget(GL3 gl, float[] projection, float[] vertices,
+			GLTexture colorTexture, int pickTexture, int recordBase,
+			int fallbackPickId, float tintAlpha, float alphaThreshold) {
+		if (vertices == null || vertices.length != 24)
+			throw new IllegalArgumentException(
+					"Render-target picking requires exactly six x/y/u/v vertices");
+		if (colorTexture == null || colorTexture.isDisposed() || pickTexture == 0)
+			throw new IllegalArgumentException(
+					"Render-target color and picking textures must be live");
+		ensureActiveSurface(gl);
+		captureCurrentTarget(gl);
+		bindForPicking(gl);
+		clearPendingFrameIfRequired(gl);
+		renderTargetProgram.use(gl);
+		renderTargetProgram.setMatrix4(gl, "uProjection", projection);
+		renderTargetProgram.setInteger(gl, "uColorTexture", 0);
+		renderTargetProgram.setInteger(gl, "uPickTexture", 1);
+		renderTargetProgram.setInteger(gl, "uRecordBase", recordBase);
+		renderTargetProgram.setInteger(gl, "uFallbackPickId", fallbackPickId);
+		renderTargetProgram.setFloat(gl, "uTintAlpha", tintAlpha);
+		renderTargetProgram.setFloat(gl, "uAlphaThreshold", alphaThreshold);
+		colorTexture.bind(gl, 0);
+		gl.glActiveTexture(GL.GL_TEXTURE1);
+		gl.glBindTexture(GL.GL_TEXTURE_2D, pickTexture);
+		renderTargetVertices.clear();
+		renderTargetVertices.put(vertices).flip();
+		gl.glBindVertexArray(renderTargetVao);
+		gl.glBindBuffer(GL.GL_ARRAY_BUFFER, renderTargetVbo);
+		gl.glBufferData(GL.GL_ARRAY_BUFFER,
+				(long) vertices.length * Float.BYTES,
+				renderTargetVertices, GL3.GL_STREAM_DRAW);
+		gl.glDrawArrays(GL.GL_TRIANGLES, 0, 6);
+		gl.glBindBuffer(GL.GL_ARRAY_BUFFER, 0);
+		gl.glBindVertexArray(0);
+		gl.glActiveTexture(GL.GL_TEXTURE1);
+		gl.glBindTexture(GL.GL_TEXTURE_2D, 0);
+		gl.glActiveTexture(GL.GL_TEXTURE0);
+		gl.glBindTexture(GL.GL_TEXTURE_2D, 0);
 		restoreAfterPicking(gl);
 	}
 
@@ -329,6 +428,9 @@ public final class PickFramebuffer {
 	}
 
 	public void dispose(GL3 gl) {
+		if (!externalSurfaces.isEmpty())
+			throw new IllegalStateException(
+					"Cannot dispose picking while external surfaces are active");
 		for (int slot = 0; slot < READBACK_SLOTS; slot++)
 			releaseReadbackSlot(gl, slot);
 		if (readbackBuffers[0] != 0) {
@@ -347,10 +449,19 @@ public final class PickFramebuffer {
 			gl.glDeleteFramebuffers(1, new int[] { framebuffer }, 0);
 			framebuffer = 0;
 		}
+		if (renderTargetVbo != 0) {
+			gl.glDeleteBuffers(1, new int[] { renderTargetVbo }, 0);
+			renderTargetVbo = 0;
+		}
+		if (renderTargetVao != 0) {
+			gl.glDeleteVertexArrays(1, new int[] { renderTargetVao }, 0);
+			renderTargetVao = 0;
+		}
 		filledProgram.dispose(gl);
 		textureProgram.dispose(gl);
 		textProgram.dispose(gl);
 		uiProgram.dispose(gl);
+		renderTargetProgram.dispose(gl);
 	}
 
 	private void ensureReadableSurface(GL3 gl) {
@@ -490,8 +601,8 @@ public final class PickFramebuffer {
 	}
 
 	private void bind(GL3 gl) {
-		gl.glBindFramebuffer(GL3.GL_DRAW_FRAMEBUFFER, framebuffer);
-		gl.glViewport(0, 0, width, height);
+		gl.glBindFramebuffer(GL3.GL_DRAW_FRAMEBUFFER, activeFramebuffer());
+		gl.glViewport(0, 0, activeWidth(), activeHeight());
 	}
 
 	private void restorePreviousTarget(GL3 gl) {
@@ -512,8 +623,10 @@ public final class PickFramebuffer {
 			gl.glDisable(GL.GL_SCISSOR_TEST);
 			return;
 		}
-		float scaleX = width / (float) Math.max(1, previousViewport[2]);
-		float scaleY = height / (float) Math.max(1, previousViewport[3]);
+		int surfaceWidth = activeWidth();
+		int surfaceHeight = activeHeight();
+		float scaleX = surfaceWidth / (float) Math.max(1, previousViewport[2]);
+		float scaleY = surfaceHeight / (float) Math.max(1, previousViewport[3]);
 		int minimumX = (int) Math.floor(
 				(previousScissor[0] - previousViewport[0]) * scaleX);
 		int minimumY = (int) Math.floor(
@@ -522,14 +635,39 @@ public final class PickFramebuffer {
 				(previousScissor[0] + previousScissor[2] - previousViewport[0]) * scaleX);
 		int maximumY = (int) Math.ceil(
 				(previousScissor[1] + previousScissor[3] - previousViewport[1]) * scaleY);
-		minimumX = Math.max(0, Math.min(width, minimumX));
-		minimumY = Math.max(0, Math.min(height, minimumY));
-		maximumX = Math.max(0, Math.min(width, maximumX));
-		maximumY = Math.max(0, Math.min(height, maximumY));
+		minimumX = Math.max(0, Math.min(surfaceWidth, minimumX));
+		minimumY = Math.max(0, Math.min(surfaceHeight, minimumY));
+		maximumX = Math.max(0, Math.min(surfaceWidth, maximumX));
+		maximumY = Math.max(0, Math.min(surfaceHeight, maximumY));
 		gl.glEnable(GL.GL_SCISSOR_TEST);
 		gl.glScissor(minimumX, minimumY,
 				Math.max(0, maximumX - minimumX),
 				Math.max(0, maximumY - minimumY));
+	}
+
+	private void ensureActiveSurface(GL3 gl) {
+		if (externalSurfaces.isEmpty())
+			ensureSize(gl, width, height);
+	}
+
+	private void clearPendingFrameIfRequired(GL3 gl) {
+		if (externalSurfaces.isEmpty())
+			clearPendingFrame(gl);
+	}
+
+	private int activeFramebuffer() {
+		return externalSurfaces.isEmpty() ? framebuffer
+				: externalSurfaces.get(externalSurfaces.size() - 1).framebuffer;
+	}
+
+	private int activeWidth() {
+		return externalSurfaces.isEmpty() ? width
+				: externalSurfaces.get(externalSurfaces.size() - 1).width;
+	}
+
+	private int activeHeight() {
+		return externalSurfaces.isEmpty() ? height
+				: externalSurfaces.get(externalSurfaces.size() - 1).height;
 	}
 
 	private static void draw(GL3 gl, int vao, int vertexCount) {
@@ -553,5 +691,8 @@ public final class PickFramebuffer {
 			gl.glBindTexture(GL.GL_TEXTURE_2D, 0);
 		}
 		gl.glActiveTexture(GL.GL_TEXTURE0);
+	}
+
+	private record ExternalSurface(int framebuffer, int width, int height) {
 	}
 }

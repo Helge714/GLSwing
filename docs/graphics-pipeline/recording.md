@@ -161,7 +161,7 @@ einer Aufnahme. `withParameters` schließt die Region auch bei einer Exception.
 | UI-Instanzen | Als UI-Replaybefehl gespeichert |
 | Modeltransform | Interne Transformoperationen werden gespeichert; Aufnahme startet bei Identität |
 | Projection/View | Als Replayzustand gespeichert |
-| Shader/Uniforms | Als Replayzustand gespeichert |
+| Filled-/Texture-/Text-/UI-Shader und Uniforms | Als Replayzustand gespeichert |
 | Clips/Layer | Verschachtelung wird gespeichert und beim Abschluss validiert |
 | Color/Stroke/Picking | Bei Geometrieerzeugung eingebacken beziehungsweise zugeordnet |
 | `GLIcon` | Icon bleibt high-level; passende adaptive Variante wird beim Replay gewählt |

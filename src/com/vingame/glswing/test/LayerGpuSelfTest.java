@@ -16,6 +16,7 @@ import com.vingame.glswing.rendering.GLComposite;
 import com.vingame.glswing.rendering.GLCornerRadii;
 import com.vingame.glswing.rendering.GLRenderer2D;
 import com.vingame.glswing.rendering.GLLayerEffects;
+import com.vingame.glswing.rendering.GLShape2D;
 import com.vingame.glswing.rendering.Projection2D;
 import com.vingame.glswing.rendering.ShaderProgram;
 
@@ -200,6 +201,11 @@ public final class LayerGpuSelfTest {
 			context.endLayer(new GLComposite().withEffect(
 					GLLayerEffects.roundedClip(
 							new GLCornerRadii(10, 0, 10, 0))));
+
+			context.beginLayer();
+			context.fillRect(240, 300, 60, 40, Color.WHITE);
+			context.endLayer(new GLComposite().withEffect(
+					GLLayerEffects.pathClip(GLShape2D.circle(270, 320, 18))));
 			renderer.endFrame();
 			drawable.swapBuffers();
 			int glError = gl.glGetError();
@@ -331,6 +337,10 @@ public final class LayerGpuSelfTest {
 					"rounded layer clip excludes its bottom-right corner");
 			checkNear(readColor(gl, 181, 338), Color.WHITE, 5,
 					"rounded layer clip preserves its square bottom-left corner");
+			checkNear(readColor(gl, 270, 320), Color.WHITE, 5,
+					"path layer clip preserves its interior");
+			checkNear(readColor(gl, 241, 301), Color.BLACK, 5,
+					"path layer clip excludes pixels outside the shape");
 
 			System.out.println("Layer GPU self-test passed.");
 		} finally {

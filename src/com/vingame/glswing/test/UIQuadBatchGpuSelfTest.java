@@ -1,7 +1,10 @@
 package com.vingame.glswing.test;
 
 import java.awt.Color;
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 
 import com.jogamp.opengl.GL;
 import com.jogamp.opengl.GL3;
@@ -20,6 +23,7 @@ import com.vingame.glswing.rendering.GLRenderer2D;
 import com.vingame.glswing.rendering.GLStroke;
 import com.vingame.glswing.rendering.GLTransform;
 import com.vingame.glswing.rendering.Projection2D;
+import com.vingame.glswing.rendering.ShaderProgram;
 
 /** GPU checks for the shared instanced standard-control batch. */
 public final class UIQuadBatchGpuSelfTest {
@@ -53,6 +57,7 @@ public final class UIQuadBatchGpuSelfTest {
 				testAsymmetricRoundedFill(gl, renderer);
 				testScreenSpaceBorderUnderZoom(gl, renderer);
 				testSliderPrimitives(gl, renderer);
+				testCustomUIShader(gl, renderer);
 				testThousandRecordedControls(gl, renderer, font);
 			} catch (RuntimeException | Error failure) {
 				try {
@@ -71,6 +76,51 @@ public final class UIQuadBatchGpuSelfTest {
 				renderer.dispose(gl);
 			nativeContext.release();
 			drawable.destroy();
+		}
+	}
+
+	private static void testCustomUIShader(GL3 gl,
+			GLRenderer2D renderer) {
+		String fragment = loadResource(
+				"/com/vingame/glswing/shaders/ui_quad.frag")
+				.replace("out vec4 fragColor;",
+						"uniform float uTestAlpha;\nout vec4 fragColor;")
+				.replace("fragColor = vec4(color.rgb, color.a * coverage);",
+						"fragColor = vec4(color.rgb, color.a * coverage * uTestAlpha);");
+		ShaderProgram shader = ShaderProgram.fromUIFragmentSource(gl, fragment);
+		try {
+			GLContext2D context = renderer.beginFrame(gl, WIDTH, HEIGHT,
+					Projection2D.TOP_LEFT_PIXELS.create(WIDTH, HEIGHT));
+			context.clear(Color.BLACK);
+			context.setUIShader(shader);
+			context.setUIUniform("uTestAlpha", 0.25f);
+			context.fillUIRoundRect(10, 10, 50, 40, 4, Color.RED);
+			renderer.endFrame();
+
+			if (renderer.drawCallCount() != 1)
+				throw new AssertionError("Custom UI shader used "
+						+ renderer.drawCallCount() + " draw calls instead of one");
+			ByteBuffer pixel = readPixel(gl, 30, 30);
+			int red = pixel.get(0) & 0xff;
+			if (red < 45 || red > 85)
+				throw new AssertionError(
+						"Custom UI uniform did not affect output: red=" + red);
+			if (gl.glGetError() != GL.GL_NO_ERROR)
+				throw new AssertionError("Custom UI shader produced an OpenGL error");
+		} finally {
+			shader.dispose(gl);
+		}
+	}
+
+	private static String loadResource(String path) {
+		try (InputStream stream = UIQuadBatchGpuSelfTest.class
+				.getResourceAsStream(path)) {
+			if (stream == null)
+				throw new IllegalArgumentException("Resource not found: " + path);
+			return new String(stream.readAllBytes(), StandardCharsets.UTF_8);
+		} catch (IOException error) {
+			throw new IllegalStateException("Could not read resource: " + path,
+					error);
 		}
 	}
 

@@ -147,6 +147,7 @@ konstante Fabrik.
 | `drawTexture(texture,sourceX,sourceY,sourceW,sourceH,destX,destY,destW,destH,...)` | Teilbereich; Quellwerte in Texturpixeln | Ja |
 | `drawImage(image,x,y)` | Originalgröße | Ja |
 | `drawImage(image,x,y,w,h[,tint])` | High-Level-Bild | Ja |
+| `drawIcon(icon,x,y,w,h[,color])` | Icon als adaptive RGBA-Textur; frei shaderbar | Ja |
 | `drawRenderTarget(target,x,y)` | Targetgröße | Nein |
 | `drawRenderTarget(target,x,y,w,h[,tint/picking])` | Dynamischer Targetinhalt | Nein |
 
@@ -155,7 +156,11 @@ Negative Zielbreite/-höhe spiegeln ein Bild; die Quellregion von
 Quell-X/Y/Breite/Höhe sind Texturpixel; Ziel-X/Y/Breite/Höhe sind lokale
 Benutzerkoordinaten.
 `drawImage` löst `GLImage` automatisch als Atlasregion oder Standalone-Textur
-auf. Der aktive TextureShader wirkt auf alle Methoden dieser Tabelle.
+auf. `drawIcon` wählt auch bei einem vektorbasierten Icon eine passende
+RGBA-Rasterstufe. Ein MSDF-Icon erzeugt für diesen Pfad bei Bedarf lazy eine
+RGBA-Repräsentation, weil ein beliebiger Texture-Shader die MSDF-Distanz nicht
+automatisch interpretieren kann. Der aktive TextureShader wirkt auf alle
+Methoden dieser Tabelle.
 
 ## Nicht-UI: Text-Batch
 
@@ -173,11 +178,21 @@ separaten, frei austauschbaren Textshader.
 Der Universal-UI-Batch ist nicht bloß eine Abkürzung für die Standardformen.
 Er verwendet instanzierte analytische Quads und kann Standardflächen,
 MSDF-Glyphen und bis zu 16 Texturen in einem Drawcall kombinieren. Eigene
-Filled-/Texture-/Textshader wirken hier bewusst nicht.
+Filled-/Texture-/Textshader wirken hier bewusst nicht. Mit `setUIShader` kann
+der komplette UI-Shader ersetzt werden; dieser fortgeschrittene Weg muss alle
+UI-Modi nachbilden und ist im [Shaderkapitel](shaders.md#eigener-ui-shader)
+beschrieben.
 
 Alle UI-Methoden sind recordbar. Picking wird über den aktuellen
 `setPickId`-/`setMouseTarget`-Zustand gesteuert; sie besitzen keine zusätzlichen
 Pickingoverloads.
+
+Das ist bewusst zustandsbasiert: Ein Control setzt sein Ziel einmal und kann
+danach Fläche, Border, Text, Icon und eine größere Hit-Area demselben Ziel
+zuordnen. Pickingoverloads an jeder spezialisierten UI-Methode würden diese
+Zustandsgruppe nur duplizieren und die API stark verbreitern. Für genau einen
+Befehl kann der Zustand direkt davor gesetzt und danach mit `clearPickId` oder
+`clearMouseTarget` beendet werden.
 
 ### Flächen und Border
 
@@ -215,11 +230,16 @@ sonstige UI-Borderbreiten folgen dem angegebenen `WidthSpace`.
 | `drawUIRoundRectShadow(...)` | Analytischer weicher Schatten, absichtlich nicht pickbar |
 | `drawUIText(font,text,x,baselineY,color)` | MSDF-Glyphen im UI-Batch |
 | `drawUIImage(image,x,y,w,h[,tint])` | `GLImage`/Atlasregion im UI-Batch |
-| `drawIcon(icon,x,y,w,h[,color])` | MSDF- oder RGBA-Icon, adaptive Wahl beim Replay |
+| `drawUIIcon(icon,x,y,w,h[,color])` | MSDF- oder RGBA-Icon, adaptive Wahl beim Replay |
 | `addUIHitArea(x,y,w,h)` | Schreibt nur Picking, nicht Farbe |
 
 Der analytische UI-Schatten ist deutlich günstiger als ein Layer-Blur, kann
 aber nur das gerundete Rechteckmodell darstellen.
+
+`addUIHitArea` ist keine globale Ausgabekonfiguration. Die Methode fügt eine
+unsichtbare rechteckige UI-Instanz hinzu, die nur im Picking-FBO erscheint.
+`setOutputMask(color,picking)` schaltet dagegen für **alle** nachfolgenden
+Zeichenbefehle die beiden Ausgaben ein oder aus.
 
 ## Pfade
 
@@ -230,12 +250,51 @@ GLPath2D path = new GLPath2D(GLPath2D.FillRule.NON_ZERO)
         .quadTo(140, 50, 100, 90)
         .cubicTo(70, 120, 30, 120, 10, 90)
         .closePath();
+
+GLPath2D badge = GLPath2D.build(p -> {
+    p.append(GLShape2D.roundedRectangle(0, 0, 80, 30, 6));
+    p.add(GLShape2D.circle(68, 15, 5)); // Alias für append
+});
+
+GLPath2D combined = GLPath2D.combine(badge, GLShape2D.circle(90, 15, 8));
 ```
 
 `GLPath2D` kann mehrere Subpaths enthalten. `EVEN_ODD` toggelt innen/außen bei
 jeder Kontur; `NON_ZERO` berücksichtigt die Richtung. Weitere Operationen:
 `setFillRule`, `getFillRule`, `copy`, `reset`, `transformed`, `getBounds`,
-`getSegmentCount`, `getCommandCount`, `fromSvgPath`.
+`getSegmentCount`, `getCommandCount`, `fromSvgPath`, `toPath`, `build`,
+`append`/`add` und `combine`.
+
+`build(callback)` stellt dem Callback bewusst nur einen `GLPath2D` bereit –
+keinen rendernden `GLContext2D`. `append(shape)` fügt die Konturen eines
+`GLShape2D` an; `combine(shapes...)` erzeugt dafür einen neuen Path. Das ist
+eine geometrische Kombination anhand der Fill-Rule, keine boolesche Union oder
+Subtraktion. Ein `g.toPath(() -> g.fill...())` gibt es absichtlich nicht:
+Contextbefehle enthalten neben Geometrie auch Farbe, Picking, Shaderwechsel,
+Texturen und andere Renderzustände, die ein Path nicht verlustfrei abbilden
+kann.
+
+Für einzelne Standardformen muss kein Pfad von Hand aufgebaut werden:
+
+```java
+GLPath2D ellipse = GLPath2D.ellipse(20, 30, 120, 60);
+GLPath2D polygon = GLShape2D.polygon(new float[] {
+        0, 30, 25, 0, 80, 15, 60, 55
+}).toPath();
+```
+
+`GLShape2D` ist das leichte gemeinsame Forminterface mit `toPath()` und den
+Fabriken `rectangle`, `roundedRectangle`, `ellipse`, `circle` und `polygon`.
+Die Konvertierung liefert immer eine unabhängige mutable Kopie. Dieselben
+Fabriken auf `GLPath2D` geben direkt einen Path zurück. Formen können deshalb
+einheitlich gezeichnet, mit `GLIcon.fromPath(...)` in Icons umgewandelt oder
+mit `GLLayerEffects.pathClip(...)` als freie Layerclips verwendet werden.
+
+Paths laufen über den normalen Filled-Batch und sind daher nicht direkt
+UI-batchfähig. Für ein wiederverwendetes einfarbiges UI-Symbol dient
+`GLIcon.fromPath(path)`; anschließend zeichnet `drawUIIcon` das erzeugte MSDF
+im Universal-UI-Batch. Mit `drawIcon` kann dasselbe Icon stattdessen als
+frei shaderbare RGBA-Textur dargestellt werden.
 
 ## Zeichenreihenfolge und Überlappung
 
@@ -252,6 +311,9 @@ Text mehr Flushes erzeugen; die UI-Pipeline existiert genau für diesen Fall.
 | Standardcontrol | `...UI...` |
 | Normales Bild | `GLImage` + `drawImage` |
 | Bild im Controlbatch | `drawUIImage` |
+| Frei shaderbares Icon | `GLIcon` + `drawIcon` |
+| Icon im Controlbatch | `GLIcon` + `drawUIIcon` |
+| Einfarbiger Path als UI-Icon | `GLIcon.fromPath(path)` + `drawUIIcon` |
 | Manuelle GL-Textur | `drawTexture` |
 | Scharfer frei shaderbarer Text | `drawText` |
 | Text zusammen mit Controls | `drawUIText` |

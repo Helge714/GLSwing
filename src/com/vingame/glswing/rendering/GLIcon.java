@@ -41,6 +41,7 @@ public final class GLIcon {
 			new LinkedHashMap<>();
 	private int scheduledResolution = -1;
 	private ScheduledFuture<?> scheduledRequest;
+	private GLImage rgbaFallback;
 
 	private GLIcon(GLImage fixedImage, GLSvgDocument svg, Format format,
 			float pixelRange, GLIconOptions options) {
@@ -49,8 +50,11 @@ public final class GLIcon {
 		this.format = format;
 		this.pixelRange = pixelRange;
 		this.options = options;
-		if (svg != null && fixedImage != null)
-			variants.put(fixedImage.getWidth(), fixedImage);
+		if (format == Format.RGBA) {
+			rgbaFallback = fixedImage;
+			if (svg != null)
+				variants.put(fixedImage.getWidth(), fixedImage);
+		}
 	}
 
 	public static GLIcon fromImage(GLImage image) {
@@ -85,6 +89,21 @@ public final class GLIcon {
 				DEFAULT_PIXEL_RANGE);
 	}
 
+	/** Creates a tintable icon from one filled path using automatic MSDF format. */
+	public static GLIcon fromPath(GLPath2D path) {
+		return fromPath(path, Format.AUTO, GLIconOptions.DEFAULT);
+	}
+
+	public static GLIcon fromPath(GLPath2D path, Format format) {
+		return fromPath(path, format, GLIconOptions.DEFAULT);
+	}
+
+	public static GLIcon fromPath(GLPath2D path, Format format,
+			GLIconOptions options) {
+		return createSvg(GLSvgDocument.fromMonochromePath(path), format,
+				requireOptions(options), DEFAULT_PIXEL_RANGE);
+	}
+
 	private static GLIcon createSvg(GLSvgDocument document, Format requested,
 			GLIconOptions options, float pixelRange) {
 		if (document == null || requested == null)
@@ -107,8 +126,7 @@ public final class GLIcon {
 		int resolution = options.rasterPolicy() == GLIconOptions.RasterPolicy.FIXED
 				? options.maximumResolution() : DEFAULT_RESOLUTION;
 		GLImage field = msdfImage(document, resolution, pixelRange);
-		return new GLIcon(field, null, resolved, pixelRange,
-				GLIconOptions.fixed(resolution));
+		return new GLIcon(field, document, resolved, pixelRange, options);
 	}
 
 	public Format getFormat() {
@@ -134,8 +152,10 @@ public final class GLIcon {
 	 */
 	public CompletableFuture<GLImage> prepareAsync(float physicalPixels) {
 		if (svg == null)
-			return CompletableFuture.completedFuture(fixedImage);
+			return CompletableFuture.completedFuture(rgbaImage());
 		int resolution = options.resolutionFor(physicalPixels);
+		if (options.rasterPolicy() == GLIconOptions.RasterPolicy.FIXED)
+			return CompletableFuture.completedFuture(rgbaImage());
 		synchronized (this) {
 			GLImage existing = variants.get(resolution);
 			if (existing != null)
@@ -152,9 +172,20 @@ public final class GLIcon {
 		}
 	}
 
-	GLImage imageFor(float physicalPixels, Runnable repaintWhenReady) {
-		if (svg == null)
+	GLImage uiImageFor(float physicalPixels, Runnable repaintWhenReady) {
+		if (format == Format.MSDF)
 			return fixedImage;
+		return rgbaImageFor(physicalPixels, repaintWhenReady);
+	}
+
+	GLImage textureImageFor(float physicalPixels, Runnable repaintWhenReady) {
+		return rgbaImageFor(physicalPixels, repaintWhenReady);
+	}
+
+	private GLImage rgbaImageFor(float physicalPixels, Runnable repaintWhenReady) {
+		GLImage fallback = rgbaImage();
+		if (svg == null || options.rasterPolicy() == GLIconOptions.RasterPolicy.FIXED)
+			return fallback;
 		int resolution = options.resolutionFor(physicalPixels);
 		synchronized (this) {
 			GLImage exact = variants.get(resolution);
@@ -170,13 +201,34 @@ public final class GLIcon {
 		}
 	}
 
-	synchronized GLImage bestImageFor(float physicalPixels,
+	synchronized GLImage bestUIImageFor(float physicalPixels,
+			Predicate<GLImage> acceptable) {
+		if (format == Format.MSDF)
+			return acceptable.test(fixedImage) ? fixedImage : null;
+		return bestTextureImageFor(physicalPixels, acceptable);
+	}
+
+	synchronized GLImage bestTextureImageFor(float physicalPixels,
 			Predicate<GLImage> acceptable) {
 		if (acceptable == null)
 			throw new IllegalArgumentException("Image predicate must not be null");
-		if (svg == null)
-			return acceptable.test(fixedImage) ? fixedImage : null;
+		GLImage fallback = rgbaImage();
+		if (svg == null || options.rasterPolicy() == GLIconOptions.RasterPolicy.FIXED)
+			return acceptable.test(fallback) ? fallback : null;
 		return bestVariant(options.resolutionFor(physicalPixels), acceptable);
+	}
+
+	private synchronized GLImage rgbaImage() {
+		if (rgbaFallback != null)
+			return rgbaFallback;
+		if (svg == null)
+			throw new IllegalStateException("Icon has no RGBA source");
+		int resolution = options.rasterPolicy() == GLIconOptions.RasterPolicy.FIXED
+				? options.maximumResolution()
+				: options.resolutionFor(DEFAULT_RESOLUTION);
+		rgbaFallback = rgbaVariant(svg, resolution);
+		variants.putIfAbsent(resolution, rgbaFallback);
+		return rgbaFallback;
 	}
 
 	private void requestVariant(int resolution) {

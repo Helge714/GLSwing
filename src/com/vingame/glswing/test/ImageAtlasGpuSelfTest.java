@@ -20,11 +20,13 @@ import com.vingame.glswing.rendering.GLImage;
 import com.vingame.glswing.rendering.GLImageOptions;
 import com.vingame.glswing.rendering.GLIcon;
 import com.vingame.glswing.rendering.GLIconOptions;
+import com.vingame.glswing.rendering.GLPath2D;
 import com.vingame.glswing.rendering.GLRecording;
 import com.vingame.glswing.rendering.GLRenderer2D;
 import com.vingame.glswing.rendering.GLSvgDocument;
 import com.vingame.glswing.rendering.GLTransform;
 import com.vingame.glswing.rendering.Projection2D;
+import com.vingame.glswing.rendering.ShaderProgram;
 
 /** GPU regression tests for automatic atlases and multi-texture batches. */
 public final class ImageAtlasGpuSelfTest {
@@ -55,6 +57,7 @@ public final class ImageAtlasGpuSelfTest {
 			testTextureSlotLimit(gl, renderer);
 			testMixedUiTexturesAndPicking(gl, renderer);
 			testRgbaAndMsdfIcons(gl, renderer);
+			testPathIconInUIAndTextureBatch(gl, renderer);
 			testMipmappedAtlasIsolation(gl, renderer);
 			testRecordedAdaptiveIcon(gl, renderer);
 			System.out.println("Image atlas GPU self-test passed.");
@@ -63,6 +66,65 @@ public final class ImageAtlasGpuSelfTest {
 				renderer.dispose(drawable.getGL().getGL3());
 			nativeContext.release();
 			drawable.destroy();
+		}
+	}
+
+	private static void testPathIconInUIAndTextureBatch(GL3 gl,
+			GLRenderer2D renderer) {
+		GLPath2D path = new GLPath2D()
+				.moveTo(0, 0)
+				.lineTo(32, 0)
+				.lineTo(16, 32)
+				.closePath();
+		GLIcon icon = GLIcon.fromPath(path);
+		check(icon.getFormat() == GLIcon.Format.MSDF,
+				"Path icon should default to tintable MSDF");
+
+		ShaderProgram shader = ShaderProgram.fromSource(gl, """
+				#version 330 core
+				layout(location = 0) in vec2 aPosition;
+				layout(location = 1) in vec2 aTexCoord;
+				layout(location = 2) in vec4 aColor;
+				uniform mat4 uProjection;
+				out vec2 vTexCoord;
+				out vec4 vColor;
+				void main() {
+				    vTexCoord = aTexCoord;
+				    vColor = aColor;
+				    gl_Position = uProjection * vec4(aPosition, 0.0, 1.0);
+				}
+				""", """
+				#version 330 core
+				in vec2 vTexCoord;
+				in vec4 vColor;
+				uniform sampler2D uTexture;
+				out vec4 fragColor;
+				void main() {
+				    float alpha = texture(uTexture, vTexCoord).a * vColor.a;
+				    fragColor = vec4(0.0, alpha, 0.0, alpha);
+				}
+				""");
+		try {
+			GLContext2D context = begin(gl, renderer);
+			context.beginRecording();
+			context.setTextureShader(shader);
+			context.drawIcon(icon, 8, 8, 48, 48, Color.MAGENTA);
+			context.useDefaultTextureShader();
+			GLRecording textureRecording = context.endRecording();
+			context.clear(Color.BLACK);
+			context.draw(textureRecording);
+			context.drawUIIcon(icon, 72, 8, 48, 48, Color.CYAN);
+			renderer.endFrame();
+
+			check(renderer.drawCallCount() == 2,
+					"Texture and UI path icons should use their two respective batches");
+			checkDominant(gl, 32, 24, Color.GREEN,
+					"custom-shaded texture-batch path icon");
+			checkVisible(gl, 72, 8, 48, 48, "UI-batch path icon");
+			check(gl.glGetError() == GL.GL_NO_ERROR,
+					"Path icon rendering produced an OpenGL error");
+		} finally {
+			shader.dispose(gl);
 		}
 	}
 
@@ -147,8 +209,8 @@ public final class ImageAtlasGpuSelfTest {
 		GLContext2D context = begin(gl, renderer);
 		context.clear(Color.BLACK);
 		context.fillUIRoundRect(4, 4, 70, 70, 8, new Color(30, 40, 55));
-		context.drawIcon(msdf, 8, 8, 62, 62, Color.CYAN);
-		context.drawIcon(rgba, 90, 4, 70, 70);
+		context.drawUIIcon(msdf, 8, 8, 62, 62, Color.CYAN);
+		context.drawUIIcon(rgba, 90, 4, 70, 70);
 		renderer.endFrame();
 		check(renderer.drawCallCount() == 1,
 				"RGBA and MSDF atlas icons should remain in one UI draw call");
@@ -193,7 +255,7 @@ public final class ImageAtlasGpuSelfTest {
 
 		GLContext2D context = begin(gl, renderer);
 		context.beginRecording();
-		context.drawIcon(icon, 0, 0, 24, 24);
+		context.drawUIIcon(icon, 0, 0, 24, 24);
 		GLRecording recording = context.endRecording();
 		context.clear(Color.BLACK);
 		context.draw(recording);

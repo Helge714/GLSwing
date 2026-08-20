@@ -126,10 +126,10 @@ public final class ImageAtlasDemo {
 			};
 			for (int index = 0; index < iconColors.length; index++) {
 				float size = 42 + index * 16;
-				context.drawIcon(msdfIcon, 92 + index * 115,
+				context.drawUIIcon(msdfIcon, 92 + index * 115,
 						112 + (90 - size) * 0.5f, size, size, iconColors[index]);
 			}
-			context.drawIcon(rgbaIcon, 625, 96, 150, 150);
+			context.drawUIIcon(rgbaIcon, 625, 96, 150, 150);
 
 			for (int index = 0; index < tiles.length; index++) {
 				float x = 92 + (index % 10) * 66;

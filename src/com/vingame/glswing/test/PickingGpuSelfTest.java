@@ -131,7 +131,7 @@ public final class PickingGpuSelfTest {
 			context.clear(Color.BLACK);
 			context.setPickingRenderingEnabled(false);
 			context.fillRect(10, 10, 40, 40, Color.RED, 901);
-			context.setRenderOutputs(false, true);
+			context.setOutputMask(false, true);
 			context.fillRect(70, 10, 40, 40, Color.GREEN, 902);
 			renderer.endFrame();
 			checkId(renderer, gl, 20, 20, GLContext2D.NO_PICK_ID,

@@ -160,7 +160,16 @@ public final class GLRecording {
 					texture, instances, pickId, target.get(), originX, originY));
 		}
 
-		/** Retains a high-level icon so its RGBA bucket is chosen during replay. */
+		/** Retains a high-level UI icon so its best representation is chosen during replay. */
+		void addUIIcon(GLIcon icon, float x, float y, float width, float height,
+				Color color, int pickId, GLMouseTarget mouseTarget,
+				float originX, float originY) {
+			TargetReference target = TargetReference.of(mouseTarget);
+			add(renderer -> renderer.addUIIcon(icon, x, y, width, height, color,
+					pickId, target.get(), originX, originY));
+		}
+
+		/** Retains an icon so its RGBA texture bucket is chosen during replay. */
 		void addIcon(GLIcon icon, float x, float y, float width, float height,
 				Color color, int pickId, GLMouseTarget mouseTarget,
 				float originX, float originY) {

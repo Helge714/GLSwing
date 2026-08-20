@@ -288,7 +288,7 @@ public abstract class GLSwingCanvas extends GLCanvas implements GLEventListener 
 						update.rebuildPicking());
 				frameBegan = true;
 				if (scene != null) {
-					context.setRenderOutputs(true, update.rebuildPicking());
+					context.setOutputMask(true, update.rebuildPicking());
 					renderer.setRedrawBounds(update.full() ? null : update.bounds());
 				}
 				render(context);

@@ -53,6 +53,15 @@ public final class GLLayerEffects {
 		return new GLRoundedClipEffect(radii);
 	}
 
+	/** Clips a layer against a path in the user space active at beginLayer(). */
+	public static GLPathClipEffect pathClip(GLShape2D shape) {
+		return new GLPathClipEffect(shape);
+	}
+
+	/**
+	 * Creates the concrete shader effect so its fluent uniform and padding API
+	 * remains available; the result is also a {@link GLLayerEffect}.
+	 */
 	public static GLShaderEffect custom(ShaderProgram shader) {
 		return new GLShaderEffect(shader);
 	}

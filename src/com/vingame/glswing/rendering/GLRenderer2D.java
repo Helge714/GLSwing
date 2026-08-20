@@ -21,6 +21,7 @@ import com.vingame.glswing.rendering.internal.LayerStack;
 import com.vingame.glswing.rendering.internal.LayerEffectCommand;
 import com.vingame.glswing.rendering.internal.PickFramebuffer;
 import com.vingame.glswing.rendering.internal.PickFrameRecords;
+import com.vingame.glswing.rendering.internal.PersistentPickRecords;
 import com.vingame.glswing.rendering.internal.ShaderUniformValue;
 import com.vingame.glswing.rendering.internal.TexturedVertexFormat;
 import com.vingame.glswing.rendering.internal.UIQuadInstanceFormat;
@@ -59,9 +60,11 @@ public final class GLRenderer2D {
 	private ShaderProgram filledShaderOverride;
 	private ShaderProgram textureShaderOverride;
 	private ShaderProgram textShaderOverride;
+	private ShaderProgram uiShaderOverride;
 	private final Map<String, ShaderUniformValue> filledUniforms = new LinkedHashMap<>();
 	private final Map<String, ShaderUniformValue> textureUniforms = new LinkedHashMap<>();
 	private final Map<String, ShaderUniformValue> textUniforms = new LinkedHashMap<>();
+	private final Map<String, ShaderUniformValue> uiUniforms = new LinkedHashMap<>();
 	private final GLTransform transform = new GLTransform();
 	private final GLTransform pickTransform = new GLTransform();
 	private GLTransform recordingReplayBase;
@@ -89,6 +92,11 @@ public final class GLRenderer2D {
 	private float texturePickAlphaThreshold;
 	private float[] redrawBounds;
 	private final List<ScissorState> clipStack = new ArrayList<>();
+	private final List<LayerPathState> layerPathStates = new ArrayList<>();
+	private float layerMinimumX;
+	private float layerMinimumY;
+	private float layerMaximumX;
+	private float layerMaximumY;
 	private Runnable asynchronousResourceRepaint = NO_REPAINT_REQUEST;
 	private int adaptiveIconUploads;
 
@@ -182,9 +190,11 @@ public final class GLRenderer2D {
 		filledShaderOverride = null;
 		textureShaderOverride = null;
 		textShaderOverride = null;
+		uiShaderOverride = null;
 		filledUniforms.clear();
 		textureUniforms.clear();
 		textUniforms.clear();
+		uiUniforms.clear();
 		transform.setToIdentity();
 		recordingReplayBase = null;
 		replayParameterDepth = 0;
@@ -194,6 +204,7 @@ public final class GLRenderer2D {
 		redrawBounds = null;
 		adaptiveIconUploads = 0;
 		clipStack.clear();
+		layerPathStates.clear();
 		context.reset(logicalWidth, logicalHeight);
 
 		gl.glEnable(GL.GL_MULTISAMPLE);
@@ -260,11 +271,16 @@ public final class GLRenderer2D {
 			picking.requestSnapshot(gl, pickRecords);
 		if (openLayers != 0)
 			layers.abortFrame(gl);
+		layerPathStates.clear();
 		while (!clipStack.isEmpty())
 			restoreScissor(clipStack.remove(clipStack.size() - 1));
-		while (!renderTargetStack.isEmpty())
-			restoreRenderTarget(renderTargetStack.remove(
-					renderTargetStack.size() - 1));
+		while (!renderTargetStack.isEmpty()) {
+			RenderTargetState state = renderTargetStack.remove(
+					renderTargetStack.size() - 1);
+			if (state.target.isPickingEnabled())
+				picking.popExternalSurface();
+			restoreRenderTarget(state);
+		}
 		gl.glDisable(GL.GL_BLEND);
 		frameActive = false;
 		rebuildingPickingFrame = false;
@@ -293,6 +309,7 @@ public final class GLRenderer2D {
 			throw new IllegalArgumentException("Clear color must not be null");
 		flush();
 		if (colorRenderingEnabled) {
+			layers.includeCurrentLimit();
 			float alpha = color.getAlpha() / 255f;
 			float premultiply = layers.depth() == 0 ? 1 : alpha;
 			gl.glClearColor(color.getRed() / 255f * premultiply,
@@ -300,15 +317,20 @@ public final class GLRenderer2D {
 					color.getBlue() / 255f * premultiply, alpha);
 			gl.glClear(GL.GL_COLOR_BUFFER_BIT);
 		}
-		if (pickingRenderingEnabled)
-			picking.clear(gl);
+		if (pickingRenderingEnabled) {
+			if (activeRenderTargetPickingRecords() == null)
+				picking.clear(gl);
+			else
+				activeRenderTarget().clearPicking(this, gl);
+		}
 	}
 
 	void beginLayer() {
 		requireFrame();
 		requireNoRenderTargetForLayer();
 		flush();
-		layers.beginLayer(gl);
+		layers.beginAutoLayer(gl);
+		layerPathStates.add(captureLayerPathState());
 	}
 
 	void beginClip(float x, float y, float width, float height) {
@@ -403,6 +425,7 @@ public final class GLRenderer2D {
 		}
 		layers.beginLayer(gl, minimumX, minimumY,
 				maximumX - minimumX, maximumY - minimumY);
+		layerPathStates.add(captureLayerPathState());
 	}
 
 	void beginLayer(float x, float y, float width, float height,
@@ -441,6 +464,7 @@ public final class GLRenderer2D {
 		layers.beginLayer(gl, minimumX + inset, minimumY + inset,
 				maximumX - minimumX - inset * 2,
 				maximumY - minimumY - inset * 2);
+		layerPathStates.add(captureLayerPathState());
 	}
 
 	void endLayer(float opacity) {
@@ -453,6 +477,8 @@ public final class GLRenderer2D {
 			throw new IllegalArgumentException("Layer composite must not be null");
 		if (layers.depth() == 0)
 			throw new IllegalStateException("endLayer() requires a matching beginLayer()");
+		LayerPathState layerPathState = layerPathStates.get(
+				layerPathStates.size() - 1);
 		List<LayerEffectCommand> effects = new ArrayList<>();
 		for (GLLayerEffect effect : composite.getEffects()) {
 			Map<String, ShaderUniformValue> uniforms = Map.of();
@@ -465,11 +491,28 @@ public final class GLRenderer2D {
 				for (Map.Entry<String, ShaderUniformValue> uniform : uniforms.entrySet())
 					shader.validateUserUniform(gl, uniform.getKey(), uniform.getValue());
 			}
-			effects.add(new LayerEffectCommand(effect, uniforms));
+			if (effect instanceof GLPathClipEffect clip) {
+				float[] vertices = PathGeometryCompiler.fill(
+						clip.pathValue(), Color.WHITE, layerPathState.curveTolerance,
+						layerPathState.transform, layerPathState.worldToScreen);
+				if (vertices.length == 0)
+					throw new IllegalArgumentException(
+							"Path clip has no filled area");
+				effects.add(new LayerEffectCommand(effect, uniforms, vertices,
+						layerPathState.projection.toMatrix4()));
+			} else {
+				effects.add(new LayerEffectCommand(effect, uniforms));
+			}
 		}
 		flush();
 		drawCallCount += layers.endLayer(gl, composite.getOpacity(),
 				composite.getBlendMode(), effects);
+		layerPathStates.remove(layerPathStates.size() - 1);
+	}
+
+	private LayerPathState captureLayerPathState() {
+		return new LayerPathState(transform.copy(), worldToScreen.copy(),
+				projection.copy(), context.getCurveTolerance());
 	}
 
 	int layerDepth() {
@@ -477,11 +520,12 @@ public final class GLRenderer2D {
 		return layers.depth();
 	}
 
-	void setRenderOutputs(boolean renderColor, boolean renderPicking) {
+	void setOutputMask(boolean renderColor, boolean renderPicking) {
 		requireFrame();
-		if (renderPicking && !renderTargetStack.isEmpty())
+		if (renderPicking && !renderTargetStack.isEmpty()
+				&& !activeRenderTarget().isPickingEnabled())
 			throw new IllegalStateException(
-					"Picking cannot be enabled inside a persistent render target");
+					"This render target was created without picking support");
 		if (colorRenderingEnabled == renderColor
 				&& pickingRenderingEnabled == renderPicking)
 			return;
@@ -563,7 +607,13 @@ public final class GLRenderer2D {
 		int framebuffer = target.framebuffer(this, gl);
 		RenderTargetState parent = RenderTargetState.capture(this, gl, target);
 		renderTargetStack.add(parent);
+		boolean pickingSurfacePushed = false;
 		try {
+			if (target.isPickingEnabled()) {
+				picking.pushExternalSurface(target.pickingFramebuffer(this, gl),
+						target.getWidth(), target.getHeight());
+				pickingSurfacePushed = true;
+			}
 			gl.glBindFramebuffer(GL.GL_FRAMEBUFFER, framebuffer);
 			gl.glViewport(0, 0, target.getWidth(), target.getHeight());
 			gl.glDisable(GL.GL_SCISSOR_TEST);
@@ -577,9 +627,11 @@ public final class GLRenderer2D {
 			updateScreenTransforms();
 			transform.setToIdentity();
 			colorRenderingEnabled = true;
-			pickingRenderingEnabled = false;
+			pickingRenderingEnabled = target.isPickingEnabled();
 			redrawBounds = null;
 		} catch (RuntimeException error) {
+			if (pickingSurfacePushed)
+				picking.popExternalSurface();
 			renderTargetStack.remove(renderTargetStack.size() - 1);
 			restoreRenderTarget(parent);
 			throw error;
@@ -597,9 +649,15 @@ public final class GLRenderer2D {
 		if (!clipStack.isEmpty())
 			throw new IllegalStateException(
 					"A clip must end before its render target");
-		flush();
-		restoreRenderTarget(renderTargetStack.remove(
-				renderTargetStack.size() - 1));
+		RenderTargetState state = renderTargetStack.remove(
+				renderTargetStack.size() - 1);
+		try {
+			flush();
+		} finally {
+			if (state.target.isPickingEnabled())
+				picking.popExternalSurface();
+			restoreRenderTarget(state);
+		}
 	}
 
 	int renderTargetDepth() {
@@ -617,6 +675,52 @@ public final class GLRenderer2D {
 					"A render target cannot sample from itself while being written");
 		renderTargets.add(target);
 		return target.texture(this, gl);
+	}
+
+	/**
+	 * Presents a target-local ID texture through the same transformed quad as its
+	 * color texture and maps its compact local records into the active destination.
+	 */
+	void addRenderTargetPicking(GLRenderTarget target, GLTexture colorTexture,
+			float[] vertices, float x, float y, float width, float height,
+			int fallbackPickId, GLMouseTarget fallbackMouseTarget,
+			float fallbackOriginX, float fallbackOriginY, float tintAlpha) {
+		requireFrame();
+		if (!pickingRenderingEnabled || !target.isPickingEnabled())
+			return;
+		if (vertices == null || vertices.length != 24)
+			throw new IllegalArgumentException(
+					"Render-target picking requires six x/y/u/v vertices");
+
+		// The caller flushed preceding geometry before submitting this target quad.
+		// Render that quad only to color; its picking image is presented by the
+		// specialized pass below rather than by the ordinary texture shader.
+		pickingRenderingEnabled = false;
+		try {
+			flush();
+		} finally {
+			pickingRenderingEnabled = true;
+		}
+
+		GLTransform targetToDestination = transform.copy()
+				.translate(x, y)
+				.scale(width / target.getWidth(), height / target.getHeight());
+		GLTransform targetToSurface = worldToScreen.copy()
+				.concatenate(targetToDestination);
+		PersistentPickRecords source = target.pickingRecords();
+		PersistentPickRecords destination = activeRenderTargetPickingRecords();
+		int recordBase = destination == null
+				? pickRecords.append(source, targetToSurface)
+				: source.appendTo(destination, targetToSurface);
+		int fallbackRecord = createPickRecord(fallbackPickId,
+				fallbackMouseTarget, fallbackOriginX, fallbackOriginY);
+		if (source.size() == 0 && fallbackRecord == 0)
+			return;
+
+		picking.drawRenderTarget(gl, projectionMatrix, vertices,
+				colorTexture, target.pickingTexture(this, gl), recordBase,
+				fallbackRecord, tintAlpha, texturePickAlphaThreshold);
+		drawCallCount++;
 	}
 
 	private void restoreRenderTarget(RenderTargetState state) {
@@ -690,6 +794,7 @@ public final class GLRenderer2D {
 		requireFrame();
 		int pickRecord = createPickRecord(
 				pickId, mouseTarget, automaticOriginX, automaticOriginY);
+		includeLayerTriangle(x1, y1, x2, y2, x3, y3);
 		activateBatch(BatchType.FILLED);
 		ensureFilledCapacity(3);
 		filledBatch.addTriangle(x1, y1, x2, y2, x3, y3,
@@ -705,6 +810,7 @@ public final class GLRenderer2D {
 		requireFrame();
 		int pickRecord = createPickRecord(
 				pickId, mouseTarget, automaticOriginX, automaticOriginY);
+		includeLayerTriangle(x1, y1, x2, y2, x3, y3);
 		activateBatch(BatchType.FILLED);
 		ensureFilledCapacity(3);
 		filledBatch.addTriangle(
@@ -721,6 +827,8 @@ public final class GLRenderer2D {
 		requireFrame();
 		int pickRecord = createPickRecord(
 				pickId, mouseTarget, automaticOriginX, automaticOriginY);
+		includeLayerSixPoints(x1, y1, x2, y2, x3, y3,
+				x4, y4, x5, y5, x6, y6);
 		activateBatch(BatchType.FILLED);
 		ensureFilledCapacity(6);
 		filledBatch.addTriangles(x1, y1, x2, y2, x3, y3,
@@ -787,6 +895,11 @@ public final class GLRenderer2D {
 		return textShaderOverride;
 	}
 
+	ShaderProgram currentUIShader() {
+		requireFrame();
+		return uiShaderOverride;
+	}
+
 	StateSnapshot captureState() {
 		requireFrame();
 		return new StateSnapshot(
@@ -795,7 +908,8 @@ public final class GLRenderer2D {
 				texturePickAlphaThreshold,
 				filledShaderOverride, filledUniforms,
 				textureShaderOverride, textureUniforms,
-				textShaderOverride, textUniforms);
+				textShaderOverride, textUniforms,
+				uiShaderOverride, uiUniforms);
 	}
 
 	void beginRecordingReplay(StateSnapshot state, StateSnapshot outerState,
@@ -811,9 +925,9 @@ public final class GLRenderer2D {
 		// the frame in which it is replayed. Otherwise a recording created before
 		// a resize restores the old aspect ratio. Explicit setProjection commands
 		// inside the recording still replay normally after this initial state.
-		// Render outputs are ambient for the same reason: a recording built during
+		// The output mask is ambient for the same reason: a recording built during
 		// a color-only damage frame must not permanently disable picking when it is
-		// replayed in a later full frame. Explicit setRenderOutputs commands remain
+		// replayed in a later full frame. Explicit setOutputMask commands remain
 		// part of the command stream and can still override them afterwards.
 		applyState(state, inheritedProjection,
 				outerState.renderColor, outerState.renderPicking);
@@ -904,6 +1018,8 @@ public final class GLRenderer2D {
 				state.textureShader, state.textureUniforms);
 		validateRecordedBatchState(BatchType.TEXT,
 				state.textShader, state.textUniforms);
+		validateRecordedBatchState(BatchType.UI,
+				state.uiShader, state.uiUniforms);
 
 		GLTransform targetProjection = inheritedProjection == null
 				? state.projection : inheritedProjection;
@@ -918,11 +1034,13 @@ public final class GLRenderer2D {
 				|| !textureUniforms.equals(state.textureUniforms);
 		boolean textStateChanged = textShaderOverride != state.textShader
 				|| !textUniforms.equals(state.textUniforms);
+		boolean uiStateChanged = uiShaderOverride != state.uiShader
+				|| !uiUniforms.equals(state.uiUniforms);
 		boolean activeStateChanged = switch (activeBatch) {
 		case FILLED -> filledStateChanged;
 		case TEXTURE -> textureStateChanged || textureThresholdChanged;
 		case TEXT -> textStateChanged;
-		case UI -> textureThresholdChanged;
+		case UI -> uiStateChanged || textureThresholdChanged;
 		case NONE -> false;
 		};
 		if (projectionChanged || outputsChanged || activeStateChanged)
@@ -946,6 +1064,9 @@ public final class GLRenderer2D {
 		textShaderOverride = state.textShader;
 		textUniforms.clear();
 		textUniforms.putAll(state.textUniforms);
+		uiShaderOverride = state.uiShader;
+		uiUniforms.clear();
+		uiUniforms.putAll(state.uiUniforms);
 	}
 
 	void addTextured(GLTexture texture,
@@ -958,6 +1079,7 @@ public final class GLRenderer2D {
 		requireFrame();
 		int pickRecord = createPickRecord(
 				pickId, mouseTarget, automaticOriginX, automaticOriginY);
+		includeLayerQuad(x1, y1, x2, y2, x3, y3, x4, y4);
 		activateBatch(BatchType.TEXTURE);
 		int textureLimit = textureShaderOverride == null ? 16 : 1;
 		if (!textureBatch.accepts(texture, textureLimit) || !textureBatch.canAdd(6))
@@ -981,6 +1103,8 @@ public final class GLRenderer2D {
 			throw new IllegalArgumentException("Texture must be live");
 		int pickRecord = createPickRecord(
 				pickId, mouseTarget, automaticOriginX, automaticOriginY);
+		VertexModifier modifier = activeRecordingVertexModifier();
+		includeLayerPoints(vertices, TexturedVertexFormat.FLOATS_PER_VERTEX, modifier);
 		activateBatch(BatchType.TEXTURE);
 		int textureLimit = textureShaderOverride == null ? 16 : 1;
 		int remaining = vertices.length / TexturedVertexFormat.FLOATS_PER_VERTEX;
@@ -994,7 +1118,7 @@ public final class GLRenderer2D {
 				continue;
 			}
 			textureBatch.addVertices(texture, vertices, offset, chunk,
-					pickRecord, activeRecordingVertexModifier(), textureLimit);
+					pickRecord, modifier, textureLimit);
 			offset += chunk * TexturedVertexFormat.FLOATS_PER_VERTEX;
 			remaining -= chunk;
 		}
@@ -1019,6 +1143,8 @@ public final class GLRenderer2D {
 			throw new IllegalArgumentException("Text vertex data is invalid");
 		int pickRecord = createPickRecord(
 				pickId, mouseTarget, automaticOriginX, automaticOriginY);
+		VertexModifier modifier = activeRecordingVertexModifier();
+		includeLayerPoints(vertices, TexturedVertexFormat.FLOATS_PER_VERTEX, modifier);
 		activateBatch(BatchType.TEXT);
 		int remaining = vertexCount;
 		int offset = 0;
@@ -1031,7 +1157,7 @@ public final class GLRenderer2D {
 				continue;
 			}
 			textBatch.addVertices(atlas, pixelRange, vertices, offset, chunk,
-					pickRecord, activeRecordingVertexModifier());
+					pickRecord, modifier);
 			offset += chunk * TexturedVertexFormat.FLOATS_PER_VERTEX;
 			remaining -= chunk;
 		}
@@ -1055,6 +1181,7 @@ public final class GLRenderer2D {
 			throw new IllegalArgumentException("UI instance data is invalid");
 		int pickRecord = createPickRecord(
 				pickId, mouseTarget, automaticOriginX, automaticOriginY);
+		includeLayerUIInstances(instances, modifier);
 		activateBatch(BatchType.UI);
 		int remaining = instances.length / UIQuadInstanceFormat.FLOATS_PER_INSTANCE;
 		int offset = 0;
@@ -1074,14 +1201,14 @@ public final class GLRenderer2D {
 	}
 
 	/** Resolves an adaptive RGBA icon in the current replay/view space. */
-	void addIcon(GLIcon icon, float x, float y, float width, float height,
+	void addUIIcon(GLIcon icon, float x, float y, float width, float height,
 			Color color, int pickId, GLMouseTarget mouseTarget,
 			float automaticOriginX, float automaticOriginY) {
 		requireFrame();
 		float requiredPixels = physicalExtent(x, y, width, height);
-		GLImage image = icon.imageFor(requiredPixels, asynchronousResourceRepaint);
+		GLImage image = icon.uiImageFor(requiredPixels, asynchronousResourceRepaint);
 		if (!textureManager.isResolved(image)) {
-			GLImage resolvedFallback = icon.bestImageFor(requiredPixels,
+			GLImage resolvedFallback = icon.bestUIImageFor(requiredPixels,
 					textureManager::isResolved);
 			if (resolvedFallback != null
 					&& adaptiveIconUploads >= MAX_ADAPTIVE_ICON_UPLOADS_PER_FRAME) {
@@ -1105,6 +1232,45 @@ public final class GLRenderer2D {
 				? null : recordingColorModifier;
 		addUI(region.texture(), instance, pickId, mouseTarget,
 				automaticOriginX, automaticOriginY, modifier);
+	}
+
+	/** Resolves an icon as RGBA and submits it through the shaderable texture batch. */
+	void addIcon(GLIcon icon, float x, float y, float width, float height,
+			Color color, int pickId, GLMouseTarget mouseTarget,
+			float automaticOriginX, float automaticOriginY) {
+		requireFrame();
+		float requiredPixels = physicalExtent(x, y, width, height);
+		GLImage image = icon.textureImageFor(
+				requiredPixels, asynchronousResourceRepaint);
+		if (!textureManager.isResolved(image)) {
+			GLImage resolvedFallback = icon.bestTextureImageFor(requiredPixels,
+					textureManager::isResolved);
+			if (resolvedFallback != null
+					&& adaptiveIconUploads >= MAX_ADAPTIVE_ICON_UPLOADS_PER_FRAME) {
+				image = resolvedFallback;
+				asynchronousResourceRepaint.run();
+			} else if (resolvedFallback != null) {
+				adaptiveIconUploads++;
+			}
+		}
+		GLTextureRegion region = resolveImage(image);
+		float x2 = x + width;
+		float y2 = y + height;
+		GLTransform current = currentTransform();
+		float x1t = current.transformX(x, y);
+		float y1t = current.transformY(x, y);
+		float x2t = current.transformX(x2, y);
+		float y2t = current.transformY(x2, y);
+		float x3t = current.transformX(x2, y2);
+		float y3t = current.transformY(x2, y2);
+		float x4t = current.transformX(x, y2);
+		float y4t = current.transformY(x, y2);
+		addTextured(region.texture(),
+				x1t, y1t, x2t, y2t, x3t, y3t, x4t, y4t,
+				region.u0(), region.v0(), region.u1(), region.v1(),
+				color.getRed() / 255f, color.getGreen() / 255f,
+				color.getBlue() / 255f, color.getAlpha() / 255f,
+				pickId, mouseTarget, automaticOriginX, automaticOriginY);
 	}
 
 	private float physicalExtent(float x, float y, float width, float height) {
@@ -1170,6 +1336,20 @@ public final class GLRenderer2D {
 		textUniforms.clear();
 	}
 
+	void setUIShader(ShaderProgram shader) {
+		requireFrame();
+		if (shader != null && shader.isDisposed())
+			throw new IllegalArgumentException("UI shader has already been disposed");
+		if (uiShaderOverride == shader)
+			return;
+		if (shader != null)
+			shader.validateForUIBatch(gl);
+		if (activeBatch == BatchType.UI)
+			drawCallCount += flushBatch(BatchType.UI);
+		uiShaderOverride = shader;
+		uiUniforms.clear();
+	}
+
 	void setFilledUniform(String name, ShaderUniformValue value) {
 		setUserUniform(BatchType.FILLED, name, value, filledShaderOverride, filledUniforms);
 	}
@@ -1180,6 +1360,10 @@ public final class GLRenderer2D {
 
 	void setTextUniform(String name, ShaderUniformValue value) {
 		setUserUniform(BatchType.TEXT, name, value, textShaderOverride, textUniforms);
+	}
+
+	void setUIUniform(String name, ShaderUniformValue value) {
+		setUserUniform(BatchType.UI, name, value, uiShaderOverride, uiUniforms);
 	}
 
 	GLTransform getTransform() {
@@ -1271,6 +1455,7 @@ public final class GLRenderer2D {
 
 	private void addTriangleVerticesRaw(float[] triangleVertices, int pickId,
 			VertexModifier modifier) {
+		includeLayerPoints(triangleVertices, FilledBatch.FLOATS_PER_VERTEX, modifier);
 		activateBatch(BatchType.FILLED);
 		int remaining = triangleVertices.length / FilledBatch.FLOATS_PER_VERTEX;
 		int offset = 0;
@@ -1294,6 +1479,114 @@ public final class GLRenderer2D {
 
 	private VertexModifier activeRecordingVertexModifier() {
 		return recordingReplayBase == null ? null : recordingVertexModifier;
+	}
+
+	private void includeLayerTriangle(float x1, float y1,
+			float x2, float y2, float x3, float y3) {
+		if (!tracksAutomaticLayer())
+			return;
+		beginLayerBoundsScan();
+		includeLayerPoint(x1, y1, null);
+		includeLayerPoint(x2, y2, null);
+		includeLayerPoint(x3, y3, null);
+		finishLayerBoundsScan();
+	}
+
+	private void includeLayerQuad(float x1, float y1,
+			float x2, float y2, float x3, float y3, float x4, float y4) {
+		if (!tracksAutomaticLayer())
+			return;
+		beginLayerBoundsScan();
+		includeLayerPoint(x1, y1, null);
+		includeLayerPoint(x2, y2, null);
+		includeLayerPoint(x3, y3, null);
+		includeLayerPoint(x4, y4, null);
+		finishLayerBoundsScan();
+	}
+
+	private void includeLayerSixPoints(float x1, float y1,
+			float x2, float y2, float x3, float y3,
+			float x4, float y4, float x5, float y5, float x6, float y6) {
+		if (!tracksAutomaticLayer())
+			return;
+		beginLayerBoundsScan();
+		includeLayerPoint(x1, y1, null);
+		includeLayerPoint(x2, y2, null);
+		includeLayerPoint(x3, y3, null);
+		includeLayerPoint(x4, y4, null);
+		includeLayerPoint(x5, y5, null);
+		includeLayerPoint(x6, y6, null);
+		finishLayerBoundsScan();
+	}
+
+	private void includeLayerUIInstances(float[] instances,
+			VertexModifier modifier) {
+		if (!tracksAutomaticLayer())
+			return;
+		beginLayerBoundsScan();
+		for (int offset = 0; offset < instances.length;
+				offset += UIQuadInstanceFormat.FLOATS_PER_INSTANCE) {
+			float x00 = instances[offset];
+			float y00 = instances[offset + 1];
+			float x10 = instances[offset + 2];
+			float y10 = instances[offset + 3];
+			float x01 = instances[offset + 4];
+			float y01 = instances[offset + 5];
+			includeLayerPoint(x00, y00, modifier);
+			includeLayerPoint(x10, y10, modifier);
+			includeLayerPoint(x01, y01, modifier);
+			includeLayerPoint(x10 + x01 - x00,
+					y10 + y01 - y00, modifier);
+		}
+		finishLayerBoundsScan();
+	}
+
+	private void includeLayerPoints(float[] vertices, int stride,
+			VertexModifier modifier) {
+		if (!tracksAutomaticLayer())
+			return;
+		beginLayerBoundsScan();
+		for (int offset = 0; offset < vertices.length; offset += stride)
+			includeLayerPoint(vertices[offset], vertices[offset + 1], modifier);
+		finishLayerBoundsScan();
+	}
+
+	private void beginLayerBoundsScan() {
+		layerMinimumX = Float.POSITIVE_INFINITY;
+		layerMinimumY = Float.POSITIVE_INFINITY;
+		layerMaximumX = Float.NEGATIVE_INFINITY;
+		layerMaximumY = Float.NEGATIVE_INFINITY;
+	}
+
+	private void includeLayerPoint(float x, float y, VertexModifier modifier) {
+		if (modifier != null) {
+			float transformedX = modifier.transformX(x, y);
+			y = modifier.transformY(x, y);
+			x = transformedX;
+		}
+		float screenX = worldToScreen.transformX(x, y);
+		float screenY = worldToScreen.transformY(x, y);
+		layerMinimumX = Math.min(layerMinimumX, screenX);
+		layerMinimumY = Math.min(layerMinimumY, screenY);
+		layerMaximumX = Math.max(layerMaximumX, screenX);
+		layerMaximumY = Math.max(layerMaximumY, screenY);
+	}
+
+	private void finishLayerBoundsScan() {
+		includeLayerScreenBounds(layerMinimumX, layerMinimumY,
+				layerMaximumX, layerMaximumY);
+	}
+
+	private boolean tracksAutomaticLayer() {
+		return colorRenderingEnabled && layers.tracksAutomaticBounds();
+	}
+
+	private void includeLayerScreenBounds(float minimumX, float minimumY,
+			float maximumX, float maximumY) {
+		if (minimumX != Float.POSITIVE_INFINITY)
+			layers.includeLogicalBounds(minimumX, minimumY,
+					Math.max(0, maximumX - minimumX),
+					Math.max(0, maximumY - minimumY));
 	}
 
 	private void updateRecordingReplayState() {
@@ -1347,7 +1640,21 @@ public final class GLRenderer2D {
 		pickTransform.setTransform(worldToScreen)
 				.concatenate(transform)
 				.translate(originX, originY);
-		return pickRecords.add(pickId, mouseTarget, pickTransform);
+		PersistentPickRecords targetRecords = activeRenderTargetPickingRecords();
+		return targetRecords == null
+				? pickRecords.add(pickId, mouseTarget, pickTransform)
+				: targetRecords.add(pickId, mouseTarget, pickTransform);
+	}
+
+	private GLRenderTarget activeRenderTarget() {
+		return renderTargetStack.isEmpty() ? null
+				: renderTargetStack.get(renderTargetStack.size() - 1).target;
+	}
+
+	private PersistentPickRecords activeRenderTargetPickingRecords() {
+		GLRenderTarget target = activeRenderTarget();
+		return target != null && target.isPickingEnabled()
+				? target.pickingRecords() : null;
 	}
 
 	private void validateRecordedBatchState(BatchType batch, ShaderProgram shader,
@@ -1365,8 +1672,7 @@ public final class GLRenderer2D {
 		case FILLED -> shader.validateForFilledBatch(gl);
 		case TEXTURE -> shader.validateForTextureBatch(gl);
 		case TEXT -> shader.validateForTextBatch(gl);
-		case UI -> throw new IllegalArgumentException(
-				"The standard UI batch does not use type-specific shader overrides");
+		case UI -> shader.validateForUIBatch(gl);
 		case NONE -> throw new IllegalArgumentException("NONE has no shader state");
 		}
 		for (Map.Entry<String, ShaderUniformValue> uniform : uniforms.entrySet())
@@ -1430,7 +1736,8 @@ public final class GLRenderer2D {
 		case TEXT -> textBatch.flush(
 				gl, projectionMatrix, textShaderOverride, textUniforms, picking,
 				colorRenderingEnabled, pickingRenderingEnabled);
-		case UI -> uiQuadBatch.flush(gl, projectionMatrix, picking,
+		case UI -> uiQuadBatch.flush(gl, projectionMatrix,
+				uiShaderOverride, uiUniforms, picking,
 				colorRenderingEnabled, pickingRenderingEnabled,
 				texturePickAlphaThreshold, colorDeviceScaleX, colorDeviceScaleY);
 		case NONE -> 0;
@@ -1439,8 +1746,11 @@ public final class GLRenderer2D {
 
 	private static boolean isManagedUniform(BatchType batch, String name) {
 		return name.equals("uProjection")
-				|| batch != BatchType.FILLED && name.equals("uTexture")
-				|| batch == BatchType.TEXT && name.equals("uMsdfPixelRange");
+				|| (batch == BatchType.TEXTURE || batch == BatchType.TEXT)
+						&& name.equals("uTexture")
+				|| batch == BatchType.TEXT && name.equals("uMsdfPixelRange")
+				|| batch == BatchType.UI && (name.equals("uDeviceScale")
+						|| name.equals("uTextures") || name.startsWith("uTextures["));
 	}
 
 	private void requireFrame() {
@@ -1569,6 +1879,8 @@ public final class GLRenderer2D {
 		final Map<String, ShaderUniformValue> textureUniforms;
 		final ShaderProgram textShader;
 		final Map<String, ShaderUniformValue> textUniforms;
+		final ShaderProgram uiShader;
+		final Map<String, ShaderUniformValue> uiUniforms;
 
 		StateSnapshot(GLTransform projection, GLTransform transform,
 				boolean renderColor, boolean renderPicking,
@@ -1578,7 +1890,9 @@ public final class GLRenderer2D {
 				ShaderProgram textureShader,
 				Map<String, ShaderUniformValue> textureUniforms,
 				ShaderProgram textShader,
-				Map<String, ShaderUniformValue> textUniforms) {
+				Map<String, ShaderUniformValue> textUniforms,
+				ShaderProgram uiShader,
+				Map<String, ShaderUniformValue> uiUniforms) {
 			this.projection = projection.copy();
 			this.transform = transform.copy();
 			this.renderColor = renderColor;
@@ -1590,9 +1904,16 @@ public final class GLRenderer2D {
 			this.textureUniforms = Map.copyOf(textureUniforms);
 			this.textShader = textShader;
 			this.textUniforms = Map.copyOf(textUniforms);
+			this.uiShader = uiShader;
+			this.uiUniforms = Map.copyOf(uiUniforms);
 		}
 	}
 
 	private record ScissorState(boolean enabled, int[] bounds) {
+	}
+
+	private record LayerPathState(GLTransform transform,
+			GLTransform worldToScreen, GLTransform projection,
+			float curveTolerance) {
 	}
 }

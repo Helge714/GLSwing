@@ -20,7 +20,7 @@ wird während des Inhalts direkt in den Picking-FBO geschrieben.
 
 - gemeinsame Opacity ohne dunklere Überlappungen,
 - Blendmodus auf eine Gruppe,
-- Blur, Schatten, Outline, Farbkorrektur oder runder Clip,
+- Blur, Schatten, Outline, Farbkorrektur oder Formclip,
 - verschachtelte Postprocessing-Schritte.
 
 Für einen einfachen Schatten eines runden UI-Rechtecks ist
@@ -40,8 +40,8 @@ try {
 
 | Begin | Verwendung |
 |---|---|
-| `beginLayer()` | Unbegrenzter/fullscreen Layer; flexibel, aber teuer |
-| `beginLayer(x,y,w,h)` | Auf tatsächliche lokale Inhaltsbounds begrenzt |
+| `beginLayer()` | Automatische Bounds aus allen tatsächlich gezeichneten Farbvertices |
+| `beginLayer(x,y,w,h)` | Explizite lokale Bounds und früher Scissor-Clip |
 | `beginLayer(x,y,w,h,screenInset)` | Bounds an allen Seiten um logische Screenpixel nach innen setzen |
 
 X/Y/Breite/Höhe verwenden aktuelle lokale Benutzerkoordinaten. `screenInset`
@@ -55,6 +55,19 @@ wird automatisch zur Verarbeitungsregion addiert.
 
 Layer sind verschachtelbar und recordbar. Begin/End müssen auf derselben Ebene
 balanciert sein; `getLayerDepth()` unterstützt die Diagnose.
+
+Die parameterlose Variante belegt nicht pro Aufruf eine neue Textur in
+Objektgröße. Der Renderer nutzt wiederverwendete Fullsize-FBOs, sammelt beim
+Zeichnen konservative Screenbounds und beschränkt Resolve, Effekte und
+Composite am Ende auf diese Region. Ein leerer Layer erzeugt keinen
+Composite-Drawcall. Bei Verschachtelung meldet ein fertiger innerer Layer seine
+inklusive Effektpadding vergrößerte Region automatisch an den Parent.
+
+Explizite Bounds bleiben sinnvoll, wenn der Inhalt schon bekannt ist: Sie
+clippen bereits während des Zeichnens in den Layer und schützen bewusst vor
+außerhalb liegenden Zeichenbefehlen. Automatische Bounds beschreiben dagegen
+alles, was tatsächlich in Farbe gezeichnet wurde. `clear(...)` innerhalb eines
+automatischen Layers betrifft absichtlich den kompletten aktuellen Clip.
 
 ## `GLComposite`
 
@@ -102,6 +115,7 @@ Opacity und Blendmodus in den Parent.
   Blur und vertikaler/zusammensetzender Pass.
 - Outline, InnerOutline, Color, RoundedClip und Custom benötigen je einen
   Drawcall.
+- PathClip benötigt einen Masken- und einen Composite-Drawcall.
 - Ein Layer ohne Effekte benötigt einen Composite-Drawcall.
 - Die eigentliche Layergeometrie besitzt zusätzlich ihre normalen Drawcalls.
 
@@ -220,6 +234,35 @@ Form erhalten.
 
 Der Record-Accessor heißt `radii()`, dazu kommt `getPadding()`.
 
+### Freier Path Clip
+
+```java
+GLShape2D clipShape = GLShape2D.roundedRectangle(
+        30, 30, 240, 120, new GLCornerRadii(24, 8, 24, 8));
+
+g.beginLayer();
+g.fillRect(10, 10, 300, 160, artworkColor);
+g.endLayer(GLComposite.NORMAL.withEffect(
+        GLLayerEffects.pathClip(clipShape)));
+```
+
+`pathClip(GLShape2D)` clippt den Layer gegen jede gefüllte Vektorform:
+Rechteck, RoundRect, Ellipse, Kreis, Polygon, eigener `GLPath2D` oder eine
+eigene `GLShape2D`-Implementierung. Der Path verwendet den lokalen
+Koordinatenraum und Transformationszustand, der bei `beginLayer()` aktiv war.
+Er wird mit der aktuellen `curveTolerance` tesselliert und in eine
+MSAA-aufgelöste Maske gezeichnet; dadurch bleiben auch Kurven und schräge
+Kanten antialiasend. Padding `0`, zwei Drawcalls.
+
+Fabriken stehen sowohl auf `GLShape2D` als auch auf `GLPath2D` bereit:
+`rectangle`, `roundedRectangle`, `ellipse`, `circle` und `polygon`. Jede
+`GLShape2D` besitzt `toPath()` und liefert damit eine unabhängig veränderbare
+Pfaddarstellung. `GLPath2D` implementiert dieses Interface selbst und gibt bei
+`toPath()` ebenfalls eine Kopie zurück.
+
+API: `new GLPathClipEffect(shape)`, `getPath`, `getPadding` sowie
+`GLLayerEffects.pathClip(shape)`.
+
 ### Custom Shader
 
 ```java
@@ -237,6 +280,13 @@ verwaltete Uniforms stehen im [Shaderkapitel](shaders.md).
 
 API: Konstruktor oder `GLShaderEffect.of(shader)`, `getShader`, alle
 `withUniform`-Overloads, `withUniformMatrix4`, `withPadding`, `getPadding`.
+
+Die Fabrik gibt bewusst den konkreten `GLShaderEffect` und nicht nur das
+gemeinsame Interface `GLLayerEffect` zurück. Dadurch bleiben die fluent
+Methoden `withUniform(...)` und `withPadding(...)` ohne Cast erreichbar.
+`GLShaderEffect` implementiert dennoch `GLLayerEffect`; nach der Konfiguration
+kann der Wert deshalb problemlos als allgemeiner Layereffekt gespeichert oder
+an `withEffect(...)` übergeben werden.
 
 ## Effektketten
 

@@ -112,7 +112,7 @@ Varianten und Argumentregeln.
 
 | Methoden | Zweck |
 |---|---|
-| `setRenderOutputs` | Farbe und Picking gemeinsam konfigurieren |
+| `setOutputMask` | Farb- und Pickingausgabe gemeinsam ein-/ausschalten |
 | `setColorRenderingEnabled`, `isColorRenderingEnabled` | Farbausgabe |
 | `setPickingRenderingEnabled`, `isPickingRenderingEnabled` | Pickingausgabe |
 | `setTexturePickAlphaThreshold`, `getTexturePickAlphaThreshold` | Alpha-Grenze für Textur-Picking |
@@ -126,9 +126,11 @@ Varianten und Argumentregeln.
 | `setFilledShader`, `getFilledShader`, `useDefaultFilledShader` | Shader für Shapes und Strokes |
 | `setTextureShader`, `getTextureShader`, `useDefaultTextureShader` | Shader für Texturen/Bilder/Targets |
 | `setTextShader`, `getTextShader`, `useDefaultTextShader` | Shader für Standard-MSDF-Text |
+| `setUIShader`, `getUIShader`, `useDefaultUIShader` | Vollständiger Shaderersatz für den Universal-UI-Batch |
 | `setFilledUniform`, `setFilledUniformMatrix4` | Filled-Uniforms |
 | `setTextureUniform`, `setTextureUniformMatrix4` | Texture-Uniforms |
 | `setTextUniform`, `setTextUniformMatrix4` | Text-Uniforms |
+| `setUIUniform`, `setUIUniformMatrix4` | Uniforms des eigenen UI-Shaders |
 
 Jede `set...Uniform`-Familie besitzt Overloads für `float`, `vec2`, `vec3`,
 `vec4` und `int`; die Matrixmethode erwartet 16 `float`-Werte.
@@ -138,7 +140,7 @@ Jede `set...Uniform`-Familie besitzt Overloads für `float`, `vec2`, `vec3`,
 | Methoden | Zweck |
 |---|---|
 | `beginClip`, `endClip`, `getClipDepth` | Verschachtelbarer Scissor-Clip |
-| `beginLayer()` | Unbegrenzten Layer beginnen |
+| `beginLayer()` | Layer mit automatisch ermittelten Inhaltsbounds beginnen |
 | `beginLayer(x,y,w,h)` | Begrenzten Layer beginnen |
 | `beginLayer(x,y,w,h,screenInset)` | Begrenzten Layer mit Screen-Inset beginnen |
 | `endLayer()` | Normal zusammensetzen |
@@ -163,7 +165,7 @@ Jede `set...Uniform`-Familie besitzt Overloads für `float`, `vec2`, `vec3`,
 | `drawPath`, `drawRect`, `drawRoundRect`, `drawEllipse`, `drawCircle` | Filled |
 | `fillPath`, `fillTriangle`, `fillRect`, `fillPolygon` | Filled |
 | `fillRoundRect`, `fillEllipse`, `fillCircle` | Filled |
-| `drawTexture`, `drawImage`, `drawRenderTarget` | Texture |
+| `drawTexture`, `drawImage`, `drawIcon`, `drawRenderTarget` | Texture |
 | `drawText` | Text |
 
 Strokes landen als tessellierte Dreiecke ebenfalls im Filled-Batch.
@@ -181,7 +183,7 @@ Strokes landen als tessellierte Dreiecke ebenfalls im Filled-Batch.
 | `fillUIProgressRoundRect` | Fortschrittsverlauf |
 | `fillUIVerticalGradientRoundRect` | Vollständiger vertikaler Verlauf |
 | `addUIHitArea` | Nur Picking, keine Farbe |
-| `drawUIImage`, `drawIcon` | RGBA-/MSDF-Atlasinhalt |
+| `drawUIImage`, `drawUIIcon` | RGBA-/MSDF-Atlasinhalt |
 
 ## Konstanten
 

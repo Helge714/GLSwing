@@ -182,14 +182,14 @@ public final class RecordingGpuSelfTest {
 		};
 		GLContext2D context = renderer.beginFrame(gl, WIDTH, HEIGHT,
 				Projection2D.TOP_LEFT_PIXELS.create(WIDTH, HEIGHT), false);
-		context.setRenderOutputs(true, false);
+		context.setOutputMask(true, false);
 		context.beginRecording();
 		context.setMouseTarget(ambientTarget);
 		context.fillRect(20, 20, 40, 30, Color.MAGENTA);
 		GLRecording ambientRecording = context.endRecording();
 
 		context.beginRecording();
-		context.setRenderOutputs(true, false);
+		context.setOutputMask(true, false);
 		context.setMouseTarget(new GLMouseTarget() {
 		});
 		context.fillRect(90, 20, 40, 30, Color.YELLOW);
@@ -209,7 +209,7 @@ public final class RecordingGpuSelfTest {
 					"Recording captured the color-only build frame and disabled later picking");
 		if (renderer.readPickResult(gl, 100, 30).isHit())
 			throw new AssertionError(
-					"Explicit setRenderOutputs command inside a recording was not preserved");
+					"Explicit setOutputMask command inside a recording was not preserved");
 	}
 
 	private static void testRecordedScreenStrokeIgnoresReplayScale(

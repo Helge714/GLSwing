@@ -10,6 +10,8 @@ import com.jogamp.opengl.GLContext;
 import com.jogamp.opengl.GLDrawableFactory;
 import com.jogamp.opengl.GLOffscreenAutoDrawable;
 import com.jogamp.opengl.GLProfile;
+import com.vingame.glswing.input.GLMouseTarget;
+import com.vingame.glswing.input.GLPickResult;
 import com.vingame.glswing.rendering.GLContext2D;
 import com.vingame.glswing.rendering.GLFeedbackBuffer;
 import com.vingame.glswing.rendering.GLRenderTarget;
@@ -71,17 +73,24 @@ public final class RenderTargetGpuSelfTest {
 				GLRenderTargetOptions.pixelArt());
 		GLRenderTarget copy = new GLRenderTarget(32, 32,
 				GLRenderTargetOptions.pixelArt());
+		GLRenderTarget pickable = new GLRenderTarget(40, 30,
+				GLRenderTargetOptions.pixelArt().withPicking(true));
+		GLRenderTarget nestedPickable = new GLRenderTarget(50, 40,
+				GLRenderTargetOptions.pixelArt().withPicking(true));
 		GLFeedbackBuffer feedback = new GLFeedbackBuffer(16, 16,
 				GLRenderTargetOptions.repeatingPixelArt());
 		try {
 			renderer = GLRenderer2D.create(gl);
 			invert = ShaderProgram.fromSource(gl, TEXTURE_VERTEX, INVERT_FRAGMENT);
 			testPersistentTarget(gl, renderer, target, copy);
+			testPersistentPicking(gl, renderer, pickable, nestedPickable);
 			testFeedback(gl, renderer, feedback, invert);
 			System.out.println("Render target GPU self-test passed.");
 		} finally {
 			target.close();
 			copy.close();
+			pickable.close();
+			nestedPickable.close();
 			feedback.close();
 			if (invert != null)
 				invert.dispose(gl);
@@ -90,6 +99,71 @@ public final class RenderTargetGpuSelfTest {
 			nativeContext.release();
 			drawable.destroy();
 		}
+	}
+
+	private static void testPersistentPicking(GL3 gl, GLRenderer2D renderer,
+			GLRenderTarget pickable, GLRenderTarget nestedPickable) {
+		GLMouseTarget rectangle = new GLMouseTarget() { };
+		GLMouseTarget invisibleArea = new GLMouseTarget() { };
+		GLMouseTarget fallback = new GLMouseTarget() { };
+
+		GLContext2D context = begin(gl, renderer);
+		context.beginRenderTarget(pickable);
+		check(context.isPickingRenderingEnabled(),
+				"Picking target did not enable its local ID output");
+		context.clear(new Color(0, 0, 0, 0));
+		context.fillRect(4, 5, 10, 8, Color.RED, rectangle);
+		context.setMouseTarget(invisibleArea);
+		context.addUIHitArea(16, 16, 4, 4);
+		context.clearMouseTarget();
+		context.fillRect(20, 5, 8, 8, Color.BLUE);
+		context.endRenderTarget();
+
+		// The second target verifies that ID textures and record transforms can be
+		// nested before they are finally presented on the main framebuffer.
+		context.beginRenderTarget(nestedPickable);
+		context.clear(new Color(0, 0, 0, 0));
+		context.drawRenderTarget(pickable, 5, 5, 40, 30);
+		context.endRenderTarget();
+
+		context.clear(Color.BLACK);
+		context.drawRenderTarget(nestedPickable, 60, 40, 75, 60, fallback);
+		renderer.endFrame();
+
+		checkTarget(renderer.readPickResult(gl, 81, 61), rectangle, 5, 4,
+				"nested and scaled target-local rectangle");
+		checkTarget(renderer.readPickResult(gl, 95, 75), invisibleArea, 2.33f, 2.33f,
+				"invisible target-local hit area");
+		checkTarget(renderer.readPickResult(gl, 104, 60), fallback, 44, 20,
+				"whole-target fallback");
+
+		// Persistent ID contents and weak target mappings survive a frame in which
+		// the target is only sampled, not redrawn.
+		context = begin(gl, renderer);
+		context.clear(Color.BLACK);
+		context.drawRenderTarget(nestedPickable, 10, 10, 50, 40);
+		renderer.endFrame();
+		checkTarget(renderer.readPickResult(gl, 24, 24), rectangle, 5, 4,
+				"persistent target picking across frames");
+
+		context = begin(gl, renderer);
+		context.clear(Color.BLACK);
+		context.translate(120, 20);
+		context.rotate((float) (Math.PI * 0.5));
+		context.drawRenderTarget(nestedPickable, 0, 0);
+		renderer.endFrame();
+		checkTarget(renderer.readPickResult(gl, 106, 34), rectangle, 5, 4,
+				"rotated target picking");
+
+		context = begin(gl, renderer);
+		context.beginRenderTarget(nestedPickable);
+		context.clear(new Color(0, 0, 0, 0));
+		context.endRenderTarget();
+		context.clear(Color.BLACK);
+		context.drawRenderTarget(nestedPickable, 10, 10);
+		renderer.endFrame();
+		check(!renderer.readPickResult(gl, 24, 24).isHit(),
+				"Clearing a picking target retained stale IDs");
 	}
 
 	private static void testPersistentTarget(GL3 gl, GLRenderer2D renderer,
@@ -155,6 +229,16 @@ public final class RenderTargetGpuSelfTest {
 				&& Math.abs(green - expected.getGreen()) < 12
 				&& Math.abs(blue - expected.getBlue()) < 12,
 				description + " had color " + red + "/" + green + "/" + blue);
+	}
+
+	private static void checkTarget(GLPickResult result, GLMouseTarget expected,
+			float localX, float localY, String description) {
+		check(result.getTarget() == expected, description + " picked the wrong target");
+		check(result.hasLocalPosition()
+				&& Math.abs(result.getLocalX() - localX) < 0.75f
+				&& Math.abs(result.getLocalY() - localY) < 0.75f,
+				description + " had local coordinates "
+						+ result.getLocalX() + "/" + result.getLocalY());
 	}
 
 	private static void expectFailure(Runnable action, String message) {

@@ -99,6 +99,8 @@ GLIcon imageIcon = GLIcon.fromImage(image);
 GLIcon autoSvg = GLIcon.fromSvgResource("com/example/link.svg");
 GLIcon rgbaSvg = GLIcon.fromSvgResource(
         "com/example/logo.svg", GLIcon.Format.RGBA);
+GLIcon pathIcon = GLIcon.fromPath(new GLPath2D()
+        .moveTo(0, 0).lineTo(24, 12).lineTo(0, 24).closePath());
 ```
 
 Formate:
@@ -110,8 +112,41 @@ Formate:
 | `RGBA` | Originalfarben, optional adaptive Rasterstufen |
 
 `fromSvg(document,format[,options])` arbeitet mit einem bereits geladenen
-`GLSvgDocument`. Getter: `getFormat`, `getRasterResolution`, `getOptions`,
-`getCachedVariantCount`.
+`GLSvgDocument`. `fromPath(path[,format[,options]])` erzeugt aus einem
+gefüllten `GLPath2D` ein einfarbiges Icon; `AUTO` wählt deshalb MSDF. Der Path
+darf mehrere Konturen und seine Fill-Rule enthalten, muss aber endliche Bounds
+mit positiver Breite und Höhe besitzen. Getter: `getFormat`,
+`getRasterResolution`, `getOptions`, `getCachedVariantCount`.
+
+### `drawIcon` oder `drawUIIcon`?
+
+| Befehl | Pipeline | Darstellung | Eigener Shader |
+|---|---|---|---|
+| `drawUIIcon` | Universal-UI-Batch | MSDF bleibt MSDF; RGBA nutzt adaptive Rasterstufen | Vollständiger UI-Shader |
+| `drawIcon` | Normaler Texture-Batch | Immer RGBA; vektorbasierte Icons wählen adaptive Stufen | Freier TextureShader |
+
+Damit ist `GLIcon.fromPath(path)` zugleich die Brücke von beliebiger
+Pathgeometrie in den UI-Batch:
+
+```java
+GLIcon search = GLIcon.fromPath(searchPath);
+g.drawUIIcon(search, 12, 12, 18, 18, theme.iconColor());
+```
+
+Soll ein spezieller TextureShader auf dasselbe Icon wirken, wird einfach der
+normale Pfad verwendet:
+
+```java
+g.setTextureShader(iconShader);
+g.setTextureUniform("uGlow", 0.4f);
+g.drawIcon(search, 40, 12, 18, 18, Color.CYAN);
+g.useDefaultTextureShader();
+```
+
+Ein MSDF kann nicht unverändert von einem beliebigen RGBA-TextureShader gelesen
+werden. Deshalb erzeugt ein vektorbasiertes MSDF-Icon beim ersten `drawIcon`
+lazy eine RGBA-Ausgangsstufe; `drawUIIcon` nutzt weiterhin direkt das scharfe
+MSDF. Wer den ersten RGBA-Aufbau vorziehen möchte, verwendet `prepareAsync`.
 
 ### Adaptive RGBA-Auflösung
 
@@ -131,9 +166,12 @@ einem Hintergrundworker rasterisiert. Bis dahin bleibt die beste vorhandene
 Stufe sichtbar; der kurze Upload folgt später im GL-Thread. Beim
 Recording-Replay wird die Stufe neu gewählt, ohne das Recording zu erneuern.
 
-`prepareAsync(physicalPixels)` wärmt eine quadratische Stufe der angegebenen
-physischen Framebufferpixelzahl vor und liefert deren
-`CompletableFuture<GLImage>`. `GLIconOptions.fixed(resolution)` verwendet genau
+`prepareAsync(physicalPixels)` wärmt eine quadratische **RGBA**-Stufe der
+angegebenen physischen Framebufferpixelzahl vor und liefert deren
+`CompletableFuture<GLImage>`. Das ist für adaptive RGBA-Icons und für den
+Texture-Batch-Pfad eines vektorbasierten MSDF-Icons relevant; reines
+`drawUIIcon` eines MSDF benötigt keine RGBA-Stufe.
+`GLIconOptions.fixed(resolution)` verwendet genau
 eine Größe in physischen Pixeln. Validierung: Auflösungen mindestens 16
 physische Pixel, Max >= Min, der `resolutionStep` ist ein dimensionsloser
 Faktor >= 2, `oversampling` ein dimensionsloser Faktor `>0..4` und die
@@ -201,6 +239,11 @@ GLPath2D path = new GLPath2D(GLPath2D.FillRule.NON_ZERO)
         .quadTo(140, 50, 100, 90)
         .cubicTo(70, 120, 30, 120, 10, 90)
         .closePath();
+
+GLPath2D compound = GLPath2D.build(p -> {
+    p.append(GLShape2D.roundedRectangle(0, 0, 100, 40, 8));
+    p.append(GLShape2D.circle(82, 20, 7));
+});
 ```
 
 Methoden: `moveTo`, `lineTo`, `quadTo`, `cubicTo`, `closePath`,
@@ -216,6 +259,11 @@ enthalten exakte Kurvenextrema. `GLPath2D.Bounds` bietet die Record-Accessors
 `x`, `y`, `width`, `height` sowie die abgeleiteten Kanten `maximumX` und
 `maximumY`, jeweils in lokalen Benutzerkoordinaten. Der SVG-Pfadparser unterstützt
 `M/L/H/V/C/S/Q/T/A/Z` absolut und relativ; Arcs werden kubische Beziers.
+
+`build(callback)` ist ein ausschließlich geometrischer Builder. `append` und
+sein Alias `add` übernehmen die Konturen eines `GLShape2D`; `combine` erzeugt
+aus mehreren Shapes einen neuen Path. Diese Operationen verknüpfen Konturen
+gemäß der Fill-Rule und führen keine boolesche Flächenoperation aus.
 
 ## `GLSvgDocument`
 

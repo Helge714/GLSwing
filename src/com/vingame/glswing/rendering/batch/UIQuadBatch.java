@@ -2,6 +2,7 @@ package com.vingame.glswing.rendering.batch;
 
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
+import java.util.Map;
 
 import com.jogamp.common.nio.Buffers;
 import com.jogamp.opengl.GL;
@@ -9,6 +10,7 @@ import com.jogamp.opengl.GL3;
 import com.vingame.glswing.rendering.GLTexture;
 import com.vingame.glswing.rendering.ShaderProgram;
 import com.vingame.glswing.rendering.internal.PickFramebuffer;
+import com.vingame.glswing.rendering.internal.ShaderUniformValue;
 import com.vingame.glswing.rendering.internal.UIQuadInstanceFormat;
 import com.vingame.glswing.rendering.internal.VertexModifier;
 
@@ -211,7 +213,8 @@ public final class UIQuadBatch {
 		}
 	}
 
-	public int flush(GL3 gl, float[] projection, PickFramebuffer picking,
+	public int flush(GL3 gl, float[] projection, ShaderProgram shaderOverride,
+			Map<String, ShaderUniformValue> userUniforms, PickFramebuffer picking,
 			boolean renderColor, boolean renderPicking, float textureAlphaThreshold,
 			float deviceScaleX, float deviceScaleY) {
 		if (instanceCount == 0)
@@ -242,10 +245,13 @@ public final class UIQuadBatch {
 		textures.bind(gl);
 		int drawCalls = 0;
 		if (renderColor) {
-			program.use(gl);
-			program.setMatrix4(gl, "uProjection", projection);
-			textures.setSamplerUniforms(gl, program, "uTextures");
-			program.setVector2(gl, "uDeviceScale", deviceScaleX, deviceScaleY);
+			ShaderProgram activeProgram = shaderOverride == null ? program : shaderOverride;
+			activeProgram.use(gl);
+			activeProgram.setMatrix4(gl, "uProjection", projection);
+			textures.setSamplerUniforms(gl, activeProgram, "uTextures");
+			activeProgram.setVector2(gl, "uDeviceScale", deviceScaleX, deviceScaleY);
+			for (Map.Entry<String, ShaderUniformValue> uniform : userUniforms.entrySet())
+				uniform.getValue().apply(gl, activeProgram, uniform.getKey());
 			gl.glDrawArraysInstanced(GL.GL_TRIANGLES, 0, 6, instanceCount);
 			drawCalls++;
 		}

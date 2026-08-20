@@ -232,15 +232,21 @@ Komponenten selten sinnvoll.
 ### Farb- und Pickingausgabe
 
 ```java
-g.setRenderOutputs(true, false);   // nur Farbe
+g.setOutputMask(true, false);      // nur Farbe
 g.setColorRenderingEnabled(false);
 g.setPickingRenderingEnabled(true); // nur Picking
-g.setRenderOutputs(true, true);    // Frame-Normalzustand
+g.setOutputMask(true, true);       // Frame-Normalzustand
 ```
 
 Beide Outputs sind am Frameanfang aktiv. Eine Änderung flusht und ist
 recordbar. Bei temporären Änderungen muss der Aufrufer den gewünschten Zustand
 wiederherstellen.
+
+Die Maske bestimmt, **in welche vorhandenen Frameausgaben** nachfolgende
+Befehle schreiben. Sie wählt kein anderes Renderziel: Dafür dienen
+`beginRenderTarget` und `endRenderTarget`. `setOutputMask(false,true)` bedeutet
+also beispielsweise „nur in den Picking-FBO schreiben“, nicht „einen FBO als
+Target setzen“.
 
 `setTexturePickAlphaThreshold` erwartet einen dimensionslosen Wert von `0..1`
 und betrifft nur texturgebundene Geometrie: Verglichen wird Texturalpha mal
@@ -261,8 +267,9 @@ Die vier Argumente sind lokale Benutzerkoordinaten. Clips sind verschachtelbar
 und recordbar. Verwendet wird die transformierte, achsenparallele
 Screen-Boundingbox; es ist ein günstiger Scissor-Clip, kein runder
 Geometrieclip. `getClipDepth()` liefert eine dimensionslose Ebenenanzahl und
-hilft beim Diagnostizieren unbalancierter Paare. Für runde Kanten siehe
-`roundedClip` im [Layerkapitel](layers-effects.md).
+hilft beim Diagnostizieren unbalancierter Paare. Für runde oder vollkommen
+freie Vektorkanten siehe `roundedClip` und `pathClip` im
+[Layerkapitel](layers-effects.md).
 
 ### Damage
 
@@ -272,9 +279,10 @@ die Contextabfrage dazu ist `intersectsRedrawBounds`, wie oben beschrieben.
 
 ## Shaderzustände
 
-Filled-, Texture- und Textshader sind getrennt, damit kein unverständliches
+Filled-, Texture-, Text- und UI-Shader sind getrennt, damit kein unverständliches
 Attributlayout-Mismatch entsteht. Shader- und Uniformwechsel sind recordbar,
-validieren ihre Zielpipeline und flushen deren offenen Batch. Die vollständigen
+validieren ihre Zielpipeline und flushen deren offenen Batch. Der UI-Shader ist
+ein bewusster vollständiger Ersatz für alle UI-Modi. Die vollständigen
 Verträge und Einheiten der verwalteten Uniforms stehen im
 [Shaderkapitel](shaders.md).
 
@@ -283,6 +291,8 @@ Verträge und Einheiten der verwalteten Uniforms stehen im
 - `getTransform` und `getProjection` liefern unabhängige Kopien.
 - `getStroke` darf direkt behalten werden, da `GLStroke` unveränderlich ist.
 - `getStrokeDash` liefert eine defensive Kopie.
+- Shader-Getter liefern die aktuell gesetzte Programminstanz oder `null` für
+  den jeweiligen Defaultshader.
 - Shadergetter liefern die aktuell gesetzte Instanz oder `null` für Default.
 - Depth-Getter liefern dimensionslose Anzahlen der aktuell offenen
   Clip-/Layer-/RenderTarget-Ebenen.

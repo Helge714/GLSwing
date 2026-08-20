@@ -1,10 +1,12 @@
 package com.vingame.glswing.rendering.internal;
 
 import java.awt.Color;
+import java.nio.FloatBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import com.jogamp.common.nio.Buffers;
 import com.jogamp.opengl.GL;
 import com.jogamp.opengl.GL3;
 import com.vingame.glswing.rendering.GLBlurEffect;
@@ -15,6 +17,7 @@ import com.vingame.glswing.rendering.GLInnerOutlineEffect;
 import com.vingame.glswing.rendering.GLInnerShadowEffect;
 import com.vingame.glswing.rendering.GLLayerEffect;
 import com.vingame.glswing.rendering.GLOutlineEffect;
+import com.vingame.glswing.rendering.GLPathClipEffect;
 import com.vingame.glswing.rendering.GLRoundedClipEffect;
 import com.vingame.glswing.rendering.GLShaderEffect;
 import com.vingame.glswing.rendering.ShaderProgram;
@@ -32,11 +35,18 @@ public final class LayerStack {
 	private final ShaderProgram innerShadowProgram;
 	private final ShaderProgram colorProgram;
 	private final ShaderProgram roundedClipProgram;
+	private final ShaderProgram pathClipProgram;
+	private final ShaderProgram pathMaskProgram;
 	private final List<LayerTarget> targets = new ArrayList<>();
 	private final List<TargetState> parents = new ArrayList<>();
 	private final List<PixelBounds> layerBounds = new ArrayList<>();
+	private final List<PixelBounds> layerLimits = new ArrayList<>();
+	private final List<Boolean> automaticLayers = new ArrayList<>();
 	private final EffectTarget[] effectTargets = new EffectTarget[3];
+	private LayerTarget pathMaskTarget;
 	private int compositeVao;
+	private int pathMaskVao;
+	private int pathMaskVbo;
 	private int width;
 	private int height;
 	private float logicalWidth;
@@ -47,7 +57,8 @@ public final class LayerStack {
 			ShaderProgram shadowProgram, ShaderProgram outlineProgram,
 			ShaderProgram innerOutlineProgram, ShaderProgram innerShadowProgram,
 			ShaderProgram colorProgram, ShaderProgram roundedClipProgram,
-			int compositeVao, int samples) {
+			ShaderProgram pathClipProgram, ShaderProgram pathMaskProgram,
+			int compositeVao, int pathMaskVao, int pathMaskVbo, int samples) {
 		this.compositeProgram = compositeProgram;
 		this.blurProgram = blurProgram;
 		this.shadowProgram = shadowProgram;
@@ -56,7 +67,11 @@ public final class LayerStack {
 		this.innerShadowProgram = innerShadowProgram;
 		this.colorProgram = colorProgram;
 		this.roundedClipProgram = roundedClipProgram;
+		this.pathClipProgram = pathClipProgram;
+		this.pathMaskProgram = pathMaskProgram;
 		this.compositeVao = compositeVao;
+		this.pathMaskVao = pathMaskVao;
+		this.pathMaskVbo = pathMaskVbo;
 		this.samples = samples;
 	}
 
@@ -70,7 +85,10 @@ public final class LayerStack {
 		ShaderProgram innerShadow = null;
 		ShaderProgram color = null;
 		ShaderProgram roundedClip = null;
-		int[] vao = new int[1];
+		ShaderProgram pathClip = null;
+		ShaderProgram pathMask = null;
+		int[] vao = new int[2];
+		int[] vbo = new int[1];
 		try {
 			blur = ShaderProgram.fromBuiltInResources(
 					gl, "layer.vert", "layer_blur.frag");
@@ -86,17 +104,38 @@ public final class LayerStack {
 					gl, "layer.vert", "layer_color.frag");
 			roundedClip = ShaderProgram.fromBuiltInResources(
 					gl, "layer.vert", "layer_rounded_clip.frag");
-			gl.glGenVertexArrays(1, vao, 0);
-			if (vao[0] == 0)
+			pathClip = ShaderProgram.fromBuiltInResources(
+					gl, "layer.vert", "layer_path_clip.frag");
+			pathMask = ShaderProgram.fromBuiltInResources(
+					gl, "layer_path_mask.vert", "layer_path_mask.frag");
+			gl.glGenVertexArrays(2, vao, 0);
+			if (vao[0] == 0 || vao[1] == 0)
 				throw new IllegalStateException("Could not create the layer compositor VAO");
+			gl.glBindVertexArray(vao[1]);
+			gl.glGenBuffers(1, vbo, 0);
+			if (vbo[0] == 0)
+				throw new IllegalStateException("Could not create the layer path-mask VBO");
+			gl.glBindBuffer(GL.GL_ARRAY_BUFFER, vbo[0]);
+			gl.glEnableVertexAttribArray(0);
+			gl.glVertexAttribPointer(0, 2, GL.GL_FLOAT, false,
+					FilledVertexFormat.FLOATS_PER_VERTEX * Float.BYTES, 0);
+			gl.glBindBuffer(GL.GL_ARRAY_BUFFER, 0);
+			gl.glBindVertexArray(0);
 			int[] framebufferSamples = new int[1];
 			gl.glGetIntegerv(GL3.GL_SAMPLES, framebufferSamples, 0);
 			return new LayerStack(composite, blur, shadow, outline,
 					innerOutline, innerShadow, color,
-					roundedClip, vao[0], Math.max(1, framebufferSamples[0]));
+					roundedClip, pathClip, pathMask, vao[0], vao[1], vbo[0],
+					Math.max(1, framebufferSamples[0]));
 		} catch (RuntimeException error) {
-			if (vao[0] != 0)
-				gl.glDeleteVertexArrays(1, vao, 0);
+			if (vbo[0] != 0)
+				gl.glDeleteBuffers(1, vbo, 0);
+			if (vao[0] != 0 || vao[1] != 0)
+				gl.glDeleteVertexArrays(2, vao, 0);
+			if (pathMask != null)
+				pathMask.dispose(gl);
+			if (pathClip != null)
+				pathClip.dispose(gl);
 			if (roundedClip != null)
 				roundedClip.dispose(gl);
 			if (color != null)
@@ -130,8 +169,30 @@ public final class LayerStack {
 		this.logicalHeight = logicalHeight;
 	}
 
-	public void beginLayer(GL3 gl) {
-		beginLayer(gl, 0, 0, logicalWidth, logicalHeight);
+	public void beginAutoLayer(GL3 gl) {
+		int depth = depth();
+		TargetState parent = TargetState.capture(gl);
+		PixelBounds limit = PixelBounds.full(width, height)
+				.intersect(parent.clipBounds());
+		LayerTarget target;
+		if (depth == targets.size()) {
+			target = LayerTarget.create(gl);
+			targets.add(target);
+		} else {
+			target = targets.get(depth);
+		}
+		try {
+			target.ensureSize(gl, width, height, samples);
+			target.beginAutoDrawing(gl, limit);
+		} catch (RuntimeException error) {
+			parent.restore(gl);
+			throw error;
+		}
+		parents.add(parent);
+		layerBounds.add(null);
+		layerLimits.add(limit);
+		automaticLayers.add(true);
+		configureLayerDrawing(gl);
 	}
 
 	public void beginLayer(GL3 gl, float x, float y,
@@ -143,7 +204,8 @@ public final class LayerStack {
 					"Layer bounds must be finite and have a positive size");
 		int depth = depth();
 		TargetState parent = TargetState.capture(gl);
-		PixelBounds bounds = logicalBounds(x, y, layerWidth, layerHeight);
+		PixelBounds bounds = logicalBounds(x, y, layerWidth, layerHeight)
+				.intersect(parent.clipBounds());
 		LayerTarget target;
 		if (depth == targets.size()) {
 			target = LayerTarget.create(gl);
@@ -160,7 +222,30 @@ public final class LayerStack {
 		}
 		parents.add(parent);
 		layerBounds.add(bounds);
+		layerLimits.add(parent.clipBounds());
+		automaticLayers.add(false);
 		configureLayerDrawing(gl);
+	}
+
+	/** Adds conservative logical screen bounds to the current automatic layer. */
+	public void includeLogicalBounds(float x, float y,
+			float boundsWidth, float boundsHeight) {
+		if (depth() == 0 || !automaticLayers.get(depth() - 1))
+			return;
+		if (!Float.isFinite(x) || !Float.isFinite(y)
+				|| !Float.isFinite(boundsWidth) || !Float.isFinite(boundsHeight)
+				|| boundsWidth < 0 || boundsHeight < 0)
+			throw new IllegalArgumentException(
+					"Automatic layer bounds must be finite and non-negative");
+		PixelBounds included = logicalBounds(x, y, boundsWidth, boundsHeight)
+				.intersect(layerLimits.get(depth() - 1));
+		includeTopPixelBounds(included);
+	}
+
+	/** Marks the complete current clip as affected, for example by clear(). */
+	public void includeCurrentLimit() {
+		if (depth() != 0 && automaticLayers.get(depth() - 1))
+			includeTopPixelBounds(layerLimits.get(depth() - 1));
 	}
 
 	/** Processes and composites the top layer, returning all issued effect draw calls. */
@@ -172,15 +257,24 @@ public final class LayerStack {
 
 		LayerTarget target = targets.get(depth - 1);
 		PixelBounds contentBounds = layerBounds.remove(depth - 1);
+		layerLimits.remove(depth - 1);
+		automaticLayers.remove(depth - 1);
+		TargetState parent = parents.remove(depth - 1);
+		if (contentBounds == null || contentBounds.isEmpty()) {
+			target.finishEmpty();
+			parent.restore(gl);
+			configureBatchDrawing(gl);
+			return 0;
+		}
 		float logicalPadding = 0;
 		for (LayerEffectCommand effect : effects)
 			logicalPadding += effect.effect().getPadding();
 		PixelBounds processingBounds = contentBounds.expand(
 				(int) Math.ceil(logicalPadding * width / logicalWidth),
 				(int) Math.ceil(logicalPadding * height / logicalHeight),
-				width, height);
+				width, height).intersect(parent.clipBounds());
 		target.resolve(gl, contentBounds, processingBounds);
-		TargetState parent = parents.remove(depth - 1);
+		includeTopPixelBounds(processingBounds);
 		TextureSource input = target;
 		int drawCalls = 0;
 		try {
@@ -248,13 +342,18 @@ public final class LayerStack {
 					}
 					drawCalls++;
 				} else {
+					TextureSource pathMask = null;
+					if (command.hasPathMask()) {
+						pathMask = renderPathMask(gl, command, processingBounds);
+						drawCalls++;
+					}
 					if (finalEffect) {
 						prepareFinalPass(gl, parent, blendMode, processingBounds);
-						drawEffect(gl, input, command, opacity, contentBounds);
+						drawEffect(gl, input, command, opacity, contentBounds, pathMask);
 					} else {
 						EffectTarget output = effectTargetExcluding(gl, input);
 						prepareIntermediatePass(gl, output, processingBounds);
-						drawEffect(gl, input, command, 1, contentBounds);
+						drawEffect(gl, input, command, 1, contentBounds, pathMask);
 						input = output;
 					}
 					drawCalls++;
@@ -271,6 +370,10 @@ public final class LayerStack {
 		return parents.size();
 	}
 
+	public boolean tracksAutomaticBounds() {
+		return depth() != 0 && automaticLayers.get(depth() - 1);
+	}
+
 	/** Restores the frame's original render target while discarding open layers. */
 	public void abortFrame(GL3 gl) {
 		if (parents.isEmpty())
@@ -278,7 +381,18 @@ public final class LayerStack {
 		parents.get(0).restore(gl);
 		parents.clear();
 		layerBounds.clear();
+		layerLimits.clear();
+		automaticLayers.clear();
 		configureBatchDrawing(gl);
+	}
+
+	private void includeTopPixelBounds(PixelBounds included) {
+		if (included == null || included.isEmpty() || depth() == 0
+				|| !automaticLayers.get(depth() - 1))
+			return;
+		int index = depth() - 1;
+		PixelBounds current = layerBounds.get(index);
+		layerBounds.set(index, current == null ? included : current.union(included));
 	}
 
 	public void dispose(GL3 gl) {
@@ -293,6 +407,18 @@ public final class LayerStack {
 				effectTargets[index] = null;
 			}
 		}
+		if (pathMaskTarget != null) {
+			pathMaskTarget.dispose(gl);
+			pathMaskTarget = null;
+		}
+		if (pathMaskVbo != 0) {
+			gl.glDeleteBuffers(1, new int[] { pathMaskVbo }, 0);
+			pathMaskVbo = 0;
+		}
+		if (pathMaskVao != 0) {
+			gl.glDeleteVertexArrays(1, new int[] { pathMaskVao }, 0);
+			pathMaskVao = 0;
+		}
 		if (compositeVao != 0) {
 			gl.glDeleteVertexArrays(1, new int[] { compositeVao }, 0);
 			compositeVao = 0;
@@ -305,6 +431,8 @@ public final class LayerStack {
 		innerShadowProgram.dispose(gl);
 		colorProgram.dispose(gl);
 		roundedClipProgram.dispose(gl);
+		pathClipProgram.dispose(gl);
+		pathMaskProgram.dispose(gl);
 	}
 
 	private EffectTarget effectTarget(GL3 gl, int index) {
@@ -409,8 +537,33 @@ public final class LayerStack {
 				horizontallyBlurred, "uBlurTexture");
 	}
 
+	private TextureSource renderPathMask(GL3 gl, LayerEffectCommand command,
+			PixelBounds processingBounds) {
+		if (pathMaskTarget == null)
+			pathMaskTarget = LayerTarget.create(gl);
+		pathMaskTarget.ensureSize(gl, width, height, samples);
+		pathMaskTarget.beginDrawing(gl, processingBounds);
+		gl.glDisable(GL.GL_BLEND);
+		pathMaskProgram.use(gl);
+		pathMaskProgram.setMatrix4(gl, "uProjection", command.maskProjection());
+		float[] vertices = command.maskVertices();
+		FloatBuffer data = Buffers.newDirectFloatBuffer(vertices);
+		gl.glBindVertexArray(pathMaskVao);
+		gl.glBindBuffer(GL.GL_ARRAY_BUFFER, pathMaskVbo);
+		gl.glBufferData(GL.GL_ARRAY_BUFFER, (long) vertices.length * Float.BYTES,
+				data, GL3.GL_STREAM_DRAW);
+		gl.glDrawArrays(GL.GL_TRIANGLES, 0,
+				vertices.length / FilledVertexFormat.FLOATS_PER_VERTEX);
+		gl.glBindBuffer(GL.GL_ARRAY_BUFFER, 0);
+		gl.glBindVertexArray(0);
+		gl.glUseProgram(0);
+		pathMaskTarget.resolve(gl, processingBounds, processingBounds);
+		return pathMaskTarget;
+	}
+
 	private void drawEffect(GL3 gl, TextureSource input,
-			LayerEffectCommand command, float opacity, PixelBounds contentBounds) {
+			LayerEffectCommand command, float opacity, PixelBounds contentBounds,
+			TextureSource pathMask) {
 		GLLayerEffect effect = command.effect();
 		ShaderProgram program;
 		if (effect instanceof GLOutlineEffect outline) {
@@ -444,13 +597,20 @@ public final class LayerStack {
 			program.setVector4(gl, "uCornerRadii",
 					clip.radii().topLeft(), clip.radii().topRight(),
 					clip.radii().bottomRight(), clip.radii().bottomLeft());
+		} else if (effect instanceof GLPathClipEffect) {
+			program = pathClipProgram;
+			program.use(gl);
 		} else if (effect instanceof GLShaderEffect custom) {
 			program = custom.getShader();
 			program.use(gl);
 		} else {
 			throw new IllegalArgumentException("Unsupported layer effect: " + effect);
 		}
-		drawProgram(gl, input, program, opacity, command.uniforms());
+		if (pathMask != null)
+			drawProgram(gl, input, program, opacity, command.uniforms(),
+					pathMask, "uMaskTexture");
+		else
+			drawProgram(gl, input, program, opacity, command.uniforms());
 	}
 
 	private void drawProgram(GL3 gl, TextureSource input, ShaderProgram program,
@@ -829,6 +989,22 @@ public final class LayerStack {
 			gl.glBindFramebuffer(GL3.GL_DRAW_FRAMEBUFFER, drawFramebuffer);
 			gl.glViewport(0, 0, width, height);
 			applyScissor(gl, bounds);
+		}
+
+		void beginAutoDrawing(GL3 gl, PixelBounds limit) {
+			if (dirtyBounds != null) {
+				clearFramebuffer(gl, drawFramebuffer, width, height, dirtyBounds);
+				if (samples > 1)
+					clearFramebuffer(gl, resolveFramebuffer, width, height, dirtyBounds);
+			}
+			dirtyBounds = null;
+			gl.glBindFramebuffer(GL3.GL_DRAW_FRAMEBUFFER, drawFramebuffer);
+			gl.glViewport(0, 0, width, height);
+			applyScissor(gl, limit);
+		}
+
+		void finishEmpty() {
+			dirtyBounds = null;
 		}
 
 		void resolve(GL3 gl, PixelBounds contentBounds,

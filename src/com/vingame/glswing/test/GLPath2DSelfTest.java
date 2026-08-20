@@ -4,6 +4,7 @@ import java.awt.Color;
 import java.util.List;
 
 import com.vingame.glswing.rendering.GLPath2D;
+import com.vingame.glswing.rendering.GLShape2D;
 import com.vingame.glswing.rendering.internal.FilledVertexFormat;
 import com.vingame.glswing.rendering.internal.PolygonTessellator;
 
@@ -19,6 +20,8 @@ public final class GLPath2DSelfTest {
 		assertQuadraticBounds();
 		assertCubicBounds();
 		assertCopyIsIndependent();
+		assertShapeFactories();
+		assertShapeComposition();
 		assertPathMustBeginWithMove();
 		assertFillRulesProduceDifferentAreas();
 		System.out.println("GLPath2D self-test passed.");
@@ -49,6 +52,48 @@ public final class GLPath2DSelfTest {
 		original.reset().moveTo(5, 5).lineTo(6, 6);
 		if (copy.getCommandCount() != 5)
 			throw new AssertionError("Resetting a path changed its copy");
+	}
+
+	private static void assertShapeFactories() {
+		assertBounds("rectangle", GLPath2D.rectangle(2, 3, 20, 10).getBounds(),
+				2, 3, 20, 10);
+		assertBounds("rounded rectangle",
+				GLPath2D.roundedRectangle(4, 5, 30, 12, 20).getBounds(),
+				4, 5, 30, 12);
+		assertBounds("ellipse", GLPath2D.ellipse(6, 7, 40, 16).getBounds(),
+				6, 7, 40, 16);
+		assertBounds("circle", GLPath2D.circle(15, 25, 8).getBounds(),
+				7, 17, 16, 16);
+		assertBounds("polygon",
+				GLPath2D.polygon(new float[] { 3, 9, 13, 4, 18, 20 }).getBounds(),
+				3, 4, 15, 16);
+
+		GLShape2D reusable = GLShape2D.circle(50, 60, 10);
+		GLPath2D first = reusable.toPath();
+		first.reset().moveTo(0, 0).lineTo(1, 1);
+		assertBounds("independent shape conversion", reusable.toPath().getBounds(),
+				40, 50, 20, 20);
+	}
+
+	private static void assertShapeComposition() {
+		GLPath2D built = GLPath2D.build(path -> {
+			path.add(GLShape2D.rectangle(0, 0, 20, 10));
+			path.add(GLShape2D.circle(30, 10, 5));
+		});
+		assertBounds("shape builder", built.getBounds(), 0, 0, 35, 15);
+		if (built.getCommandCount() != 11)
+			throw new AssertionError(
+					"Shape builder did not preserve both independent contours");
+
+		GLPath2D combined = GLPath2D.combine(
+				GLShape2D.rectangle(2, 3, 8, 9),
+				GLShape2D.ellipse(20, 4, 6, 12));
+		assertBounds("combined shapes", combined.getBounds(), 2, 3, 24, 13);
+
+		int commandsBeforeSelfAppend = combined.getCommandCount();
+		combined.append(combined);
+		if (combined.getCommandCount() != commandsBeforeSelfAppend * 2)
+			throw new AssertionError("Appending a path to itself corrupted it");
 	}
 
 	private static void assertPathMustBeginWithMove() {

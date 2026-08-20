@@ -31,16 +31,23 @@ wird von der Anwendung ausdrücklich aktualisiert.
 GLRenderTarget target = new GLRenderTarget(512, 512);
 GLRenderTarget pixels = new GLRenderTarget(
         256, 256, GLRenderTargetOptions.pixelArt());
+GLRenderTarget interactive = new GLRenderTarget(
+        512, 512,
+        GLRenderTargetOptions.DEFAULT.withPicking(true));
 ```
 
 `GLRenderTargetOptions` kombiniert:
 
 - Filter `LINEAR` oder `NEAREST`,
-- Wrap `CLAMP` oder `REPEAT`.
+- Wrap `CLAMP` oder `REPEAT`,
+- optionales persistentes Picking mit `withPicking(true)`.
 
 `DEFAULT` ist linear/clamp. `pixelArt()` ist nearest/clamp,
 `repeatingPixelArt()` nearest/repeat. `withFilter` und `withWrap` erzeugen
-veränderte immutable Optionen.
+veränderte immutable Optionen. Picking ist standardmäßig aus, sodass ein
+gewöhnliches Target weder die zusätzliche Integertextur noch deren FBO
+allokiert. `withPicking(true)` ergänzt beides in Targetauflösung. Die
+Pickingtextur verwendet immer `NEAREST`, unabhängig vom Farbfilter.
 
 Konstruktorbreite und -höhe sind ganzzahlige Targetpixel und damit zugleich
 die Texelauflösung. Innerhalb des Targets entspricht eine logische
@@ -76,8 +83,13 @@ Innerhalb gelten:
 - logische Größe gleich Targetbreite/-höhe,
 - Top-Left-Pixelkoordinaten,
 - Projection passend zum Target,
-- Picking deaktiviert,
+- Picking entsprechend der Targetoption,
 - eigener Viewport und FBO.
+
+In einem Target mit `withPicking(true)` funktionieren `setPickId`,
+`setMouseTarget`, ihre Zeichenoverloads, `addUIHitArea` und
+`setOutputMask(color,picking)` wie im Hauptbild. Ein Target ohne diese Option
+weist das Aktivieren der Picking-Ausgabe innerhalb des Targetpasses ab.
 
 `endRenderTarget` restauriert Output, Viewport, Transform, Projection, Shader,
 Uniforms, Color, Stroke, Picking und weitere Contextzustände. Targets dürfen
@@ -97,6 +109,19 @@ Weitere Overloads nehmen Pick-ID oder MouseTarget. Die FBO-Y-Ausrichtung wird
 intern korrigiert. `drawRenderTarget` verwendet den Texture-Batch und dessen
 aktuellen Shader.
 
+Hat das Target Picking aktiviert, wird seine lokale ID-Textur mit genau
+demselben Quad wie die Farbtextur dargestellt. Skalierung, Spiegelung,
+Rotation, View und Projection wirken dadurch automatisch identisch auf Farbe
+und Treffer. Auch verschachtelte Picking-Targets bleiben korrekt. Die beim
+Zeichnen in das Target erfassten lokalen Koordinaten werden beim Treffer durch
+alle Präsentationstransformationen zurückgerechnet.
+
+Eine Pick-ID oder ein MouseTarget am `drawRenderTarget`-Aufruf ist in diesem
+Fall ein **Fallback für sichtbare Pixel ohne interne ID**. Interne Treffer haben
+Vorrang. Unsichtbare interne `addUIHitArea`-Flächen bleiben pickbar; der
+Alpha-Schwellwert gilt nur für den sichtbaren Fallback. Ohne Pickingoption
+verhält sich der Overload weiterhin wie ein einziges pickbares Textur-Quad.
+
 Wichtig: `drawRenderTarget` und sämtliche Target-Updates sind nicht recordbar,
 weil der gezeigte Inhalt dynamisch ist.
 
@@ -111,6 +136,12 @@ g.withRenderTarget(target, () ->
 ```
 
 `clear` löscht das aktuell gebundene Target, nicht automatisch den Bildschirm.
+Bei einem Picking-Target werden mit der standardmäßigen Output-Maske Farb- und
+ID-Inhalt gemeinsam geleert und die lokalen Zuordnungen zurückgesetzt. Über
+`setOutputMask` kann auch nur eine der beiden Flächen geleert werden. Ohne Clear
+der Picking-Ausgabe bleiben deren Daten für partielle Updates erhalten.
+Häufiges vollständiges Neuzeichnen ohne Picking-Clear würde dagegen unnötig
+alte Zuordnungen ansammeln.
 
 ## Ping-Pong mit `GLFeedbackBuffer`
 
@@ -187,3 +218,7 @@ werden.
 - Ping-Pong hält die Pipeline auf der GPU; ein synchroner Readback würde sie
   typischerweise blockieren.
 - Jeder Wechsel in/aus einem Target flusht offene Batches.
+- `withPicking(true)` benötigt zusätzlich ungefähr vier Bytes pro Targetpixel
+  für `R32UI` und beim Darstellen einen Picking-Drawcall. Die Zuordnung zu
+  `GLMouseTarget` verwendet schwache Referenzen und hält entfernte UI-Objekte
+  daher nicht künstlich am Leben.

@@ -106,6 +106,21 @@ public final class GLSvgDocument {
 		}
 	}
 
+	/** Creates an internal monochrome vector document for path-backed icons. */
+	static GLSvgDocument fromMonochromePath(GLPath2D path) {
+		if (path == null || path.isEmpty())
+			throw new IllegalArgumentException("Icon path must not be null or empty");
+		GLPath2D copy = path.copy();
+		GLPath2D.Bounds bounds = copy.getBounds();
+		if (!Float.isFinite(bounds.x()) || !Float.isFinite(bounds.y())
+				|| !Float.isFinite(bounds.width()) || !Float.isFinite(bounds.height())
+				|| bounds.width() <= 0 || bounds.height() <= 0)
+			throw new IllegalArgumentException(
+					"Icon path bounds must have a positive finite width and height");
+		return new GLSvgDocument(bounds.x(), bounds.y(), bounds.width(), bounds.height(),
+				List.of(new SvgShape(copy, GLPaint2D.solid(Color.WHITE))));
+	}
+
 	public float getViewBoxX() { return viewX; }
 	public float getViewBoxY() { return viewY; }
 	public float getViewBoxWidth() { return viewWidth; }

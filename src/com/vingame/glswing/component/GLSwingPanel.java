@@ -1195,7 +1195,7 @@ public abstract class GLSwingPanel extends GLJPanel
 						Projection2D.TOP_LEFT_PIXELS.create(logicalWidth, logicalHeight),
 						damage.rebuildPicking());
 				frameBegan = true;
-				context.setRenderOutputs(true, damage.rebuildPicking());
+				context.setOutputMask(true, damage.rebuildPicking());
 				renderer.setRedrawBounds(damage.full() ? null : damage.bounds());
 				layoutSupport.ensure(logicalWidth, logicalHeight);
 				if (recordingCache.isDirty())

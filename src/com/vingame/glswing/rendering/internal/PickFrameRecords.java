@@ -87,6 +87,27 @@ public final class PickFrameRecords {
 		return record;
 	}
 
+	/** Adds all target-local records as one contiguous presentation range. */
+	public int append(PersistentPickRecords source, GLTransform targetToScreen) {
+		if (source == null)
+			throw new IllegalArgumentException("Persistent pick records must not be null");
+		return source.appendTo(this, targetToScreen);
+	}
+
+	int nextRecord() {
+		return count;
+	}
+
+	void appendExact(int id, GLMouseTarget target, GLTransform localToScreen) {
+		if (localToScreen == null)
+			throw new IllegalArgumentException("Pick transform must not be null");
+		ensureCapacity(count + 1);
+		int record = count++;
+		ids[record] = id;
+		targets[record] = target;
+		storeInverse(record, localToScreen);
+	}
+
 	public GLPickResult resolve(int record, float screenX, float screenY) {
 		if (record <= 0 || record >= count)
 			return GLPickResult.none();
@@ -117,6 +138,27 @@ public final class PickFrameRecords {
 				&& Float.compare(lastTransform[3], m11) == 0
 				&& Float.compare(lastTransform[4], m02) == 0
 				&& Float.compare(lastTransform[5], m12) == 0;
+	}
+
+	private void storeInverse(int record, GLTransform localToScreen) {
+		int offset = record * 6;
+		float m00 = localToScreen.getScaleX();
+		float m10 = localToScreen.getShearY();
+		float m01 = localToScreen.getShearX();
+		float m11 = localToScreen.getScaleY();
+		float m02 = localToScreen.getTranslateX();
+		float m12 = localToScreen.getTranslateY();
+		float determinant = m00 * m11 - m01 * m10;
+		if (determinant == 0 || !Float.isFinite(determinant)) {
+			Arrays.fill(inverses, offset, offset + 6, Float.NaN);
+		} else {
+			inverses[offset] = m11 / determinant;
+			inverses[offset + 1] = -m10 / determinant;
+			inverses[offset + 2] = -m01 / determinant;
+			inverses[offset + 3] = m00 / determinant;
+			inverses[offset + 4] = (m01 * m12 - m11 * m02) / determinant;
+			inverses[offset + 5] = (m10 * m02 - m00 * m12) / determinant;
+		}
 	}
 
 	private void ensureCapacity(int required) {

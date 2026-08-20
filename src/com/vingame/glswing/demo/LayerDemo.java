@@ -12,7 +12,10 @@ import javax.swing.SwingUtilities;
 import com.jogamp.opengl.GL3;
 import com.vingame.glswing.component.GLSwingPanel;
 import com.vingame.glswing.rendering.GLContext2D;
+import com.vingame.glswing.rendering.GLComposite;
 import com.vingame.glswing.rendering.GLFont;
+import com.vingame.glswing.rendering.GLLayerEffects;
+import com.vingame.glswing.rendering.GLShape2D;
 import com.vingame.glswing.rendering.GLStroke;
 
 /** Compares per-command transparency with nested group opacity. */
@@ -28,7 +31,7 @@ public final class LayerDemo {
 	private static void showWindow() {
 		JLabel status = new JLabel("Mausrad: Deckkraft verändern", SwingConstants.CENTER);
 		LayerPanel panel = new LayerPanel(status);
-		panel.setPreferredSize(new Dimension(900, 620));
+		panel.setPreferredSize(new Dimension(900, 780));
 
 		JFrame frame = new JFrame("GLSwingNext - verschachtelte Layer");
 		frame.setLayout(new BorderLayout());
@@ -97,6 +100,18 @@ public final class LayerDemo {
 			context.fillRect(390, 432, 120, 155, new Color(76, 220, 145));
 			context.endLayer(0.55f);
 			context.endLayer(0.75f);
+
+			context.drawText(headingFont, "Freier Path-Clip", 350, 630, Color.WHITE);
+			context.beginLayer();
+			context.fillRect(350, 650, 67, 90, new Color(76, 220, 145));
+			context.fillRect(417, 650, 66, 90, new Color(72, 202, 235));
+			context.fillRect(483, 650, 67, 90, new Color(234, 137, 60));
+			context.endLayer(GLComposite.NORMAL.withEffect(GLLayerEffects.pathClip(
+					GLShape2D.polygon(new float[] {
+							450, 646, 461, 676, 493, 677, 468, 697,
+							477, 730, 450, 712, 423, 730, 432, 697,
+							407, 677, 439, 676
+					}))));
 		}
 
 		private static void drawAsterisk(GLContext2D context, float centerX,
