@@ -1,0 +1,225 @@
+# Zeichenbefehle und Renderpfade
+
+[Zur API-Landkarte](../graphics-pipeline.md) · [Konfiguration](context-configuration.md) · [Weiter: Recording](recording.md)
+
+Dieses Kapitel trennt vier Fragen ausdrücklich:
+
+1. Wird immediate gerendert oder aufgenommen?
+2. Läuft der Befehl über die frei shaderbare Standardpipeline oder den
+   spezialisierten UI-Batch?
+3. Welcher Batchtyp wird verwendet?
+4. Welche Overloads und Einheiten gelten?
+
+## Immediate, Recording und Replay
+
+| Modus | Was ein Zeichenbefehl tut |
+|---|---|
+| Kein Recording aktiv | Geometrie wird direkt in den offenen Rendererbatch eingefügt. |
+| Zwischen `beginRecording`/`endRecording` | Normalisierte Anweisung/Geometrie wird gespeichert, nicht sichtbar gezeichnet. |
+| `draw(recording)` | Gespeicherte Anweisungen fließen in die aktuellen Batches ein. |
+
+Alle unten genannten Zeichenbefehle sind recordbar, außer
+`drawRenderTarget(...)`. `draw(GLRecording)` selbst ist während einer aktiven
+Aufnahme nicht erlaubt.
+
+## Overload-Konvention
+
+Bei Standardformen wiederholen sich diese Varianten:
+
+- ohne `Color`: aktuelle Contextfarbe,
+- mit `Color`: Farbe nur für diesen Befehl,
+- mit `int pickId`: numerisches Ziel nur für diesen Befehl,
+- mit `GLMouseTarget`: direktes Ziel nur für diesen Befehl,
+- mit `Color[]`: interpolierte Vertex-/Punktfarben.
+
+Ein explizites Pickingargument ersetzt für den Befehl den Contextzustand.
+Pick-ID und MouseTarget werden nie gleichzeitig übergeben. Arrays mit Punkten
+sind immer `x0,y0,x1,y1,...`.
+
+## Nicht-UI: Filled-Batch
+
+Diese Methoden erzeugen normale Filled-Geometrie. Eigene Filled-Shader wirken;
+Strokes werden auf der CPU in Dreiecke umgewandelt.
+
+### Linien
+
+| Methode | Parameter/Varianten | Verhalten |
+|---|---|---|
+| `drawLine(x1,y1,x2,y2,...)` | Contextfarbe, `Color`, Pick-ID oder MouseTarget | Ein Segment |
+| `drawLine(x1,y1,color1,x2,y2,color2,...)` | optional Picking | Farbverlauf zwischen Endpunkten |
+| `drawPolyline(points,...)` | `Color` oder `Color[]`, optional Picking | Offen; letzter Punkt wird nicht mit erstem verbunden |
+| `drawPolygon(points,...)` | `Color` oder `Color[]`, optional Picking | Geschlossen |
+
+Alle verwenden den aktuellen `GLStroke`, einschließlich Dash, Cap, Join,
+Offset und WidthSpace.
+
+### Kubische Beziers
+
+```java
+g.drawCubicBezier(
+        x0, y0, control1X, control1Y,
+        control2X, control2Y, x1, y1,
+        startColor, endColor, GLColorInterpolation.OKLAB);
+```
+
+Overloads bieten Contextfarbe, eine Farbe, Start-/Endfarbe, optional
+`GLColorInterpolator` und jeweils Pick-ID oder MouseTarget. Ohne explizite
+Interpolation gilt `SRGB`. Eingebaut sind `SRGB`, `LINEAR_RGB`,
+`HSV_SHORTEST`, `OKLAB`, `OKLCH_SHORTEST`.
+
+Alle Modi implementieren `GLColorInterpolator.interpolate(start,end,amount)`.
+`GLColorInterpolation.parse(String)` liest einen Modusnamen tolerant, während
+`valueOf` die normale Enum-Semantik besitzt. Eine eigene Interpolation ist ein
+Lambda `(start, end, amount) -> Color`.
+
+### Umrisse
+
+| Methode | Besonderheiten |
+|---|---|
+| `drawRect(x,y,w,h,...)` | Optional vier Farben: oben links, oben rechts, unten rechts, unten links |
+| `drawRoundRect(x,y,w,h,radius,...)` | Einheitlicher Radius |
+| `drawRoundRect(x,y,w,h,GLCornerRadii,...)` | Eigener Radius pro Ecke |
+| `drawEllipse(x,y,w,h,...)` | Bounds beschreiben die Ellipse |
+| `drawCircle(centerX,centerY,radius,...)` | Radius muss nichtnegativ sein |
+| `drawPath(path,...)` | Alle Subpaths werden gestrokt |
+
+Die `GLCornerRadii`-Reihenfolge ist oben links, oben rechts, unten rechts,
+unten links. Die Record-Accessors heißen `topLeft`, `topRight`, `bottomRight`
+und `bottomLeft`; `GLCornerRadii.all(radius)` erzeugt vier gleiche Werte.
+
+### Fills
+
+| Methode | Besonderheiten |
+|---|---|
+| `fillTriangle(...)` | Eine Farbe oder eine pro Vertex; optional Picking |
+| `fillRect(x,y,w,h,...)` | Optimierter Quadpfad |
+| `fillPolygon(points,...)` | Konkave Polygone; `Color` oder `Color[]` |
+| `fillRoundRect(...)` | Radius oder `GLCornerRadii` |
+| `fillEllipse(...)`, `fillCircle(...)` | Kurvenqualität über `curveTolerance` |
+| `fillPath(path,Color)` | Pfad mit einer Farbe |
+| `fillPath(path,GLPaint2D)` | Farbe wird an lokalen Tessellierungspunkten ausgewertet |
+
+```java
+GLPaint2D stripes = (x, y) -> ((int) (x / 16) & 1) == 0
+        ? new Color(80, 180, 255)
+        : new Color(35, 90, 180);
+g.fillPath(path, stripes);
+```
+
+`GLPaint2D` ist CPU-seitig und erzeugt Vertexfarben; es ist kein frei pro Pixel
+ausgewerteter GPU-Paint. Für pixelgenaue prozedurale Fills dient ein Shader.
+Die funktionale Methode heißt `colorAt(x,y)`; `GLPaint2D.solid(color)` ist die
+konstante Fabrik.
+
+## Nicht-UI: Texture-Batch
+
+| Methode | Varianten | Recordbar |
+|---|---|---|
+| `drawTexture(texture,x,y)` | Originalgröße; Tint/Pick-ID/MouseTarget möglich | Ja |
+| `drawTexture(texture,x,y,w,h)` | Skalierte Zielbounds; Tint/Picking möglich | Ja |
+| `drawTexture(texture,sourceX,sourceY,sourceW,sourceH,destX,destY,destW,destH,...)` | Teilbereich; Quellwerte in Texturpixeln | Ja |
+| `drawImage(image,x,y)` | Originalgröße | Ja |
+| `drawImage(image,x,y,w,h[,tint])` | High-Level-Bild | Ja |
+| `drawRenderTarget(target,x,y)` | Targetgröße | Nein |
+| `drawRenderTarget(target,x,y,w,h[,tint/picking])` | Dynamischer Targetinhalt | Nein |
+
+Negative Zielbreite/-höhe spiegeln ein Bild; die Quellregion von
+`drawTexture` muss positiv und vollständig innerhalb der Textur liegen.
+`drawImage` löst `GLImage` automatisch als Atlasregion oder Standalone-Textur
+auf. Der aktive TextureShader wirkt auf alle Methoden dieser Tabelle.
+
+## Nicht-UI: Text-Batch
+
+```java
+g.drawText(font, "Baseline", 30, 80, Color.WHITE);
+```
+
+`drawText(GLFont,String,x,baselineY,...)` besitzt Varianten mit Contextfarbe,
+`Color`, Pick-ID und MouseTarget. Y ist immer die Baseline wie bei
+`Graphics2D.drawString`, nicht die obere Textkante. Text verwendet MSDF und den
+separaten, frei austauschbaren Textshader.
+
+## UI-Pipeline
+
+Der Universal-UI-Batch ist nicht bloß eine Abkürzung für die Standardformen.
+Er verwendet instanzierte analytische Quads und kann Standardflächen,
+MSDF-Glyphen und bis zu 16 Texturen in einem Drawcall kombinieren. Eigene
+Filled-/Texture-/Textshader wirken hier bewusst nicht.
+
+Alle UI-Methoden sind recordbar. Picking wird über den aktuellen
+`setPickId`-/`setMouseTarget`-Zustand gesteuert; sie besitzen keine zusätzlichen
+Pickingoverloads.
+
+### Flächen und Border
+
+| Methode | Verhalten |
+|---|---|
+| `fillUIRoundRect(...,radius,color)` | Analytisch antialiaste Fläche |
+| `fillUIRoundRect(...,GLCornerRadii,color)` | Unterschiedliche Eckradien |
+| `drawUIRoundRect(...,radius,strokeWidth,color)` | Innerer World-Space-Border |
+| `drawUIRoundRect(...,radius,strokeWidth,color,widthSpace)` | World/Screen wählbar |
+| `drawUIRoundRect(...,radii,strokeWidth,color,widthSpace)` | Eckradien + WidthSpace |
+| `fillAndDrawUIRoundRect(...)` | Fill und innerer Border in einer Instanz, kein AA-Bleeding |
+
+`fillAndDrawUIRoundRect` ist für Standardcontrols meist besser als getrenntes
+Fill und Border. `SCREEN` hält die Borderdicke beim Zoom konstant.
+
+### Verläufe und Symbole
+
+| Methode | Verhalten |
+|---|---|
+| `fillUIProgressRoundRect(...,radius,progress,top,bottom)` | Verlauf bis `progress` geclippt |
+| `fillUIProgressRoundRect(...,topRadius,bottomRadius,progress,...)` | Getrennte obere/untere Rundung |
+| `fillUIVerticalGradientRoundRect(...)` | Fortschritt immer `1` |
+| `drawUICheckMark(...)` | Analytischer Haken |
+| `drawUIChevron(...,pointsRight,strokeWidth,color,widthSpace)` | Linker/rechter Chevron |
+
+### Schatten, Text und Bilder
+
+| Methode | Verhalten |
+|---|---|
+| `drawUIRoundRectShadow(...)` | Analytischer weicher Schatten, absichtlich nicht pickbar |
+| `drawUIText(font,text,x,baselineY,color)` | MSDF-Glyphen im UI-Batch |
+| `drawUIImage(image,x,y,w,h[,tint])` | `GLImage`/Atlasregion im UI-Batch |
+| `drawIcon(icon,x,y,w,h[,color])` | MSDF- oder RGBA-Icon, adaptive Wahl beim Replay |
+| `addUIHitArea(x,y,w,h)` | Schreibt nur Picking, nicht Farbe |
+
+Der analytische UI-Schatten ist deutlich günstiger als ein Layer-Blur, kann
+aber nur das gerundete Rechteckmodell darstellen.
+
+## Pfade
+
+```java
+GLPath2D path = new GLPath2D(GLPath2D.FillRule.NON_ZERO)
+        .moveTo(10, 10)
+        .lineTo(100, 10)
+        .quadTo(140, 50, 100, 90)
+        .cubicTo(70, 120, 30, 120, 10, 90)
+        .closePath();
+```
+
+`GLPath2D` kann mehrere Subpaths enthalten. `EVEN_ODD` toggelt innen/außen bei
+jeder Kontur; `NON_ZERO` berücksichtigt die Richtung. Weitere Operationen:
+`setFillRule`, `getFillRule`, `copy`, `reset`, `transformed`, `getBounds`,
+`getSegmentCount`, `getCommandCount`, `fromSvgPath`.
+
+## Zeichenreihenfolge und Überlappung
+
+GLSwing bewahrt die sichtbare Reihenfolge. Wenn ein Wechsel zwischen Filled,
+Text und Texture nötig ist, wird der vorherige Batch geflusht, bevor der nächste
+Typ darüber zeichnet. Deshalb können viele Controls mit abwechselndem Fill und
+Text mehr Flushes erzeugen; die UI-Pipeline existiert genau für diesen Fall.
+
+## Entscheidungshilfe
+
+| Ziel | Empfohlener Befehl |
+|---|---|
+| Frei shaderbare Form | Standard-`fill...`/`draw...` |
+| Standardcontrol | `...UI...` |
+| Normales Bild | `GLImage` + `drawImage` |
+| Bild im Controlbatch | `drawUIImage` |
+| Manuelle GL-Textur | `drawTexture` |
+| Scharfer frei shaderbarer Text | `drawText` |
+| Text zusammen mit Controls | `drawUIText` |
+| Gruppeneffekt | Layer |
+| Wiederverwendete komplexe Geometrie | Recording |
