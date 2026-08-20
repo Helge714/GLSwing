@@ -190,7 +190,7 @@ public final class GLThemeLoader {
 		GLMenuBarStyle menuBar = menuBar(base.menuBarStyle(), values);
 		GLComboBoxStyle combo = combo(base.comboBoxStyle(), values);
 		return new GLTheme(label, button, checkBox, slider, editor, menu,
-				menuBar, combo, base.uiStrings(), values);
+				menuBar, combo, values);
 	}
 
 	private static GLLabelStyle label(GLLabelStyle base, GLThemeValues values) {

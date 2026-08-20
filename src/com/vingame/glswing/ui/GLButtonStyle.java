@@ -37,23 +37,6 @@ public record GLButtonStyle(
 					"Button geometry must be finite and non-negative");
 	}
 
-	/** Source-compatible constructor for a formerly flat pressed color. */
-	public GLButtonStyle(GLFontSpec font, Color background,
-			Color hoverBackground, Color pressedBackground,
-			Color disabledBackground, Color textColor, Color disabledTextColor,
-			Color borderColor, Color focusColor, float cornerRadius,
-			float borderWidth, float height, GLInsets padding) {
-		this(font, background, hoverBackground, pressedBackground,
-				pressedBackground, disabledBackground, textColor,
-				disabledTextColor, borderColor, focusColor, cornerRadius,
-				borderWidth, height, padding);
-	}
-
-	/** Compatibility view of the old single pressed color. */
-	public Color pressedBackground() {
-		return pressedDarkColor;
-	}
-
 	public Color background(GLControlState state) {
 		return switch (state) {
 		case NORMAL -> background;

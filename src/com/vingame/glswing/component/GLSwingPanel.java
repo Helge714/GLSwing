@@ -1144,6 +1144,7 @@ public abstract class GLSwingPanel extends GLJPanel
 		gl.glGetIntegerv(GL3.GL_SAMPLES, samples, 0);
 		actualAntialiasingSamples = samples[0];
 		renderer = GLRenderer2D.create(gl);
+		renderer.setAsynchronousResourceRepaint(this::repaintColorOnly);
 		sceneFramebuffer = SceneFramebuffer.create(gl);
 		gpuTimers = new GLGpuTimerQueries();
 		gpuTimers.initialize(gl);

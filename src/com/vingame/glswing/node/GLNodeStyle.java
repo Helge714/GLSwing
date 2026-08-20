@@ -35,42 +35,6 @@ public record GLNodeStyle(GLFontSpec titleFont, Color background,
 					"Node style geometry must be finite and valid");
 	}
 
-	/** Source-compatible constructor for styles without an active border color. */
-	public GLNodeStyle(GLFontSpec titleFont, Color background,
-			Color titleBackground, Color titleGradientLight,
-			Color titleGradientDark, Color titleText, Color border,
-			Color selectedBorder, Color shadow, Color inputPort,
-			Color outputPort, Color portBorder, Color portHover,
-			float cornerRadius, float borderWidth, float titleHeight,
-			float shadowSoftness, float shadowOffsetX, float shadowOffsetY,
-			float portRadius, float rowGap, float minimumWidth,
-			float resizeHandleSize, GLInsets contentPadding) {
-		this(titleFont, background, titleBackground, titleGradientLight,
-				titleGradientDark, titleText, border, selectedBorder,
-				selectedBorder, shadow, inputPort, outputPort, portBorder,
-				portHover, cornerRadius, borderWidth, titleHeight,
-				shadowSoftness, shadowOffsetX, shadowOffsetY, portRadius,
-				rowGap, minimumWidth, resizeHandleSize, contentPadding);
-	}
-
-	/** Source-compatible constructor for styles without title-gradient colors. */
-	public GLNodeStyle(GLFontSpec titleFont, Color background,
-			Color titleBackground, Color titleText, Color border,
-			Color selectedBorder, Color shadow, Color inputPort,
-			Color outputPort, Color portBorder, Color portHover,
-			float cornerRadius, float borderWidth, float titleHeight,
-			float shadowSoftness, float shadowOffsetX, float shadowOffsetY,
-			float portRadius, float rowGap, float minimumWidth,
-			float resizeHandleSize, GLInsets contentPadding) {
-		this(titleFont, background, titleBackground, titleBackground,
-				titleBackground, titleText, border, selectedBorder,
-				selectedBorder, shadow,
-				inputPort, outputPort, portBorder, portHover, cornerRadius,
-				borderWidth, titleHeight, shadowSoftness, shadowOffsetX,
-				shadowOffsetY, portRadius, rowGap, minimumWidth,
-				resizeHandleSize, contentPadding);
-	}
-
 	public GLNodeStyle withTitleBackground(Color color) {
 		return copy(color, titleGradientLight, titleGradientDark);
 	}

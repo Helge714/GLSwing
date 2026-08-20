@@ -5,6 +5,7 @@ import java.nio.ByteBuffer;
 
 import com.jogamp.common.nio.Buffers;
 import com.jogamp.opengl.GL;
+import com.jogamp.opengl.GL2ES3;
 import com.jogamp.opengl.GL3;
 
 /** Owns one OpenGL 2D texture created from a {@link BufferedImage}. */
@@ -13,11 +14,13 @@ public final class GLTexture {
 	private int id;
 	private final int width;
 	private final int height;
+	private final boolean mipmapped;
 
-	private GLTexture(int id, int width, int height) {
+	private GLTexture(int id, int width, int height, boolean mipmapped) {
 		this.id = id;
 		this.width = width;
 		this.height = height;
+		this.mipmapped = mipmapped;
 	}
 
 	/** Creates a linearly filtered RGBA texture. Must run with a current GL context. */
@@ -27,6 +30,11 @@ public final class GLTexture {
 
 	static GLTexture create(GL3 gl, BufferedImage image,
 			boolean linearFiltering, boolean repeating) {
+		return create(gl, image, linearFiltering, repeating, false);
+	}
+
+	static GLTexture create(GL3 gl, BufferedImage image,
+			boolean linearFiltering, boolean repeating, boolean mipmapped) {
 		if (gl == null)
 			throw new IllegalArgumentException("GL context must not be null");
 		if (image == null)
@@ -35,18 +43,29 @@ public final class GLTexture {
 			throw new IllegalArgumentException("Texture image must have a positive size");
 
 		return create(gl, image.getWidth(), image.getHeight(), rgbaPixels(image),
-				linearFiltering, repeating);
+				linearFiltering, repeating, mipmapped);
 	}
 
 	static GLTexture createEmpty(GL3 gl, int width, int height,
 			boolean linearFiltering) {
+		return createEmpty(gl, width, height, linearFiltering, false);
+	}
+
+	static GLTexture createEmpty(GL3 gl, int width, int height,
+			boolean linearFiltering, boolean mipmapped) {
+		return createEmpty(gl, width, height, linearFiltering, false, mipmapped);
+	}
+
+	static GLTexture createEmpty(GL3 gl, int width, int height,
+			boolean linearFiltering, boolean repeating, boolean mipmapped) {
 		if (width <= 0 || height <= 0)
 			throw new IllegalArgumentException("Texture dimensions must be positive");
-		return create(gl, width, height, null, linearFiltering, false);
+		return create(gl, width, height, null, linearFiltering, repeating, mipmapped);
 	}
 
 	private static GLTexture create(GL3 gl, int width, int height,
-			ByteBuffer pixels, boolean linearFiltering, boolean repeating) {
+			ByteBuffer pixels, boolean linearFiltering, boolean repeating,
+			boolean mipmapped) {
 		int[] textureId = new int[1];
 		gl.glGenTextures(1, textureId, 0);
 		if (textureId[0] == 0)
@@ -65,13 +84,15 @@ public final class GLTexture {
 			gl.glPixelStorei(GL.GL_UNPACK_ALIGNMENT, 1);
 			int filter = linearFiltering ? GL.GL_LINEAR : GL.GL_NEAREST;
 			int wrap = repeating ? GL.GL_REPEAT : GL.GL_CLAMP_TO_EDGE;
-			gl.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MIN_FILTER, filter);
+			gl.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MIN_FILTER,
+					mipmapped ? GL.GL_LINEAR_MIPMAP_LINEAR : filter);
 			gl.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MAG_FILTER, filter);
 			gl.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_WRAP_S, wrap);
 			gl.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_WRAP_T, wrap);
+			gl.glTexParameteri(GL.GL_TEXTURE_2D, GL2ES3.GL_TEXTURE_MAX_LEVEL, 0);
 			gl.glTexImage2D(GL.GL_TEXTURE_2D, 0, GL.GL_RGBA8, width, height,
 					0, GL.GL_RGBA, GL.GL_UNSIGNED_BYTE, pixels);
-			return new GLTexture(textureId[0], width, height);
+			return new GLTexture(textureId[0], width, height, mipmapped);
 		} catch (RuntimeException error) {
 			gl.glDeleteTextures(1, textureId, 0);
 			throw error;
@@ -79,6 +100,29 @@ public final class GLTexture {
 			gl.glPixelStorei(GL.GL_UNPACK_ALIGNMENT, previousUnpackAlignment[0]);
 			gl.glBindTexture(GL.GL_TEXTURE_2D, previousBinding[0]);
 			gl.glActiveTexture(previousActiveTexture[0]);
+		}
+	}
+
+	void generateMipmaps(GL3 gl, int maximumLevel) {
+		if (!mipmapped)
+			throw new IllegalStateException("Texture was not created for mipmapping");
+		if (id == 0)
+			throw new IllegalStateException("Texture has already been disposed");
+		int fullChain = 31 - Integer.numberOfLeadingZeros(Math.max(width, height));
+		int level = Math.max(0, Math.min(maximumLevel, fullChain));
+		int[] previousActive = new int[1];
+		int[] previousBinding = new int[1];
+		gl.glGetIntegerv(GL.GL_ACTIVE_TEXTURE, previousActive, 0);
+		gl.glActiveTexture(GL.GL_TEXTURE0);
+		gl.glGetIntegerv(GL.GL_TEXTURE_BINDING_2D, previousBinding, 0);
+		try {
+			gl.glBindTexture(GL.GL_TEXTURE_2D, id);
+			gl.glTexParameteri(GL.GL_TEXTURE_2D, GL2ES3.GL_TEXTURE_MAX_LEVEL, level);
+			if (level > 0)
+				gl.glGenerateMipmap(GL.GL_TEXTURE_2D);
+		} finally {
+			gl.glBindTexture(GL.GL_TEXTURE_2D, previousBinding[0]);
+			gl.glActiveTexture(previousActive[0]);
 		}
 	}
 
@@ -118,6 +162,12 @@ public final class GLTexture {
 
 	public boolean isDisposed() {
 		return id == 0;
+	}
+
+	int textureId() {
+		if (id == 0)
+			throw new IllegalStateException("Texture has already been disposed");
+		return id;
 	}
 
 	/** Binds this texture to the requested zero-based texture unit. */

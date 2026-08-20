@@ -2,7 +2,10 @@ package com.vingame.glswing.test;
 
 import java.awt.Color;
 import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import com.jogamp.opengl.GL;
 import com.jogamp.opengl.GL3;
@@ -16,7 +19,11 @@ import com.vingame.glswing.rendering.GLContext2D;
 import com.vingame.glswing.rendering.GLImage;
 import com.vingame.glswing.rendering.GLImageOptions;
 import com.vingame.glswing.rendering.GLIcon;
+import com.vingame.glswing.rendering.GLIconOptions;
+import com.vingame.glswing.rendering.GLRecording;
 import com.vingame.glswing.rendering.GLRenderer2D;
+import com.vingame.glswing.rendering.GLSvgDocument;
+import com.vingame.glswing.rendering.GLTransform;
 import com.vingame.glswing.rendering.Projection2D;
 
 /** GPU regression tests for automatic atlases and multi-texture batches. */
@@ -29,6 +36,7 @@ public final class ImageAtlasGpuSelfTest {
 	}
 
 	public static void main(String[] args) {
+		testMipmappingOptions();
 		GLProfile profile = GLProfile.get(GLProfile.GL3);
 		GLCapabilities capabilities = new GLCapabilities(profile);
 		capabilities.setOnscreen(false);
@@ -47,6 +55,8 @@ public final class ImageAtlasGpuSelfTest {
 			testTextureSlotLimit(gl, renderer);
 			testMixedUiTexturesAndPicking(gl, renderer);
 			testRgbaAndMsdfIcons(gl, renderer);
+			testMipmappedAtlasIsolation(gl, renderer);
+			testRecordedAdaptiveIcon(gl, renderer);
 			System.out.println("Image atlas GPU self-test passed.");
 		} finally {
 			if (renderer != null)
@@ -54,6 +64,26 @@ public final class ImageAtlasGpuSelfTest {
 			nativeContext.release();
 			drawable.destroy();
 		}
+	}
+
+	private static void testMipmappingOptions() {
+		check(GLImageOptions.DEFAULT.mipmapping()
+				== GLImageOptions.Mipmapping.AUTO,
+				"Default images should choose mipmapping automatically");
+		check(GLImageOptions.pixelArt().mipmapping()
+				== GLImageOptions.Mipmapping.NONE,
+				"Pixel-art images must not use conventional mipmaps");
+		check(GLImageOptions.dynamic().mipmapping()
+				== GLImageOptions.Mipmapping.NONE,
+				"Dynamic images should not regenerate mipmaps implicitly");
+		boolean rejected = false;
+		try {
+			GLImageOptions.pixelArt().withMipmapping(
+					GLImageOptions.Mipmapping.ENABLED);
+		} catch (IllegalArgumentException expected) {
+			rejected = true;
+		}
+		check(rejected, "Explicit mipmapping should reject nearest filtering");
 	}
 
 	private static void testAutomaticAtlas(GL3 gl, GLRenderer2D renderer) {
@@ -126,15 +156,120 @@ public final class ImageAtlasGpuSelfTest {
 		checkVisible(gl, 90, 4, 70, 70, "RGBA icon");
 	}
 
+	private static void testMipmappedAtlasIsolation(GL3 gl,
+			GLRenderer2D renderer) {
+		GLImage red = colorImage(64, 64, Color.RED, GLImageOptions.DEFAULT);
+		GLImage green = colorImage(64, 64, Color.GREEN, GLImageOptions.DEFAULT);
+		GLContext2D context = begin(gl, renderer);
+		context.clear(Color.BLACK);
+		context.drawUIImage(red, 10, 90, 4, 4);
+		context.drawUIImage(green, 30, 90, 4, 4);
+		renderer.endFrame();
+		check(renderer.drawCallCount() == 1,
+				"Mipmapped atlas images should share one UI draw call");
+		checkDominant(gl, 12, 92, Color.RED, "red downscaled atlas image");
+		checkDominant(gl, 32, 92, Color.GREEN, "green downscaled atlas image");
+		check(gl.glGetError() == GL.GL_NO_ERROR,
+				"Mipmapped atlas rendering produced an OpenGL error");
+	}
+
+	private static void testRecordedAdaptiveIcon(GL3 gl,
+			GLRenderer2D renderer) {
+		String source = """
+				<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+				  <path fill="#ff4030" d="M 0 0 L 64 0 L 64 32 L 0 32 Z"/>
+				  <path fill="#30a0ff" d="M 0 32 L 64 32 L 64 64 L 0 64 Z"/>
+				</svg>
+				""";
+		GLSvgDocument document = GLSvgDocument.parse(new ByteArrayInputStream(
+				source.getBytes(StandardCharsets.UTF_8)));
+		GLIcon icon = GLIcon.fromSvg(document, GLIcon.Format.RGBA,
+				GLIconOptions.DEFAULT.withResolutionRange(32, 512)
+						.withRasterizationDelayMillis(0));
+		check(icon.getCachedVariantCount() == 1,
+				"Adaptive icon should initially retain one warm variant");
+		AtomicInteger repaintRequests = new AtomicInteger();
+		renderer.setAsynchronousResourceRepaint(repaintRequests::incrementAndGet);
+
+		GLContext2D context = begin(gl, renderer);
+		context.beginRecording();
+		context.drawIcon(icon, 0, 0, 24, 24);
+		GLRecording recording = context.endRecording();
+		context.clear(Color.BLACK);
+		context.draw(recording);
+		renderer.endFrame();
+		check(renderer.drawCallCount() == 1,
+				"Recorded adaptive icon left the UI batch at unit scale");
+		awaitVariantCount(icon, 2,
+				"Unit replay did not generate its 32px icon bucket asynchronously");
+		awaitRepaintRequest(repaintRequests);
+
+		context = begin(gl, renderer);
+		context.clear(Color.BLACK);
+		context.setTransform(new GLTransform().scale(8));
+		context.draw(recording);
+		renderer.endFrame();
+		check(renderer.drawCallCount() == 1,
+				"Zoomed recorded icon left the UI batch");
+		awaitVariantCount(icon, 3,
+				"Zoomed replay did not generate its 256px icon bucket asynchronously");
+
+		context = begin(gl, renderer);
+		context.clear(Color.BLACK);
+		context.setTransform(new GLTransform().scale(8));
+		context.draw(recording);
+		renderer.endFrame();
+		check(renderer.drawCallCount() == 1,
+				"Uploaded adaptive icon left the UI batch");
+		checkVisible(gl, 0, 0, 64, 64, "zoomed recorded adaptive icon");
+		renderer.setAsynchronousResourceRepaint(null);
+	}
+
+	private static void awaitVariantCount(GLIcon icon, int expected,
+			String failureMessage) {
+		long deadline = System.nanoTime() + 10_000_000_000L;
+		while (icon.getCachedVariantCount() < expected
+				&& System.nanoTime() < deadline) {
+			try {
+				Thread.sleep(5);
+			} catch (InterruptedException error) {
+				Thread.currentThread().interrupt();
+				throw new AssertionError("Interrupted while awaiting SVG rasterization",
+						error);
+			}
+		}
+		check(icon.getCachedVariantCount() >= expected, failureMessage);
+	}
+
+	private static void awaitRepaintRequest(AtomicInteger requests) {
+		long deadline = System.nanoTime() + 2_000_000_000L;
+		while (requests.get() == 0 && System.nanoTime() < deadline) {
+			try {
+				Thread.sleep(2);
+			} catch (InterruptedException error) {
+				Thread.currentThread().interrupt();
+				throw new AssertionError(
+						"Interrupted while awaiting adaptive-icon repaint", error);
+			}
+		}
+		check(requests.get() > 0,
+				"Completed adaptive icon did not request a repaint");
+	}
+
 	private static GLContext2D begin(GL3 gl, GLRenderer2D renderer) {
 		return renderer.beginFrame(gl, WIDTH, HEIGHT,
 				Projection2D.TOP_LEFT_PIXELS.create(WIDTH, HEIGHT));
 	}
 
 	private static GLImage colorImage(Color color, GLImageOptions options) {
-		BufferedImage image = new BufferedImage(8, 8, BufferedImage.TYPE_INT_ARGB);
-		for (int y = 0; y < 8; y++)
-			for (int x = 0; x < 8; x++)
+		return colorImage(8, 8, color, options);
+	}
+
+	private static GLImage colorImage(int width, int height,
+			Color color, GLImageOptions options) {
+		BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+		for (int y = 0; y < height; y++)
+			for (int x = 0; x < width; x++)
 				image.setRGB(x, y, color.getRGB());
 		return GLImage.of(image, options);
 	}
@@ -157,5 +292,21 @@ public final class ImageAtlasGpuSelfTest {
 				return;
 		}
 		throw new AssertionError(description + " produced no visible pixels");
+	}
+
+	private static void checkDominant(GL3 gl, int x, int y,
+			Color expected, String description) {
+		ByteBuffer pixel = ByteBuffer.allocateDirect(4);
+		gl.glReadPixels(x, HEIGHT - 1 - y, 1, 1,
+				GL.GL_RGBA, GL.GL_UNSIGNED_BYTE, pixel);
+		int red = pixel.get(0) & 0xff;
+		int green = pixel.get(1) & 0xff;
+		int blue = pixel.get(2) & 0xff;
+		int wanted = expected == Color.RED ? red : green;
+		int unwanted = expected == Color.RED ? Math.max(green, blue)
+				: Math.max(red, blue);
+		check(wanted > 180 && wanted > unwanted * 3,
+				description + " bled into a neighboring atlas entry: "
+						+ red + "/" + green + "/" + blue);
 	}
 }

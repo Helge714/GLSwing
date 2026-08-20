@@ -226,12 +226,18 @@ public abstract class GLSwingCanvas extends GLCanvas implements GLEventListener 
 		gl.glGetIntegerv(GL3.GL_SAMPLES, samples, 0);
 		actualAntialiasingSamples = samples[0];
 		renderer = GLRenderer2D.create(gl);
+		renderer.setAsynchronousResourceRepaint(this::asynchronousResourceUpdated);
 		gpuTimers = new GLGpuTimerQueries();
 		gpuTimers.initialize(gl);
 		if (isSceneCachingEnabled())
 			sceneFramebuffer = SceneFramebuffer.create(gl);
 		resetFrameStatistics();
 		initialize(gl);
+	}
+
+	/** Called from resource workers; AWT repaint is safe to request off the EDT. */
+	protected void asynchronousResourceUpdated() {
+		repaint();
 	}
 
 	@Override

@@ -14,6 +14,7 @@ import com.vingame.glswing.rendering.GLContext2D;
 import com.vingame.glswing.rendering.GLIcon;
 import com.vingame.glswing.rendering.GLImage;
 import com.vingame.glswing.rendering.GLImageOptions;
+import com.vingame.glswing.rendering.GLTransform;
 import com.vingame.glswing.ui.GLLabel;
 
 /** Visual smoke test for RGBA atlases, MSDF icons and multi-texture UI batching. */
@@ -54,8 +55,9 @@ public final class ImageAtlasDemo {
 		status.setBounds(24, 18, 520, 22);
 		frame.addGL(status);
 		Timer statusTimer = new Timer(250, event -> status.setText(String.format(
-				"%.0f FPS | %d Drawcalls | Mausrad: Zoom",
-				frame.getFramesPerSecond(), frame.getLastDrawCallCount())));
+				"%.0f FPS | %d Drawcalls | RGBA-Stufen: %d | Mausrad: Zoom",
+				frame.getFramesPerSecond(), frame.getLastDrawCallCount(),
+				rgbaIcon.getCachedVariantCount())));
 		statusTimer.start();
 		frame.closedFuture().whenComplete((unused, error) -> statusTimer.stop());
 		frame.getGLCanvas().addMouseWheelListener(
@@ -99,15 +101,20 @@ public final class ImageAtlasDemo {
 			if (Float.compare(this.zoom, zoom) == 0)
 				return;
 			this.zoom = zoom;
-			invalidateRecording();
+			repaintGL();
+		}
+
+		@Override
+		protected void transformComponent(GLContext2D context) {
+			GLTransform transform = context.getTransform().copy();
+			transform.translate(DESIGN_WIDTH * 0.5f, DESIGN_HEIGHT * 0.5f);
+			transform.scale(zoom);
+			transform.translate(-DESIGN_WIDTH * 0.5f, -DESIGN_HEIGHT * 0.5f);
+			context.setTransform(transform);
 		}
 
 		@Override
 		protected void record(GLContext2D context) {
-			context.translate(DESIGN_WIDTH * 0.5f, DESIGN_HEIGHT * 0.5f);
-			context.scale(zoom);
-			context.translate(-DESIGN_WIDTH * 0.5f, -DESIGN_HEIGHT * 0.5f);
-
 			context.fillUIRoundRect(55, 72, 790, 490, 18,
 					new Color(29, 37, 53));
 			context.drawUIRoundRect(55, 72, 790, 490, 18, 2,

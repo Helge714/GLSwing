@@ -2,9 +2,12 @@ package com.vingame.glswing.rendering;
 
 import java.awt.Color;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import com.jogamp.opengl.GL;
 import com.jogamp.opengl.GL3;
@@ -26,6 +29,9 @@ import com.vingame.glswing.rendering.internal.VertexModifier;
 /** Owns the GPU rendering state and batches for one GLSwing panel. */
 public final class GLRenderer2D {
 
+	private static final int MAX_ADAPTIVE_ICON_UPLOADS_PER_FRAME = 1;
+	private static final Runnable NO_REPAINT_REQUEST = () -> { };
+
 	private final FilledBatch filledBatch;
 	private final TextureBatch textureBatch;
 	private final TextBatch textBatch;
@@ -34,6 +40,9 @@ public final class GLRenderer2D {
 	private final LayerStack layers;
 	private final GLTextureManager textureManager = new GLTextureManager();
 	private final PickFrameRecords pickRecords = new PickFrameRecords();
+	private final Set<GLRenderTarget> renderTargets =
+			Collections.newSetFromMap(new IdentityHashMap<>());
+	private final List<RenderTargetState> renderTargetStack = new ArrayList<>();
 	private final GLContext2D context;
 	private GL3 gl;
 	private final GLTransform projection = new GLTransform();
@@ -80,6 +89,8 @@ public final class GLRenderer2D {
 	private float texturePickAlphaThreshold;
 	private float[] redrawBounds;
 	private final List<ScissorState> clipStack = new ArrayList<>();
+	private Runnable asynchronousResourceRepaint = NO_REPAINT_REQUEST;
+	private int adaptiveIconUploads;
 
 	private GLRenderer2D(FilledBatch filledBatch, TextureBatch textureBatch,
 			TextBatch textBatch, UIQuadBatch uiQuadBatch,
@@ -138,6 +149,10 @@ public final class GLRenderer2D {
 			throw new IllegalArgumentException("Initial projection must not be null");
 
 		this.gl = gl;
+		if (!renderTargetStack.isEmpty())
+			throw new IllegalStateException(
+					"A previous frame still has open render targets");
+		releaseClosedRenderTargets(gl);
 		this.logicalWidth = logicalWidth;
 		this.logicalHeight = logicalHeight;
 		int[] colorViewport = new int[4];
@@ -177,6 +192,7 @@ public final class GLRenderer2D {
 		pickingRenderingEnabled = true;
 		texturePickAlphaThreshold = GLContext2D.DEFAULT_TEXTURE_PICK_ALPHA_THRESHOLD;
 		redrawBounds = null;
+		adaptiveIconUploads = 0;
 		clipStack.clear();
 		context.reset(logicalWidth, logicalHeight);
 
@@ -239,12 +255,16 @@ public final class GLRenderer2D {
 		flush();
 		int openLayers = layers.depth();
 		int openClips = clipStack.size();
-		if (rebuildingPickingFrame && openLayers == 0)
+		int openRenderTargets = renderTargetStack.size();
+		if (rebuildingPickingFrame && openLayers == 0 && openRenderTargets == 0)
 			picking.requestSnapshot(gl, pickRecords);
 		if (openLayers != 0)
 			layers.abortFrame(gl);
 		while (!clipStack.isEmpty())
 			restoreScissor(clipStack.remove(clipStack.size() - 1));
+		while (!renderTargetStack.isEmpty())
+			restoreRenderTarget(renderTargetStack.remove(
+					renderTargetStack.size() - 1));
 		gl.glDisable(GL.GL_BLEND);
 		frameActive = false;
 		rebuildingPickingFrame = false;
@@ -255,6 +275,10 @@ public final class GLRenderer2D {
 		if (openClips != 0)
 			throw new IllegalStateException("Frame ended with " + openClips
 					+ " unclosed clip" + (openClips == 1 ? "" : "s"));
+		if (openRenderTargets != 0)
+			throw new IllegalStateException("Frame ended with " + openRenderTargets
+					+ " unclosed render target"
+					+ (openRenderTargets == 1 ? "" : "s"));
 	}
 
 	public void flush() {
@@ -282,6 +306,7 @@ public final class GLRenderer2D {
 
 	void beginLayer() {
 		requireFrame();
+		requireNoRenderTargetForLayer();
 		flush();
 		layers.beginLayer(gl);
 	}
@@ -351,6 +376,7 @@ public final class GLRenderer2D {
 
 	void beginLayer(float x, float y, float width, float height) {
 		requireFrame();
+		requireNoRenderTargetForLayer();
 		if (!Float.isFinite(x) || !Float.isFinite(y)
 				|| !Float.isFinite(width) || !Float.isFinite(height)
 				|| width <= 0 || height <= 0)
@@ -382,6 +408,7 @@ public final class GLRenderer2D {
 	void beginLayer(float x, float y, float width, float height,
 			float screenInset) {
 		requireFrame();
+		requireNoRenderTargetForLayer();
 		if (!Float.isFinite(x) || !Float.isFinite(y)
 				|| !Float.isFinite(width) || !Float.isFinite(height)
 				|| width <= 0 || height <= 0
@@ -452,6 +479,9 @@ public final class GLRenderer2D {
 
 	void setRenderOutputs(boolean renderColor, boolean renderPicking) {
 		requireFrame();
+		if (renderPicking && !renderTargetStack.isEmpty())
+			throw new IllegalStateException(
+					"Picking cannot be enabled inside a persistent render target");
 		if (colorRenderingEnabled == renderColor
 				&& pickingRenderingEnabled == renderPicking)
 			return;
@@ -494,6 +524,9 @@ public final class GLRenderer2D {
 	public void dispose(GL3 gl) {
 		if (frameActive)
 			throw new IllegalStateException("Cannot dispose the renderer during a frame");
+		for (GLRenderTarget target : new ArrayList<>(renderTargets))
+			target.release(this, gl);
+		renderTargets.clear();
 		filledBatch.dispose(gl);
 		textureBatch.dispose(gl);
 		textBatch.dispose(gl);
@@ -501,11 +534,125 @@ public final class GLRenderer2D {
 		picking.dispose(gl);
 		layers.dispose(gl);
 		textureManager.dispose(gl);
+		asynchronousResourceRepaint = NO_REPAINT_REQUEST;
+	}
+
+	/** Sets the thread-safe host callback used when an async resource becomes ready. */
+	public void setAsynchronousResourceRepaint(Runnable repaintRequester) {
+		asynchronousResourceRepaint = repaintRequester == null
+				? NO_REPAINT_REQUEST : repaintRequester;
 	}
 
 	GLTextureRegion resolveImage(GLImage image) {
 		requireFrame();
 		return textureManager.resolve(gl, image);
+	}
+
+	void beginRenderTarget(GLRenderTarget target) {
+		requireFrame();
+		if (target == null)
+			throw new IllegalArgumentException("Render target must not be null");
+		if (layers.depth() != 0)
+			throw new IllegalStateException(
+					"Render targets cannot begin inside a temporary layer");
+		if (!clipStack.isEmpty())
+			throw new IllegalStateException(
+					"Render targets cannot begin inside a clip");
+		flush();
+		renderTargets.add(target);
+		int framebuffer = target.framebuffer(this, gl);
+		RenderTargetState parent = RenderTargetState.capture(this, gl, target);
+		renderTargetStack.add(parent);
+		try {
+			gl.glBindFramebuffer(GL.GL_FRAMEBUFFER, framebuffer);
+			gl.glViewport(0, 0, target.getWidth(), target.getHeight());
+			gl.glDisable(GL.GL_SCISSOR_TEST);
+			logicalWidth = target.getWidth();
+			logicalHeight = target.getHeight();
+			colorDeviceScaleX = 1;
+			colorDeviceScaleY = 1;
+			projection.setTransform(Projection2D.TOP_LEFT_PIXELS.create(
+					logicalWidth, logicalHeight));
+			projectionMatrix = projection.toMatrix4();
+			updateScreenTransforms();
+			transform.setToIdentity();
+			colorRenderingEnabled = true;
+			pickingRenderingEnabled = false;
+			redrawBounds = null;
+		} catch (RuntimeException error) {
+			renderTargetStack.remove(renderTargetStack.size() - 1);
+			restoreRenderTarget(parent);
+			throw error;
+		}
+	}
+
+	void endRenderTarget() {
+		requireFrame();
+		if (renderTargetStack.isEmpty())
+			throw new IllegalStateException(
+					"endRenderTarget() requires a matching beginRenderTarget()");
+		if (layers.depth() != 0)
+			throw new IllegalStateException(
+					"A temporary layer must end before its render target");
+		if (!clipStack.isEmpty())
+			throw new IllegalStateException(
+					"A clip must end before its render target");
+		flush();
+		restoreRenderTarget(renderTargetStack.remove(
+				renderTargetStack.size() - 1));
+	}
+
+	int renderTargetDepth() {
+		requireFrame();
+		return renderTargetStack.size();
+	}
+
+	GLTexture resolveRenderTargetTexture(GLRenderTarget target) {
+		requireFrame();
+		if (target == null)
+			throw new IllegalArgumentException("Render target must not be null");
+		if (!renderTargetStack.isEmpty()
+				&& renderTargetStack.get(renderTargetStack.size() - 1).target == target)
+			throw new IllegalStateException(
+					"A render target cannot sample from itself while being written");
+		renderTargets.add(target);
+		return target.texture(this, gl);
+	}
+
+	private void restoreRenderTarget(RenderTargetState state) {
+		gl.glBindFramebuffer(GL3.GL_DRAW_FRAMEBUFFER, state.drawFramebuffer);
+		gl.glBindFramebuffer(GL3.GL_READ_FRAMEBUFFER, state.readFramebuffer);
+		gl.glViewport(state.viewport[0], state.viewport[1],
+				state.viewport[2], state.viewport[3]);
+		if (state.scissorEnabled) {
+			gl.glEnable(GL.GL_SCISSOR_TEST);
+			gl.glScissor(state.scissor[0], state.scissor[1],
+					state.scissor[2], state.scissor[3]);
+		} else {
+			gl.glDisable(GL.GL_SCISSOR_TEST);
+		}
+		logicalWidth = state.logicalWidth;
+		logicalHeight = state.logicalHeight;
+		colorDeviceScaleX = state.colorDeviceScaleX;
+		colorDeviceScaleY = state.colorDeviceScaleY;
+		redrawBounds = state.redrawBounds == null
+				? null : state.redrawBounds.clone();
+		applyState(state.rendererState);
+	}
+
+	private void releaseClosedRenderTargets(GL3 gl) {
+		for (GLRenderTarget target : new ArrayList<>(renderTargets)) {
+			if (!target.isClosed())
+				continue;
+			target.release(this, gl);
+			renderTargets.remove(target);
+		}
+	}
+
+	private void requireNoRenderTargetForLayer() {
+		if (!renderTargetStack.isEmpty())
+			throw new IllegalStateException(
+					"Temporary layers inside persistent render targets are not supported yet");
 	}
 
 	public int readPickId(GL3 gl, int x, int y) {
@@ -814,10 +961,7 @@ public final class GLRenderer2D {
 		activateBatch(BatchType.TEXTURE);
 		int textureLimit = textureShaderOverride == null ? 16 : 1;
 		if (!textureBatch.accepts(texture, textureLimit) || !textureBatch.canAdd(6))
-			drawCallCount += textureBatch.flush(
-					gl, projectionMatrix, textureShaderOverride, textureUniforms, picking,
-					colorRenderingEnabled, pickingRenderingEnabled,
-					texturePickAlphaThreshold);
+			drawCallCount += flushBatch(BatchType.TEXTURE);
 
 		textureBatch.addQuad(texture,
 				x1, y1, x2, y2, x3, y3, x4, y4,
@@ -896,6 +1040,15 @@ public final class GLRenderer2D {
 	void addUI(GLTexture texture, float[] instances,
 			int pickId, GLMouseTarget mouseTarget,
 			float automaticOriginX, float automaticOriginY) {
+		addUI(texture, instances, pickId, mouseTarget,
+				automaticOriginX, automaticOriginY,
+				activeRecordingVertexModifier());
+	}
+
+	private void addUI(GLTexture texture, float[] instances,
+			int pickId, GLMouseTarget mouseTarget,
+			float automaticOriginX, float automaticOriginY,
+			VertexModifier modifier) {
 		requireFrame();
 		if (instances == null || instances.length == 0
 				|| instances.length % UIQuadInstanceFormat.FLOATS_PER_INSTANCE != 0)
@@ -914,10 +1067,61 @@ public final class GLRenderer2D {
 				continue;
 			}
 			uiQuadBatch.add(texture, instances, offset, chunk,
-					pickRecord, activeRecordingVertexModifier());
+					pickRecord, modifier);
 			offset += chunk * UIQuadInstanceFormat.FLOATS_PER_INSTANCE;
 			remaining -= chunk;
 		}
+	}
+
+	/** Resolves an adaptive RGBA icon in the current replay/view space. */
+	void addIcon(GLIcon icon, float x, float y, float width, float height,
+			Color color, int pickId, GLMouseTarget mouseTarget,
+			float automaticOriginX, float automaticOriginY) {
+		requireFrame();
+		float requiredPixels = physicalExtent(x, y, width, height);
+		GLImage image = icon.imageFor(requiredPixels, asynchronousResourceRepaint);
+		if (!textureManager.isResolved(image)) {
+			GLImage resolvedFallback = icon.bestImageFor(requiredPixels,
+					textureManager::isResolved);
+			if (resolvedFallback != null
+					&& adaptiveIconUploads >= MAX_ADAPTIVE_ICON_UPLOADS_PER_FRAME) {
+				image = resolvedFallback;
+				// The worker's repaint may have woken only this frame. Keep the
+				// damage chain alive until every ready upgrade got its upload turn.
+				asynchronousResourceRepaint.run();
+			} else if (resolvedFallback != null) {
+				adaptiveIconUploads++;
+			}
+		}
+		GLTextureRegion region = resolveImage(image);
+		float[] instance = icon.getFormat() == GLIcon.Format.MSDF
+				? UIQuadInstanceFormat.distanceField(x, y, width, height,
+						region.u0(), region.v0(), region.u1(), region.v1(),
+						icon.pixelRange(), color, currentTransform())
+				: UIQuadInstanceFormat.texture(x, y, width, height,
+						region.u0(), region.v0(), region.u1(), region.v1(),
+						color, currentTransform());
+		VertexModifier modifier = recordingReplayBase == null
+				? null : recordingColorModifier;
+		addUI(region.texture(), instance, pickId, mouseTarget,
+				automaticOriginX, automaticOriginY, modifier);
+	}
+
+	private float physicalExtent(float x, float y, float width, float height) {
+		GLTransform userToScreen = worldToScreen.copy().concatenate(transform);
+		float x00 = userToScreen.transformX(x, y);
+		float y00 = userToScreen.transformY(x, y);
+		float x10 = userToScreen.transformX(x + width, y);
+		float y10 = userToScreen.transformY(x + width, y);
+		float x01 = userToScreen.transformX(x, y + height);
+		float y01 = userToScreen.transformY(x, y + height);
+		float horizontal = (float) Math.hypot(
+				(x10 - x00) * colorDeviceScaleX,
+				(y10 - y00) * colorDeviceScaleY);
+		float vertical = (float) Math.hypot(
+				(x01 - x00) * colorDeviceScaleX,
+				(y01 - y00) * colorDeviceScaleY);
+		return Math.max(horizontal, vertical);
 	}
 
 	void setFilledShader(ShaderProgram shader) {
@@ -945,10 +1149,7 @@ public final class GLRenderer2D {
 		if (shader != null)
 			shader.validateForTextureBatch(gl);
 		if (activeBatch == BatchType.TEXTURE)
-			drawCallCount += textureBatch.flush(
-					gl, projectionMatrix, textureShaderOverride, textureUniforms, picking,
-					colorRenderingEnabled, pickingRenderingEnabled,
-					texturePickAlphaThreshold);
+			drawCallCount += flushBatch(BatchType.TEXTURE);
 		textureShaderOverride = shader;
 		textureUniforms.clear();
 	}
@@ -1216,6 +1417,8 @@ public final class GLRenderer2D {
 	}
 
 	private int flushBatch(BatchType batch) {
+		if (batch == BatchType.TEXTURE || batch == BatchType.UI)
+			textureManager.prepareForSampling(gl);
 		return switch (batch) {
 		case FILLED -> filledBatch.flush(
 				gl, projectionMatrix, filledShaderOverride, filledUniforms, picking,
@@ -1298,6 +1501,59 @@ public final class GLRenderer2D {
 			renderer.replayColorBlue = colorBlue;
 			renderer.replayColorAlpha = colorAlpha;
 			renderer.replayOpacity = opacity;
+		}
+	}
+
+	private static final class RenderTargetState {
+		private final GLRenderTarget target;
+		private final StateSnapshot rendererState;
+		private final float logicalWidth;
+		private final float logicalHeight;
+		private final float colorDeviceScaleX;
+		private final float colorDeviceScaleY;
+		private final float[] redrawBounds;
+		private final int drawFramebuffer;
+		private final int readFramebuffer;
+		private final int[] viewport;
+		private final boolean scissorEnabled;
+		private final int[] scissor;
+
+		private RenderTargetState(GLRenderTarget target,
+				StateSnapshot rendererState,
+				float logicalWidth, float logicalHeight,
+				float colorDeviceScaleX, float colorDeviceScaleY,
+				float[] redrawBounds,
+				int drawFramebuffer, int readFramebuffer,
+				int[] viewport, boolean scissorEnabled, int[] scissor) {
+			this.target = target;
+			this.rendererState = rendererState;
+			this.logicalWidth = logicalWidth;
+			this.logicalHeight = logicalHeight;
+			this.colorDeviceScaleX = colorDeviceScaleX;
+			this.colorDeviceScaleY = colorDeviceScaleY;
+			this.redrawBounds = redrawBounds == null ? null : redrawBounds.clone();
+			this.drawFramebuffer = drawFramebuffer;
+			this.readFramebuffer = readFramebuffer;
+			this.viewport = viewport;
+			this.scissorEnabled = scissorEnabled;
+			this.scissor = scissor;
+		}
+
+		private static RenderTargetState capture(GLRenderer2D renderer,
+				GL3 gl, GLRenderTarget target) {
+			int[] draw = new int[1];
+			int[] read = new int[1];
+			int[] viewport = new int[4];
+			int[] scissor = new int[4];
+			gl.glGetIntegerv(GL3.GL_DRAW_FRAMEBUFFER_BINDING, draw, 0);
+			gl.glGetIntegerv(GL3.GL_READ_FRAMEBUFFER_BINDING, read, 0);
+			gl.glGetIntegerv(GL.GL_VIEWPORT, viewport, 0);
+			gl.glGetIntegerv(GL.GL_SCISSOR_BOX, scissor, 0);
+			return new RenderTargetState(target, renderer.captureState(),
+					renderer.logicalWidth, renderer.logicalHeight,
+					renderer.colorDeviceScaleX, renderer.colorDeviceScaleY,
+					renderer.redrawBounds, draw[0], read[0], viewport,
+					gl.glIsEnabled(GL.GL_SCISSOR_TEST), scissor);
 		}
 	}
 

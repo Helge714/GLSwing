@@ -1,5 +1,6 @@
 package com.vingame.glswing.rendering;
 
+import java.awt.Color;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -157,6 +158,15 @@ public final class GLRecording {
 			TargetReference target = TargetReference.of(mouseTarget);
 			add(renderer -> renderer.addUI(
 					texture, instances, pickId, target.get(), originX, originY));
+		}
+
+		/** Retains a high-level icon so its RGBA bucket is chosen during replay. */
+		void addIcon(GLIcon icon, float x, float y, float width, float height,
+				Color color, int pickId, GLMouseTarget mouseTarget,
+				float originX, float originY) {
+			TargetReference target = TargetReference.of(mouseTarget);
+			add(renderer -> renderer.addIcon(icon, x, y, width, height, color,
+					pickId, target.get(), originX, originY));
 		}
 
 		void beginLayer(Command command) {

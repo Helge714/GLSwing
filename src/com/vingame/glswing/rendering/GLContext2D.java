@@ -1,6 +1,8 @@
 package com.vingame.glswing.rendering;
 
 import java.awt.Color;
+import java.util.ArrayList;
+import java.util.List;
 
 import com.vingame.glswing.input.GLMouseTarget;
 import com.vingame.glswing.rendering.internal.FilledVertexFormat;
@@ -37,6 +39,7 @@ public final class GLContext2D {
 	private GLRecording.Builder recording;
 	private GLRenderer2D.StateSnapshot recordingOuterRendererState;
 	private ContextState recordingOuterContextState;
+	private final List<ContextState> renderTargetContextStates = new ArrayList<>();
 
 	GLContext2D(GLRenderer2D renderer) {
 		this.renderer = renderer;
@@ -55,6 +58,7 @@ public final class GLContext2D {
 		recording = null;
 		recordingOuterRendererState = null;
 		recordingOuterContextState = null;
+		renderTargetContextStates.clear();
 		this.logicalWidth = logicalWidth;
 		this.logicalHeight = logicalHeight;
 	}
@@ -307,6 +311,52 @@ public final class GLContext2D {
 	/** Returns the number of currently open nested layers. */
 	public int getLayerDepth() {
 		return renderer.layerDepth() + (recording == null ? 0 : recording.openLayers());
+	}
+
+	/**
+	 * Starts drawing into a persistent RGBA render target. Target coordinates use
+	 * top-left pixels, picking is disabled and the surrounding state is restored
+	 * by {@link #endRenderTarget()}.
+	 */
+	public void beginRenderTarget(GLRenderTarget target) {
+		if (recording != null)
+			throw new IllegalStateException(
+					"Render-target updates cannot be captured in a recording");
+		ContextState state = captureContextState();
+		renderer.beginRenderTarget(target);
+		renderTargetContextStates.add(state);
+		logicalWidth = target.getWidth();
+		logicalHeight = target.getHeight();
+	}
+
+	/** Restores the output and state active before the matching begin call. */
+	public void endRenderTarget() {
+		if (recording != null)
+			throw new IllegalStateException(
+					"A recording cannot contain render-target updates");
+		if (renderTargetContextStates.isEmpty())
+			throw new IllegalStateException(
+					"endRenderTarget() requires a matching beginRenderTarget()");
+		renderer.endRenderTarget();
+		restoreContextState(renderTargetContextStates.remove(
+				renderTargetContextStates.size() - 1));
+	}
+
+	public int getRenderTargetDepth() {
+		return renderer.renderTargetDepth();
+	}
+
+	/** Runs one exception-safe persistent render-target pass. */
+	public void withRenderTarget(GLRenderTarget target, Runnable drawing) {
+		if (drawing == null)
+			throw new IllegalArgumentException(
+					"Render-target drawing must not be null");
+		beginRenderTarget(target);
+		try {
+			drawing.run();
+		} finally {
+			endRenderTarget();
+		}
 	}
 
 	/**
@@ -1671,16 +1721,24 @@ public final class GLContext2D {
 			float width, float height, Color color) {
 		if (icon == null)
 			throw new IllegalArgumentException("Icon must not be null");
-		GLTextureRegion region = renderer.resolveImage(icon.image());
-		float[] instance = icon.getFormat() == GLIcon.Format.MSDF
-				? UIQuadInstanceFormat.distanceField(x, y, width, height,
-						region.u0(), region.v0(), region.u1(), region.v1(),
-						icon.pixelRange(), requireColor(color), renderer.currentTransform())
-				: UIQuadInstanceFormat.texture(x, y, width, height,
-						region.u0(), region.v0(), region.u1(), region.v1(),
-						requireColor(color), renderer.currentTransform());
-		submitUI(region.texture(), instance, pickId, mouseTarget,
-				Math.min(x, x + width), Math.min(y, y + height));
+		if (!Float.isFinite(x) || !Float.isFinite(y) || !Float.isFinite(width)
+				|| !Float.isFinite(height) || width == 0 || height == 0)
+			throw new IllegalArgumentException(
+					"Icon bounds must be finite and non-zero");
+		Color actualColor = requireColor(color);
+		float originX = Math.min(x, x + width);
+		float originY = Math.min(y, y + height);
+		if (mouseTarget != null) {
+			resolveMouseOrigin(mouseTarget, originX, originY);
+			originX = resolvedMouseOriginX;
+			originY = resolvedMouseOriginY;
+		}
+		if (recording == null)
+			renderer.addIcon(icon, x, y, width, height, actualColor,
+					pickId, mouseTarget, originX, originY);
+		else
+			recording.addIcon(icon, x, y, width, height, actualColor,
+					pickId, mouseTarget, originX, originY);
 	}
 
 	public void drawIcon(GLIcon icon, float x, float y,
@@ -1712,6 +1770,74 @@ public final class GLContext2D {
 				region.u0(), region.v0(), region.u1(), region.v1(),
 				tint.getRed() / 255f, tint.getGreen() / 255f,
 				tint.getBlue() / 255f, tint.getAlpha() / 255f,
+				pickId, mouseTarget, Math.min(x, x2), Math.min(y, y2));
+	}
+
+	public void drawRenderTarget(GLRenderTarget target, float x, float y) {
+		drawRenderTarget(target, x, y,
+				targetWidth(target), targetHeight(target),
+				Color.WHITE, pickId, mouseTarget);
+	}
+
+	public void drawRenderTarget(GLRenderTarget target, float x, float y,
+			float width, float height) {
+		drawRenderTarget(target, x, y, width, height,
+				Color.WHITE, pickId, mouseTarget);
+	}
+
+	public void drawRenderTarget(GLRenderTarget target, float x, float y,
+			float width, float height, Color tint) {
+		drawRenderTarget(target, x, y, width, height,
+				tint, pickId, mouseTarget);
+	}
+
+	public void drawRenderTarget(GLRenderTarget target, float x, float y,
+			float width, float height, int pickId) {
+		drawRenderTarget(target, x, y, width, height,
+				Color.WHITE, requirePickId(pickId), null);
+	}
+
+	public void drawRenderTarget(GLRenderTarget target, float x, float y,
+			float width, float height, GLMouseTarget mouseTarget) {
+		drawRenderTarget(target, x, y, width, height,
+				Color.WHITE, NO_PICK_ID, requireMouseTarget(mouseTarget));
+	}
+
+	private void drawRenderTarget(GLRenderTarget target, float x, float y,
+			float width, float height, Color tint, int pickId,
+			GLMouseTarget mouseTarget) {
+		if (recording != null)
+			throw new IllegalStateException(
+					"Render targets are dynamic resources and cannot be recorded");
+		if (target == null || target.isClosed())
+			throw new IllegalArgumentException("Render target must be live");
+		if (!Float.isFinite(x) || !Float.isFinite(y)
+				|| !Float.isFinite(width) || !Float.isFinite(height))
+			throw new IllegalArgumentException(
+					"Render-target bounds must be finite");
+		if (width == 0 || height == 0)
+			return;
+		Color actualTint = requireColor(tint);
+		GLTexture texture = renderer.resolveRenderTargetTexture(target);
+		float x2 = x + width;
+		float y2 = y + height;
+		GLTransform transform = renderer.currentTransform();
+		float x1t = transform.transformX(x, y);
+		float y1t = transform.transformY(x, y);
+		float x2t = transform.transformX(x2, y);
+		float y2t = transform.transformY(x2, y);
+		float x3t = transform.transformX(x2, y2);
+		float y3t = transform.transformY(x2, y2);
+		float x4t = transform.transformX(x, y2);
+		float y4t = transform.transformY(x, y2);
+		requireFiniteCoordinates(x1t, y1t, x2t, y2t, x3t, y3t, x4t, y4t);
+		// FBO textures use OpenGL's bottom-left storage, while context coordinates
+		// are top-left. Reversing V preserves orientation across feedback passes.
+		submitTextured(texture,
+				x1t, y1t, x2t, y2t, x3t, y3t, x4t, y4t,
+				0, 1, 1, 0,
+				actualTint.getRed() / 255f, actualTint.getGreen() / 255f,
+				actualTint.getBlue() / 255f, actualTint.getAlpha() / 255f,
 				pickId, mouseTarget, Math.min(x, x2), Math.min(y, y2));
 	}
 
@@ -2486,6 +2612,18 @@ public final class GLContext2D {
 		return texture.getWidth();
 	}
 
+	private static int targetWidth(GLRenderTarget target) {
+		if (target == null)
+			throw new IllegalArgumentException("Render target must not be null");
+		return target.getWidth();
+	}
+
+	private static int targetHeight(GLRenderTarget target) {
+		if (target == null)
+			throw new IllegalArgumentException("Render target must not be null");
+		return target.getHeight();
+	}
+
 	private static GLImage requireImage(GLImage image) {
 		if (image == null)
 			throw new IllegalArgumentException("Image must not be null");
@@ -2529,12 +2667,19 @@ public final class GLContext2D {
 	private ContextState captureContextState() {
 		return new ContextState(color, stroke, filledShader, textureShader, textShader,
 				curveTolerance, pickId, mouseTarget,
-				mouseOriginDefined, mouseOriginX, mouseOriginY);
+				mouseOriginDefined, mouseOriginX, mouseOriginY,
+				logicalWidth, logicalHeight);
 	}
 
 	private void restoreRecordingOuterState() {
 		renderer.applyState(recordingOuterRendererState);
 		ContextState state = recordingOuterContextState;
+		restoreContextState(state);
+		recordingOuterRendererState = null;
+		recordingOuterContextState = null;
+	}
+
+	private void restoreContextState(ContextState state) {
 		color = state.color;
 		stroke = state.stroke;
 		filledShader = state.filledShader;
@@ -2546,14 +2691,15 @@ public final class GLContext2D {
 		mouseOriginDefined = state.mouseOriginDefined;
 		mouseOriginX = state.mouseOriginX;
 		mouseOriginY = state.mouseOriginY;
-		recordingOuterRendererState = null;
-		recordingOuterContextState = null;
+		logicalWidth = state.logicalWidth;
+		logicalHeight = state.logicalHeight;
 	}
 
 	private record ContextState(Color color, GLStroke stroke,
 			ShaderProgram filledShader, ShaderProgram textureShader,
 			ShaderProgram textShader, float curveTolerance,
 			int pickId, GLMouseTarget mouseTarget,
-			boolean mouseOriginDefined, float mouseOriginX, float mouseOriginY) {
+			boolean mouseOriginDefined, float mouseOriginX, float mouseOriginY,
+			float logicalWidth, float logicalHeight) {
 	}
 }

@@ -274,6 +274,11 @@ public abstract class GLSwingContainerCanvas extends GLSwingCanvas
 		super.repaint();
 	}
 
+	@Override
+	protected final void asynchronousResourceUpdated() {
+		repaintColorOnly();
+	}
+
 	final boolean isPickingDirty() {
 		return damageTracker.isPickingDirty();
 	}

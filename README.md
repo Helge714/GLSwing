@@ -62,9 +62,9 @@ tabs.setEnabledAt(1, false);
 ```
 
 Farben und Geometrie liegen in `default.gltheme` unter `scrollBar.*`,
-`scrollPane.*` und `tabbedPane.*`. Eine interaktive Kombination ist ueber
-`Scroll Tabs Demo.launch` startbar. Zurueckgestellte Vorhaben stehen zentral in
-[`TODO.md`](TODO.md).
+`scrollPane.*` und `tabbedPane.*`. Der allgemeine GUI-Showcase demonstriert
+Tabs samt Overflow-Scrollbar; der noch ausstehende umfassende ScrollPane-
+Showcase steht zentral in [`TODO.md`](TODO.md).
 
 ## Native GLSwing-Dialoge
 
@@ -81,8 +81,8 @@ dialog.show(owner);
 dialog.closedFuture().thenRun(() -> System.out.println("geschlossen"));
 ```
 
-Canvas-Dialoge benoetigen dieselben `--add-opens`-Argumente wie GLCanvas und
-sind ueber `Canvas Dialog Demo.launch` direkt testbar.
+Canvas-Dialoge benoetigen dieselben `--add-opens`-Argumente wie GLCanvas.
+Dialoge und verschachtelte Dialoge sind in beiden GUI-Showcases enthalten.
 
 ## Kernbeispiele
 
@@ -92,21 +92,16 @@ sind ueber `Canvas Dialog Demo.launch` direkt testbar.
 - `LayerDemo` – Gruppen-Alpha und verschachtelte Layer
 - `RecordingParameterDemo` – wiederverwendbare Recordings mit Laufzeitparametern
 - `PickingDemo` – Picking fuer Formen, Texturen und Text
-- `DraggableZOrderDemo` – Dragging und Zeichenreihenfolge
-- `LayoutDemo` – leichtgewichtiges Grid- und Free-Layout
-- `SingleButtonDemo` – Buttons, Checkbox und beide Slider-Modi
-- `ComboBoxDemo` – Popup-Platzierung, Submenus, Scrolling und Zoom
-- `MenuDemo` – Menueleiste, Kontextmenues und verschachtelte Submenus
-- `CanvasMenuDemo` – Menues auf einer direkten `GLCanvas`
-- `CanvasSliderPerformanceDemo` – Benchmark fuer grosse Slider-Szenen
 - `GLFrameDemo` – verwaltetes Standalone-Fenster mit Renderkonfiguration
-- `ScrollTabsDemo` – verschachtelte Scrollbereiche, Scrollbars und Tabs
+- `PathDemo` und `SvgImportDemo` – Pfade, Strokes und vollstaendige SVGs
+- `ImageAtlasDemo` – Bilder, adaptive SVG-Icons und Texturatlanten
+- `NodeEditorDemo` – interaktiver Node-Editor
+- `GameOfLifeDemo` – persistente RenderTargets und GPU-Ping-Pong-Feedback
 
-Die beiden Canvas-Demos werden unter Windows am einfachsten ueber ihre
-mitgelieferten Eclipse-Launch-Konfigurationen gestartet, da JOGL dafuer
-zusaetzliche `--add-opens`-Argumente benoetigt.
-Die vollstaendige Vergleichsszene ist sowohl als `GLSwingPanel` als auch als
-direkte `GLCanvas` vorhanden; ihre Performancewerte stehen im Fenstertitel.
+Die vollstaendige GUI-Szene ist sowohl als `GLSwingPanel` als auch als direkte
+`GLCanvas` vorhanden. Unter Windows wird die Canvas-Variante am einfachsten
+ueber ihre Eclipse-Launch-Konfiguration gestartet, da JOGL dort zusaetzliche
+`--add-opens`-Argumente benoetigt. Performancewerte stehen im Fenstertitel.
 
 ## Tests
 
@@ -132,12 +127,26 @@ context.drawUIImage(pixels, 360, 20, 32, 32);     // gemeinsamer UI-Batch
 ```
 
 Mit `GLImageOptions.atlas()`, `standalone()`, `pixelArt()`, `dynamic()` und
-`repeating()` kann die Automatik gezielt ueberschrieben werden. Ein Batch kann
+`repeating()` kann die Automatik gezielt ueberschrieben werden. Statische,
+linear gefilterte RGBA-Bilder verwenden standardmaessig atlas-sichere Mipmaps
+mit trilinearem Filtering. Die Auswahl kann explizit angepasst werden:
+
+```java
+GLImageOptions noMipmaps = GLImageOptions.DEFAULT
+        .withMipmapping(GLImageOptions.Mipmapping.NONE);
+GLImageOptions forcedMipmaps = GLImageOptions.standalone()
+        .withMipmapping(GLImageOptions.Mipmapping.ENABLED);
+```
+
+Mip-Atlanten besitzen groessere extrudierte Raender und nur so viele Stufen,
+wie Bildgroesse und Rand sicher erlauben. MSDF-Icons, dynamische Bilder und
+Pixel-Art verwenden keine gewoehnlichen Mipmaps. Ein Batch kann
 bis zu 16 unterschiedliche Texturen gleichzeitig binden; weitere Texturen
 erzeugen automatisch den naechsten Drawcall. Picking nutzt dieselben Slots.
 
 `GLIcon` importiert SVGs als Icon-Ressource. `AUTO` verwendet fuer einfarbige
-SVGs ein frei einfaerbbares MSDF und fuer mehrfarbige SVGs ein RGBA-Bild:
+SVGs ein frei einfaerbbares MSDF und fuer mehrfarbige SVGs adaptive
+RGBA-Aufloesungsstufen:
 
 ```java
 GLIcon link = GLIcon.fromSvgResource("com/example/icons/link.svg");
@@ -148,10 +157,78 @@ context.drawIcon(link, 20, 220, 24, 24, accentColor);
 context.drawIcon(logo, 60, 210, 96, 96);
 ```
 
+Mehrfarbige SVGs behalten ihr Vektordokument und rasterisieren bei Bedarf eine
+passende, endliche Aufloesungsstufe in einem gemeinsamen Hintergrund-Worker.
+Bis sie bereitsteht, bleibt die beste vorhandene Stufe sichtbar. Schnelle
+Zoomschritte werden zusammengefasst; der kurze GPU-Upload erfolgt spaeter mit
+hoechstens einem adaptiven Icon-Upgrade pro Renderer-Frame. Die Auswahl
+beruecksichtigt Projektion, Transform und HiDPI-Skalierung. Sie geschieht auch
+beim Abspielen eines bereits vorhandenen Recordings neu; Zoom erfordert daher
+weder eine neue Tessellierung noch eine neue Aufnahme. Aufloesungsbereich,
+Stufung, Oversampling und Wartezeit lassen sich konfigurieren:
+
+```java
+GLIconOptions options = GLIconOptions.DEFAULT
+        .withResolutionRange(32, 1024)
+        .withResolutionStep(2)
+        .withOversampling(1.25f)
+        .withRasterizationDelayMillis(150);
+GLIcon adaptiveLogo = GLIcon.fromSvgResource(
+        "com/example/icons/logo.svg", GLIcon.Format.RGBA, options);
+
+// Optionales Vorwaermen erledigt nur die CPU-Rasterisierung.
+adaptiveLogo.prepareAsync(512).thenRun(frame::repaintGL);
+```
+
+Die Rastervarianten landen weiterhin in den RGBA-Atlanten und verwenden deren
+Mipmaps zum sauberen Verkleinern. Fuer bewusst feste Rastergroessen steht
+`GLIconOptions.fixed(resolution)` bereit; MSDF-Icons bleiben prinzipbedingt
+auf einer festen Quellaufloesung.
+
 UI-Flächen, MSDF-Text, RGBA-Icons und MSDF-Icons bleiben dabei im selben
 universellen UI-Batch. `Image Atlas Demo.launch` zeigt alle Varianten samt Zoom
-und Drawcall-Anzeige; `ImageAtlasGpuSelfTest` prueft Atlaswahl, Slotgrenze und
-Picking auf einer Offscreen-GL3-Instanz.
+und Drawcall-Anzeige, ohne die Szene beim Zoomen neu aufzunehmen;
+`ImageAtlasGpuSelfTest` prueft Atlaswahl, adaptive Recording-Wiedergabe,
+Slotgrenze und Picking auf einer Offscreen-GL3-Instanz.
+
+## Persistente RenderTargets und Feedback
+
+`GLRenderTarget` ist ein lazy erzeugter, persistenter RGBA8-FBO mit eigener
+Aufloesung. Innerhalb eines Targets verwendet der Context Top-Left-Pixelmasse;
+Picking ist deaktiviert. Target-, Viewport-, Transform-, Projektions-, Shader-
+und Uniformzustand werden beim Beenden vollstaendig restauriert:
+
+```java
+GLRenderTarget target = new GLRenderTarget(512, 512,
+        GLRenderTargetOptions.pixelArt());
+
+context.withRenderTarget(target, () -> {
+    context.clear(Color.TRANSPARENT);
+    context.fillCircle(256, 256, 80, Color.WHITE);
+});
+context.drawRenderTarget(target, 20, 20, 400, 400);
+```
+
+Fuer Simulationen kapselt `GLFeedbackBuffer` zwei Targets. `current()` bleibt
+waehrend eines Updates lesbar, waehrend in `next()` geschrieben wird; nach
+erfolgreichem Abschluss werden beide atomar getauscht:
+
+```java
+GLFeedbackBuffer feedback = new GLFeedbackBuffer(512, 512,
+        GLRenderTargetOptions.repeatingPixelArt());
+
+feedback.update(context, () -> {
+    context.setTextureShader(simulationShader);
+    context.drawRenderTarget(feedback.current(), 0, 0, 512, 512);
+});
+feedback.drawCurrent(context, 20, 20, 700, 700);
+```
+
+Gleichzeitiges Lesen und Schreiben desselben Targets wird abgewiesen. Targets
+sind dynamische Ressourcen und werden daher bewusst nicht in `GLRecording`
+aufgenommen. `GPU Game of Life Demo.launch` zeigt eine 256x256-Simulation ohne
+GPU-zu-CPU-Readback; `RenderTargetGpuSelfTest` prueft Persistenz, Orientierung,
+State-Restoration und Ping-Pong-Rendering.
 
 ## Gruppierte Slider
 
@@ -250,5 +327,4 @@ Das englische Root-Sprachbundle ist der Fallback fuer nicht unterstuetzte
 Locales. Fehlt diese Pflichtressource oder das Standard-Theme bzw. ein interner
 Shader, bricht GLSwing mit einer klaren Fehlermeldung ab; solche Dateien sind
 Bestandteil der Bibliothek und kein optionaler Laufzeit-Fallback.
-#   G L S w i n g N e x t  
- 
+#
