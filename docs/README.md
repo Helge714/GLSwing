@@ -11,6 +11,20 @@ langen Featurelisten gesucht werden muss.
 
 ## Handbücher
 
+### UI-Framework
+
+Die [vollständige UI-API-Landkarte](ui-framework.md) führt von Hosts und
+`GLContainer` bis zum Node-Editor:
+
+| Kapitel | Inhalt |
+|---|---|
+| [Komponenten und Hosts](ui-framework/components.md) | Lifecycle, Bounds, Z-Order, Damage, `GLFrame`, Canvas, Panel und Dialoge |
+| [Layouts und Größen](ui-framework/layout.md) | Freies Layout, Grid, Constraints, Messen und eigene Layouts |
+| [Controls](ui-framework/controls.md) | Alle Standardcontrols, Menüs, Tabs, Scrollen und Eingabe |
+| [Themes und Sprachen](ui-framework/themes-localization.md) | Styles, externe Theme-Dateien, Farben, Live-Reload und Locale-Fallback |
+| [Undo/Redo](ui-framework/history.md) | `GLSaveManager`, Transaktionen, Shortcuts und automatische Integration |
+| [Node-System](ui-framework/nodes.md) | Nodes, Ports, Verbindungen, Auswahl, Ansicht, Styles und History |
+
 ### Grafikpipeline
 
 Beginne mit der [vollständigen `GLContext2D`-API-Landkarte](graphics-pipeline.md).
@@ -39,6 +53,8 @@ Die Klassen in `src/com/vingame/glswing/demo` ergänzen das Handbuch:
 - `DrawingApiDemo`, `PathDemo`, `SvgImportDemo`
 - `CustomShaderDemo`, `RecordingParameterDemo`, `LayerDemo`
 - `ImageAtlasDemo`, `PickingDemo`, `GameOfLifeDemo`
+- `GuiShowcaseDemo`, `CanvasGuiShowcaseDemo`, `GLFrameDemo`
+- `NodeEditorDemo`
 
 Die Dokumentation beschreibt die jeweils aktuelle API. In der derzeitigen
 Entwicklungsphase gibt es bewusst keine Kompatibilitätsschicht für ältere

@@ -15,6 +15,8 @@ Kompatibilitätsschicht konserviert.
 - [Grafikpipeline und `GLContext2D`](docs/graphics-pipeline.md) – vollständige
   Befehls- und Konfigurationsreferenz mit Beispielen für Shader, Atlanten,
   Recording, Picking, Layer und RenderTargets
+- [UI-Framework](docs/ui-framework.md) – Komponenten, Hosts, Layouts, alle
+  Controls, Themes, Sprachen, Undo/Redo und das Node-System
 - [Offene Vorhaben](TODO.md)
 
 Die README bleibt bewusst kurz. Ausführliche Anleitungen gehören nach `docs`,
