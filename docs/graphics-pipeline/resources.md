@@ -6,6 +6,21 @@ Dieses Kapitel erklärt alle Ressourcen, die von den Zeichenbefehlen konsumiert
 werden. Die wichtigste Trennung ist High-Level (`GLImage`, `GLIcon`) gegen
 manuelle GL-Ressourcen (`GLTexture`, eigener `GLFont`, `ShaderProgram`).
 
+## Inhalt
+
+- [Bilder und GLImageOptions](#glimage)
+- [Icons und adaptive Auflösung](#glicon)
+- [Texturslots und GLTexture](#texturslots)
+- [Fonts](#glfont)
+- [Pfade und SVG](#glpath2d)
+- [Lebensdauer](#lebensdauertabelle)
+
+Größen von CPU-Bildern, Texturen und Atlaspages sind ganzzahlige
+Raster-/Texturpixel. Zielbounds beim Zeichnen verwenden lokale
+Benutzerkoordinaten. Adaptive Iconauflösungen beziehen sich ausdrücklich auf
+physische Framebufferpixel; Zeitparameter mit `Millis` im Namen verwenden
+Millisekunden.
+
 ## `GLImage`
 
 `GLImage` hält CPU-Pixel und Optionen und kann ohne aktuellen GL-Kontext geladen
@@ -30,7 +45,7 @@ Beim ersten Zeichnen löst jeder Renderer das Bild lazy auf:
 - `STANDALONE`: eigene Textur erzwingen,
 - `REPEAT` oder `DYNAMIC`: immer Standalone.
 
-Die gewünschte Atlaspage ist 2048 Pixel groß, höchstens jedoch
+Die gewünschte Atlaspage ist `2048 × 2048` Texturpixel groß, höchstens jedoch
 `GL_MAX_TEXTURE_SIZE`. In `AUTO` wird ein Bild nur atlasiert, wenn jede Dimension
 höchstens die halbe Pagegröße besitzt und es mit Padding passt.
 
@@ -116,10 +131,13 @@ einem Hintergrundworker rasterisiert. Bis dahin bleibt die beste vorhandene
 Stufe sichtbar; der kurze Upload folgt später im GL-Thread. Beim
 Recording-Replay wird die Stufe neu gewählt, ohne das Recording zu erneuern.
 
-`prepareAsync(physicalPixels)` wärmt eine Stufe vor und liefert deren
+`prepareAsync(physicalPixels)` wärmt eine quadratische Stufe der angegebenen
+physischen Framebufferpixelzahl vor und liefert deren
 `CompletableFuture<GLImage>`. `GLIconOptions.fixed(resolution)` verwendet genau
-eine Größe. Validierung: mindestens 16 Pixel, Max >= Min, Step >= 2,
-Oversampling `>0..4`, Delay `0..2000 ms`.
+eine Größe in physischen Pixeln. Validierung: Auflösungen mindestens 16
+physische Pixel, Max >= Min, der `resolutionStep` ist ein dimensionsloser
+Faktor >= 2, `oversampling` ein dimensionsloser Faktor `>0..4` und die
+Verzögerung liegt bei `0..2000 ms`.
 
 Die immutable Options-API bietet `withRasterPolicy`, `withResolutionRange`,
 `withMinimumResolution`, `withMaximumResolution`, `withResolutionStep`,
@@ -144,6 +162,8 @@ texture.dispose(gl);
 
 `create`, `bind` und `dispose` benötigen einen aktuellen GL-Kontext. Getter:
 `getWidth`, `getHeight`, `isDisposed`. `bind(gl,unit)` ist Low-Level-Zugriff.
+Breite/Höhe sind Texturpixel; `unit` ist ein dimensionsloser ganzzahliger
+Texture-Unit-Index.
 `GLTexture` wird nicht automatisch atlasiert und ist für bewusste manuelle
 Integration; normale Bilder sollten `GLImage` verwenden.
 
@@ -156,7 +176,9 @@ GLFont custom = GLFont.fromFile(fontPath, GLFont.BOLD, 20);
 
 Familienkonstanten: `DIALOG`, `DIALOG_INPUT`, `MONOSPACED`, `SANS_SERIF`,
 `SERIF`; Styles: `PLAIN`, `BOLD`, `ITALIC`. Konstruktoren akzeptieren Familie,
-Style, Größe und optional einen eingeschränkten Zeichensatz oder eine AWT-Font.
+Style, AWT-Schriftgröße und optional einen eingeschränkten Zeichensatz oder eine
+AWT-Font. Die Größe entspricht der `java.awt.Font`-Point-Size und wird als
+logische Benutzerraumgröße gerendert, nicht als physische HiDPI-Pixelzahl.
 
 `initialize(gl)` ist optional; der erste Renderzugriff initialisiert lazy.
 Metriken: `getAscent`, `getDescent`, `getLineHeight`, `measureText`; außerdem
@@ -165,7 +187,8 @@ Metriken: `getAscent`, `getDescent`, `getLineHeight`, `measureText`; außerdem
 bietet über `getGLFont(GLFontSpec)` einen verwalteten Cache.
 
 `drawText` verwendet den Standard-Textbatch; `drawUIText` den UI-Batch. Beide
-erwarten eine Baseline.
+erwarten eine Baseline in lokalen Benutzerkoordinaten. Ascent, Descent,
+Zeilenhöhe und `measureText` liefern ebenfalls logische Benutzerraumlängen.
 
 ## `GLPath2D`
 
@@ -184,9 +207,14 @@ Methoden: `moveTo`, `lineTo`, `quadTo`, `cubicTo`, `closePath`,
 `set/getFillRule`, `isEmpty`, `getSegmentCount`, `getCommandCount`, `reset`,
 `copy`, `transformed`, `getBounds`, `fromSvgPath`.
 
+Alle Pathkoordinaten und Bounds sind einheitenneutral und werden beim Zeichnen
+als aktuelle lokale Benutzerkoordinaten interpretiert.
+
 `NON_ZERO` berücksichtigt gerichtete Konturen; `EVEN_ODD` toggelt bei jeder
 Kreuzung. `setFillRule` und `getFillRule` ändern/lesen die Regel. Bounds
-enthalten exakte Kurvenextrema. Der SVG-Pfadparser unterstützt
+enthalten exakte Kurvenextrema. `GLPath2D.Bounds` bietet die Record-Accessors
+`x`, `y`, `width`, `height` sowie die abgeleiteten Kanten `maximumX` und
+`maximumY`, jeweils in lokalen Benutzerkoordinaten. Der SVG-Pfadparser unterstützt
 `M/L/H/V/C/S/Q/T/A/Z` absolut und relativ; Arcs werden kubische Beziers.
 
 ## `GLSvgDocument`
@@ -202,6 +230,10 @@ Zusätzlich: `parse(InputStream)`, `getViewBoxX`, `getViewBoxY`,
 `isMonochrome`, `rasterize(width,height)`. `draw` verwendet normale
 Contextbefehle und ist dadurch recordbar, batchbar und transformierbar. Für
 häufig gezeichnete Icons ist `GLIcon` meist effizienter.
+
+ViewBox-Werte sind SVG-Dokumenteinheiten. Die vier `draw`-Bounds sind lokale
+Benutzerkoordinaten; `rasterize(width,height)` erwartet ganzzahlige
+Ausgabepixel.
 
 Der derzeitige Importer unterstützt Pfade, verschachtelte Gruppen, ViewBox,
 affine SVG-Transforms, Fill-Regeln, Fill-Opacity, lineare Gradients im

@@ -4,6 +4,11 @@ Die README im Projektstamm ist der kurze Einstieg. Ausführliche, versionierte
 Anleitungen liegen hier, damit die öffentliche API nicht zwischen Demos und
 langen Featurelisten gesucht werden muss.
 
+## Inhalt
+
+- [Handbücher](#handbücher)
+- [Ausführbare Referenzen](#ausführbare-referenzen)
+
 ## Handbücher
 
 ### Grafikpipeline
@@ -13,7 +18,7 @@ Die Detailkapitel bauen in dieser Reihenfolge darauf auf:
 
 | Kapitel | Inhalt |
 |---|---|
-| [Context konfigurieren](graphics-pipeline/context-configuration.md) | Farbe, Transform, Projection, Kamera, Stroke, Toleranzen, Clip und Outputs |
+| [Context konfigurieren](graphics-pipeline/context-configuration.md) | Zeichenstil aus Farbe und Stroke, Koordinatensysteme, Einheiten, Clip und Outputs |
 | [Zeichenbefehle](graphics-pipeline/drawing.md) | Alle Draw-/Fill-Methoden, Overloads und klare Trennung von Immediate, Recording, UI und Nicht-UI |
 | [Recording](graphics-pipeline/recording.md) | Aufnahme, Replay, Parameterregionen, Caches und Referenzen |
 | [Shader](graphics-pipeline/shaders.md) | Alle Shaderlayouts, Uniformtypen und Custom-Layer-Shader |

@@ -7,6 +7,16 @@ Vertexlayouts und verwalteten Uniforms verschieden sind. Der Renderer validiert
 den Vertrag beim ersten Einsatz und meldet fehlende Attribute, falsche
 Locations oder inaktive Pflichtuniforms als Exception.
 
+## Inhalt
+
+- [Erzeugen und freigeben](#erzeugen-und-freigeben)
+- [Shaderverträge](#shaderverträge)
+- [Standardpipeline-Beispiele](#filled-beispiel)
+- [Context-Uniforms](#context-uniforms)
+- [Shader in Recordings](#shader-in-recordings)
+- [Eigene Layer-Shader](#eigener-layer-shader)
+- [Alpha und Low-Level-Zugriff](#premultiplied-alpha)
+
 ## Erzeugen und freigeben
 
 ```java
@@ -115,7 +125,7 @@ fragColor = vec4(vColor.rgb, vColor.a * coverage);
 
 `setTextShader` betrifft `drawText`, nicht `drawUIText`.
 
-## Contextuniforms
+## Context-Uniforms
 
 Jede Pipeline bietet:
 
@@ -131,6 +141,12 @@ g.setFilledUniformMatrix4("uExtraMatrix", matrix16);
 Ersetze `Filled` durch `Texture` oder `Text` für die anderen Batches. Uniforms
 werden typgeprüft: `float`, `vec2`, `vec3`, `vec4`, `int`/`bool` und `mat4`.
 Name muss aktiv sein und zum Typ passen.
+
+Eigene Uniforms besitzen keine von GLSwing vorgegebene Einheit; ihr Shader
+definiert die Semantik. Im Beispiel ist `uGamma` dimensionslos. Soll eine
+Uniform auf Fenster- oder Layergrößen reagieren, sollten die unten
+aufgeführten verwalteten Auflösungsuniforms verwendet werden, damit physische
+und logische Pixel nicht unbemerkt vermischt werden.
 
 Shader- und Uniformänderungen flushen den betroffenen Batch, damit bereits
 gesammelte Vertices ihren alten Wert behalten. Dieselbe Shaderinstanz erneut zu
@@ -170,17 +186,18 @@ Der Renderer verwaltet bei vorhandener Deklaration zusätzlich:
 
 | Uniform | Inhalt |
 |---|---|
-| `uTexture` | Eingabetextur, Texture Unit 0 |
-| `uOpacity` | Composite-Opacity im letzten Pass, sonst 1 |
-| `uResolution` | Physische FBO-Pixelgröße |
-| `uTexelSize` | Kehrwert der physischen Größe |
-| `uLogicalResolution` | Logische Zielgröße |
-| `uDeviceScale` | Physische/logische Skalierung je Achse |
+| `uTexture` | Eingabetextur, dimensionsloser Texture-Unit-Index `0` |
+| `uOpacity` | Dimensionsloser Composite-Faktor `0..1` im letzten Pass, sonst `1` |
+| `uResolution` | Physische FBO-Größe in Framebufferpixeln |
+| `uTexelSize` | Normierte UV-Schrittweite pro physischem Pixel (`1 / uResolution`) |
+| `uLogicalResolution` | Logische Zielgröße in Screenpixeln |
+| `uDeviceScale` | Dimensionsloses Verhältnis physische/logische Pixel je Achse |
 
 Diese Namen dürfen nicht als Useruniform gesetzt werden. `withUniform` bietet
-dieselben Typen wie der Context. `withPadding` erklärt, wie weit der Shader
-außerhalb der ursprünglichen Layerbounds sichtbare Pixel erzeugen kann; ein zu
-kleiner Wert schneidet den Effekt ab.
+dieselben Typen wie der Context. `withPadding` wird in logischen Screenpixeln
+angegeben und erklärt, wie weit der Shader außerhalb der ursprünglichen
+Layerbounds sichtbare Pixel erzeugen kann; ein zu kleiner Wert schneidet den
+Effekt ab.
 
 ## Premultiplied Alpha
 

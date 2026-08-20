@@ -8,6 +8,15 @@ Drawcall: Beim Replay werden die gespeicherten Anweisungen wieder in die gerade
 offenen Rendererbatches eingespeist. Dadurch können mehrere Recordings und
 Immediate-Befehle weiterhin gemeinsam gebatcht werden.
 
+## Inhalt
+
+- [Was Recording spart](#was-recording-spart)
+- [Manuelle und automatische Aufnahme](#manuelle-aufnahme)
+- [Replay und äußerer Zustand](#replay-und-äußerer-zustand)
+- [Laufzeitparameter](#parameter-für-ein-komplettes-recording)
+- [Gespeicherte und nicht recordbare Inhalte](#was-genau-gespeichert-wird)
+- [Lebensdauer und Diagnose](#referenzen-und-lebensdauer)
+
 ## Was Recording spart
 
 - Polygon- und Path-Tessellierung
@@ -102,12 +111,12 @@ state.setTransform(new GLTransform()
 
 | Parameter | Bedeutung |
 |---|---|
-| `setTransform`, `resetTransform` | Vollständiger Replay-Transform |
-| `setTranslation` | Transform durch reine Translation ersetzen |
-| `translate`, `rotate`, `scale` | Vorhandenen Parametertransform fortschreiben |
+| `setTransform`, `resetTransform` | Vollständiger Replay-Transform; Matrixeinheiten wie im [Konfigurationskapitel](context-configuration.md#gltransform-referenz) |
+| `setTranslation` | Transform durch Translation in lokalen Benutzerkoordinaten ersetzen |
+| `translate`, `rotate`, `scale` | Benutzerkoordinaten, Radiant beziehungsweise dimensionslose Faktoren |
 | `setTint`, `resetTint` | Aufgezeichnete RGBA-Farben multiplizieren |
 | `setColor`, `clearColor` | Aufgezeichnete RGB-/Vertexfarben ersetzen/zurücksetzen |
-| `setOpacity` | Vertexalpha multiplizieren |
+| `setOpacity` | Vertexalpha mit einem dimensionslosen Faktor `0..1` multiplizieren |
 | `reset` | Alle Werte auf Identität/Weiß/Original/1 setzen |
 
 `getTransform` liefert eine Kopie. Setter validieren Null, Endlichkeit und den

@@ -5,6 +5,14 @@ GLSwingNext. Es ist in kurze, abgegrenzte Kapitel aufgeteilt: zuerst die
 vollständige API-Landkarte, dann Konfiguration, Zeichnen und anschließend die
 fortgeschrittenen Pipelinestufen.
 
+## Inhalt
+
+- [Empfohlene Reihenfolge](#empfohlene-reihenfolge)
+- [Grundbegriffe und Einheiten](#grundbegriffe-und-einheiten)
+- [Vollständige GLContext2D-Übersicht](#vollständige-glcontext2d-übersicht)
+- [Konstanten](#konstanten)
+- [Welches Kapitel brauche ich?](#welches-kapitel-brauche-ich)
+
 ## Empfohlene Reihenfolge
 
 1. [Context konfigurieren](graphics-pipeline/context-configuration.md)
@@ -17,7 +25,7 @@ fortgeschrittenen Pipelinestufen.
 8. [Picking und Mausziele](graphics-pipeline/picking.md)
 9. [Batching, Performance und Lebensdauer](graphics-pipeline/performance.md)
 
-## Grundbegriffe
+## Grundbegriffe und Einheiten
 
 | Begriff | Bedeutung |
 |---|---|
@@ -32,6 +40,20 @@ fortgeschrittenen Pipelinestufen.
 Fast alle Zeichenbefehle funktionieren sowohl immediate als auch in einem
 Recording. Ausnahmen sind RenderTarget-Updates und `drawRenderTarget`, weil ihr
 Inhalt dynamisch ist. Details stehen in den Tabellen der jeweiligen Kapitel.
+
+Wenn eine Methode nichts Abweichendes sagt, gelten folgende Einheiten:
+
+| Wertart | Einheit |
+|---|---|
+| Geometrie, Position und Größe | Aktuelle lokale Benutzerkoordinaten; bei `TOP_LEFT_PIXELS` entspricht eine Einheit einem logischen Pixel |
+| Explizite Screen-Werte | Logische Pixel; HiDPI-Skalierung in physische Framebufferpixel übernimmt der Renderer |
+| Winkel | Radiant |
+| Opacity, Alpha und normalisierte Anteile | Dimensionslos, üblicherweise `0..1` |
+| Farben | `java.awt.Color`; Kanalwerte der Integer-Konstruktoren `0..255` |
+| Zeitwerte mit `Millis` im Namen | Millisekunden |
+
+Stroke-Werte hängen teilweise von `GLStroke.WidthSpace` ab; die genaue Tabelle
+steht im [Konfigurationskapitel](graphics-pipeline/context-configuration.md#stroke).
 
 ## Vollständige `GLContext2D`-Übersicht
 

@@ -10,6 +10,29 @@ Dieses Kapitel trennt vier Fragen ausdrücklich:
 3. Welcher Batchtyp wird verwendet?
 4. Welche Overloads und Einheiten gelten?
 
+## Inhalt
+
+- [Einheiten](#einheiten)
+- [Immediate, Recording und Replay](#immediate-recording-und-replay)
+- [Overload-Konvention](#overload-konvention)
+- [Nicht-UI-Pipelines](#nicht-ui-filled-batch)
+- [UI-Pipeline](#ui-pipeline)
+- [Pfade](#pfade)
+- [Zeichenreihenfolge und Entscheidungshilfe](#zeichenreihenfolge-und-überlappung)
+
+## Einheiten
+
+Sofern eine Signatur nichts anderes sagt, sind X/Y, Breite, Höhe, Radius,
+Bezier-Kontrollpunkte und Pfadkoordinaten lokale Benutzerkoordinaten. Unter
+`TOP_LEFT_PIXELS` entspricht eine Einheit einem logischen Pixel. Winkel werden
+in Radiant angegeben, normalisierte Werte wie `progress` und
+Interpolations-`amount` liegen in `0..1`.
+
+Ausnahmen sind ausdrücklich benannt: Textur-Quellrechtecke verwenden
+Texturpixel, Text-Y ist eine Baseline, Stroke- und UI-Borderbreiten folgen dem
+jeweiligen `WidthSpace`. Farben sind `java.awt.Color`-Werte mit Integerkanälen
+von `0..255`.
+
 ## Immediate, Recording und Replay
 
 | Modus | Was ein Zeichenbefehl tut |
@@ -34,7 +57,8 @@ Bei Standardformen wiederholen sich diese Varianten:
 
 Ein explizites Pickingargument ersetzt für den Befehl den Contextzustand.
 Pick-ID und MouseTarget werden nie gleichzeitig übergeben. Arrays mit Punkten
-sind immer `x0,y0,x1,y1,...`.
+sind immer `x0,y0,x1,y1,...` in lokalen Benutzerkoordinaten. `Color[]`-Arrays
+enthalten genau eine Farbe pro zugehörigem Punkt/Vertex.
 
 ## Nicht-UI: Filled-Batch
 
@@ -68,6 +92,8 @@ Interpolation gilt `SRGB`. Eingebaut sind `SRGB`, `LINEAR_RGB`,
 `HSV_SHORTEST`, `OKLAB`, `OKLCH_SHORTEST`.
 
 Alle Modi implementieren `GLColorInterpolator.interpolate(start,end,amount)`.
+`amount` ist ein dimensionsloser Anteil von `0` (Startfarbe) bis `1`
+(Endfarbe).
 `GLColorInterpolation.parse(String)` liest einen Modusnamen tolerant, während
 `valueOf` die normale Enum-Semantik besitzt. Eine eigene Interpolation ist ein
 Lambda `(start, end, amount) -> Color`.
@@ -85,7 +111,8 @@ Lambda `(start, end, amount) -> Color`.
 
 Die `GLCornerRadii`-Reihenfolge ist oben links, oben rechts, unten rechts,
 unten links. Die Record-Accessors heißen `topLeft`, `topRight`, `bottomRight`
-und `bottomLeft`; `GLCornerRadii.all(radius)` erzeugt vier gleiche Werte.
+und `bottomLeft`; `GLCornerRadii.all(radius)` erzeugt vier gleiche Werte. Alle
+Radien verwenden lokale Benutzerkoordinaten.
 
 ### Fills
 
@@ -125,6 +152,8 @@ konstante Fabrik.
 
 Negative Zielbreite/-höhe spiegeln ein Bild; die Quellregion von
 `drawTexture` muss positiv und vollständig innerhalb der Textur liegen.
+Quell-X/Y/Breite/Höhe sind Texturpixel; Ziel-X/Y/Breite/Höhe sind lokale
+Benutzerkoordinaten.
 `drawImage` löst `GLImage` automatisch als Atlasregion oder Standalone-Textur
 auf. Der aktive TextureShader wirkt auf alle Methoden dieser Tabelle.
 
@@ -163,6 +192,8 @@ Pickingoverloads.
 
 `fillAndDrawUIRoundRect` ist für Standardcontrols meist besser als getrenntes
 Fill und Border. `SCREEN` hält die Borderdicke beim Zoom konstant.
+Radien und World-Space-Borderbreiten sind lokale Benutzerkoordinaten;
+Screen-Space-Borderbreiten sind logische Pixel.
 
 ### Verläufe und Symbole
 
@@ -173,6 +204,9 @@ Fill und Border. `SCREEN` hält die Borderdicke beim Zoom konstant.
 | `fillUIVerticalGradientRoundRect(...)` | Fortschritt immer `1` |
 | `drawUICheckMark(...)` | Analytischer Haken |
 | `drawUIChevron(...,pointsRight,strokeWidth,color,widthSpace)` | Linker/rechter Chevron |
+
+`progress` ist ein dimensionsloser Anteil in `0..1`. Chevron-Strichbreite und
+sonstige UI-Borderbreiten folgen dem angegebenen `WidthSpace`.
 
 ### Schatten, Text und Bilder
 

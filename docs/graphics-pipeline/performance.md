@@ -6,6 +6,16 @@ GLSwing optimiert die CPU-Aufbereitung und die Zahl der GPU-Drawcalls, kann aber
 die tatsächliche Pixelarbeit, Host-Präsentation oder VSync nicht wegoptimieren.
 Dieses Kapitel erklärt die wichtigsten Grenzen und Messwerte.
 
+## Inhalt
+
+- [Renderfluss und Batchgrenzen](#renderfluss)
+- [Standard- und UI-Pipeline](#standardpipeline-gegen-ui-pipeline)
+- [Recording, Atlanten und Layer](#recording)
+- [Damage und Hosts](#damage-und-culling)
+- [Renderauflösung und HiDPI](#renderauflösung-und-hidpi)
+- [Messen](#messen)
+- [Lebensdauer und Checkliste](#ressourcenlebensdauer)
+
 ## Renderfluss
 
 ```text
@@ -106,7 +116,8 @@ Ein weiterer FBO beseitigt die Swing-/AWT-Präsentationsgrenze nicht automatisch
 ## Renderauflösung und HiDPI
 
 `setRenderResolutionScale` am Host reduziert/erhöht die physische
-Renderauflösung. Logische Koordinaten bleiben stabil. Niedrigere Skalen sparen
+Renderauflösung. Der Wert ist ein dimensionsloser Faktor (`1` = native
+HiDPI-Framebufferauflösung). Logische Koordinaten bleiben stabil. Niedrigere Skalen sparen
 Pixelarbeit, können aber Text, Kanten und Effekte weicher machen. Eingebaute
 Effekte und adaptive Icons berücksichtigen DeviceScale.
 
@@ -116,13 +127,13 @@ Am Host stehen typischerweise bereit:
 
 | Messwert | Aussage |
 |---|---|
-| `getFramesPerSecond()` | Präsentierte Frames pro Sekunde |
-| `getAverageFrameTimeMillis()` | Gemittelte End-to-End-Framezeit |
-| `getLastDrawCallCount()` | Drawcalls des letzten Frames |
+| `getFramesPerSecond()` | Präsentierte Frames pro Sekunde (`1/s`) |
+| `getAverageFrameTimeMillis()` | Gemittelte End-to-End-Framezeit in Millisekunden |
+| `getLastDrawCallCount()` | Dimensionslose Drawcallanzahl des letzten Frames |
 | `getFrameProfile()` | Detaillierte CPU-/GPU-/Präsentationsphasen |
-| `getActualAntialiasingSamples()` | Tatsächlich gewähltes MSAA |
-| `getActualSwapInterval()` | Tatsächliches VSync-Verhalten |
-| Surface-/Renderpixelgröße | HiDPI- und Resolution-Scale-Kosten |
+| `getActualAntialiasingSamples()` | Dimensionslose tatsächliche MSAA-Sampleanzahl |
+| `getActualSwapInterval()` | Swap-Interval in Bildschirm-Refreshperioden (`0` = ungebremst) |
+| Surface-/Renderpixelgröße | Physische Framebufferpixel; zeigt HiDPI- und Resolution-Scale-Kosten |
 
 FPS allein ist nicht ausreichend: VSync, Swing-Scheduling und Fensterzustand
 können die Rate deckeln, obwohl CPU und GPU freie Zeit besitzen.

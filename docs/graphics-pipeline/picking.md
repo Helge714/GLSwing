@@ -6,6 +6,16 @@ GLSwing rendert neben Farbe optional einen Picking-FBO. Jeder pickbare Pixel
 enthält eine intern auflösbare GPU-ID. Die öffentliche API bietet zwei Modelle:
 eine eigene Integer-ID oder ein direktes `GLMouseTarget`.
 
+## Inhalt
+
+- [Numerische Pick-ID](#numerische-pick-id)
+- [Direktes GLMouseTarget](#direktes-glmousetarget)
+- [Ereignisse und Koordinaten](#ereignisse)
+- [Maus-Capture](#maus-capture)
+- [Textur-Alpha und Renderausgaben](#textur-alpha)
+- [Asynchroner Snapshot](#asynchroner-snapshot)
+- [Recording, Grenzen und Fehler](#recording-und-referenzen)
+
 ## Numerische Pick-ID
 
 ```java
@@ -71,6 +81,12 @@ automatisch mit lokalem Ursprung `(0,0)`, solange
 | Eventfluss | `consume`, `isConsumed` |
 | Pointer | `requestPointerWarp`, `getPointerController` |
 
+Screenposition, Dragdelta und Pointer-Warp verwenden logische, zum Host
+lokale Screenpixel. Lokale X/Y-Werte liegen nach inverser Draw-Transformation
+im Benutzerkoordinatenraum des Ziels. Maustaste, Klickzahl und Modifier sind
+dimensionslose Integerwerte; `getWhen` übernimmt den AWT-Zeitstempel in
+Millisekunden seit der Epoche.
+
 `GLMouseWheelEvent` ergänzt `getWheelRotation`, `getPreciseWheelRotation`,
 `getScrollAmount`, `getScrollType`.
 
@@ -116,6 +132,7 @@ g.setTexturePickAlphaThreshold(0.2f);
 ```
 
 Für Texture-Batches wird `textureAlpha * tintAlpha >= threshold` geprüft. Die
+Alphawerte und der Threshold sind dimensionslose Werte von `0..1`. Die
 Grenze gilt für `drawTexture`, `drawImage` und `drawRenderTarget` sowie für
 texturgebundene Instanzen des UI-Batches wie `drawUIImage` und Icons. Filled,
 Standardtext und rein analytische UI-Geometrie sind nicht betroffen.

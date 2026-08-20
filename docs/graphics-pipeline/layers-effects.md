@@ -6,6 +6,16 @@ Ein Layer sammelt Farbe in einer temporären Offscreentextur. `endLayer` setzt
 das fertige Ergebnis einmal in den Parent ein. Picking bleibt unabhängig und
 wird während des Inhalts direkt in den Picking-FBO geschrieben.
 
+## Inhalt
+
+- [Wann ein Layer nötig ist](#wann-ein-layer-nötig-ist)
+- [Begin/End und Einheiten](#beginend)
+- [Composite und Blendmodi](#glcomposite)
+- [Effektreihenfolge und Kosten](#effektreihenfolge-und-kostenmodell)
+- [Alle eingebauten Effekte](#alle-eingebauten-effekte)
+- [Effektketten und HiDPI](#effektketten)
+- [Picking](#picking)
+
 ## Wann ein Layer nötig ist
 
 - gemeinsame Opacity ohne dunklere Überlappungen,
@@ -34,6 +44,11 @@ try {
 | `beginLayer(x,y,w,h)` | Auf tatsächliche lokale Inhaltsbounds begrenzt |
 | `beginLayer(x,y,w,h,screenInset)` | Bounds an allen Seiten um logische Screenpixel nach innen setzen |
 
+X/Y/Breite/Höhe verwenden aktuelle lokale Benutzerkoordinaten. `screenInset`
+ist dagegen ausdrücklich eine Dicke in logischen Screenpixeln und bleibt daher
+unter Model-/Kamerazoom konstant. `endLayer(opacity)` erwartet einen
+dimensionslosen Wert von `0..1`.
+
 Der Screen-Inset wird beim Recording-Replay neu aufgelöst und bleibt unter
 World-Zoom stabil. Effekte dürfen über die Bounds hinaus wachsen; ihr Padding
 wird automatisch zur Verarbeitungsregion addiert.
@@ -60,6 +75,8 @@ nur Blendmodus, beides, `opacity(...)`, `blend(...)`. Konstanten: `DEFAULT`,
 `withEffect` hängt an die Reihenfolge an, `withoutEffects` entfernt alle.
 `getOpacity`, `getBlendMode` und `getEffects` lesen den Zustand;
 `getEffectPadding` summiert das deklarierte Padding der Kette.
+Opacity ist dimensionslos (`0..1`); Effektpadding ist eine Länge in logischen
+Screenpixeln.
 
 ## Blendmodi
 
@@ -113,7 +130,8 @@ GLLayerEffects.outerGlow(12, new Color(80, 160, 255, 150));
 ```
 
 Erzeugt aus der verschobenen Layeralpha einen weichen Schatten und erhält den
-Quellinhalt. Offset muss endlich, Radius nichtnegativ sein. `outerGlow` ist ein
+Quellinhalt. Offset und Radius sind logische Screenpixel; Offset muss endlich,
+Radius nichtnegativ sein. `outerGlow` ist ein
 DropShadow mit Offset `(0,0)`. Padding:
 `radius + max(abs(offsetX), abs(offsetY))`. Zwei Passes.
 
@@ -127,8 +145,8 @@ GLLayerEffects.outline(3, Color.WHITE)
 ```
 
 Färbt transparente Pixel, wenn in der angegebenen Nachbarschaft Layeralpha
-existiert. Die Outline liegt außerhalb der Form. Breite `>= 0`, Padding gleich
-Breite, ein Pass.
+existiert. Die Outline liegt außerhalb der Form. Breite in logischen
+Screenpixeln, `>= 0`; Padding gleich Breite, ein Pass.
 
 API: Konstruktor `GLOutlineEffect(width,color)`, `getWidth`, `getColor`,
 `getPadding`.
@@ -139,8 +157,9 @@ API: Konstruktor `GLOutlineEffect(width,color)`, `getWidth`, `getColor`,
 GLLayerEffects.innerOutline(3, new Color(20, 30, 45))
 ```
 
-Färbt den Rand vollständig innerhalb der vorhandenen Layeralpha. Breite
-`>= 0`, Padding `0`, ein Pass. Die Außenkontur wächst nicht.
+Färbt den Rand vollständig innerhalb der vorhandenen Layeralpha. Breite in
+logischen Screenpixeln, `>= 0`; Padding `0`, ein Pass. Die Außenkontur wächst
+nicht.
 
 API: Konstruktor `GLInnerOutlineEffect(width,color)`, `getWidth`, `getColor`,
 `getPadding`.
@@ -152,7 +171,8 @@ GLLayerEffects.innerShadow(3, 5, 8, new Color(0, 0, 0, 120))
 ```
 
 Weicher verschobener Schatten, auf die Innenseite der Alphaform geclippt.
-Offset endlich, Radius `>= 0`, Padding `0`, zwei Passes.
+Offset und Radius sind logische Screenpixel. Offset endlich, Radius `>= 0`,
+Padding `0`, zwei Passes.
 
 API: Konstruktor sowie `getOffsetX`, `getOffsetY`, `getRadius`, `getColor`,
 `getPadding`.
@@ -173,12 +193,12 @@ Alle Operationen laufen gemeinsam in einem Texture-Sample/einem Pass:
 
 | Wert | Neutral | Bereich |
 |---|---:|---|
-| Brightness | 1 | endlich, `>= 0` |
-| Contrast | 1 | endlich, `>= 0` |
-| Saturation | 1 | endlich, `>= 0`; 0 ist Graustufe |
-| Gamma | 1 | endlich, `> 0` |
-| Invert | 0 | `0..1` |
-| Tint strength | 0 | `0..1` |
+| Brightness | 1 | Dimensionsloser Faktor, endlich, `>= 0` |
+| Contrast | 1 | Dimensionsloser Faktor, endlich, `>= 0` |
+| Saturation | 1 | Dimensionsloser Faktor, endlich, `>= 0`; 0 ist Graustufe |
+| Gamma | 1 | Dimensionsloser Exponent, endlich, `> 0` |
+| Invert | 0 | Dimensionsloser Anteil `0..1` |
+| Tint strength | 0 | Dimensionsloser Anteil `0..1` |
 
 Padding `0`. Komfortfabriken: `grayscale(strength)` setzt Sättigung auf
 `1-strength`; `invert(strength)` setzt die Invertstärke.
@@ -194,8 +214,9 @@ GLLayerEffects.roundedClip(new GLCornerRadii(14, 14, 4, 4))
 ```
 
 Clippt antialiasend auf ein gerundetes Rechteck an den ursprünglichen
-Layerbounds. Jeder Eckenradius ist konfigurierbar. Padding `0`, ein Pass. Anders
-als `beginClip` bleibt die tatsächliche runde Form erhalten.
+Layerbounds. Jeder Eckenradius ist in logischen Screenpixeln konfigurierbar.
+Padding `0`, ein Pass. Anders als `beginClip` bleibt die tatsächliche runde
+Form erhalten.
 
 Der Record-Accessor heißt `radii()`, dazu kommt `getPadding()`.
 
@@ -210,8 +231,9 @@ GLShaderEffect custom = GLLayerEffects.custom(program)
 
 Ein Pass, sofern der eigene Shader nicht selbst durch mehrere Effects
 verkettet wird. Uniformtypen: Float, Vec2/3/4, Int und Mat4. Padding ist
-standardmäßig `0` und muss für außerhalb entstehende Pixel ausdrücklich gesetzt
-werden. Shadervertrag und verwaltete Uniforms stehen im [Shaderkapitel](shaders.md).
+standardmäßig `0`, wird in logischen Screenpixeln gemessen und muss für
+außerhalb entstehende Pixel ausdrücklich gesetzt werden. Shadervertrag und
+verwaltete Uniforms stehen im [Shaderkapitel](shaders.md).
 
 API: Konstruktor oder `GLShaderEffect.of(shader)`, `getShader`, alle
 `withUniform`-Overloads, `withUniformMatrix4`, `withPadding`, `getPadding`.

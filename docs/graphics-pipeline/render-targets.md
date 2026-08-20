@@ -6,6 +6,15 @@ Ein `GLRenderTarget` ist ein persistenter, lazy erzeugter RGBA8-Framebuffer mit
 eigener Größe. Anders als ein Layer bleibt sein Inhalt über Frames erhalten und
 wird von der Anwendung ausdrücklich aktualisiert.
 
+## Inhalt
+
+- [Layer oder RenderTarget?](#layer-oder-rendertarget)
+- [Erzeugen, Optionen und Einheiten](#erzeugen-und-optionen)
+- [In ein Target zeichnen](#zeichnen-in-ein-target)
+- [Target darstellen](#target-darstellen)
+- [Ping-Pong mit GLFeedbackBuffer](#ping-pong-mit-glfeedbackbuffer)
+- [Shader, Lebensdauer und Performance](#shader-für-simulationen)
+
 ## Layer oder RenderTarget?
 
 | Layer | RenderTarget |
@@ -32,6 +41,11 @@ GLRenderTarget pixels = new GLRenderTarget(
 `DEFAULT` ist linear/clamp. `pixelArt()` ist nearest/clamp,
 `repeatingPixelArt()` nearest/repeat. `withFilter` und `withWrap` erzeugen
 veränderte immutable Optionen.
+
+Konstruktorbreite und -höhe sind ganzzahlige Targetpixel und damit zugleich
+die Texelauflösung. Innerhalb des Targets entspricht eine logische
+Top-Left-Koordinate genau einem Targetpixel. Beim späteren Darstellen sind
+X/Y/Breite/Höhe wieder lokale Benutzerkoordinaten der aktuellen Szene.
 
 Die GPU-Ressource entsteht erst beim ersten Einsatz. Ein Target bindet sich
 dabei an genau einen Renderer und kann nicht zwischen unabhängigen Fenstern
@@ -120,6 +134,9 @@ feedback.drawCurrent(g, 20, 20, 700, 700);
 `update` schreibt in `next`, während `current` lesbar bleibt. Nur nach einem
 erfolgreichen Callback werden beide getauscht. Bei einer Exception endet der
 Targetpass ohne Swap.
+
+`uTexelSize` im Beispiel ist eine dimensionslose UV-Schrittweite pro Texel,
+also `(1 / targetWidth, 1 / targetHeight)`.
 
 Manuelle API:
 
