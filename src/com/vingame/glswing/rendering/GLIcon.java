@@ -85,12 +85,6 @@ public final class GLIcon {
 				DEFAULT_PIXEL_RANGE);
 	}
 
-	/** Compatibility overload creating one fixed-resolution representation. */
-	public static GLIcon fromSvg(GLSvgDocument document, Format requested,
-			int resolution, float pixelRange) {
-		return createSvg(document, requested, GLIconOptions.fixed(resolution), pixelRange);
-	}
-
 	private static GLIcon createSvg(GLSvgDocument document, Format requested,
 			GLIconOptions options, float pixelRange) {
 		if (document == null || requested == null)

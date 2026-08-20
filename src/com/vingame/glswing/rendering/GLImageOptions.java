@@ -13,11 +13,6 @@ public record GLImageOptions(Storage storage, Filter filter, Wrap wrap,
 	public static final GLImageOptions DEFAULT = new GLImageOptions(
 			Storage.AUTO, Filter.LINEAR, Wrap.CLAMP, Usage.STATIC, Mipmapping.AUTO);
 
-	/** Compatibility constructor using automatic mipmap selection. */
-	public GLImageOptions(Storage storage, Filter filter, Wrap wrap, Usage usage) {
-		this(storage, filter, wrap, usage, Mipmapping.AUTO);
-	}
-
 	public GLImageOptions {
 		if (storage == null || filter == null || wrap == null || usage == null
 				|| mipmapping == null)

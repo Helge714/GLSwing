@@ -11,14 +11,6 @@ public record GLIconOptions(RasterPolicy rasterPolicy,
 	public static final GLIconOptions DEFAULT = new GLIconOptions(
 			RasterPolicy.AUTO, 32, 1024, 2, 1, 150);
 
-	/** Compatibility constructor using the default automatic request delay. */
-	public GLIconOptions(RasterPolicy rasterPolicy,
-			int minimumResolution, int maximumResolution,
-			int resolutionStep, float oversampling) {
-		this(rasterPolicy, minimumResolution, maximumResolution,
-				resolutionStep, oversampling, 150);
-	}
-
 	public GLIconOptions {
 		if (rasterPolicy == null)
 			throw new IllegalArgumentException("Icon raster policy must not be null");
