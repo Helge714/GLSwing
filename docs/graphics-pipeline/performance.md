@@ -67,6 +67,14 @@ können oft `GLRenderParameters` nutzen.
 Screen-Space-Strokes bleiben viewabhängig. Ihre Geometrie wird bei geänderter
 Model-/Viewmatrix einmal neu kompiliert und anschließend gecacht.
 
+Für sehr große, unveränderte Sprite-Mengen geht `GLSpriteBuffer` einen Schritt
+weiter: Die kompakten Instanzdaten werden beim ersten Draw einmalig pro
+Renderer mit `GL_STATIC_DRAW` hochgeladen und bleiben danach GPU-resident.
+Modeltransform, Projection und Licht dürfen sich ohne Neuaufnahme ändern.
+Nicht pickbare Puffer verursachen beim Replay keinen Instanzupload; bei Picking
+werden nur die frame-lokalen Integer-IDs aktualisiert. Der residente Draw ist
+eine bewusste Batchgrenze und verschmilzt nicht mit dem dynamischen Spritebatch.
+
 ## Atlanten und Slots
 
 Kleine statische Bilder gemeinsam in Atlaspages zu speichern reduziert
@@ -153,6 +161,7 @@ können die Rate deckeln, obwohl CPU und GPU freie Zeit besitzen.
 | `GLImage`, `GLIcon` | CPU-Ressource; Renderer verwaltet seine GPU-Auflösung |
 | `GLTexture`, `ShaderProgram`, eigener `GLFont` | Im passenden GL-Disposehook freigeben |
 | `GLRecording` | Gehört seinem Renderer; besitzt referenzierte Ressourcen nicht |
+| `GLSpriteBuffer` | Rendererunabhängige CPU-Beschreibung plus lazy GPU-Kopie; explizit `close()` aufrufen |
 | `GLRenderTarget`, `GLFeedbackBuffer` | Mit `close()` beenden; renderergebunden |
 
 Niemals Low-Level-GL-Ressourcen auf einem beliebigen AWT-Thread erstellen oder
@@ -161,10 +170,11 @@ löschen, wenn dort kein passender GL-Kontext current ist.
 ## Praktische Checkliste
 
 1. Stabile komplexe Geometrie recorden.
-2. Standardcontrols über den UI-Batch zeichnen.
-3. Kleine statische Bilder der Atlasautomatik überlassen.
-4. Shader-/Uniformwechsel gruppieren.
-5. Layer auf echte Bounds begrenzen und Effektketten bewusst ordnen.
-6. RenderTargets nur aktualisieren, wenn ein neuer Zustand nötig ist.
-7. GPU-Readbacks im interaktiven Framepfad vermeiden.
-8. Mit Frameprofil und Drawcalls messen, nicht nur mit FPS urteilen.
+2. Sehr große statische Spritefelder in wenige `GLSpriteBuffer`-Chunks legen.
+3. Standardcontrols über den UI-Batch zeichnen.
+4. Kleine statische Bilder der Atlasautomatik überlassen.
+5. Shader-/Uniformwechsel gruppieren.
+6. Layer auf echte Bounds begrenzen und Effektketten bewusst ordnen.
+7. RenderTargets nur aktualisieren, wenn ein neuer Zustand nötig ist.
+8. GPU-Readbacks im interaktiven Framepfad vermeiden.
+9. Mit Frameprofil und Drawcalls messen, nicht nur mit FPS urteilen.

@@ -16,6 +16,7 @@ layout(location = 12) in int aTextureSlot;
 layout(location = 13) in int aFlags;
 
 uniform mat4 uProjection;
+uniform mat4 uModel;
 
 out vec2 vColorUv;
 out vec2 vDepthUv;
@@ -42,11 +43,15 @@ void main() {
     vTint = aTint;
     vDepthData = aDepthData;
     vAlphaCutoff = aDepthData.w;
-    vTangentX = aTangentX;
-    vTangentY = aTangentY;
+    vec2 transformedTangentX = (uModel * vec4(aTangentX, 0.0, 0.0)).xy;
+    vec2 transformedTangentY = (uModel * vec4(aTangentY, 0.0, 0.0)).xy;
+    vTangentX = length(transformedTangentX) > 0.000001
+            ? normalize(transformedTangentX) : vec2(1.0, 0.0);
+    vTangentY = length(transformedTangentY) > 0.000001
+            ? normalize(transformedTangentY) : vec2(0.0, 1.0);
     vPickId = aPickId;
     vTextureSlot = aTextureSlot;
     vFlags = aFlags;
-    gl_Position = uProjection * vec4(position, 0.0, 1.0);
+    gl_Position = uProjection * uModel * vec4(position, 0.0, 1.0);
     gl_Position.z = aDepthData.x * 2.0 - 1.0;
 }

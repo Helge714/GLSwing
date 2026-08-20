@@ -15,6 +15,7 @@ Immediate-Befehle weiterhin gemeinsam gebatcht werden.
 - [Replay und äußerer Zustand](#replay-und-äußerer-zustand)
 - [Laufzeitparameter](#parameter-für-ein-komplettes-recording)
 - [Gespeicherte und nicht recordbare Inhalte](#was-genau-gespeichert-wird)
+- [GPU-residente Sprite-Puffer](#gpu-residente-sprite-puffer)
 - [Lebensdauer und Diagnose](#referenzen-und-lebensdauer)
 
 ## Was Recording spart
@@ -176,6 +177,78 @@ einer Aufnahme. `withParameters` schließt die Region auch bei einer Exception.
 
 RenderTargets sind dynamische, frameabhängige Ressourcen. Sie werden im
 Immediate-Renderpfad aktualisiert und dargestellt.
+
+## GPU-residente Sprite-Puffer
+
+Ein `GLRecording` spart Geometrieaufbereitung, speist seine Daten beim Replay
+aber erneut in dynamische Batches ein. Für große, unveränderte Sprite-Mengen
+stellt `GLSpriteBuffer` die Instanzdaten dagegen einmalig als statischen
+GPU-Puffer bereit:
+
+```java
+GLSpriteBuffer terrain;
+
+g.beginSpriteBuffer();
+try {
+    for (Tile tile : tiles) {
+        g.setMouseTarget(tile);
+        g.drawSprite(tile.sprite(), tile.x(), tile.y(), 32, 32,
+                Color.WHITE, tile.depth());
+    }
+    g.clearMouseTarget();
+    terrain = g.endSpriteBuffer();
+} catch (RuntimeException error) {
+    if (g.isRecordingSpriteBuffer())
+        g.cancelSpriteBuffer();
+    throw error;
+}
+
+g.translate(worldX, worldY);
+g.draw(terrain);
+
+// Wenn die Ressource endgültig nicht mehr gebraucht wird:
+terrain.close();
+```
+
+Die Aufnahme startet wie ein normales Recording mit Identität und wird beim
+Zeichnen relativ zum aktuellen Modeltransform, zur aktuellen Projection und
+zum aktuellen Licht ausgewertet. `drawSprite`, `drawMaterial`, Transform- und
+Pickingzustand sowie ein explizites `flush()` sind im Aufnahmescope erlaubt.
+Andere Zeichenpipelines, Layer, Clips und RenderTarget-Updates gehören nicht in
+einen Sprite-Puffer und werden mit einer verständlichen Exception abgewiesen.
+
+Beim ersten `draw(buffer)` löst jeder Renderer die Bilder auf und lädt
+kompatible Materialabschnitte lazy mit `GL_STATIC_DRAW` hoch. Weitere Draws
+übertragen die Instanzgeometrie nicht erneut. Shader-, Alpha- oder
+Depthstate-Wechsel, mehr als fünf Textursets und ein während der Aufnahme
+gesetztes `flush()` bilden Abschnitts- und damit Drawcallgrenzen.
+Die verwendeten `GLImage`-Kanäle müssen `Usage.STATIC` besitzen; dynamische
+Bilder würden die einmal aufgenommenen Texture-IDs/UVs ungültig machen und
+werden deshalb bereits bei der Aufnahme abgewiesen.
+
+Numerische Pick-IDs und `GLMouseTarget` funktionieren weiter. MouseTargets
+liegen als schwache Referenzen vor; frame-lokale GPU-Pick-IDs werden beim Draw
+neu zugeordnet. Ein vollständig nicht pickbarer Puffer benötigt diesen kleinen
+ID-Upload nicht. `close()` markiert den Puffer sofort ungültig; die eigentlichen
+renderergebundenen GL-Objekte werden sicher am Beginn eines folgenden Frames
+oder beim Renderer-Dispose freigegeben.
+
+| Statischer Inhalt | Geeigneter Weg |
+|---|---|
+| Shapes, Text, UI oder häufig mit anderen Befehlen zusammen batchen | `GLRecording` |
+| Sehr viele unveränderte Sprites/Materialquads | `GLSpriteBuffer` |
+| Einzelne Sprites ändern sich pro Frame | Dynamisches `drawSprite` |
+| Welt in selten geänderten Teilen | Ein `GLSpriteBuffer` pro Chunk |
+
+Partielle Updates innerhalb eines bestehenden Puffers sind noch nicht Teil der
+API. Ändert sich ein Chunk, wird sein Puffer geschlossen und neu aufgenommen.
+`getInstanceCount()` und `isEmpty()` beschreiben den aufgenommenen Inhalt;
+`getMinX/Y` und `getMaxX/Y` liefern seine lokale achsenparallele Boundingbox in
+Benutzerkoordinaten. `isClosed()` zeigt den Lebenszykluszustand. Die kompakte
+CPU-Beschreibung bleibt rendererunabhängig, daher darf derselbe offene Puffer
+ohne kontextgebundenen eigenen Materialshader in mehreren Renderern lazy jeweils
+eine eigene GPU-Kopie erhalten. Ein eigener `ShaderProgram` bleibt wie bisher
+an den GL-Kontext gebunden, in dem er erstellt wurde.
 
 ## Typische Entscheidungen
 

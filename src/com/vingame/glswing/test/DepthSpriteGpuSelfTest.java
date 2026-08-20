@@ -22,6 +22,7 @@ import com.vingame.glswing.rendering.GLRenderTarget;
 import com.vingame.glswing.rendering.GLRenderTargetOptions;
 import com.vingame.glswing.rendering.GLRecording;
 import com.vingame.glswing.rendering.GLSprite;
+import com.vingame.glswing.rendering.GLSpriteBuffer;
 import com.vingame.glswing.rendering.Projection2D;
 
 /** GPU regression test for cutout, per-pixel depth, lighting and picking. */
@@ -49,6 +50,7 @@ public final class DepthSpriteGpuSelfTest {
 			renderer = GLRenderer2D.create(gl);
 			testDepthCutoutAndPicking(gl, renderer);
 			testRecordedSpriteInDepthRenderTarget(gl, renderer);
+			testResidentSpriteBuffer(gl, renderer);
 			testLargeInstancedBatch(gl, renderer);
 			System.out.println("Depth sprite GPU self-test passed.");
 		} finally {
@@ -57,6 +59,50 @@ public final class DepthSpriteGpuSelfTest {
 			nativeContext.release();
 			drawable.destroy();
 		}
+	}
+
+	private static void testResidentSpriteBuffer(GL3 gl,
+			GLRenderer2D renderer) {
+		GLSprite sprite = GLSprite.builder(solid(Color.RED, false))
+				.alphaMode(GLAlphaMode.OPAQUE)
+				.depthState(GLDepthState.DISABLED)
+				.build();
+		GLMouseTarget target = new GLMouseTarget() { };
+		GLContext2D context = renderer.beginFrame(gl, WIDTH, HEIGHT,
+				Projection2D.TOP_LEFT_PIXELS.create(WIDTH, HEIGHT));
+		context.beginSpriteBuffer();
+		context.translate(5, 5);
+		context.setMouseTarget(target);
+		context.drawSprite(sprite, 10, 10, 20, 15, Color.WHITE, 0.5f);
+		context.clearMouseTarget();
+		GLSpriteBuffer buffer = context.endSpriteBuffer();
+		context.clear(Color.BLACK);
+		context.translate(20, 10);
+		context.draw(buffer);
+		renderer.endFrame();
+		assertDominant(gl, 36, 27, Color.RED,
+				"transformed resident sprite buffer");
+		var hit = renderer.readPickResult(gl, 36, 27);
+		if (hit.getTarget() != target
+				|| Math.abs(hit.getLocalX() - 1) > 0.01f
+				|| Math.abs(hit.getLocalY() - 2) > 0.01f)
+			throw new AssertionError(
+					"Resident sprite buffer lost target or local coordinates: "
+							+ hit.getLocalX() + "/" + hit.getLocalY());
+
+		context = renderer.beginFrame(gl, WIDTH, HEIGHT,
+				Projection2D.TOP_LEFT_PIXELS.create(WIDTH, HEIGHT));
+		context.clear(Color.BLACK);
+		context.setPickingRenderingEnabled(false);
+		context.translate(30, 20);
+		context.draw(buffer);
+		renderer.endFrame();
+		if (renderer.drawCallCount() != 1)
+			throw new AssertionError("Resident color replay required "
+					+ renderer.drawCallCount() + " draw calls instead of one");
+		assertDominant(gl, 46, 37, Color.RED,
+				"reused resident sprite buffer");
+		buffer.close();
 	}
 
 	private static void testLargeInstancedBatch(GL3 gl,

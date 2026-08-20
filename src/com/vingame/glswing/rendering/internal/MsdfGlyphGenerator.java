@@ -177,7 +177,7 @@ public final class MsdfGlyphGenerator {
 	}
 
 	private static void addDistinct(List<Point> points, double x, double y) {
-		Point last = points.getLast();
+		Point last = points.get(points.size() - 1);
 		if (last.x != x || last.y != y)
 			points.add(new Point(x, y));
 	}
@@ -185,10 +185,10 @@ public final class MsdfGlyphGenerator {
 	private static void finishContour(List<List<Point>> contours, List<Point> contour) {
 		if (contour == null || contour.size() < 2)
 			return;
-		Point first = contour.getFirst();
-		Point last = contour.getLast();
+		Point first = contour.get(0);
+		Point last = contour.get(contour.size() - 1);
 		if (first.x == last.x && first.y == last.y)
-			contour.removeLast();
+			contour.remove(contour.size() - 1);
 		if (contour.size() >= 2)
 			contours.add(contour);
 	}

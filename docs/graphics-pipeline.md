@@ -70,6 +70,8 @@ Varianten und Argumentregeln.
 | `beginParameters`, `endParameters`, `withParameters` | Verschachtelbare Parameterregionen |
 | `draw(GLRecording)` | Recording abspielen |
 | `draw(GLRecording, GLRenderParameters)` | Recording parametrisiert abspielen |
+| `beginSpriteBuffer`, `endSpriteBuffer`, `cancelSpriteBuffer`, `isRecordingSpriteBuffer` | GPU-residente Sprite-Instanzen aufnehmen |
+| `draw(GLSpriteBuffer)` | Residenten Sprite-Puffer relativ zum aktuellen Modeltransform zeichnen |
 
 ### Allgemeiner Zustand, Clear und Bounds
 

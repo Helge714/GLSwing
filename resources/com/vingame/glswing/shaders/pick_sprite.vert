@@ -13,6 +13,7 @@ layout(location = 12) in int aTextureSlot;
 layout(location = 13) in int aFlags;
 
 uniform mat4 uProjection;
+uniform mat4 uModel;
 
 out vec2 vColorUv;
 out vec2 vDepthUv;
@@ -38,6 +39,6 @@ void main() {
     vPickId = aPickId;
     vTextureSlot = aTextureSlot;
     vFlags = aFlags;
-    gl_Position = uProjection * vec4(position, 0.0, 1.0);
+    gl_Position = uProjection * uModel * vec4(position, 0.0, 1.0);
     gl_Position.z = aDepthData.x * 2.0 - 1.0;
 }

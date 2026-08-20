@@ -38,6 +38,7 @@ public final class GLContext2D {
 	private float logicalWidth;
 	private float logicalHeight;
 	private GLRecording.Builder recording;
+	private GLSpriteBuffer.Builder spriteBufferRecording;
 	private GLRenderer2D.StateSnapshot recordingOuterRendererState;
 	private ContextState recordingOuterContextState;
 	private final List<ContextState> renderTargetContextStates = new ArrayList<>();
@@ -58,6 +59,7 @@ public final class GLContext2D {
 		mouseTarget = null;
 		mouseOriginDefined = false;
 		recording = null;
+		spriteBufferRecording = null;
 		recordingOuterRendererState = null;
 		recordingOuterContextState = null;
 		renderTargetContextStates.clear();
@@ -80,7 +82,7 @@ public final class GLContext2D {
 	 * outside the recording; recorded transform operations start at identity.
 	 */
 	public void beginRecording() {
-		if (recording != null)
+		if (recording != null || spriteBufferRecording != null)
 			throw new IllegalStateException("A recording is already active");
 		recordingOuterRendererState = renderer.captureState();
 		recordingOuterContextState = captureContextState();
@@ -110,6 +112,45 @@ public final class GLContext2D {
 
 	public boolean isRecording() {
 		return recording != null;
+	}
+
+	/**
+	 * Starts recording immutable sprite instances in local coordinates. Only
+	 * {@code drawSprite}/{@code drawMaterial}, transform, picking-state and
+	 * {@link #flush()} calls belong in this scope.
+	 */
+	public void beginSpriteBuffer() {
+		if (recording != null || spriteBufferRecording != null)
+			throw new IllegalStateException("A recording is already active");
+		recordingOuterRendererState = renderer.captureState();
+		recordingOuterContextState = captureContextState();
+		renderer.resetTransform();
+		spriteBufferRecording = new GLSpriteBuffer.Builder();
+	}
+
+	/** Finishes the active sprite recording. GPU upload happens on first draw. */
+	public GLSpriteBuffer endSpriteBuffer() {
+		if (spriteBufferRecording == null)
+			throw new IllegalStateException("No sprite-buffer recording is active");
+		try {
+			return spriteBufferRecording.finish();
+		} finally {
+			spriteBufferRecording = null;
+			restoreRecordingOuterState();
+		}
+	}
+
+	/** Discards the active sprite recording and restores the surrounding state. */
+	public void cancelSpriteBuffer() {
+		if (spriteBufferRecording == null)
+			throw new IllegalStateException("No sprite-buffer recording is active");
+		spriteBufferRecording.cancel();
+		spriteBufferRecording = null;
+		restoreRecordingOuterState();
+	}
+
+	public boolean isRecordingSpriteBuffer() {
+		return spriteBufferRecording != null;
 	}
 
 	/** Starts a mutable replay-parameter region inside the active recording. */
@@ -162,7 +203,7 @@ public final class GLContext2D {
 	public void draw(GLRecording recording, GLRenderParameters parameters) {
 		if (recording == null)
 			throw new IllegalArgumentException("Recording must not be null");
-		if (this.recording != null)
+		if (this.recording != null || spriteBufferRecording != null)
 			throw new IllegalStateException(
 					"Drawing a recording while another recording is active is not supported yet");
 		try {
@@ -175,6 +216,16 @@ public final class GLContext2D {
 		}
 	}
 
+	/** Draws a GPU-resident sprite recording below the current model transform. */
+	public void draw(GLSpriteBuffer buffer) {
+		if (buffer == null)
+			throw new IllegalArgumentException("Sprite buffer must not be null");
+		if (recording != null || spriteBufferRecording != null)
+			throw new IllegalStateException(
+					"Drawing a sprite buffer while recording is not supported");
+		renderer.drawSpriteBuffer(buffer);
+	}
+
 	/** Clears the currently enabled render outputs using the default dark color. */
 	public void clear() {
 		clear(DEFAULT_CLEAR_COLOR);
@@ -185,12 +236,14 @@ public final class GLContext2D {
 	 * Calling this is optional and may occur at any point in a frame.
 	 */
 	public void clear(Color color) {
+		requireNoSpriteBufferRecording("clear");
 		Color actualColor = requireColor(color);
 		submit(renderer -> renderer.clear(actualColor));
 	}
 
 	/** Clears only depth to GLSwing's back value ({@code 0}). */
 	public void clearDepth() {
+		requireNoSpriteBufferRecording("clearDepth");
 		submit(GLRenderer2D::clearDepth);
 	}
 
@@ -246,6 +299,7 @@ public final class GLContext2D {
 	 * state changes; use a rounded layer effect when curved clipping is required.
 	 */
 	public void beginClip(float x, float y, float width, float height) {
+		requireNoSpriteBufferRecording("beginClip");
 		if (!Float.isFinite(x) || !Float.isFinite(y)
 				|| !Float.isFinite(width) || !Float.isFinite(height)
 				|| width < 0 || height < 0)
@@ -260,6 +314,7 @@ public final class GLContext2D {
 
 	/** Restores the clip that was active before the matching beginClip call. */
 	public void endClip() {
+		requireNoSpriteBufferRecording("endClip");
 		if (recording == null)
 			renderer.endClip();
 		else
@@ -278,6 +333,7 @@ public final class GLContext2D {
 	 * framebuffer. Pending geometry is flushed before the render target changes.
 	 */
 	public void beginLayer() {
+		requireNoSpriteBufferRecording("beginLayer");
 		if (recording == null) {
 			renderer.beginLayer();
 		} else {
@@ -291,6 +347,7 @@ public final class GLContext2D {
 	 * screen bounds; effects may extend beyond it by their declared padding.
 	 */
 	public void beginLayer(float x, float y, float width, float height) {
+		requireNoSpriteBufferRecording("beginLayer");
 		validateLayerBounds(x, y, width, height);
 		if (recording == null) {
 			renderer.beginLayer(x, y, width, height);
@@ -305,6 +362,7 @@ public final class GLContext2D {
 	 */
 	public void beginLayer(float x, float y, float width, float height,
 			float screenInset) {
+		requireNoSpriteBufferRecording("beginLayer");
 		validateLayerBounds(x, y, width, height);
 		if (!Float.isFinite(screenInset) || screenInset < 0)
 			throw new IllegalArgumentException(
@@ -334,6 +392,7 @@ public final class GLContext2D {
 
 	/** Composites the current layer using a blend mode and optional custom shader. */
 	public void endLayer(GLComposite composite) {
+		requireNoSpriteBufferRecording("endLayer");
 		if (composite == null)
 			throw new IllegalArgumentException("Layer composite must not be null");
 		if (recording == null) {
@@ -360,6 +419,7 @@ public final class GLContext2D {
 	 * restored by {@link #endRenderTarget()}.
 	 */
 	public void beginRenderTarget(GLRenderTarget target) {
+		requireNoSpriteBufferRecording("beginRenderTarget");
 		if (recording != null)
 			throw new IllegalStateException(
 					"Render-target updates cannot be captured in a recording");
@@ -372,6 +432,7 @@ public final class GLContext2D {
 
 	/** Restores the output and state active before the matching begin call. */
 	public void endRenderTarget() {
+		requireNoSpriteBufferRecording("endRenderTarget");
 		if (recording != null)
 			throw new IllegalStateException(
 					"A recording cannot contain render-target updates");
@@ -1832,7 +1893,10 @@ public final class GLContext2D {
 			originX = resolvedMouseOriginX;
 			originY = resolvedMouseOriginY;
 		}
-		if (recording == null)
+		if (spriteBufferRecording != null)
+			spriteBufferRecording.add(material, x, y, width, height, actualTint, depth,
+					renderer.currentTransform(), pickId, mouseTarget, originX, originY);
+		else if (recording == null)
 			renderer.addSprite(material, x, y, width, height, actualTint, depth,
 					pickId, mouseTarget, originX, originY);
 		else
@@ -1887,6 +1951,7 @@ public final class GLContext2D {
 
 	private void submitIcon(GLIcon icon, float x, float y,
 			float width, float height, Color color, boolean uiBatch) {
+		requireNoSpriteBufferRecording("icon drawing");
 		if (icon == null)
 			throw new IllegalArgumentException("Icon must not be null");
 		if (!Float.isFinite(x) || !Float.isFinite(y) || !Float.isFinite(width)
@@ -1977,6 +2042,7 @@ public final class GLContext2D {
 	private void drawRenderTarget(GLRenderTarget target, float x, float y,
 			float width, float height, Color tint, int pickId,
 			GLMouseTarget mouseTarget) {
+		requireNoSpriteBufferRecording("drawRenderTarget");
 		if (recording != null)
 			throw new IllegalStateException(
 					"Render targets are dynamic resources and cannot be recorded");
@@ -2424,7 +2490,10 @@ public final class GLContext2D {
 	}
 
 	public void flush() {
-		submit(GLRenderer2D::flush);
+		if (spriteBufferRecording != null)
+			spriteBufferRecording.barrier();
+		else
+			submit(GLRenderer2D::flush);
 	}
 
 	private void emitFilledVertices(float[] vertices, int pickId,
@@ -2637,6 +2706,7 @@ public final class GLContext2D {
 	private void submitFilled(float x1, float y1, float x2, float y2,
 			float x3, float y3, float red, float green, float blue, float alpha,
 			int pickId, GLMouseTarget mouseTarget, float originX, float originY) {
+		requireNoSpriteBufferRecording("filled drawing");
 		if (mouseTarget != null) {
 			resolveMouseOrigin(mouseTarget, originX, originY);
 			originX = resolvedMouseOriginX;
@@ -2660,6 +2730,7 @@ public final class GLContext2D {
 			float x2, float y2, float red2, float green2, float blue2, float alpha2,
 			float x3, float y3, float red3, float green3, float blue3, float alpha3,
 			int pickId, GLMouseTarget mouseTarget, float originX, float originY) {
+		requireNoSpriteBufferRecording("filled drawing");
 		if (mouseTarget != null) {
 			resolveMouseOrigin(mouseTarget, originX, originY);
 			originX = resolvedMouseOriginX;
@@ -2686,6 +2757,7 @@ public final class GLContext2D {
 			float u0, float v0, float u1, float v1,
 			float red, float green, float blue, float alpha,
 			int pickId, GLMouseTarget mouseTarget, float originX, float originY) {
+		requireNoSpriteBufferRecording("texture drawing");
 		if (mouseTarget != null) {
 			resolveMouseOrigin(mouseTarget, originX, originY);
 			originX = resolvedMouseOriginX;
@@ -2706,6 +2778,7 @@ public final class GLContext2D {
 
 	private void submitText(GLTexture atlas, float pixelRange, float[] vertices,
 			int pickId, GLMouseTarget mouseTarget, float originX, float originY) {
+		requireNoSpriteBufferRecording("text drawing");
 		if (mouseTarget != null) {
 			resolveMouseOrigin(mouseTarget, originX, originY);
 			originX = resolvedMouseOriginX;
@@ -2722,6 +2795,7 @@ public final class GLContext2D {
 
 	private void submitUI(GLTexture texture, float[] instances,
 			int pickId, GLMouseTarget mouseTarget, float originX, float originY) {
+		requireNoSpriteBufferRecording("UI drawing");
 		if (mouseTarget != null) {
 			resolveMouseOrigin(mouseTarget, originX, originY);
 			originX = resolvedMouseOriginX;
@@ -2747,10 +2821,16 @@ public final class GLContext2D {
 			recording.add(command);
 	}
 
+	private void requireNoSpriteBufferRecording(String operation) {
+		if (spriteBufferRecording != null)
+			throw new IllegalStateException(operation
+					+ " is not supported while recording a sprite buffer");
+	}
+
 	void requireRecordingEnded() {
-		if (recording != null)
+		if (recording != null || spriteBufferRecording != null)
 			throw new IllegalStateException(
-					"endRecording() must be called before ending the renderer frame");
+					"The active recording must be ended before ending the renderer frame");
 	}
 
 	private static void requireFiniteCoordinates(float x1, float y1,

@@ -9,6 +9,19 @@ Das Projekt befindet sich in aktiver Entwicklung. Die aktuelle API ist die
 einzige unterstützte Fassung; veraltete Zwischenstände werden nicht durch eine
 Kompatibilitätsschicht konserviert.
 
+## Java-Voraussetzungen
+
+GLSwingNext wird mit Java 17 als Mindest- und API-Ziel kompiliert. Anwendungen
+können die Bibliothek daher unter Java 17 oder jeder neueren Java-Version
+verwenden. Für die Entwicklung empfiehlt sich ein aktuelles LTS-JDK; Eclipse
+Temurin 25 ist eine freie, Java-SE-kompatible OpenJDK-Distribution und eine
+sinnvolle Standardwahl. Das neuere Entwicklungs-JDK ändert die erzeugte
+Java-17-Kompatibilität nicht, solange der Compiler mit Release 17 arbeitet.
+
+In Eclipse verwendet das Projekt deshalb die Execution Environment
+`JavaSE-17`. Ein konfiguriertes Temurin 25 kann diese bedienen; es muss kein
+separates JDK 17 installiert werden.
+
 ## Dokumentation
 
 - [Dokumentationsübersicht](docs/README.md)
@@ -62,6 +75,7 @@ Die mitgelieferten Eclipse-Launch-Konfigurationen enthalten sie bereits.
 - Model-Transforms, Projektionen und `GLCamera2D`
 - numerisches Picking oder direkte `GLMouseTarget`-Ziele
 - Recordings mit verschachtelbaren Laufzeitparametern
+- GPU-residente statische Sprite-Puffer mit relativem Draw-Transform
 - verschachtelte, begrenzte Layer mit Blendmodi und Effektketten
 - persistente RenderTargets und Ping-Pong-Feedback ohne CPU-Readback
 - optionaler Z-Buffer sowie Sprite-Materialien mit Color-, Depth- und Normalmap
@@ -93,6 +107,7 @@ Die mitgelieferten Eclipse-Launch-Konfigurationen enthalten sie bereits.
 | `DepthSpriteDemo` | Pixelgenaue Sprite-Tiefe, Normalmaps, Licht und Picking |
 | `SpritePipelineBenchmarkDemo` | Interaktiver End-to-End-Vergleich von Kanälen, Alpha, Bewegung und Picking |
 | `SpritePipelineBenchmark` | Reproduzierbare Offscreen-CPU-/GPU-Messung ohne Präsentation |
+| `ResidentSpriteBenchmark` | Direkter A/B-Test von dynamischen und GPU-residenten Sprite-Instanzen |
 | `PickingDemo` | Picking für Formen, Texturen und Text |
 | `NodeEditorDemo` | Interaktiver Node-Editor |
 | `GameOfLifeDemo` | RenderTargets und GPU-Ping-Pong |

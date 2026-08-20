@@ -14,6 +14,8 @@ import com.vingame.glswing.component.GLFrame;
 import com.vingame.glswing.component.GLFrameProfile;
 import com.vingame.glswing.rendering.GLAlphaMode;
 import com.vingame.glswing.rendering.GLContext2D;
+import com.vingame.glswing.rendering.GLSpriteBuffer;
+import com.vingame.glswing.rendering.GLTransform;
 import com.vingame.glswing.ui.GLButton;
 import com.vingame.glswing.ui.GLCheckBox;
 import com.vingame.glswing.ui.GLLabel;
@@ -77,6 +79,11 @@ public final class SpritePipelineBenchmarkDemo {
         picking.addActionListener(event -> surface.picking = picking.isSelected());
         frame.addGL(picking);
 
+		GLCheckBox resident = new GLCheckBox("GPU-resident", surface.resident);
+		resident.setBounds(855, 16, 145, 28);
+		resident.addActionListener(event -> surface.resident = resident.isSelected());
+		frame.addGL(resident);
+
         GLLabel statusPrimary = new GLLabel("Performance-Messung startet ...");
         statusPrimary.setBounds(18, 50, 1220, 20);
         frame.addGL(statusPrimary);
@@ -95,7 +102,10 @@ public final class SpritePipelineBenchmarkDemo {
         Timer statusTimer = new Timer(250, event -> updateStatus(
                 frame, surface, statusPrimary, statusSecondary));
         statusTimer.start();
-        frame.closedFuture().whenComplete((unused, error) -> statusTimer.stop());
+		frame.closedFuture().whenComplete((unused, error) -> {
+			statusTimer.stop();
+			surface.closeBuffer();
+		});
         frame.setVisible(true);
     }
 
@@ -105,7 +115,8 @@ public final class SpritePipelineBenchmarkDemo {
         primary.setText(String.format(Locale.ROOT,
                 "%,d · %s · %s · %s · %s | %.0f FPS | E2E %.2f ms | CPU Szene %.2f ms | Sprite-API %.2f ms",
                 surface.objectCount, surface.channels.label, surface.alphaMode,
-                surface.moving ? "bewegt" : "statisch",
+				(surface.resident ? "GPU-resident" : "dynamisch") + "/"
+						+ (surface.moving ? "bewegt" : "statisch"),
                 surface.picking ? "Picking an" : "Picking aus",
                 frame.getFramesPerSecond(), profile.endToEndMillis(),
                 profile.sceneCpuMillis(), surface.lastApiMillis));
@@ -144,7 +155,15 @@ public final class SpritePipelineBenchmarkDemo {
         private volatile GLAlphaMode alphaMode = GLAlphaMode.CUTOUT;
         private volatile boolean moving;
         private volatile boolean picking;
+		private volatile boolean resident;
         private volatile double lastApiMillis;
+		private GLSpriteBuffer buffer;
+		private int bufferCount = -1;
+		private SpriteBenchmarkWorkload.Channels bufferChannels;
+		private GLAlphaMode bufferAlpha;
+		private boolean bufferPicking;
+		private float bufferWidth;
+		private float bufferHeight;
 
         @Override
         protected void record(GLContext2D context) {
@@ -155,12 +174,48 @@ public final class SpritePipelineBenchmarkDemo {
         protected void render(GLContext2D context) {
             long start = System.nanoTime();
             float seconds = (System.nanoTime() - started) / 1_000_000_000f;
-            workload.draw(context, objectCount, channels, alphaMode,
-                    moving, picking, seconds, 0, CONTENT_TOP, getWidth(),
-                    Math.max(1, getHeight() - CONTENT_TOP), true);
+			if (resident) {
+				ensureBuffer(context);
+				GLTransform previous = context.getTransform();
+				if (moving)
+					context.translate((float) Math.sin(seconds * 1.7f) * 12,
+							(float) Math.cos(seconds * 1.3f) * 8);
+				workload.draw(context, buffer, picking, true);
+				context.setTransform(previous);
+			} else {
+				workload.draw(context, objectCount, channels, alphaMode,
+						moving, picking, seconds, 0, CONTENT_TOP, getWidth(),
+						Math.max(1, getHeight() - CONTENT_TOP), true);
+			}
             lastApiMillis = (System.nanoTime() - start) / 1_000_000.0;
             repaintGL();
         }
+
+		private void ensureBuffer(GLContext2D context) {
+			float width = getWidth();
+			float height = Math.max(1, getHeight() - CONTENT_TOP);
+			if (buffer != null && bufferCount == objectCount
+					&& bufferChannels == channels && bufferAlpha == alphaMode
+					&& bufferPicking == picking && bufferWidth == width
+					&& bufferHeight == height)
+				return;
+			closeBuffer();
+			buffer = workload.recordBuffer(context, objectCount, channels,
+					alphaMode, picking, 0, CONTENT_TOP, width, height);
+			bufferCount = objectCount;
+			bufferChannels = channels;
+			bufferAlpha = alphaMode;
+			bufferPicking = picking;
+			bufferWidth = width;
+			bufferHeight = height;
+		}
+
+		void closeBuffer() {
+			if (buffer != null) {
+				buffer.close();
+				buffer = null;
+			}
+		}
 
         @Override
         protected boolean isMouseTargetEnabled() {

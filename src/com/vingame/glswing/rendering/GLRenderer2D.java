@@ -45,6 +45,8 @@ public final class GLRenderer2D {
 	private final PickFrameRecords pickRecords = new PickFrameRecords();
 	private final Set<GLRenderTarget> renderTargets =
 			Collections.newSetFromMap(new IdentityHashMap<>());
+	private final Map<GLSpriteBuffer, GLStaticSpriteResource> staticSpriteResources =
+			new IdentityHashMap<>();
 	private final List<RenderTargetState> renderTargetStack = new ArrayList<>();
 	private final GLContext2D context;
 	private GL3 gl;
@@ -175,6 +177,7 @@ public final class GLRenderer2D {
 			throw new IllegalStateException(
 					"A previous frame still has open render targets");
 		releaseClosedRenderTargets(gl);
+		releaseClosedSpriteBuffers(gl);
 		this.logicalWidth = logicalWidth;
 		this.logicalHeight = logicalHeight;
 		int[] colorViewport = new int[4];
@@ -674,6 +677,9 @@ public final class GLRenderer2D {
 		for (GLRenderTarget target : new ArrayList<>(renderTargets))
 			target.release(this, gl);
 		renderTargets.clear();
+		for (GLStaticSpriteResource resource : staticSpriteResources.values())
+			resource.dispose(gl);
+		staticSpriteResources.clear();
 		filledBatch.dispose(gl);
 		textureBatch.dispose(gl);
 		textBatch.dispose(gl);
@@ -694,6 +700,70 @@ public final class GLRenderer2D {
 	GLTextureRegion resolveImage(GLImage image) {
 		requireFrame();
 		return textureManager.resolve(gl, image);
+	}
+
+	/** Draws one immutable sprite buffer from renderer-local static GPU storage. */
+	void drawSpriteBuffer(GLSpriteBuffer buffer) {
+		requireFrame();
+		if (buffer == null)
+			throw new IllegalArgumentException("Sprite buffer must not be null");
+		if (buffer.isClosed())
+			throw new IllegalStateException("Sprite buffer is closed");
+		if (buffer.isEmpty())
+			return;
+		flush();
+		GLTransform current = currentTransform();
+		float minX = buffer.getMinX(), minY = buffer.getMinY();
+		float maxX = buffer.getMaxX(), maxY = buffer.getMaxY();
+		includeLayerQuad(
+				current.transformX(minX, minY), current.transformY(minX, minY),
+				current.transformX(maxX, minY), current.transformY(maxX, minY),
+				current.transformX(maxX, maxY), current.transformY(maxX, maxY),
+				current.transformX(minX, maxY), current.transformY(minX, maxY));
+		GLStaticSpriteResource resource = staticSpriteResources.get(buffer);
+		if (resource == null) {
+			resource = GLStaticSpriteResource.create(gl, this, buffer);
+			staticSpriteResources.put(buffer, resource);
+		}
+		textureManager.prepareForSampling(gl);
+		try {
+			drawCallCount += resource.draw(gl, this, projectionMatrix,
+					current.toMatrix4(), lighting, picking,
+					colorRenderingEnabled, pickingRenderingEnabled);
+		} finally {
+			applyDepthState(depthState);
+			gl.glDepthRange(depth, depth);
+			activeBatch = BatchType.NONE;
+		}
+	}
+
+	ShaderProgram defaultSpriteProgram() {
+		return spriteBatch.defaultProgram();
+	}
+
+	void validateSpriteMaterial(GLMaterial2D material) {
+		if (material == null)
+			throw new IllegalArgumentException("Sprite material must not be null");
+		ShaderProgram shader = material.getShader();
+		if (shader == null)
+			return;
+		if (shader.isDisposed())
+			throw new IllegalArgumentException("Sprite shader is disposed");
+		shader.validateForSpriteBatch(gl);
+		for (Map.Entry<String, ShaderUniformValue> uniform
+				: material.uniformValues().entrySet()) {
+			if (isManagedUniform(BatchType.SPRITE, uniform.getKey()))
+				throw new IllegalArgumentException("Uniform " + uniform.getKey()
+						+ " is managed by the sprite renderer");
+			shader.validateUserUniform(gl, uniform.getKey(), uniform.getValue());
+		}
+	}
+
+	void validateSpriteDepthState(GLDepthState state) {
+		if (state.testEnabled() && activeRenderTarget() != null
+				&& !activeRenderTarget().isDepthEnabled())
+			throw new IllegalStateException(
+					"The active render target was created without depth support");
 	}
 
 	void beginRenderTarget(GLRenderTarget target) {
@@ -858,6 +928,16 @@ public final class GLRenderer2D {
 				continue;
 			target.release(this, gl);
 			renderTargets.remove(target);
+		}
+	}
+
+	private void releaseClosedSpriteBuffers(GL3 gl) {
+		for (Map.Entry<GLSpriteBuffer, GLStaticSpriteResource> entry
+				: new ArrayList<>(staticSpriteResources.entrySet())) {
+			if (!entry.getKey().isClosed())
+				continue;
+			entry.getValue().dispose(gl);
+			staticSpriteResources.remove(entry.getKey());
 		}
 	}
 
@@ -1409,19 +1489,8 @@ public final class GLRenderer2D {
 				&& !activeRenderTarget().isDepthEnabled())
 			throw new IllegalStateException(
 					"The active render target was created without depth support");
+		validateSpriteMaterial(material);
 		ShaderProgram shader = material.getShader();
-		if (shader != null) {
-			if (shader.isDisposed())
-				throw new IllegalArgumentException("Sprite shader is disposed");
-			shader.validateForSpriteBatch(gl);
-			for (Map.Entry<String, ShaderUniformValue> uniform
-					: material.uniformValues().entrySet()) {
-				if (isManagedUniform(BatchType.SPRITE, uniform.getKey()))
-					throw new IllegalArgumentException("Uniform " + uniform.getKey()
-							+ " is managed by the sprite renderer");
-				shader.validateUserUniform(gl, uniform.getKey(), uniform.getValue());
-			}
-		}
 
 		GLTextureRegion color = resolveImage(material.getColorMap());
 		GLTextureRegion depthRegion = material.hasDepthMap()
@@ -1840,6 +1909,11 @@ public final class GLRenderer2D {
 
 	private int createPickRecord(int pickId, GLMouseTarget mouseTarget,
 			float originX, float originY) {
+		return createPickRecord(pickId, mouseTarget, null, originX, originY);
+	}
+
+	int createPickRecord(int pickId, GLMouseTarget mouseTarget,
+			GLTransform localTransform, float originX, float originY) {
 		if (pickId != GLContext2D.NO_PICK_ID && mouseTarget != null)
 			throw new IllegalArgumentException(
 					"Pick ID and mouse target are mutually exclusive");
@@ -1848,8 +1922,10 @@ public final class GLRenderer2D {
 		if (!pickingRenderingEnabled)
 			return 0;
 		pickTransform.setTransform(worldToScreen)
-				.concatenate(transform)
-				.translate(originX, originY);
+				.concatenate(transform);
+		if (localTransform != null)
+			pickTransform.concatenate(localTransform);
+		pickTransform.translate(originX, originY);
 		PersistentPickRecords targetRecords = activeRenderTargetPickingRecords();
 		return targetRecords == null
 				? pickRecords.add(pickId, mouseTarget, pickTransform)
@@ -1973,6 +2049,7 @@ public final class GLRenderer2D {
 
 	private static boolean isManagedUniform(BatchType batch, String name) {
 		return name.equals("uProjection")
+				|| batch == BatchType.SPRITE && name.equals("uModel")
 				|| (batch == BatchType.TEXTURE || batch == BatchType.TEXT)
 						&& name.equals("uTexture")
 				|| batch == BatchType.TEXT && name.equals("uMsdfPixelRange")
@@ -1988,7 +2065,7 @@ public final class GLRenderer2D {
 						|| name.equals("uDirectionalIntensity"));
 	}
 
-	private void applyDepthState(GLDepthState state) {
+	void applyDepthState(GLDepthState state) {
 		if (state.testEnabled())
 			gl.glEnable(GL.GL_DEPTH_TEST);
 		else

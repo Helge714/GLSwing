@@ -232,7 +232,7 @@ public final class ShaderProgram {
 				new AttributeRequirement("aTextureSlot", 12),
 				new AttributeRequirement("aFlags", 13)
 		}, new String[] {
-				"uProjection",
+				"uProjection", "uModel",
 				"uColorMaps[0]", "uColorMaps[1]", "uColorMaps[2]",
 				"uColorMaps[3]", "uColorMaps[4]",
 				"uDepthMaps[0]", "uDepthMaps[1]", "uDepthMaps[2]",

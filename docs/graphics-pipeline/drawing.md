@@ -41,10 +41,14 @@ von `0..255`.
 | Kein Recording aktiv | Geometrie wird direkt in den offenen Rendererbatch eingefügt. |
 | Zwischen `beginRecording`/`endRecording` | Normalisierte Anweisung/Geometrie wird gespeichert, nicht sichtbar gezeichnet. |
 | `draw(recording)` | Gespeicherte Anweisungen fließen in die aktuellen Batches ein. |
+| Zwischen `beginSpriteBuffer`/`endSpriteBuffer` | Ausschließlich Sprite-/Materialinstanzen werden als statischer Puffer aufgenommen. |
+| `draw(spriteBuffer)` | GPU-residente Instanzen werden relativ zum aktuellen Modeltransform gezeichnet. |
 
 Alle unten genannten Zeichenbefehle sind recordbar, außer
 `drawRenderTarget(...)`. `draw(GLRecording)` selbst ist während einer aktiven
 Aufnahme nicht erlaubt.
+Die engere Sprite-Buffer-Aufnahme ist im
+[Recording-Kapitel](recording.md#gpu-residente-sprite-puffer) beschrieben.
 
 ## Overload-Konvention
 

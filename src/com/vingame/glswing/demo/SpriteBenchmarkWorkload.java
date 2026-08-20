@@ -9,6 +9,7 @@ import com.vingame.glswing.rendering.GLDepthState;
 import com.vingame.glswing.rendering.GLImage;
 import com.vingame.glswing.rendering.GLLighting2D;
 import com.vingame.glswing.rendering.GLSprite;
+import com.vingame.glswing.rendering.GLSpriteBuffer;
 
 /** Shared deterministic workload used by the interactive and offscreen benchmark. */
 final class SpriteBenchmarkWorkload {
@@ -97,6 +98,55 @@ final class SpriteBenchmarkWorkload {
         }
 
         context.clearPickId();
+        if (restoreState) {
+            context.setDepthState(previousDepthState);
+            context.setDepth(previousDepth);
+            context.setLighting(previousLighting);
+            context.setOutputMask(previousColorOutput, previousPickingOutput);
+        }
+    }
+
+    /** Records the static form of the same workload for GPU-resident replay. */
+    GLSpriteBuffer recordBuffer(GLContext2D context, int objectCount,
+            Channels channels, GLAlphaMode alphaMode, boolean picking,
+            float areaX, float areaY, float areaWidth, float areaHeight) {
+        prepare(objectCount, areaX, areaY, areaWidth, areaHeight);
+        context.beginSpriteBuffer();
+        boolean finished = false;
+        try {
+            GLSprite[] variants = sprites[channels.ordinal()][alphaMode.ordinal()];
+            for (int index = 0; index < objectCount; index++) {
+                if (picking)
+                    context.setPickId(index + 1);
+                context.drawSprite(variants[index & 3], x[index], y[index],
+                        spriteWidth, spriteHeight, Color.WHITE, depth[index]);
+            }
+            context.clearPickId();
+            GLSpriteBuffer result = context.endSpriteBuffer();
+            finished = true;
+            return result;
+        } finally {
+            if (!finished && context.isRecordingSpriteBuffer())
+                context.cancelSpriteBuffer();
+            context.clearPickId();
+        }
+    }
+
+    void draw(GLContext2D context, GLSpriteBuffer buffer, boolean picking,
+            boolean restoreState) {
+        boolean previousColorOutput = restoreState
+                && context.isColorRenderingEnabled();
+        boolean previousPickingOutput = restoreState
+                && context.isPickingRenderingEnabled();
+        GLDepthState previousDepthState = restoreState
+                ? context.getDepthState() : null;
+        float previousDepth = restoreState ? context.getDepth() : 0;
+        GLLighting2D previousLighting = restoreState
+                ? context.getLighting() : null;
+        context.setOutputMask(true, picking);
+        context.clearDepth();
+        context.setLighting(LIGHTING);
+        context.draw(buffer);
         if (restoreState) {
             context.setDepthState(previousDepthState);
             context.setDepth(previousDepth);

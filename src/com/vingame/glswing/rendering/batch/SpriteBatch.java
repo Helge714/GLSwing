@@ -24,6 +24,12 @@ public final class SpriteBatch {
 	private static final int MAX_INSTANCES = 65_536;
 	private static final int INITIAL_INSTANCES = 8_192;
 	private static final int FLOATS_PER_INSTANCE = 32;
+	private static final float[] IDENTITY_MODEL = {
+			1, 0, 0, 0,
+			0, 1, 0, 0,
+			0, 0, 1, 0,
+			0, 0, 0, 1
+	};
 
 	public static final int FLAG_DEPTH_MAP = 1;
 	public static final int FLAG_NORMAL_MAP = 2;
@@ -187,6 +193,7 @@ public final class SpriteBatch {
 			ShaderProgram active = override == null ? program : override;
 			active.use(gl);
 			active.setMatrix4(gl, "uProjection", projection);
+			active.setMatrix4(gl, "uModel", IDENTITY_MODEL);
 			setSamplers(gl, active);
 			setLighting(gl, active, lighting);
 			for (Map.Entry<String, ShaderUniformValue> uniform : uniforms.entrySet())
@@ -196,7 +203,7 @@ public final class SpriteBatch {
 			restoreBlend(gl, alphaMode);
 		}
 		if (drawPicking) {
-			picking.drawSprite(gl, vao, instanceCount, projection,
+			picking.drawSprite(gl, vao, instanceCount, projection, IDENTITY_MODEL,
 					textures.colors(), textures.depths(), textures.normals());
 			drawCalls++;
 		}
@@ -218,6 +225,11 @@ public final class SpriteBatch {
 			vao = 0;
 		}
 		program.dispose(gl);
+	}
+
+	/** Internal built-in program shared by renderer-owned resident sprite buffers. */
+	public ShaderProgram defaultProgram() {
+		return program;
 	}
 
 	private void putInstance(float x1, float y1, float x2, float y2,
@@ -304,7 +316,8 @@ public final class SpriteBatch {
 		return expanded;
 	}
 
-	private static void configureBlend(GL3 gl, GLAlphaMode mode) {
+	/** Shared internal state setup for dynamic and resident sprite batches. */
+	public static void configureBlend(GL3 gl, GLAlphaMode mode) {
 		if (mode == GLAlphaMode.BLEND) {
 			gl.glEnable(GL.GL_BLEND);
 		} else {
@@ -314,13 +327,13 @@ public final class SpriteBatch {
 		}
 	}
 
-	private static void restoreBlend(GL3 gl, GLAlphaMode mode) {
+	public static void restoreBlend(GL3 gl, GLAlphaMode mode) {
 		if (mode == GLAlphaMode.CUTOUT)
 			gl.glDisable(GL.GL_SAMPLE_ALPHA_TO_COVERAGE);
 		gl.glEnable(GL.GL_BLEND);
 	}
 
-	private static void setLighting(GL3 gl, ShaderProgram shader,
+	public static void setLighting(GL3 gl, ShaderProgram shader,
 			GLLighting2D lighting) {
 		GLLighting2D actual = lighting == null ? GLLighting2D.DEFAULT : lighting;
 		shader.setVector3(gl, "uAmbientColor",
@@ -344,7 +357,7 @@ public final class SpriteBatch {
 		}
 	}
 
-	private static void setSamplers(GL3 gl, ShaderProgram shader) {
+	public static void setSamplers(GL3 gl, ShaderProgram shader) {
 		for (int slot = 0; slot < MAX_TEXTURE_SETS; slot++) {
 			shader.setInteger(gl, "uColorMaps[" + slot + "]", slot);
 			shader.setInteger(gl, "uDepthMaps[" + slot + "]",

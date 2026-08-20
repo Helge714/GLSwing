@@ -165,9 +165,26 @@ das `GLMouseTarget` stimmen deshalb pixelgenau überein.
 `drawSprite` und `drawMaterial` sind recordbar. Maps werden erst beim Replay
 aufgelöst, sodass Recordings keine renderergebundenen Texture-IDs speichern.
 MouseTargets bleiben wie bei anderen Recordings schwach referenziert. Ein
-Recording speist derzeit den dynamischen Instanzbatch erneut; ein künftig
-GPU-residenter statischer Buffer ist davon getrennt und nicht implizit Teil
-eines normalen Recordings.
+Recording speist den dynamischen Instanzbatch erneut.
+
+Für unveränderte große Mengen dient getrennt davon `GLSpriteBuffer`:
+
+```java
+g.beginSpriteBuffer();
+for (Tile tile : staticTiles)
+    g.drawSprite(tile.sprite(), tile.x(), tile.y(), 32, 32,
+            Color.WHITE, tile.depth());
+GLSpriteBuffer chunk = g.endSpriteBuffer();
+
+g.setTransform(cameraTransform);
+g.draw(chunk);              // Instanzdaten bleiben auf der GPU
+```
+
+Der erste Draw lädt rendererlokale `GL_STATIC_DRAW`-Puffer; weitere Frames
+ändern nur Drawzustand und Modellmatrix. Materialwechsel werden intern in
+geordnete Abschnitte zerlegt. Picking bleibt möglich, aktualisiert wegen der
+frame-lokalen Registry aber weiterhin den Integer-ID-Strom. Details und
+Lebensdauer stehen im [Recording-Kapitel](recording.md#gpu-residente-sprite-puffer).
 
 ## RenderTargets und Layer
 
@@ -227,6 +244,7 @@ und schaltet zur Laufzeit zwischen folgenden Dimensionen um:
 - `OPAQUE`, `CUTOUT` und `BLEND`,
 - statische und pro Frame bewegte Positionen,
 - Farbausgabe allein oder zusätzliche Picking-Ausgabe.
+- dynamische Einreichung oder GPU-residenter Sprite-Puffer.
 
 Der Fenstertitel trennt FPS und End-to-End-Zeit von CPU-Szenenzeit,
 `drawSprite`-Einreichungszeit, GPU-Szenenzeit, Present-Zeit und Drawcalls. Die
@@ -239,6 +257,11 @@ CPU-Submission und `GL_TIME_ELAPSED` auf der GPU aus. Das ist der passende
 Test für Rendereränderungen; die interaktive Demo beantwortet dagegen, wie
 sich die vollständige Anwendung verhält.
 
+`ResidentSpriteBenchmark` ist der direkte A/B-Test für 10.000 und 50.000
+dynamische beziehungsweise residente Instanzen, jeweils mit CPU-API- und
+`GL_TIME_ELAPSED`-Messung sowie einem separaten Picking-Vergleich.
+
 Die visuelle Referenz ist `DepthSpriteDemo`; der zugehörige
 `DepthSpriteGpuSelfTest` prüft Cutout, Occlusion, Lighting, Recording,
-RenderTargets und depth-korrektes Picking.
+RenderTargets, residente Wiederverwendung/Transformation und depth-korrektes
+Picking.
