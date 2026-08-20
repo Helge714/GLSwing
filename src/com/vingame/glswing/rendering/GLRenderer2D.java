@@ -1433,7 +1433,7 @@ public final class GLRenderer2D {
 				|| !pendingSpriteDepthState.equals(material.getDepthState())
 				|| pendingSpriteAlphaMode != material.getAlphaMode();
 		activateBatch(BatchType.SPRITE);
-		if (stateChanged && spriteBatch.canAddQuad())
+		if (stateChanged)
 			drawCallCount += flushBatch(BatchType.SPRITE);
 		spriteShaderOverride = shader;
 		spriteUniforms.clear();
@@ -1441,7 +1441,7 @@ public final class GLRenderer2D {
 		pendingSpriteDepthState = material.getDepthState();
 		pendingSpriteAlphaMode = material.getAlphaMode();
 		if (!spriteBatch.accepts(color.texture(), depthRegion.texture(), normal.texture())
-				|| !spriteBatch.canAddQuad())
+				|| !spriteBatch.canAdd())
 			drawCallCount += flushBatch(BatchType.SPRITE);
 
 		float x2 = x + width;

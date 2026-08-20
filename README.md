@@ -91,6 +91,8 @@ Die mitgelieferten Eclipse-Launch-Konfigurationen enthalten sie bereits.
 | `LayerDemo` | Gruppen-Alpha, Blendmodi und Effekte |
 | `ImageAtlasDemo` | Bilder, Icons, Atlanten und adaptives Rasterisieren |
 | `DepthSpriteDemo` | Pixelgenaue Sprite-Tiefe, Normalmaps, Licht und Picking |
+| `SpritePipelineBenchmarkDemo` | Interaktiver End-to-End-Vergleich von Kanälen, Alpha, Bewegung und Picking |
+| `SpritePipelineBenchmark` | Reproduzierbare Offscreen-CPU-/GPU-Messung ohne Präsentation |
 | `PickingDemo` | Picking für Formen, Texturen und Text |
 | `NodeEditorDemo` | Interaktiver Node-Editor |
 | `GameOfLifeDemo` | RenderTargets und GPU-Ping-Pong |

@@ -17,6 +17,7 @@ bleiben Sache der Anwendung.
 - [Batching, Picking und Recording](#batching-picking-und-recording)
 - [RenderTargets und Layer](#rendertargets-und-layer)
 - [Eigene Materialshader](#eigene-materialshader)
+- [Performance messen](#performance-messen)
 
 ## Depth-Konvention und Contextzustand
 
@@ -113,8 +114,8 @@ der Beleuchtung zusammenpassen.
 
 Color-, Depth- und Normalmap werden unabhängig über `GLImage` aufgelöst. Sie
 dürfen auf unterschiedlichen Atlasseiten und an unterschiedlichen UV-Rechtecken
-liegen; die Spritevertices führen drei UV-Sätze. Die Anwendung verwaltet daher
-keine Atlaspositionen.
+liegen; jeder Instanzdatensatz führt dafür drei UV-Rechtecke. Die Anwendung
+verwaltet daher keine Atlaspositionen.
 
 ## Licht
 
@@ -138,9 +139,18 @@ Komfortwerte.
 
 ## Batching, Picking und Recording
 
-Der spezialisierte Sprite-Batch bindet bis zu fünf Material-Textursets. Jedes
-Set besteht aus Color-, Depth- und Normaltextur; damit bleiben maximal 15
-Texture-Units belegt und die garantierte GL3-Untergrenze von 16 wird eingehalten.
+Der spezialisierte Sprite-Batch zeichnet instanziert und bindet bis zu fünf
+Material-Textursets. Jedes Set besteht aus Color-, Depth- und Normaltextur;
+damit bleiben maximal 15 Texture-Units belegt und die garantierte
+GL3-Untergrenze von 16 wird eingehalten.
+
+Pro Sprite wird nur ein Instanzdatensatz übertragen: vier transformierte
+Eckpunkte, je ein UV-Rechteck für Color/Depth/Normal, Tint, Depthbereich,
+Tangentenbasis und die drei Integerwerte für Picking, Texturslot und Flags. Der
+Vertexshader erzeugt daraus über `gl_VertexID` die sechs Eckaufrufe des Quads.
+Bis zu 65.536 kompatible Sprites passen in einen Drawcall. Die CPU-Buffer
+beginnen kleiner und wachsen erst bei Bedarf, sodass normale GUI-Szenen den
+Maximalspeicher nicht vorab belegen.
 Ein Flush entsteht bei:
 
 - mehr als fünf gleichzeitig benötigten Textursets,
@@ -154,7 +164,10 @@ das `GLMouseTarget` stimmen deshalb pixelgenau überein.
 
 `drawSprite` und `drawMaterial` sind recordbar. Maps werden erst beim Replay
 aufgelöst, sodass Recordings keine renderergebundenen Texture-IDs speichern.
-MouseTargets bleiben wie bei anderen Recordings schwach referenziert.
+MouseTargets bleiben wie bei anderen Recordings schwach referenziert. Ein
+Recording speist derzeit den dynamischen Instanzbatch erneut; ein künftig
+GPU-residenter statischer Buffer ist davon getrennt und nicht implizit Teil
+eines normalen Recordings.
 
 ## RenderTargets und Layer
 
@@ -204,6 +217,28 @@ Der vollständige Vertrag steht im [Shaderkapitel](shaders.md). Wie bei allen
 eigenen Shadern besitzt das Material das Programm nicht; die Anwendung gibt es
 mit aktuellem GL-Kontext frei, nachdem kein Material/Recording es mehr nutzt.
 
-Die ausführbare Referenz ist `DepthSpriteDemo`; der zugehörige
+## Performance messen
+
+`SpritePipelineBenchmarkDemo` zeichnet dieselbe Sprite-Menge kontinuierlich
+und schaltet zur Laufzeit zwischen folgenden Dimensionen um:
+
+- 100, 1.000, 10.000 oder 50.000 Sprites,
+- nur Farbe, Farbe plus Depth oder Farbe plus Depth, Normalmap und Licht,
+- `OPAQUE`, `CUTOUT` und `BLEND`,
+- statische und pro Frame bewegte Positionen,
+- Farbausgabe allein oder zusätzliche Picking-Ausgabe.
+
+Der Fenstertitel trennt FPS und End-to-End-Zeit von CPU-Szenenzeit,
+`drawSprite`-Einreichungszeit, GPU-Szenenzeit, Present-Zeit und Drawcalls. Die
+UI-Controls gehören bei dieser Demo bewusst zum vollständigen Frame.
+
+`SpritePipelineBenchmark` verwendet dieselbe Workload in einem
+1280-mal-720-Offscreen-Framebuffer mit 4x MSAA. Er schließt Swing,
+Fenstertausch und Desktop-Compositor aus und gibt p50/p95 für API-Aufbau,
+CPU-Submission und `GL_TIME_ELAPSED` auf der GPU aus. Das ist der passende
+Test für Rendereränderungen; die interaktive Demo beantwortet dagegen, wie
+sich die vollständige Anwendung verhält.
+
+Die visuelle Referenz ist `DepthSpriteDemo`; der zugehörige
 `DepthSpriteGpuSelfTest` prüft Cutout, Occlusion, Lighting, Recording,
 RenderTargets und depth-korrektes Picking.

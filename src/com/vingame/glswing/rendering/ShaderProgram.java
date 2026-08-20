@@ -218,17 +218,19 @@ public final class ShaderProgram {
 
 	void validateForSpriteBatch(GL3 gl) {
 		validateLayout(gl, "Sprite", new AttributeRequirement[] {
-				new AttributeRequirement("aPosition", 0),
-				new AttributeRequirement("aColorUv", 1),
-				new AttributeRequirement("aTint", 2),
-				new AttributeRequirement("aTextureSlot", 4),
-				new AttributeRequirement("aDepthUv", 5),
-				new AttributeRequirement("aNormalUv", 6),
-				new AttributeRequirement("aDepthData", 7),
-				new AttributeRequirement("aFlags", 8),
-				new AttributeRequirement("aAlphaCutoff", 9),
-				new AttributeRequirement("aTangentX", 10),
-				new AttributeRequirement("aTangentY", 11)
+				new AttributeRequirement("aP00", 0),
+				new AttributeRequirement("aP10", 1),
+				new AttributeRequirement("aP11", 2),
+				new AttributeRequirement("aP01", 3),
+				new AttributeRequirement("aColorUvRect", 4),
+				new AttributeRequirement("aDepthUvRect", 5),
+				new AttributeRequirement("aNormalUvRect", 6),
+				new AttributeRequirement("aTint", 7),
+				new AttributeRequirement("aDepthData", 8),
+				new AttributeRequirement("aTangentX", 9),
+				new AttributeRequirement("aTangentY", 10),
+				new AttributeRequirement("aTextureSlot", 12),
+				new AttributeRequirement("aFlags", 13)
 		}, new String[] {
 				"uProjection",
 				"uColorMaps[0]", "uColorMaps[1]", "uColorMaps[2]",

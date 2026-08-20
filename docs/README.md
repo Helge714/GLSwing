@@ -53,7 +53,8 @@ Die Klassen in `src/com/vingame/glswing/demo` ergänzen das Handbuch:
 
 - `DrawingApiDemo`, `PathDemo`, `SvgImportDemo`
 - `CustomShaderDemo`, `RecordingParameterDemo`, `LayerDemo`
-- `ImageAtlasDemo`, `DepthSpriteDemo`, `PickingDemo`, `GameOfLifeDemo`
+- `ImageAtlasDemo`, `DepthSpriteDemo`, `SpritePipelineBenchmarkDemo`,
+  `SpritePipelineBenchmark`, `PickingDemo`, `GameOfLifeDemo`
 - `GuiShowcaseDemo`, `CanvasGuiShowcaseDemo`, `GLFrameDemo`
 - `NodeEditorDemo`
 

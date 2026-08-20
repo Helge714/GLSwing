@@ -274,7 +274,7 @@ public final class PickFramebuffer {
 	}
 
 	/** Draws depth-aware sprite IDs through the color/depth atlas set. */
-	public void drawSprite(GL3 gl, int vao, int vertexCount,
+	public void drawSprite(GL3 gl, int vao, int instanceCount,
 			float[] projection, GLTexture[] colors, GLTexture[] depths,
 			GLTexture[] normals) {
 		ensureActiveSurface(gl);
@@ -285,7 +285,8 @@ public final class PickFramebuffer {
 		spriteProgram.setMatrix4(gl, "uProjection", projection);
 		setSpriteSamplers(gl, spriteProgram);
 		bindSpriteTextures(gl, colors, depths, normals);
-		draw(gl, vao, vertexCount);
+		gl.glBindVertexArray(vao);
+		gl.glDrawArraysInstanced(GL.GL_TRIANGLES, 0, 6, instanceCount);
 		unbindSpriteTextures(gl, colors.length);
 		restoreAfterPicking(gl);
 	}

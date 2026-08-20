@@ -28,6 +28,15 @@ bewusst verworfen wurde.
 
 ## Rendering und Farbräume
 
+- GPU-residente statische Instanz-/Meshbuffer als Ergänzung zum dynamischen
+  Sprite-Instancing entwerfen.
+  - Unveränderte Instanzdaten nur bei Erstellung oder gezieltem Update
+    hochladen und anschließend ohne CPU-Neuaufbau zeichnen.
+  - Ressourcenlebensdauer, partielles Update, Recording-Integration, Picking
+    und Kontextverlust eindeutig regeln.
+  - Die API allgemein halten; Tile-Chunks, Terrain und World-Streaming bleiben
+    Anwendungs- oder Erweiterungslogik und werden nicht Teil des Kernmoduls.
+
 - 2.5D-Licht nach realer Nutzung gezielt erweitern.
   - Mehrere Richtungs-, Punkt- oder Spotlichter erst nach einem Benchmark als
     Forward-, Forward+- oder separaten Lichtpass entwerfen.

@@ -18,37 +18,38 @@ import com.vingame.glswing.rendering.ShaderProgram;
 import com.vingame.glswing.rendering.internal.PickFramebuffer;
 import com.vingame.glswing.rendering.internal.ShaderUniformValue;
 
-/** Dynamic 2.5D sprite batch with independent color/depth/normal atlas pages. */
+/** Instanced 2.5D sprite batch with independent color/depth/normal atlas pages. */
 public final class SpriteBatch {
 	public static final int MAX_TEXTURE_SETS = 5;
-	private static final int MAX_VERTICES = 32_768;
-	private static final int FLOATS_PER_VERTEX = 21;
+	private static final int MAX_INSTANCES = 65_536;
+	private static final int INITIAL_INSTANCES = 8_192;
+	private static final int FLOATS_PER_INSTANCE = 32;
 
 	public static final int FLAG_DEPTH_MAP = 1;
 	public static final int FLAG_NORMAL_MAP = 2;
 	public static final int FLAG_LIT = 4;
 	public static final int FLAG_CUTOUT = 8;
 
-	private final FloatBuffer vertices = Buffers.newDirectFloatBuffer(
-			MAX_VERTICES * FLOATS_PER_VERTEX);
-	private final IntBuffer pickIds = Buffers.newDirectIntBuffer(MAX_VERTICES);
-	private final IntBuffer slots = Buffers.newDirectIntBuffer(MAX_VERTICES);
-	private final IntBuffer flags = Buffers.newDirectIntBuffer(MAX_VERTICES);
+	private FloatBuffer instances = Buffers.newDirectFloatBuffer(
+			INITIAL_INSTANCES * FLOATS_PER_INSTANCE);
+	private IntBuffer pickIds = Buffers.newDirectIntBuffer(INITIAL_INSTANCES);
+	private IntBuffer slots = Buffers.newDirectIntBuffer(INITIAL_INSTANCES);
+	private IntBuffer flags = Buffers.newDirectIntBuffer(INITIAL_INSTANCES);
 	private final TextureSets textures = new TextureSets();
 	private final ShaderProgram program;
 	private int vao;
-	private int vertexVbo;
+	private int instanceVbo;
 	private int pickVbo;
 	private int slotVbo;
 	private int flagVbo;
-	private int vertexCount;
-	private boolean hasPickableVertices;
+	private int instanceCount;
+	private boolean hasPickableInstances;
 
-	private SpriteBatch(ShaderProgram program, int vao, int vertexVbo,
+	private SpriteBatch(ShaderProgram program, int vao, int instanceVbo,
 			int pickVbo, int slotVbo, int flagVbo) {
 		this.program = program;
 		this.vao = vao;
-		this.vertexVbo = vertexVbo;
+		this.instanceVbo = instanceVbo;
 		this.pickVbo = pickVbo;
 		this.slotVbo = slotVbo;
 		this.flagVbo = flagVbo;
@@ -58,44 +59,46 @@ public final class SpriteBatch {
 		ShaderProgram program = ShaderProgram.fromBuiltInResources(
 				gl, "sprite.vert", "sprite.frag");
 		int[] id = new int[1];
-		int vao = 0, vertexVbo = 0, pickVbo = 0, slotVbo = 0, flagVbo = 0;
+		int vao = 0, instanceVbo = 0, pickVbo = 0, slotVbo = 0, flagVbo = 0;
 		try {
 			gl.glGenVertexArrays(1, id, 0);
 			vao = id[0];
 			gl.glBindVertexArray(vao);
 			gl.glGenBuffers(1, id, 0);
-			vertexVbo = id[0];
-			gl.glBindBuffer(GL.GL_ARRAY_BUFFER, vertexVbo);
+			instanceVbo = id[0];
+			gl.glBindBuffer(GL.GL_ARRAY_BUFFER, instanceVbo);
 			gl.glBufferData(GL.GL_ARRAY_BUFFER,
-					(long) MAX_VERTICES * FLOATS_PER_VERTEX * Float.BYTES,
+					(long) INITIAL_INSTANCES * FLOATS_PER_INSTANCE * Float.BYTES,
 					null, GL.GL_DYNAMIC_DRAW);
-			int stride = FLOATS_PER_VERTEX * Float.BYTES;
+			int stride = FLOATS_PER_INSTANCE * Float.BYTES;
 			floatAttribute(gl, 0, 2, stride, 0);
 			floatAttribute(gl, 1, 2, stride, 2);
-			floatAttribute(gl, 5, 2, stride, 4);
-			floatAttribute(gl, 6, 2, stride, 6);
-			floatAttribute(gl, 2, 4, stride, 8);
-			floatAttribute(gl, 7, 4, stride, 12);
-			floatAttribute(gl, 9, 1, stride, 16);
-			floatAttribute(gl, 10, 2, stride, 17);
-			floatAttribute(gl, 11, 2, stride, 19);
+			floatAttribute(gl, 2, 2, stride, 4);
+			floatAttribute(gl, 3, 2, stride, 6);
+			floatAttribute(gl, 4, 4, stride, 8);
+			floatAttribute(gl, 5, 4, stride, 12);
+			floatAttribute(gl, 6, 4, stride, 16);
+			floatAttribute(gl, 7, 4, stride, 20);
+			floatAttribute(gl, 8, 4, stride, 24);
+			floatAttribute(gl, 9, 2, stride, 28);
+			floatAttribute(gl, 10, 2, stride, 30);
 
 			gl.glGenBuffers(1, id, 0);
 			pickVbo = id[0];
-			integerBuffer(gl, pickVbo, 3, true);
+			integerBuffer(gl, pickVbo, 11, true);
 			gl.glGenBuffers(1, id, 0);
 			slotVbo = id[0];
-			integerBuffer(gl, slotVbo, 4, false);
+			integerBuffer(gl, slotVbo, 12, false);
 			gl.glGenBuffers(1, id, 0);
 			flagVbo = id[0];
-			integerBuffer(gl, flagVbo, 8, false);
-			return new SpriteBatch(program, vao, vertexVbo,
+			integerBuffer(gl, flagVbo, 13, false);
+			return new SpriteBatch(program, vao, instanceVbo,
 					pickVbo, slotVbo, flagVbo);
 		} catch (RuntimeException error) {
 			deleteBuffer(gl, flagVbo);
 			deleteBuffer(gl, slotVbo);
 			deleteBuffer(gl, pickVbo);
-			deleteBuffer(gl, vertexVbo);
+			deleteBuffer(gl, instanceVbo);
 			if (vao != 0)
 				gl.glDeleteVertexArrays(1, new int[] { vao }, 0);
 			program.dispose(gl);
@@ -107,21 +110,21 @@ public final class SpriteBatch {
 	}
 
 	public void begin() {
-		vertices.clear();
+		instances.clear();
 		pickIds.clear();
 		slots.clear();
 		flags.clear();
 		textures.clear();
-		vertexCount = 0;
-		hasPickableVertices = false;
+		instanceCount = 0;
+		hasPickableInstances = false;
 	}
 
 	public boolean accepts(GLTexture color, GLTexture depth, GLTexture normal) {
 		return textures.accepts(color, depth, normal);
 	}
 
-	public boolean canAddQuad() {
-		return vertexCount + 6 <= MAX_VERTICES;
+	public boolean canAdd() {
+		return instanceCount < MAX_INSTANCES;
 	}
 
 	public void addQuad(GLTexture color, GLTexture depth, GLTexture normal,
@@ -133,52 +136,47 @@ public final class SpriteBatch {
 			float red, float green, float blue, float alpha,
 			float baseDepth, float backOffset, float frontOffset,
 			float alphaCutoff, int materialFlags, int pickId) {
-		if (!accepts(color, depth, normal) || !canAddQuad())
+		if (!accepts(color, depth, normal) || !canAdd())
 			throw new IllegalStateException("Sprite batch requires a flush");
+		ensureCpuCapacity(instanceCount + 1);
 		int slot = textures.slot(color, depth, normal);
-		float txX = normalizedX(x2 - x1, y2 - y1);
-		float txY = normalizedY(x2 - x1, y2 - y1);
-		float tyX = normalizedX(x4 - x1, y4 - y1);
-		float tyY = normalizedY(x4 - x1, y4 - y1);
-		put(x1, y1, colorU0, colorV0, depthU0, depthV0, normalU0, normalV0,
+		float txDx = x2 - x1;
+		float txDy = y2 - y1;
+		float txLength = (float) Math.hypot(txDx, txDy);
+		float txX = txLength == 0 ? 1 : txDx / txLength;
+		float txY = txLength == 0 ? 0 : txDy / txLength;
+		float tyDx = x4 - x1;
+		float tyDy = y4 - y1;
+		float tyLength = (float) Math.hypot(tyDx, tyDy);
+		float tyX = tyLength == 0 ? 1 : tyDx / tyLength;
+		float tyY = tyLength == 0 ? 0 : tyDy / tyLength;
+		putInstance(x1, y1, x2, y2, x3, y3, x4, y4,
+				colorU0, colorV0, colorU1, colorV1,
+				depthU0, depthV0, depthU1, depthV1,
+				normalU0, normalV0, normalU1, normalV1,
 				red, green, blue, alpha, baseDepth, backOffset, frontOffset,
 				alphaCutoff, txX, txY, tyX, tyY, pickId, slot, materialFlags);
-		put(x2, y2, colorU1, colorV0, depthU1, depthV0, normalU1, normalV0,
-				red, green, blue, alpha, baseDepth, backOffset, frontOffset,
-				alphaCutoff, txX, txY, tyX, tyY, pickId, slot, materialFlags);
-		put(x3, y3, colorU1, colorV1, depthU1, depthV1, normalU1, normalV1,
-				red, green, blue, alpha, baseDepth, backOffset, frontOffset,
-				alphaCutoff, txX, txY, tyX, tyY, pickId, slot, materialFlags);
-		put(x1, y1, colorU0, colorV0, depthU0, depthV0, normalU0, normalV0,
-				red, green, blue, alpha, baseDepth, backOffset, frontOffset,
-				alphaCutoff, txX, txY, tyX, tyY, pickId, slot, materialFlags);
-		put(x3, y3, colorU1, colorV1, depthU1, depthV1, normalU1, normalV1,
-				red, green, blue, alpha, baseDepth, backOffset, frontOffset,
-				alphaCutoff, txX, txY, tyX, tyY, pickId, slot, materialFlags);
-		put(x4, y4, colorU0, colorV1, depthU0, depthV1, normalU0, normalV1,
-				red, green, blue, alpha, baseDepth, backOffset, frontOffset,
-				alphaCutoff, txX, txY, tyX, tyY, pickId, slot, materialFlags);
-		vertexCount += 6;
+		instanceCount++;
 	}
 
 	public int flush(GL3 gl, float[] projection, ShaderProgram override,
 			Map<String, ShaderUniformValue> uniforms, GLLighting2D lighting,
 			GLAlphaMode alphaMode, PickFramebuffer picking,
 			boolean renderColor, boolean renderPicking) {
-		if (vertexCount == 0)
+		if (instanceCount == 0)
 			return 0;
-		boolean drawPicking = renderPicking && hasPickableVertices;
+		boolean drawPicking = renderPicking && hasPickableInstances;
 		if (!renderColor && !drawPicking) {
 			reset();
 			return 0;
 		}
-		vertices.flip();
+		instances.flip();
 		pickIds.flip();
 		slots.flip();
 		flags.flip();
 		textures.bind(gl);
 		gl.glBindVertexArray(vao);
-		uploadFloat(gl, vertexVbo, vertices);
+		uploadFloat(gl, instanceVbo, instances);
 		if (drawPicking)
 			uploadInt(gl, pickVbo, pickIds);
 		uploadInt(gl, slotVbo, slots);
@@ -193,12 +191,12 @@ public final class SpriteBatch {
 			setLighting(gl, active, lighting);
 			for (Map.Entry<String, ShaderUniformValue> uniform : uniforms.entrySet())
 				uniform.getValue().apply(gl, active, uniform.getKey());
-			gl.glDrawArrays(GL.GL_TRIANGLES, 0, vertexCount);
+			gl.glDrawArraysInstanced(GL.GL_TRIANGLES, 0, 6, instanceCount);
 			drawCalls++;
 			restoreBlend(gl, alphaMode);
 		}
 		if (drawPicking) {
-			picking.drawSprite(gl, vao, vertexCount, projection,
+			picking.drawSprite(gl, vao, instanceCount, projection,
 					textures.colors(), textures.depths(), textures.normals());
 			drawCalls++;
 		}
@@ -214,7 +212,7 @@ public final class SpriteBatch {
 		deleteBuffer(gl, flagVbo); flagVbo = 0;
 		deleteBuffer(gl, slotVbo); slotVbo = 0;
 		deleteBuffer(gl, pickVbo); pickVbo = 0;
-		deleteBuffer(gl, vertexVbo); vertexVbo = 0;
+		deleteBuffer(gl, instanceVbo); instanceVbo = 0;
 		if (vao != 0) {
 			gl.glDeleteVertexArrays(1, new int[] { vao }, 0);
 			vao = 0;
@@ -222,20 +220,27 @@ public final class SpriteBatch {
 		program.dispose(gl);
 	}
 
-	private void put(float x, float y,
-			float cu, float cv, float du, float dv, float nu, float nv,
+	private void putInstance(float x1, float y1, float x2, float y2,
+			float x3, float y3, float x4, float y4,
+			float colorU0, float colorV0, float colorU1, float colorV1,
+			float depthU0, float depthV0, float depthU1, float depthV1,
+			float normalU0, float normalV0, float normalU1, float normalV1,
 			float red, float green, float blue, float alpha,
 			float baseDepth, float backOffset, float frontOffset,
 			float alphaCutoff, float txX, float txY, float tyX, float tyY,
 			int pickId, int slot, int materialFlags) {
-		vertices.put(x).put(y).put(cu).put(cv).put(du).put(dv).put(nu).put(nv);
-		vertices.put(red).put(green).put(blue).put(alpha);
-		vertices.put(baseDepth).put(backOffset).put(frontOffset).put(0);
-		vertices.put(alphaCutoff).put(txX).put(txY).put(tyX).put(tyY);
+		instances.put(x1).put(y1).put(x2).put(y2);
+		instances.put(x3).put(y3).put(x4).put(y4);
+		instances.put(colorU0).put(colorV0).put(colorU1).put(colorV1);
+		instances.put(depthU0).put(depthV0).put(depthU1).put(depthV1);
+		instances.put(normalU0).put(normalV0).put(normalU1).put(normalV1);
+		instances.put(red).put(green).put(blue).put(alpha);
+		instances.put(baseDepth).put(backOffset).put(frontOffset).put(alphaCutoff);
+		instances.put(txX).put(txY).put(tyX).put(tyY);
 		pickIds.put(pickId);
 		slots.put(slot);
 		flags.put(materialFlags);
-		hasPickableVertices |= pickId != 0;
+		hasPickableInstances |= pickId != 0;
 	}
 
 	private void reset() { begin(); }
@@ -245,17 +250,19 @@ public final class SpriteBatch {
 		gl.glEnableVertexAttribArray(location);
 		gl.glVertexAttribPointer(location, count, GL.GL_FLOAT, false, stride,
 				(long) floatOffset * Float.BYTES);
+		gl.glVertexAttribDivisor(location, 1);
 	}
 
 	private static void integerBuffer(GL3 gl, int buffer, int location,
 			boolean unsigned) {
 		gl.glBindBuffer(GL.GL_ARRAY_BUFFER, buffer);
 		gl.glBufferData(GL.GL_ARRAY_BUFFER,
-				(long) MAX_VERTICES * Integer.BYTES, null, GL.GL_DYNAMIC_DRAW);
+				(long) INITIAL_INSTANCES * Integer.BYTES, null, GL.GL_DYNAMIC_DRAW);
 		gl.glEnableVertexAttribArray(location);
 		gl.glVertexAttribIPointer(location, 1,
 				unsigned ? GL.GL_UNSIGNED_INT : GL2ES2.GL_INT,
 				Integer.BYTES, 0);
+		gl.glVertexAttribDivisor(location, 1);
 	}
 
 	private static void uploadFloat(GL3 gl, int buffer, FloatBuffer values) {
@@ -268,6 +275,33 @@ public final class SpriteBatch {
 		gl.glBindBuffer(GL.GL_ARRAY_BUFFER, buffer);
 		gl.glBufferData(GL.GL_ARRAY_BUFFER,
 				(long) values.remaining() * Integer.BYTES, values, GL3.GL_STREAM_DRAW);
+	}
+
+	private void ensureCpuCapacity(int requiredInstances) {
+		int currentInstances = pickIds.capacity();
+		if (requiredInstances <= currentInstances)
+			return;
+		int expandedInstances = Math.min(MAX_INSTANCES,
+				Math.max(requiredInstances, currentInstances * 2));
+		instances = grow(instances,
+				expandedInstances * FLOATS_PER_INSTANCE);
+		pickIds = grow(pickIds, expandedInstances);
+		slots = grow(slots, expandedInstances);
+		flags = grow(flags, expandedInstances);
+	}
+
+	private static FloatBuffer grow(FloatBuffer source, int capacity) {
+		source.flip();
+		FloatBuffer expanded = Buffers.newDirectFloatBuffer(capacity);
+		expanded.put(source);
+		return expanded;
+	}
+
+	private static IntBuffer grow(IntBuffer source, int capacity) {
+		source.flip();
+		IntBuffer expanded = Buffers.newDirectIntBuffer(capacity);
+		expanded.put(source);
+		return expanded;
 	}
 
 	private static void configureBlend(GL3 gl, GLAlphaMode mode) {
@@ -318,16 +352,6 @@ public final class SpriteBatch {
 			shader.setInteger(gl, "uNormalMaps[" + slot + "]",
 					MAX_TEXTURE_SETS * 2 + slot);
 		}
-	}
-
-	private static float normalizedX(float x, float y) {
-		float length = (float) Math.hypot(x, y);
-		return length == 0 ? 1 : x / length;
-	}
-
-	private static float normalizedY(float x, float y) {
-		float length = (float) Math.hypot(x, y);
-		return length == 0 ? 0 : y / length;
 	}
 
 	private static void deleteBuffer(GL3 gl, int buffer) {

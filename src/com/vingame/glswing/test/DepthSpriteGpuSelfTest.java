@@ -14,6 +14,7 @@ import com.jogamp.opengl.GLProfile;
 import com.vingame.glswing.input.GLMouseTarget;
 import com.vingame.glswing.rendering.GLAlphaMode;
 import com.vingame.glswing.rendering.GLContext2D;
+import com.vingame.glswing.rendering.GLDepthState;
 import com.vingame.glswing.rendering.GLImage;
 import com.vingame.glswing.rendering.GLLighting2D;
 import com.vingame.glswing.rendering.GLRenderer2D;
@@ -48,6 +49,7 @@ public final class DepthSpriteGpuSelfTest {
 			renderer = GLRenderer2D.create(gl);
 			testDepthCutoutAndPicking(gl, renderer);
 			testRecordedSpriteInDepthRenderTarget(gl, renderer);
+			testLargeInstancedBatch(gl, renderer);
 			System.out.println("Depth sprite GPU self-test passed.");
 		} finally {
 			if (renderer != null)
@@ -55,6 +57,29 @@ public final class DepthSpriteGpuSelfTest {
 			nativeContext.release();
 			drawable.destroy();
 		}
+	}
+
+	private static void testLargeInstancedBatch(GL3 gl,
+			GLRenderer2D renderer) {
+		GLSprite sprite = GLSprite.builder(solid(Color.RED, false))
+				.alphaMode(GLAlphaMode.OPAQUE)
+				.depthState(GLDepthState.DISABLED)
+				.build();
+		GLContext2D context = renderer.beginFrame(gl, WIDTH, HEIGHT,
+				Projection2D.TOP_LEFT_PIXELS.create(WIDTH, HEIGHT));
+		context.clear(Color.BLACK);
+		context.setPickingRenderingEnabled(false);
+		for (int index = 0; index < 50_000; index++)
+			context.drawSprite(sprite, index % WIDTH,
+					(index / WIDTH) % HEIGHT, 1, 1, Color.WHITE, 0.5f);
+		renderer.endFrame();
+		if (renderer.drawCallCount() != 1)
+			throw new AssertionError("50k compatible sprites required "
+					+ renderer.drawCallCount() + " draw calls instead of one");
+		assertDominant(gl, 20, 20, Color.RED, "large instanced sprite batch");
+		if (gl.glGetError() != GL.GL_NO_ERROR)
+			throw new AssertionError(
+					"Large instanced sprite batch produced an OpenGL error");
 	}
 
 	private static void testRecordedSpriteInDepthRenderTarget(GL3 gl,

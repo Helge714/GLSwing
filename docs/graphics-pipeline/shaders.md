@@ -39,7 +39,7 @@ dem internen GLSwing-Shaderordner und ist hauptsächlich für Bibliothekscode.
 | Texture | `aPosition` 0, `aTexCoord` 1, `aColor` 2 | `uProjection`, `uTexture` |
 | Text | wie Texture | `uProjection`, `uTexture`, `uMsdfPixelRange` |
 | UI | eingebauter instanzierter Vertexshader; Locations `0..7`, `9`, `10` wie unten | `uProjection`, `uDeviceScale`, alle `uTextures[0..15]` |
-| Sprite | `aPosition` 0, `aColorUv` 1, `aTint` 2, `aTextureSlot` 4, `aDepthUv` 5, `aNormalUv` 6, `aDepthData` 7, `aFlags` 8, `aAlphaCutoff` 9, `aTangentX` 10, `aTangentY` 11 | `uProjection`, alle Color-/Depth-/Normal-Maps `[0..4]`, Ambient- und Richtungslicht |
+| Sprite | instanziert: `aP00` 0, `aP10` 1, `aP11` 2, `aP01` 3, `aColorUvRect` 4, `aDepthUvRect` 5, `aNormalUvRect` 6, `aTint` 7, `aDepthData` 8, `aTangentX` 9, `aTangentY` 10, optional `aPickId` 11, `aTextureSlot` 12, `aFlags` 13 | `uProjection`, alle Color-/Depth-/Normal-Maps `[0..4]`, Ambient- und Richtungslicht |
 | Layer | interner Fullscreen-Vertexshader | `uTexture`, `uOpacity` |
 
 Attribute und Pflichtuniforms müssen aktiv sein. Ein GLSL-Compiler darf
@@ -148,6 +148,13 @@ sondern am unveränderlichen `GLMaterial2D`. Damit bleiben Maps, Alpha-Modus,
 Depthstate, Shader und Uniforms eine geschlossene Materialbeschreibung. Die
 vollständige Semantik der Vertexdaten, der 15 Sampler, Beleuchtung und
 Batchgrenzen steht in [Depth und 2.5D-Materialien](depth-materials.md).
+
+`fromSpriteFragmentSource(...)` verwendet automatisch den eingebauten
+instanzierten Vertexshader. Nur ein vollständig eigenes Programm muss den
+Attributvertrag aus der Tabelle selbst umsetzen. `aDepthData` enthält
+`baseDepth`, hinteren Offset, vorderen Offset und Alpha-Cutoff. Der Vertexshader
+erzeugt seine lokale Quad-Ecke aus `gl_VertexID` (`0..5`); es gibt daher keinen
+separaten, pro Vertex übertragenen Positionsstrom mehr.
 
 ## Eigener UI-Shader
 
