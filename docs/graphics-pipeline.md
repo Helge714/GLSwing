@@ -19,11 +19,12 @@ fortgeschrittenen Pipelinestufen.
 2. [Zeichenbefehle und Renderpfade](graphics-pipeline/drawing.md)
 3. [Recording und Laufzeitparameter](graphics-pipeline/recording.md)
 4. [Eigene Shader und Uniforms](graphics-pipeline/shaders.md)
-5. [Layer, Compositing und alle Effekte](graphics-pipeline/layers-effects.md)
-6. [RenderTargets und Feedback](graphics-pipeline/render-targets.md)
-7. [Bilder, Atlanten, Icons, Text und SVG](graphics-pipeline/resources.md)
-8. [Picking und Mausziele](graphics-pipeline/picking.md)
-9. [Batching, Performance und Lebensdauer](graphics-pipeline/performance.md)
+5. [Depth und 2.5D-Materialien](graphics-pipeline/depth-materials.md)
+6. [Layer, Compositing und alle Effekte](graphics-pipeline/layers-effects.md)
+7. [RenderTargets und Feedback](graphics-pipeline/render-targets.md)
+8. [Bilder, Atlanten, Icons, Text und SVG](graphics-pipeline/resources.md)
+9. [Picking und Mausziele](graphics-pipeline/picking.md)
+10. [Batching, Performance und Lebensdauer](graphics-pipeline/performance.md)
 
 ## Grundbegriffe und Einheiten
 
@@ -75,7 +76,7 @@ Varianten und Argumentregeln.
 | Methoden | Zweck |
 |---|---|
 | `setColor`, `getColor` | Aktuelle Standardfarbe |
-| `clear()`, `clear(Color)` | Aktive Ausgaben löschen |
+| `clear()`, `clear(Color)`, `clearDepth()` | Aktive Farb-/Pickingausgaben beziehungsweise Depth löschen |
 | `getScreenBounds` | Lokale Bounds in Screen-Bounds umrechnen |
 | `intersectsRedrawBounds` | Gegen aktuelle Damage-Region testen |
 | `flush` | Offene Batches ausdrücklich absenden |
@@ -91,6 +92,14 @@ Varianten und Argumentregeln.
 | `getProjection`, `setProjection(GLTransform)` | Projektionsmatrix direkt |
 | `setProjection(Projection2D)` | Projektionsprovider anwenden |
 | `setView(GLView2D)` | Komplette View-Projection anwenden |
+
+### Depth und 2.5D-Licht
+
+| Methoden | Zweck |
+|---|---|
+| `setDepthState`, `getDepthState` | Depth-Test, Schreibmaske und Vergleich |
+| `setDepth`, `getDepth` | Feste Tiefe normaler Geometrie; `0` hinten, `1` vorne |
+| `setLighting`, `getLighting` | Ambient- und Richtungslicht für Normalmap-Sprites |
 
 ### Stroke und Tessellierung
 
@@ -167,6 +176,7 @@ Jede `set...Uniform`-Familie besitzt Overloads für `float`, `vec2`, `vec3`,
 | `fillRoundRect`, `fillEllipse`, `fillCircle` | Filled |
 | `drawTexture`, `drawImage`, `drawIcon`, `drawRenderTarget` | Texture |
 | `drawText` | Text |
+| `drawSprite`, `drawMaterial` | Sprite-Materialbatch mit Color-/Depth-/Normalmaps |
 
 Strokes landen als tessellierte Dreiecke ebenfalls im Filled-Batch.
 
@@ -199,6 +209,7 @@ Strokes landen als tessellierte Dreiecke ebenfalls im Filled-Batch.
 - Kamera, Stroke oder Projection setzen: [Konfiguration](graphics-pipeline/context-configuration.md)
 - Unveränderte Geometrie beschleunigen: [Recording](graphics-pipeline/recording.md)
 - Eigenes GLSL: [Shader](graphics-pipeline/shaders.md)
+- Pixelgenaue Tiefe, Sprites und Normalmaps: [Depth und 2.5D-Materialien](graphics-pipeline/depth-materials.md)
 - Blur, Schatten, Outline oder Gruppenalpha: [Layer und Effekte](graphics-pipeline/layers-effects.md)
 - Game of Life oder Offscreen-Canvas: [RenderTargets](graphics-pipeline/render-targets.md)
 - Bilder oder SVG-Icons: [Ressourcen](graphics-pipeline/resources.md)

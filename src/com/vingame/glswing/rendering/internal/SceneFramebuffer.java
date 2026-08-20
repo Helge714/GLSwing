@@ -9,6 +9,7 @@ public final class SceneFramebuffer {
 
 	private int framebuffer;
 	private int colorBuffer;
+	private int depthBuffer;
 	private int resolveFramebuffer;
 	private int resolveTexture;
 	private int presentVao;
@@ -29,14 +30,16 @@ public final class SceneFramebuffer {
 		gl.glGenFramebuffers(2, ids, 0);
 		result.framebuffer = ids[0];
 		result.resolveFramebuffer = ids[1];
-		gl.glGenRenderbuffers(1, ids, 0);
+		gl.glGenRenderbuffers(2, ids, 0);
 		result.colorBuffer = ids[0];
+		result.depthBuffer = ids[1];
 		gl.glGenTextures(1, ids, 0);
 		result.resolveTexture = ids[0];
 		gl.glGenVertexArrays(1, ids, 0);
 		result.presentVao = ids[0];
 		if (result.framebuffer == 0 || result.resolveFramebuffer == 0
-				|| result.colorBuffer == 0 || result.resolveTexture == 0
+				|| result.colorBuffer == 0 || result.depthBuffer == 0
+				|| result.resolveTexture == 0
 				|| result.presentVao == 0) {
 			result.dispose(gl);
 			throw new IllegalStateException("Could not create the persistent scene framebuffer");
@@ -191,6 +194,10 @@ public final class SceneFramebuffer {
 			gl.glDeleteRenderbuffers(1, new int[] { colorBuffer }, 0);
 			colorBuffer = 0;
 		}
+		if (depthBuffer != 0) {
+			gl.glDeleteRenderbuffers(1, new int[] { depthBuffer }, 0);
+			depthBuffer = 0;
+		}
 		if (framebuffer != 0 || resolveFramebuffer != 0) {
 			gl.glDeleteFramebuffers(2,
 					new int[] { framebuffer, resolveFramebuffer }, 0);
@@ -216,6 +223,15 @@ public final class SceneFramebuffer {
 		gl.glBindFramebuffer(GL3.GL_DRAW_FRAMEBUFFER, framebuffer);
 		gl.glFramebufferRenderbuffer(GL3.GL_DRAW_FRAMEBUFFER,
 				GL.GL_COLOR_ATTACHMENT0, GL.GL_RENDERBUFFER, colorBuffer);
+		gl.glBindRenderbuffer(GL.GL_RENDERBUFFER, depthBuffer);
+		if (samples > 1)
+			gl.glRenderbufferStorageMultisample(GL.GL_RENDERBUFFER, samples,
+					GL3.GL_DEPTH_COMPONENT24, width, height);
+		else
+			gl.glRenderbufferStorage(GL.GL_RENDERBUFFER,
+					GL3.GL_DEPTH_COMPONENT24, width, height);
+		gl.glFramebufferRenderbuffer(GL3.GL_DRAW_FRAMEBUFFER,
+				GL3.GL_DEPTH_ATTACHMENT, GL.GL_RENDERBUFFER, depthBuffer);
 		int status = gl.glCheckFramebufferStatus(GL3.GL_DRAW_FRAMEBUFFER);
 		if (status != GL3.GL_FRAMEBUFFER_COMPLETE)
 			throw new IllegalStateException(
@@ -243,7 +259,12 @@ public final class SceneFramebuffer {
 		gl.glBindFramebuffer(GL3.GL_DRAW_FRAMEBUFFER, framebuffer);
 		gl.glDisable(GL.GL_SCISSOR_TEST);
 		gl.glClearColor(0, 0, 0, 0);
-		gl.glClear(GL.GL_COLOR_BUFFER_BIT);
+		gl.glClearDepth(0);
+		int[] previousDepthMask = new int[1];
+		gl.glGetIntegerv(GL.GL_DEPTH_WRITEMASK, previousDepthMask, 0);
+		gl.glDepthMask(true);
+		gl.glClear(GL.GL_COLOR_BUFFER_BIT | GL.GL_DEPTH_BUFFER_BIT);
+		gl.glDepthMask(previousDepthMask[0] != 0);
 	}
 
 	private void resolve(GL3 gl) {

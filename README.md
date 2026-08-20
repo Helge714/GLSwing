@@ -55,7 +55,7 @@ Die mitgelieferten Eclipse-Launch-Konfigurationen enthalten sie bereits.
 
 ### Grafikpipeline
 
-- gebatchte Filled-, Texture- und Text-Pipelines
+- gebatchte Filled-, Texture-, Text- und 2.5D-Sprite-Pipelines
 - universeller instanzierter UI-Batch für Controls, MSDF-Text und Icons
 - Linien, Dashes, Caps, Joins, Offset und World-/Screen-Space-Breiten
 - Polygone, Beziers, `GLPath2D` und SVG-Import
@@ -64,6 +64,8 @@ Die mitgelieferten Eclipse-Launch-Konfigurationen enthalten sie bereits.
 - Recordings mit verschachtelbaren Laufzeitparametern
 - verschachtelte, begrenzte Layer mit Blendmodi und Effektketten
 - persistente RenderTargets und Ping-Pong-Feedback ohne CPU-Readback
+- optionaler Z-Buffer sowie Sprite-Materialien mit Color-, Depth- und Normalmap
+- Cutout-/Blend-Alpha, depth-korrektes Picking und Ambient-/Richtungslicht
 - eigene Filled-, Texture-, Text- und Layer-Shader mit typgeprüften Uniforms
 - automatische RGBA-Atlanten, Mipmapping, MSDF-Icons und adaptive SVG-Rasterung
 
@@ -88,6 +90,7 @@ Die mitgelieferten Eclipse-Launch-Konfigurationen enthalten sie bereits.
 | `RecordingParameterDemo` | Recordings und Laufzeitparameter |
 | `LayerDemo` | Gruppen-Alpha, Blendmodi und Effekte |
 | `ImageAtlasDemo` | Bilder, Icons, Atlanten und adaptives Rasterisieren |
+| `DepthSpriteDemo` | Pixelgenaue Sprite-Tiefe, Normalmaps, Licht und Picking |
 | `PickingDemo` | Picking für Formen, Texturen und Text |
 | `NodeEditorDemo` | Interaktiver Node-Editor |
 | `GameOfLifeDemo` | RenderTargets und GPU-Ping-Pong |

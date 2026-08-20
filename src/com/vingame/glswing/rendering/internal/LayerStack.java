@@ -502,6 +502,11 @@ public final class LayerStack {
 		gl.glViewport(0, 0, width, height);
 		applyScissor(gl, bounds);
 		gl.glClearBufferfv(GL3.GL_COLOR, 0, TRANSPARENT, 0);
+		int[] previousDepthMask = new int[1];
+		gl.glGetIntegerv(GL.GL_DEPTH_WRITEMASK, previousDepthMask, 0);
+		gl.glDepthMask(true);
+		gl.glClearBufferfv(GL3.GL_DEPTH, 0, new float[] { 0 }, 0);
+		gl.glDepthMask(previousDepthMask[0] != 0);
 	}
 
 	private void drawBlur(GL3 gl, TextureSource input, float radius,
@@ -903,6 +908,7 @@ public final class LayerStack {
 		private int resolveFramebuffer;
 		private int colorTexture;
 		private int multisampleColorBuffer;
+		private int depthBuffer;
 		private int width;
 		private int height;
 		private int samples;
@@ -963,12 +969,14 @@ public final class LayerStack {
 				gl.glFramebufferRenderbuffer(GL3.GL_DRAW_FRAMEBUFFER,
 						GL3.GL_COLOR_ATTACHMENT0, GL.GL_RENDERBUFFER,
 						multisampleColorBuffer);
+				ensureDepthBuffer(gl, true);
 				gl.glDrawBuffers(1, new int[] { GL3.GL_COLOR_ATTACHMENT0 }, 0);
 				checkComplete(gl, "multisampled layer framebuffer");
 			} else {
 				gl.glBindFramebuffer(GL3.GL_DRAW_FRAMEBUFFER, drawFramebuffer);
 				gl.glFramebufferTexture2D(GL3.GL_DRAW_FRAMEBUFFER,
 						GL3.GL_COLOR_ATTACHMENT0, GL.GL_TEXTURE_2D, colorTexture, 0);
+				ensureDepthBuffer(gl, false);
 				gl.glDrawBuffers(1, new int[] { GL3.GL_COLOR_ATTACHMENT0 }, 0);
 				checkComplete(gl, "layer framebuffer");
 			}
@@ -1038,6 +1046,10 @@ public final class LayerStack {
 		}
 
 		void dispose(GL3 gl) {
+			if (depthBuffer != 0) {
+				gl.glDeleteRenderbuffers(1, new int[] { depthBuffer }, 0);
+				depthBuffer = 0;
+			}
 			if (multisampleColorBuffer != 0) {
 				gl.glDeleteRenderbuffers(1, new int[] { multisampleColorBuffer }, 0);
 				multisampleColorBuffer = 0;
@@ -1052,6 +1064,23 @@ public final class LayerStack {
 				drawFramebuffer = 0;
 				resolveFramebuffer = 0;
 			}
+		}
+
+		private void ensureDepthBuffer(GL3 gl, boolean multisampled) {
+			if (depthBuffer == 0) {
+				int[] renderbuffer = new int[1];
+				gl.glGenRenderbuffers(1, renderbuffer, 0);
+				depthBuffer = renderbuffer[0];
+			}
+			gl.glBindRenderbuffer(GL.GL_RENDERBUFFER, depthBuffer);
+			if (multisampled)
+				gl.glRenderbufferStorageMultisample(GL.GL_RENDERBUFFER, samples,
+						GL3.GL_DEPTH_COMPONENT24, width, height);
+			else
+				gl.glRenderbufferStorage(GL.GL_RENDERBUFFER,
+						GL3.GL_DEPTH_COMPONENT24, width, height);
+			gl.glFramebufferRenderbuffer(GL3.GL_DRAW_FRAMEBUFFER,
+					GL3.GL_DEPTH_ATTACHMENT, GL.GL_RENDERBUFFER, depthBuffer);
 		}
 
 		private static void checkComplete(GL3 gl, String name) {

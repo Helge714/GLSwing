@@ -36,6 +36,7 @@ Die Detailkapitel bauen in dieser Reihenfolge darauf auf:
 | [Zeichenbefehle](graphics-pipeline/drawing.md) | Alle Draw-/Fill-Methoden, Overloads und klare Trennung von Immediate, Recording, UI und Nicht-UI |
 | [Recording](graphics-pipeline/recording.md) | Aufnahme, Replay, Parameterregionen, Caches und Referenzen |
 | [Shader](graphics-pipeline/shaders.md) | Alle Shaderlayouts, Uniformtypen und Custom-Layer-Shader |
+| [Depth und 2.5D-Materialien](graphics-pipeline/depth-materials.md) | Depth-State, Sprites, Color-/Depth-/Normalmaps, Alpha und Licht |
 | [Layer und Effekte](graphics-pipeline/layers-effects.md) | Compositing, Blendmodi und jeder eingebaute Effekt einzeln |
 | [RenderTargets](graphics-pipeline/render-targets.md) | Persistente FBOs, Feedback und Ping-Pong-Simulationen |
 | [Ressourcen](graphics-pipeline/resources.md) | Bilder, Atlanten, Icons, Text, Pfade und SVG |
@@ -52,7 +53,7 @@ Die Klassen in `src/com/vingame/glswing/demo` ergänzen das Handbuch:
 
 - `DrawingApiDemo`, `PathDemo`, `SvgImportDemo`
 - `CustomShaderDemo`, `RecordingParameterDemo`, `LayerDemo`
-- `ImageAtlasDemo`, `PickingDemo`, `GameOfLifeDemo`
+- `ImageAtlasDemo`, `DepthSpriteDemo`, `PickingDemo`, `GameOfLifeDemo`
 - `GuiShowcaseDemo`, `CanvasGuiShowcaseDemo`, `GLFrameDemo`
 - `NodeEditorDemo`
 

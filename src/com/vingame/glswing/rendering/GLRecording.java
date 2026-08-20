@@ -178,6 +178,15 @@ public final class GLRecording {
 					pickId, target.get(), originX, originY));
 		}
 
+		void addSprite(GLMaterial2D material, float x, float y,
+				float width, float height, Color tint, float depth,
+				int pickId, GLMouseTarget mouseTarget,
+				float originX, float originY) {
+			TargetReference target = TargetReference.of(mouseTarget);
+			add(renderer -> renderer.addSprite(material, x, y, width, height,
+					tint, depth, pickId, target.get(), originX, originY));
+		}
+
 		void beginLayer(Command command) {
 			add(command);
 			openLayers++;

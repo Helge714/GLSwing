@@ -84,6 +84,23 @@ public final class ShaderProgram {
 				fragmentSource, "built-in UI vertex shader", "custom UI fragment shader");
 	}
 
+	/**
+	 * Creates a 2.5D sprite shader using GLSwing's built-in sprite vertex stage.
+	 * The fragment shader must implement the complete sprite sampler and lighting
+	 * contract documented by the material pipeline.
+	 */
+	public static ShaderProgram fromSpriteFragmentSource(GL3 gl,
+			String fragmentSource) {
+		if (gl == null)
+			throw new IllegalArgumentException("GL context must not be null");
+		if (fragmentSource == null || fragmentSource.isBlank())
+			throw new IllegalArgumentException(
+					"Sprite fragment shader source must not be blank");
+		return create(gl, loadResource(BUILT_IN_SHADER_ROOT + "sprite.vert"),
+				fragmentSource, "built-in sprite vertex shader",
+				"custom sprite fragment shader");
+	}
+
 	public void use(GL3 gl) {
 		if (id == 0)
 			throw new IllegalStateException("Shader program has already been disposed");
@@ -196,6 +213,33 @@ public final class ShaderProgram {
 				"uTextures[4]", "uTextures[5]", "uTextures[6]", "uTextures[7]",
 				"uTextures[8]", "uTextures[9]", "uTextures[10]", "uTextures[11]",
 				"uTextures[12]", "uTextures[13]", "uTextures[14]", "uTextures[15]"
+		});
+	}
+
+	void validateForSpriteBatch(GL3 gl) {
+		validateLayout(gl, "Sprite", new AttributeRequirement[] {
+				new AttributeRequirement("aPosition", 0),
+				new AttributeRequirement("aColorUv", 1),
+				new AttributeRequirement("aTint", 2),
+				new AttributeRequirement("aTextureSlot", 4),
+				new AttributeRequirement("aDepthUv", 5),
+				new AttributeRequirement("aNormalUv", 6),
+				new AttributeRequirement("aDepthData", 7),
+				new AttributeRequirement("aFlags", 8),
+				new AttributeRequirement("aAlphaCutoff", 9),
+				new AttributeRequirement("aTangentX", 10),
+				new AttributeRequirement("aTangentY", 11)
+		}, new String[] {
+				"uProjection",
+				"uColorMaps[0]", "uColorMaps[1]", "uColorMaps[2]",
+				"uColorMaps[3]", "uColorMaps[4]",
+				"uDepthMaps[0]", "uDepthMaps[1]", "uDepthMaps[2]",
+				"uDepthMaps[3]", "uDepthMaps[4]",
+				"uNormalMaps[0]", "uNormalMaps[1]", "uNormalMaps[2]",
+				"uNormalMaps[3]", "uNormalMaps[4]",
+				"uAmbientColor", "uAmbientIntensity",
+				"uDirectionalDirection", "uDirectionalColor",
+				"uDirectionalIntensity"
 		});
 	}
 

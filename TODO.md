@@ -28,6 +28,17 @@ bewusst verworfen wurde.
 
 ## Rendering und Farbräume
 
+- 2.5D-Licht nach realer Nutzung gezielt erweitern.
+  - Mehrere Richtungs-, Punkt- oder Spotlichter erst nach einem Benchmark als
+    Forward-, Forward+- oder separaten Lichtpass entwerfen.
+  - Optional specular/roughness/emissive Maps ergänzen, ohne den einfachen
+    `GLMaterial2D`-Pfad mit ungenutzten Kosten zu belasten.
+  - Sortierhilfen oder Order-independent Transparency nur bei echtem Bedarf
+    untersuchen; der aktuelle `BLEND`-Modus bleibt bewusst back-to-front.
+  - Falls Anwendungen Depth nachbearbeiten müssen, eine samplebare
+    Depth-Textur-Option für `GLRenderTarget` ergänzen; derzeit sind
+    Depth-Attachments absichtlich günstige Renderbuffer.
+
 - UI-Materialsystem auf Basis des Universal-UI-Shaders entwickeln.
   - Shader und immutable Uniform-/Stilwerte in einem wiederverwendbaren
     `GLUIMaterial` bündeln.

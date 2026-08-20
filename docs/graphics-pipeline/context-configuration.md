@@ -13,6 +13,7 @@ bleiben.
 - [Einheiten](#einheiten)
 - [Zeichenstil](#zeichenstil)
 - [Koordinatensysteme](#koordinatensysteme)
+- [Depth und Licht](#depth-und-licht)
 - [Frameausgaben und Clipping](#frameausgaben-und-clipping)
 - [Shaderzustände](#shaderzustände)
 - [Getter und Kopien](#getter-und-kopien)
@@ -215,6 +216,16 @@ berücksichtigen Model und View; `getScreenBounds` liefert
 `{x, y, width, height}` als achsenparallele Bounds in logischen Screenpixeln.
 `GLContainer` nutzt diese Mechanik bereits für Culling; eigene Tests lohnen
 sich vor allem innerhalb großer dynamischer Renderhooks.
+
+## Depth und Licht
+
+`setDepthState`, `setDepth`, `clearDepth` und `setLighting` bilden den
+2.5D-Zustand des Context. Tiefe ist dimensionslos (`0` hinten, `1` vorne),
+Lichtintensitäten sind dimensionslose nichtnegative Faktoren. Alle Änderungen
+sind recordbar; Depth-/Lichtwechsel flushen betroffene offene Batches.
+
+Die vollständige Semantik einschließlich Alpha, Maps, Picking und
+RenderTargets steht in [Depth und 2.5D-Materialien](depth-materials.md).
 
 ## Frameausgaben und Clipping
 

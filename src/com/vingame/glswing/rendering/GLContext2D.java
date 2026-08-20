@@ -189,6 +189,42 @@ public final class GLContext2D {
 		submit(renderer -> renderer.clear(actualColor));
 	}
 
+	/** Clears only depth to GLSwing's back value ({@code 0}). */
+	public void clearDepth() {
+		submit(GLRenderer2D::clearDepth);
+	}
+
+	/** Configures depth testing/writes for ordinary Context geometry. */
+	public void setDepthState(GLDepthState state) {
+		if (state == null)
+			throw new IllegalArgumentException("Depth state must not be null");
+		executeAndRecord(renderer -> renderer.setDepthState(state));
+	}
+
+	public GLDepthState getDepthState() {
+		return renderer.getDepthState();
+	}
+
+	/** Sets a fixed depth for ordinary geometry: {@code 0} back, {@code 1} front. */
+	public void setDepth(float depth) {
+		executeAndRecord(renderer -> renderer.setDepth(depth));
+	}
+
+	public float getDepth() {
+		return renderer.getDepth();
+	}
+
+	/** Sets ambient and directional lighting used by subsequent lit sprites. */
+	public void setLighting(GLLighting2D lighting) {
+		if (lighting == null)
+			throw new IllegalArgumentException("Lighting must not be null");
+		executeAndRecord(renderer -> renderer.setLighting(lighting));
+	}
+
+	public GLLighting2D getLighting() {
+		return renderer.getLighting();
+	}
+
 	/** Returns an axis-aligned screen-space box for a local rectangle. */
 	public float[] getScreenBounds(float x, float y, float width, float height) {
 		if (!Float.isFinite(x) || !Float.isFinite(y)
@@ -1746,6 +1782,62 @@ public final class GLContext2D {
 		GLTextureRegion region = renderer.resolveImage(requireImage(image));
 		drawResolvedImage(region, x, y, width, height, requireColor(tint),
 				pickId, mouseTarget);
+	}
+
+	public void drawSprite(GLSprite sprite, float x, float y) {
+		if (sprite == null)
+			throw new IllegalArgumentException("Sprite must not be null");
+		drawSprite(sprite, x, y, sprite.getNaturalWidth(),
+				sprite.getNaturalHeight(), Color.WHITE, getDepth());
+	}
+
+	public void drawSprite(GLSprite sprite, float x, float y,
+			float width, float height) {
+		drawSprite(sprite, x, y, width, height, Color.WHITE, getDepth());
+	}
+
+	public void drawSprite(GLSprite sprite, float x, float y,
+			float width, float height, Color tint) {
+		drawSprite(sprite, x, y, width, height, tint, getDepth());
+	}
+
+	public void drawSprite(GLSprite sprite, float x, float y,
+			float width, float height, Color tint, float depth) {
+		if (sprite == null)
+			throw new IllegalArgumentException("Sprite must not be null");
+		drawMaterial(sprite.getMaterial(), x, y, width, height, tint, depth);
+	}
+
+	public void drawMaterial(GLMaterial2D material, float x, float y,
+			float width, float height) {
+		drawMaterial(material, x, y, width, height, Color.WHITE, getDepth());
+	}
+
+	/** Draws a color/depth/normal material through the dedicated sprite batch. */
+	public void drawMaterial(GLMaterial2D material, float x, float y,
+			float width, float height, Color tint, float depth) {
+		if (material == null)
+			throw new IllegalArgumentException("Sprite material must not be null");
+		if (!Float.isFinite(x) || !Float.isFinite(y) || !Float.isFinite(width)
+				|| !Float.isFinite(height) || width == 0 || height == 0)
+			throw new IllegalArgumentException(
+					"Sprite bounds must be finite and non-zero");
+		if (!Float.isFinite(depth) || depth < 0 || depth > 1)
+			throw new IllegalArgumentException("Sprite depth must be between 0 and 1");
+		Color actualTint = requireColor(tint);
+		float originX = Math.min(x, x + width);
+		float originY = Math.min(y, y + height);
+		if (mouseTarget != null) {
+			resolveMouseOrigin(mouseTarget, originX, originY);
+			originX = resolvedMouseOriginX;
+			originY = resolvedMouseOriginY;
+		}
+		if (recording == null)
+			renderer.addSprite(material, x, y, width, height, actualTint, depth,
+					pickId, mouseTarget, originX, originY);
+		else
+			recording.addSprite(material, x, y, width, height, actualTint, depth,
+					pickId, mouseTarget, originX, originY);
 	}
 
 	/**

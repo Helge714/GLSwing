@@ -14,6 +14,7 @@ import com.jogamp.opengl.GL3;
 import com.vingame.glswing.input.GLMouseTarget;
 import com.vingame.glswing.input.GLPickResult;
 import com.vingame.glswing.rendering.batch.FilledBatch;
+import com.vingame.glswing.rendering.batch.SpriteBatch;
 import com.vingame.glswing.rendering.batch.TextBatch;
 import com.vingame.glswing.rendering.batch.TextureBatch;
 import com.vingame.glswing.rendering.batch.UIQuadBatch;
@@ -37,6 +38,7 @@ public final class GLRenderer2D {
 	private final TextureBatch textureBatch;
 	private final TextBatch textBatch;
 	private final UIQuadBatch uiQuadBatch;
+	private final SpriteBatch spriteBatch;
 	private final PickFramebuffer picking;
 	private final LayerStack layers;
 	private final GLTextureManager textureManager = new GLTextureManager();
@@ -61,10 +63,17 @@ public final class GLRenderer2D {
 	private ShaderProgram textureShaderOverride;
 	private ShaderProgram textShaderOverride;
 	private ShaderProgram uiShaderOverride;
+	private ShaderProgram spriteShaderOverride;
 	private final Map<String, ShaderUniformValue> filledUniforms = new LinkedHashMap<>();
 	private final Map<String, ShaderUniformValue> textureUniforms = new LinkedHashMap<>();
 	private final Map<String, ShaderUniformValue> textUniforms = new LinkedHashMap<>();
 	private final Map<String, ShaderUniformValue> uiUniforms = new LinkedHashMap<>();
+	private final Map<String, ShaderUniformValue> spriteUniforms = new LinkedHashMap<>();
+	private GLDepthState depthState = GLDepthState.DISABLED;
+	private float depth = 0.5f;
+	private GLLighting2D lighting = GLLighting2D.DEFAULT;
+	private GLDepthState pendingSpriteDepthState = GLDepthState.DISABLED;
+	private GLAlphaMode pendingSpriteAlphaMode = GLAlphaMode.OPAQUE;
 	private final GLTransform transform = new GLTransform();
 	private final GLTransform pickTransform = new GLTransform();
 	private GLTransform recordingReplayBase;
@@ -101,12 +110,13 @@ public final class GLRenderer2D {
 	private int adaptiveIconUploads;
 
 	private GLRenderer2D(FilledBatch filledBatch, TextureBatch textureBatch,
-			TextBatch textBatch, UIQuadBatch uiQuadBatch,
+			TextBatch textBatch, UIQuadBatch uiQuadBatch, SpriteBatch spriteBatch,
 			PickFramebuffer picking, LayerStack layers) {
 		this.filledBatch = filledBatch;
 		this.textureBatch = textureBatch;
 		this.textBatch = textBatch;
 		this.uiQuadBatch = uiQuadBatch;
+		this.spriteBatch = spriteBatch;
 		this.picking = picking;
 		this.layers = layers;
 		context = new GLContext2D(this);
@@ -117,21 +127,25 @@ public final class GLRenderer2D {
 		TextureBatch textureBatch = null;
 		TextBatch textBatch = null;
 		UIQuadBatch uiQuadBatch = null;
+		SpriteBatch spriteBatch = null;
 		PickFramebuffer picking = null;
 		LayerStack layers = null;
 		try {
 			textureBatch = TextureBatch.create(gl);
 			textBatch = TextBatch.create(gl);
 			uiQuadBatch = UIQuadBatch.create(gl);
+			spriteBatch = SpriteBatch.create(gl);
 			picking = PickFramebuffer.create(gl);
 			layers = LayerStack.create(gl);
 			return new GLRenderer2D(filledBatch, textureBatch, textBatch,
-					uiQuadBatch, picking, layers);
+					uiQuadBatch, spriteBatch, picking, layers);
 		} catch (RuntimeException error) {
 			if (layers != null)
 				layers.dispose(gl);
 			if (picking != null)
 				picking.dispose(gl);
+			if (spriteBatch != null)
+				spriteBatch.dispose(gl);
 			if (textBatch != null)
 				textBatch.dispose(gl);
 			if (uiQuadBatch != null)
@@ -186,15 +200,23 @@ public final class GLRenderer2D {
 		textureBatch.begin();
 		textBatch.begin();
 		uiQuadBatch.begin();
+		spriteBatch.begin();
 		activeBatch = BatchType.NONE;
 		filledShaderOverride = null;
 		textureShaderOverride = null;
 		textShaderOverride = null;
 		uiShaderOverride = null;
+		spriteShaderOverride = null;
 		filledUniforms.clear();
 		textureUniforms.clear();
 		textUniforms.clear();
 		uiUniforms.clear();
+		spriteUniforms.clear();
+		depthState = GLDepthState.DISABLED;
+		depth = 0.5f;
+		lighting = GLLighting2D.DEFAULT;
+		pendingSpriteDepthState = GLDepthState.DISABLED;
+		pendingSpriteAlphaMode = GLAlphaMode.OPAQUE;
 		transform.setToIdentity();
 		recordingReplayBase = null;
 		replayParameterDepth = 0;
@@ -210,6 +232,9 @@ public final class GLRenderer2D {
 		gl.glEnable(GL.GL_MULTISAMPLE);
 		gl.glEnable(GL.GL_BLEND);
 		gl.glBlendFunc(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA);
+		gl.glClearDepth(0);
+		applyDepthState(depthState);
+		gl.glDepthRange(depth, depth);
 		return context;
 	}
 
@@ -282,6 +307,9 @@ public final class GLRenderer2D {
 			restoreRenderTarget(state);
 		}
 		gl.glDisable(GL.GL_BLEND);
+		gl.glDisable(GL.GL_DEPTH_TEST);
+		gl.glDepthMask(false);
+		gl.glDepthRange(0, 1);
 		frameActive = false;
 		rebuildingPickingFrame = false;
 		gl = null;
@@ -323,6 +351,75 @@ public final class GLRenderer2D {
 			else
 				activeRenderTarget().clearPicking(this, gl);
 		}
+	}
+
+	void clearDepth() {
+		requireFrame();
+		if (activeRenderTarget() != null && !activeRenderTarget().isDepthEnabled())
+			throw new IllegalStateException(
+					"The active render target was created without depth support");
+		flush();
+		gl.glDepthMask(true);
+		try {
+			if (colorRenderingEnabled)
+				gl.glClearBufferfv(GL3.GL_DEPTH, 0, new float[] { 0 }, 0);
+			if (pickingRenderingEnabled)
+				picking.clearDepth(gl);
+		} finally {
+			gl.glDepthMask(depthState.writeEnabled());
+		}
+	}
+
+	void setDepthState(GLDepthState state) {
+		requireFrame();
+		if (state == null)
+			throw new IllegalArgumentException("Depth state must not be null");
+		if (state.equals(depthState))
+			return;
+		if (state.testEnabled() && activeRenderTarget() != null
+				&& !activeRenderTarget().isDepthEnabled())
+			throw new IllegalStateException(
+					"The active render target was created without depth support");
+		flush();
+		depthState = state;
+		applyDepthState(state);
+	}
+
+	GLDepthState getDepthState() {
+		requireFrame();
+		return depthState;
+	}
+
+	void setDepth(float value) {
+		requireFrame();
+		if (!Float.isFinite(value) || value < 0 || value > 1)
+			throw new IllegalArgumentException("Depth must be between 0 and 1");
+		if (depth == value)
+			return;
+		flush();
+		depth = value;
+		gl.glDepthRange(value, value);
+	}
+
+	float getDepth() {
+		requireFrame();
+		return depth;
+	}
+
+	void setLighting(GLLighting2D value) {
+		requireFrame();
+		if (value == null)
+			throw new IllegalArgumentException("Lighting must not be null");
+		if (value.equals(lighting))
+			return;
+		if (activeBatch == BatchType.SPRITE)
+			flushActiveBatch();
+		lighting = value;
+	}
+
+	GLLighting2D getLighting() {
+		requireFrame();
+		return lighting;
 	}
 
 	void beginLayer() {
@@ -505,8 +602,14 @@ public final class GLRenderer2D {
 			}
 		}
 		flush();
-		drawCallCount += layers.endLayer(gl, composite.getOpacity(),
-				composite.getBlendMode(), effects);
+		applyDepthState(GLDepthState.DISABLED);
+		try {
+			drawCallCount += layers.endLayer(gl, composite.getOpacity(),
+					composite.getBlendMode(), effects);
+		} finally {
+			applyDepthState(depthState);
+			gl.glDepthRange(depth, depth);
+		}
 		layerPathStates.remove(layerPathStates.size() - 1);
 	}
 
@@ -575,6 +678,7 @@ public final class GLRenderer2D {
 		textureBatch.dispose(gl);
 		textBatch.dispose(gl);
 		uiQuadBatch.dispose(gl);
+		spriteBatch.dispose(gl);
 		picking.dispose(gl);
 		layers.dispose(gl);
 		textureManager.dispose(gl);
@@ -626,6 +730,10 @@ public final class GLRenderer2D {
 			projectionMatrix = projection.toMatrix4();
 			updateScreenTransforms();
 			transform.setToIdentity();
+			depthState = GLDepthState.DISABLED;
+			depth = 0.5f;
+			applyDepthState(depthState);
+			gl.glDepthRange(depth, depth);
 			colorRenderingEnabled = true;
 			pickingRenderingEnabled = target.isPickingEnabled();
 			redrawBounds = null;
@@ -905,7 +1013,7 @@ public final class GLRenderer2D {
 		return new StateSnapshot(
 				projection, transform,
 				colorRenderingEnabled, pickingRenderingEnabled,
-				texturePickAlphaThreshold,
+				texturePickAlphaThreshold, depthState, depth, lighting,
 				filledShaderOverride, filledUniforms,
 				textureShaderOverride, textureUniforms,
 				textShaderOverride, textUniforms,
@@ -1012,6 +1120,10 @@ public final class GLRenderer2D {
 		requireFrame();
 		if (state == null)
 			throw new IllegalArgumentException("Recorded renderer state must not be null");
+		if (state.depthState.testEnabled() && activeRenderTarget() != null
+				&& !activeRenderTarget().isDepthEnabled())
+			throw new IllegalStateException(
+					"Recorded depth state requires a depth-enabled render target");
 		validateRecordedBatchState(BatchType.FILLED,
 				state.filledShader, state.filledUniforms);
 		validateRecordedBatchState(BatchType.TEXTURE,
@@ -1028,6 +1140,9 @@ public final class GLRenderer2D {
 				|| pickingRenderingEnabled != targetRenderPicking;
 		boolean textureThresholdChanged =
 				texturePickAlphaThreshold != state.texturePickAlphaThreshold;
+		boolean depthChanged = !depthState.equals(state.depthState)
+				|| depth != state.depth;
+		boolean lightingChanged = !lighting.equals(state.lighting);
 		boolean filledStateChanged = filledShaderOverride != state.filledShader
 				|| !filledUniforms.equals(state.filledUniforms);
 		boolean textureStateChanged = textureShaderOverride != state.textureShader
@@ -1041,9 +1156,11 @@ public final class GLRenderer2D {
 		case TEXTURE -> textureStateChanged || textureThresholdChanged;
 		case TEXT -> textStateChanged;
 		case UI -> uiStateChanged || textureThresholdChanged;
+		case SPRITE -> false;
 		case NONE -> false;
 		};
-		if (projectionChanged || outputsChanged || activeStateChanged)
+		if (projectionChanged || outputsChanged || activeStateChanged
+				|| depthChanged || lightingChanged)
 			flush();
 
 		if (projectionChanged) {
@@ -1055,6 +1172,11 @@ public final class GLRenderer2D {
 		colorRenderingEnabled = targetRenderColor;
 		pickingRenderingEnabled = targetRenderPicking;
 		texturePickAlphaThreshold = state.texturePickAlphaThreshold;
+		depthState = state.depthState;
+		depth = state.depth;
+		lighting = state.lighting;
+		applyDepthState(depthState);
+		gl.glDepthRange(depth, depth);
 		filledShaderOverride = state.filledShader;
 		filledUniforms.clear();
 		filledUniforms.putAll(state.filledUniforms);
@@ -1271,6 +1393,94 @@ public final class GLRenderer2D {
 				color.getRed() / 255f, color.getGreen() / 255f,
 				color.getBlue() / 255f, color.getAlpha() / 255f,
 				pickId, mouseTarget, automaticOriginX, automaticOriginY);
+	}
+
+	/** Resolves and submits one depth-aware material quad. */
+	void addSprite(GLMaterial2D material, float x, float y,
+			float width, float height, Color tint, float baseDepth,
+			int pickId, GLMouseTarget mouseTarget,
+			float automaticOriginX, float automaticOriginY) {
+		requireFrame();
+		if (material == null)
+			throw new IllegalArgumentException("Sprite material must not be null");
+		if (!Float.isFinite(baseDepth) || baseDepth < 0 || baseDepth > 1)
+			throw new IllegalArgumentException("Sprite depth must be between 0 and 1");
+		if (material.getDepthState().testEnabled() && activeRenderTarget() != null
+				&& !activeRenderTarget().isDepthEnabled())
+			throw new IllegalStateException(
+					"The active render target was created without depth support");
+		ShaderProgram shader = material.getShader();
+		if (shader != null) {
+			if (shader.isDisposed())
+				throw new IllegalArgumentException("Sprite shader is disposed");
+			shader.validateForSpriteBatch(gl);
+			for (Map.Entry<String, ShaderUniformValue> uniform
+					: material.uniformValues().entrySet()) {
+				if (isManagedUniform(BatchType.SPRITE, uniform.getKey()))
+					throw new IllegalArgumentException("Uniform " + uniform.getKey()
+							+ " is managed by the sprite renderer");
+				shader.validateUserUniform(gl, uniform.getKey(), uniform.getValue());
+			}
+		}
+
+		GLTextureRegion color = resolveImage(material.getColorMap());
+		GLTextureRegion depthRegion = material.hasDepthMap()
+				? resolveImage(material.getDepthMap()) : color;
+		GLTextureRegion normal = material.hasNormalMap()
+				? resolveImage(material.getNormalMap()) : color;
+		boolean stateChanged = spriteShaderOverride != shader
+				|| !spriteUniforms.equals(material.uniformValues())
+				|| !pendingSpriteDepthState.equals(material.getDepthState())
+				|| pendingSpriteAlphaMode != material.getAlphaMode();
+		activateBatch(BatchType.SPRITE);
+		if (stateChanged && spriteBatch.canAddQuad())
+			drawCallCount += flushBatch(BatchType.SPRITE);
+		spriteShaderOverride = shader;
+		spriteUniforms.clear();
+		spriteUniforms.putAll(material.uniformValues());
+		pendingSpriteDepthState = material.getDepthState();
+		pendingSpriteAlphaMode = material.getAlphaMode();
+		if (!spriteBatch.accepts(color.texture(), depthRegion.texture(), normal.texture())
+				|| !spriteBatch.canAddQuad())
+			drawCallCount += flushBatch(BatchType.SPRITE);
+
+		float x2 = x + width;
+		float y2 = y + height;
+		GLTransform current = currentTransform();
+		float x1t = current.transformX(x, y);
+		float y1t = current.transformY(x, y);
+		float x2t = current.transformX(x2, y);
+		float y2t = current.transformY(x2, y);
+		float x3t = current.transformX(x2, y2);
+		float y3t = current.transformY(x2, y2);
+		float x4t = current.transformX(x, y2);
+		float y4t = current.transformY(x, y2);
+		includeLayerQuad(x1t, y1t, x2t, y2t, x3t, y3t, x4t, y4t);
+		int pickRecord = createPickRecord(pickId, mouseTarget,
+				automaticOriginX, automaticOriginY);
+		int flags = (material.hasDepthMap() ? SpriteBatch.FLAG_DEPTH_MAP : 0)
+				| (material.hasNormalMap() ? SpriteBatch.FLAG_NORMAL_MAP : 0)
+				| (material.isLit() ? SpriteBatch.FLAG_LIT : 0)
+				| (material.getAlphaMode() == GLAlphaMode.CUTOUT
+						? SpriteBatch.FLAG_CUTOUT : 0);
+		float red = tint.getRed() / 255f;
+		float green = tint.getGreen() / 255f;
+		float blue = tint.getBlue() / 255f;
+		float alpha = tint.getAlpha() / 255f;
+		if (recordingReplayBase != null) {
+			red = recordingColorModifier.red(red);
+			green = recordingColorModifier.green(green);
+			blue = recordingColorModifier.blue(blue);
+			alpha = recordingColorModifier.alpha(alpha);
+		}
+		spriteBatch.addQuad(color.texture(), depthRegion.texture(), normal.texture(),
+				x1t, y1t, x2t, y2t, x3t, y3t, x4t, y4t,
+				color.u0(), color.v0(), color.u1(), color.v1(),
+				depthRegion.u0(), depthRegion.v0(), depthRegion.u1(), depthRegion.v1(),
+				normal.u0(), normal.v0(), normal.u1(), normal.v1(),
+				red, green, blue, alpha, baseDepth,
+				material.getDepthBackOffset(), material.getDepthFrontOffset(),
+				material.getAlphaCutoff(), flags, pickRecord);
 	}
 
 	private float physicalExtent(float x, float y, float width, float height) {
@@ -1673,6 +1883,7 @@ public final class GLRenderer2D {
 		case TEXTURE -> shader.validateForTextureBatch(gl);
 		case TEXT -> shader.validateForTextBatch(gl);
 		case UI -> shader.validateForUIBatch(gl);
+		case SPRITE -> shader.validateForSpriteBatch(gl);
 		case NONE -> throw new IllegalArgumentException("NONE has no shader state");
 		}
 		for (Map.Entry<String, ShaderUniformValue> uniform : uniforms.entrySet())
@@ -1723,7 +1934,8 @@ public final class GLRenderer2D {
 	}
 
 	private int flushBatch(BatchType batch) {
-		if (batch == BatchType.TEXTURE || batch == BatchType.UI)
+		if (batch == BatchType.TEXTURE || batch == BatchType.UI
+				|| batch == BatchType.SPRITE)
 			textureManager.prepareForSampling(gl);
 		return switch (batch) {
 		case FILLED -> filledBatch.flush(
@@ -1740,8 +1952,23 @@ public final class GLRenderer2D {
 				uiShaderOverride, uiUniforms, picking,
 				colorRenderingEnabled, pickingRenderingEnabled,
 				texturePickAlphaThreshold, colorDeviceScaleX, colorDeviceScaleY);
+		case SPRITE -> flushSpriteBatch();
 		case NONE -> 0;
 		};
+	}
+
+	private int flushSpriteBatch() {
+		applyDepthState(pendingSpriteDepthState);
+		gl.glDepthRange(0, 1);
+		try {
+			return spriteBatch.flush(gl, projectionMatrix,
+					spriteShaderOverride, spriteUniforms, lighting,
+					pendingSpriteAlphaMode, picking,
+					colorRenderingEnabled, pickingRenderingEnabled);
+		} finally {
+			applyDepthState(depthState);
+			gl.glDepthRange(depth, depth);
+		}
 	}
 
 	private static boolean isManagedUniform(BatchType batch, String name) {
@@ -1750,7 +1977,31 @@ public final class GLRenderer2D {
 						&& name.equals("uTexture")
 				|| batch == BatchType.TEXT && name.equals("uMsdfPixelRange")
 				|| batch == BatchType.UI && (name.equals("uDeviceScale")
-						|| name.equals("uTextures") || name.startsWith("uTextures["));
+						|| name.equals("uTextures") || name.startsWith("uTextures["))
+				|| batch == BatchType.SPRITE && (name.startsWith("uColorMaps")
+						|| name.startsWith("uDepthMaps")
+						|| name.startsWith("uNormalMaps")
+						|| name.equals("uAmbientColor")
+						|| name.equals("uAmbientIntensity")
+						|| name.equals("uDirectionalDirection")
+						|| name.equals("uDirectionalColor")
+						|| name.equals("uDirectionalIntensity"));
+	}
+
+	private void applyDepthState(GLDepthState state) {
+		if (state.testEnabled())
+			gl.glEnable(GL.GL_DEPTH_TEST);
+		else
+			gl.glDisable(GL.GL_DEPTH_TEST);
+		gl.glDepthMask(state.writeEnabled());
+		int function = switch (state.function()) {
+		case LESS -> GL.GL_LESS;
+		case LESS_OR_EQUAL -> GL.GL_LEQUAL;
+		case GREATER -> GL.GL_GREATER;
+		case GREATER_OR_EQUAL -> GL.GL_GEQUAL;
+		case ALWAYS -> GL.GL_ALWAYS;
+		};
+		gl.glDepthFunc(function);
 	}
 
 	private void requireFrame() {
@@ -1763,7 +2014,8 @@ public final class GLRenderer2D {
 		FILLED("filled"),
 		TEXTURE("texture"),
 		TEXT("text"),
-		UI("UI");
+		UI("UI"),
+		SPRITE("sprite");
 
 		private final String displayName;
 
@@ -1873,6 +2125,9 @@ public final class GLRenderer2D {
 		final boolean renderColor;
 		final boolean renderPicking;
 		final float texturePickAlphaThreshold;
+		final GLDepthState depthState;
+		final float depth;
+		final GLLighting2D lighting;
 		final ShaderProgram filledShader;
 		final Map<String, ShaderUniformValue> filledUniforms;
 		final ShaderProgram textureShader;
@@ -1884,7 +2139,8 @@ public final class GLRenderer2D {
 
 		StateSnapshot(GLTransform projection, GLTransform transform,
 				boolean renderColor, boolean renderPicking,
-				float texturePickAlphaThreshold,
+				float texturePickAlphaThreshold, GLDepthState depthState,
+				float depth, GLLighting2D lighting,
 				ShaderProgram filledShader,
 				Map<String, ShaderUniformValue> filledUniforms,
 				ShaderProgram textureShader,
@@ -1898,6 +2154,9 @@ public final class GLRenderer2D {
 			this.renderColor = renderColor;
 			this.renderPicking = renderPicking;
 			this.texturePickAlphaThreshold = texturePickAlphaThreshold;
+			this.depthState = depthState;
+			this.depth = depth;
+			this.lighting = lighting;
 			this.filledShader = filledShader;
 			this.filledUniforms = Map.copyOf(filledUniforms);
 			this.textureShader = textureShader;

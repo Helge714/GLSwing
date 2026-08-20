@@ -34,6 +34,9 @@ GLRenderTarget pixels = new GLRenderTarget(
 GLRenderTarget interactive = new GLRenderTarget(
         512, 512,
         GLRenderTargetOptions.DEFAULT.withPicking(true));
+GLRenderTarget depthAware = new GLRenderTarget(
+        512, 512,
+        GLRenderTargetOptions.DEFAULT.withDepth(true).withPicking(true));
 ```
 
 `GLRenderTargetOptions` kombiniert:
@@ -41,6 +44,7 @@ GLRenderTarget interactive = new GLRenderTarget(
 - Filter `LINEAR` oder `NEAREST`,
 - Wrap `CLAMP` oder `REPEAT`,
 - optionales persistentes Picking mit `withPicking(true)`.
+- optionalen Depthbuffer mit `withDepth(true)`.
 
 `DEFAULT` ist linear/clamp. `pixelArt()` ist nearest/clamp,
 `repeatingPixelArt()` nearest/repeat. `withFilter` und `withWrap` erzeugen
@@ -48,6 +52,8 @@ veränderte immutable Optionen. Picking ist standardmäßig aus, sodass ein
 gewöhnliches Target weder die zusätzliche Integertextur noch deren FBO
 allokiert. `withPicking(true)` ergänzt beides in Targetauflösung. Die
 Pickingtextur verwendet immer `NEAREST`, unabhängig vom Farbfilter.
+Bei kombinierter Depth-/Pickingoption besitzen Color- und Pickingpass getrennte
+Depthbuffer, damit beide unabhängig dieselbe Geometrieentscheidung aufbauen.
 
 Konstruktorbreite und -höhe sind ganzzahlige Targetpixel und damit zugleich
 die Texelauflösung. Innerhalb des Targets entspricht eine logische

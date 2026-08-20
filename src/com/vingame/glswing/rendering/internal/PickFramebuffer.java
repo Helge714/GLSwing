@@ -26,12 +26,14 @@ public final class PickFramebuffer {
 	private final ShaderProgram textureProgram;
 	private final ShaderProgram textProgram;
 	private final ShaderProgram uiProgram;
+	private final ShaderProgram spriteProgram;
 	private final ShaderProgram renderTargetProgram;
 	private final FloatBuffer renderTargetVertices =
 			Buffers.newDirectFloatBuffer(6 * 4);
 	private final List<ExternalSurface> externalSurfaces = new ArrayList<>();
 	private int framebuffer;
 	private int idTexture;
+	private int depthBuffer;
 	private int renderTargetVao;
 	private int renderTargetVbo;
 	private int width;
@@ -63,16 +65,19 @@ public final class PickFramebuffer {
 
 	private PickFramebuffer(ShaderProgram filledProgram, ShaderProgram textureProgram,
 			ShaderProgram textProgram, ShaderProgram uiProgram,
+			ShaderProgram spriteProgram,
 			ShaderProgram renderTargetProgram,
-			int framebuffer, int idTexture,
+			int framebuffer, int idTexture, int depthBuffer,
 			int renderTargetVao, int renderTargetVbo) {
 		this.filledProgram = filledProgram;
 		this.textureProgram = textureProgram;
 		this.textProgram = textProgram;
 		this.uiProgram = uiProgram;
+		this.spriteProgram = spriteProgram;
 		this.renderTargetProgram = renderTargetProgram;
 		this.framebuffer = framebuffer;
 		this.idTexture = idTexture;
+		this.depthBuffer = depthBuffer;
 		this.renderTargetVao = renderTargetVao;
 		this.renderTargetVbo = renderTargetVbo;
 	}
@@ -83,9 +88,11 @@ public final class PickFramebuffer {
 		ShaderProgram texture = null;
 		ShaderProgram text = null;
 		ShaderProgram ui = null;
+		ShaderProgram sprite = null;
 		ShaderProgram renderTarget = null;
 		int framebuffer = 0;
 		int idTexture = 0;
+		int depthBuffer = 0;
 		int renderTargetVao = 0;
 		int renderTargetVbo = 0;
 		try {
@@ -95,6 +102,8 @@ public final class PickFramebuffer {
 					gl, "pick_text.vert", "pick_text.frag");
 			ui = ShaderProgram.fromBuiltInResources(
 					gl, "pick_ui_quad.vert", "pick_ui_quad.frag");
+			sprite = ShaderProgram.fromBuiltInResources(
+					gl, "pick_sprite.vert", "pick_sprite.frag");
 			renderTarget = ShaderProgram.fromBuiltInResources(
 					gl, "pick_render_target.vert", "pick_render_target.frag");
 			int[] id = new int[1];
@@ -102,6 +111,8 @@ public final class PickFramebuffer {
 			framebuffer = id[0];
 			gl.glGenTextures(1, id, 0);
 			idTexture = id[0];
+			gl.glGenRenderbuffers(1, id, 0);
+			depthBuffer = id[0];
 			gl.glGenVertexArrays(1, id, 0);
 			renderTargetVao = id[0];
 			gl.glBindVertexArray(renderTargetVao);
@@ -118,8 +129,9 @@ public final class PickFramebuffer {
 					2L * Float.BYTES);
 			gl.glBindBuffer(GL.GL_ARRAY_BUFFER, 0);
 			gl.glBindVertexArray(0);
-			return new PickFramebuffer(filled, texture, text, ui, renderTarget,
-					framebuffer, idTexture, renderTargetVao, renderTargetVbo);
+			return new PickFramebuffer(filled, texture, text, ui, sprite,
+					renderTarget, framebuffer, idTexture, depthBuffer,
+					renderTargetVao, renderTargetVbo);
 		} catch (RuntimeException error) {
 			if (renderTargetVbo != 0)
 				gl.glDeleteBuffers(1, new int[] { renderTargetVbo }, 0);
@@ -127,12 +139,16 @@ public final class PickFramebuffer {
 				gl.glDeleteVertexArrays(1, new int[] { renderTargetVao }, 0);
 			if (idTexture != 0)
 				gl.glDeleteTextures(1, new int[] { idTexture }, 0);
+			if (depthBuffer != 0)
+				gl.glDeleteRenderbuffers(1, new int[] { depthBuffer }, 0);
 			if (framebuffer != 0)
 				gl.glDeleteFramebuffers(1, new int[] { framebuffer }, 0);
 			if (text != null)
 				text.dispose(gl);
 			if (ui != null)
 				ui.dispose(gl);
+			if (sprite != null)
+				sprite.dispose(gl);
 			if (texture != null)
 				texture.dispose(gl);
 			if (renderTarget != null)
@@ -255,6 +271,33 @@ public final class PickFramebuffer {
 		gl.glDrawArraysInstanced(GL.GL_TRIANGLES, 0, 6, instanceCount);
 		unbindTextures(gl, textures);
 		restoreAfterPicking(gl);
+	}
+
+	/** Draws depth-aware sprite IDs through the color/depth atlas set. */
+	public void drawSprite(GL3 gl, int vao, int vertexCount,
+			float[] projection, GLTexture[] colors, GLTexture[] depths,
+			GLTexture[] normals) {
+		ensureActiveSurface(gl);
+		captureCurrentTarget(gl);
+		bindForPicking(gl);
+		clearPendingFrameIfRequired(gl);
+		spriteProgram.use(gl);
+		spriteProgram.setMatrix4(gl, "uProjection", projection);
+		setSpriteSamplers(gl, spriteProgram);
+		bindSpriteTextures(gl, colors, depths, normals);
+		draw(gl, vao, vertexCount);
+		unbindSpriteTextures(gl, colors.length);
+		restoreAfterPicking(gl);
+	}
+
+	/** Clears depth in the active picking surface without changing its IDs. */
+	public void clearDepth(GL3 gl) {
+		ensureActiveSurface(gl);
+		captureCurrentTarget(gl);
+		bind(gl);
+		applyScaledScissor(gl);
+		clearDepthBuffer(gl);
+		restorePreviousTarget(gl);
 	}
 
 	/** Draws one transformed color/ID target pair into the active picking surface. */
@@ -445,6 +488,10 @@ public final class PickFramebuffer {
 			gl.glDeleteTextures(1, new int[] { idTexture }, 0);
 			idTexture = 0;
 		}
+		if (depthBuffer != 0) {
+			gl.glDeleteRenderbuffers(1, new int[] { depthBuffer }, 0);
+			depthBuffer = 0;
+		}
 		if (framebuffer != 0) {
 			gl.glDeleteFramebuffers(1, new int[] { framebuffer }, 0);
 			framebuffer = 0;
@@ -461,6 +508,7 @@ public final class PickFramebuffer {
 		textureProgram.dispose(gl);
 		textProgram.dispose(gl);
 		uiProgram.dispose(gl);
+		spriteProgram.dispose(gl);
 		renderTargetProgram.dispose(gl);
 	}
 
@@ -472,6 +520,7 @@ public final class PickFramebuffer {
 		bind(gl);
 		gl.glDisable(GL.GL_SCISSOR_TEST);
 		gl.glClearBufferuiv(GL3.GL_COLOR, 0, clearValue, 0);
+		clearDepthBuffer(gl);
 		fullClearPending = false;
 		restorePreviousTarget(gl);
 	}
@@ -555,6 +604,11 @@ public final class PickFramebuffer {
 		gl.glBindFramebuffer(GL3.GL_DRAW_FRAMEBUFFER, framebuffer);
 		gl.glFramebufferTexture2D(GL3.GL_DRAW_FRAMEBUFFER, GL3.GL_COLOR_ATTACHMENT0,
 				GL.GL_TEXTURE_2D, idTexture, 0);
+		gl.glBindRenderbuffer(GL.GL_RENDERBUFFER, depthBuffer);
+		gl.glRenderbufferStorage(GL.GL_RENDERBUFFER, GL3.GL_DEPTH_COMPONENT24,
+				allocatedWidth, allocatedHeight);
+		gl.glFramebufferRenderbuffer(GL3.GL_DRAW_FRAMEBUFFER,
+				GL3.GL_DEPTH_ATTACHMENT, GL.GL_RENDERBUFFER, depthBuffer);
 		gl.glDrawBuffers(1, new int[] { GL3.GL_COLOR_ATTACHMENT0 }, 0);
 		int status = gl.glCheckFramebufferStatus(GL3.GL_DRAW_FRAMEBUFFER);
 		gl.glBindTexture(GL.GL_TEXTURE_2D, previousTexture[0]);
@@ -588,6 +642,7 @@ public final class PickFramebuffer {
 		// layer, then restore that draw's scaled scissor rectangle.
 		gl.glDisable(GL.GL_SCISSOR_TEST);
 		gl.glClearBufferuiv(GL3.GL_COLOR, 0, clearValue, 0);
+		clearDepthBuffer(gl);
 		fullClearPending = false;
 		applyScaledScissor(gl);
 	}
@@ -675,9 +730,42 @@ public final class PickFramebuffer {
 		gl.glDrawArrays(GL.GL_TRIANGLES, 0, vertexCount);
 	}
 
+	private static void clearDepthBuffer(GL3 gl) {
+		int[] previous = new int[1];
+		gl.glGetIntegerv(GL.GL_DEPTH_WRITEMASK, previous, 0);
+		gl.glDepthMask(true);
+		gl.glClearBufferfv(GL3.GL_DEPTH, 0, new float[] { 0 }, 0);
+		gl.glDepthMask(previous[0] != 0);
+	}
+
 	private static void setTextureSamplers(GL3 gl, ShaderProgram program) {
 		for (int slot = 0; slot < 16; slot++)
 			program.setInteger(gl, "uTextures[" + slot + "]", slot);
+	}
+
+	private static void setSpriteSamplers(GL3 gl, ShaderProgram program) {
+		for (int slot = 0; slot < 5; slot++) {
+			program.setInteger(gl, "uColorMaps[" + slot + "]", slot);
+			program.setInteger(gl, "uDepthMaps[" + slot + "]", 5 + slot);
+		}
+	}
+
+	private static void bindSpriteTextures(GL3 gl, GLTexture[] colors,
+			GLTexture[] depths, GLTexture[] normals) {
+		for (int slot = 0; slot < colors.length; slot++) {
+			colors[slot].bind(gl, slot);
+			depths[slot].bind(gl, 5 + slot);
+			normals[slot].bind(gl, 10 + slot);
+		}
+	}
+
+	private static void unbindSpriteTextures(GL3 gl, int count) {
+		for (int channel = 0; channel < 3; channel++)
+			for (int slot = 0; slot < count; slot++) {
+				gl.glActiveTexture(GL.GL_TEXTURE0 + channel * 5 + slot);
+				gl.glBindTexture(GL.GL_TEXTURE_2D, 0);
+			}
+		gl.glActiveTexture(GL.GL_TEXTURE0);
 	}
 
 	private static void bindTextures(GL3 gl, GLTexture[] textures) {

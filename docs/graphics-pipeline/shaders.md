@@ -39,6 +39,7 @@ dem internen GLSwing-Shaderordner und ist hauptsächlich für Bibliothekscode.
 | Texture | `aPosition` 0, `aTexCoord` 1, `aColor` 2 | `uProjection`, `uTexture` |
 | Text | wie Texture | `uProjection`, `uTexture`, `uMsdfPixelRange` |
 | UI | eingebauter instanzierter Vertexshader; Locations `0..7`, `9`, `10` wie unten | `uProjection`, `uDeviceScale`, alle `uTextures[0..15]` |
+| Sprite | `aPosition` 0, `aColorUv` 1, `aTint` 2, `aTextureSlot` 4, `aDepthUv` 5, `aNormalUv` 6, `aDepthData` 7, `aFlags` 8, `aAlphaCutoff` 9, `aTangentX` 10, `aTangentY` 11 | `uProjection`, alle Color-/Depth-/Normal-Maps `[0..4]`, Ambient- und Richtungslicht |
 | Layer | interner Fullscreen-Vertexshader | `uTexture`, `uOpacity` |
 
 Attribute und Pflichtuniforms müssen aktiv sein. Ein GLSL-Compiler darf
@@ -127,6 +128,26 @@ fragColor = vec4(vColor.rgb, vColor.a * coverage);
 ```
 
 `setTextShader` betrifft `drawText`, nicht `drawUIText`.
+
+## Eigener Sprite-Materialshader
+
+```java
+ShaderProgram shader = ShaderProgram.fromSpriteFragmentSource(gl,
+        myFragmentSource);
+
+GLSprite sprite = GLSprite.builder(colorImage)
+        .depthMap(depthImage)
+        .normalMap(normalImage)
+        .shader(shader)
+        .uniform("uRoughness", 0.7f)
+        .build();
+```
+
+Sprite-Shader hängen nicht als globaler Contextzustand an allen Sprites,
+sondern am unveränderlichen `GLMaterial2D`. Damit bleiben Maps, Alpha-Modus,
+Depthstate, Shader und Uniforms eine geschlossene Materialbeschreibung. Die
+vollständige Semantik der Vertexdaten, der 15 Sampler, Beleuchtung und
+Batchgrenzen steht in [Depth und 2.5D-Materialien](depth-materials.md).
 
 ## Eigener UI-Shader
 

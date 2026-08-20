@@ -17,8 +17,10 @@ public final class GLRenderTarget implements AutoCloseable {
 	private GLRenderer2D owner;
 	private GLTexture texture;
 	private int framebuffer;
+	private int depthBuffer;
 	private int pickingTexture;
 	private int pickingFramebuffer;
+	private int pickingDepthBuffer;
 	private final PersistentPickRecords pickingRecords =
 			new PersistentPickRecords();
 	private volatile boolean closed;
@@ -56,6 +58,10 @@ public final class GLRenderTarget implements AutoCloseable {
 		return options.picking();
 	}
 
+	public boolean isDepthEnabled() {
+		return options.depth();
+	}
+
 	public boolean isClosed() {
 		return closed;
 	}
@@ -81,19 +87,23 @@ public final class GLRenderTarget implements AutoCloseable {
 		GLTexture createdTexture = GLTexture.createEmpty(gl, width, height,
 				linear, repeating, false);
 		int[] createdFramebuffer = new int[1];
+		int[] createdDepthBuffer = new int[1];
 		int[] createdPickingFramebuffer = new int[1];
 		int[] createdPickingTexture = new int[1];
+		int[] createdPickingDepthBuffer = new int[1];
 		int[] previousDraw = new int[1];
 		int[] previousRead = new int[1];
 		int[] previousViewport = new int[4];
 		int[] previousTexture = new int[1];
 		float[] previousClearColor = new float[4];
+		int[] previousDepthMask = new int[1];
 		boolean previousScissor = gl.glIsEnabled(GL.GL_SCISSOR_TEST);
 		gl.glGetIntegerv(GL3.GL_DRAW_FRAMEBUFFER_BINDING, previousDraw, 0);
 		gl.glGetIntegerv(GL3.GL_READ_FRAMEBUFFER_BINDING, previousRead, 0);
 		gl.glGetIntegerv(GL.GL_VIEWPORT, previousViewport, 0);
 		gl.glGetIntegerv(GL.GL_TEXTURE_BINDING_2D, previousTexture, 0);
 		gl.glGetFloatv(GL.GL_COLOR_CLEAR_VALUE, previousClearColor, 0);
+		gl.glGetIntegerv(GL.GL_DEPTH_WRITEMASK, previousDepthMask, 0);
 		try {
 			gl.glGenFramebuffers(1, createdFramebuffer, 0);
 			if (createdFramebuffer[0] == 0)
@@ -103,6 +113,15 @@ public final class GLRenderTarget implements AutoCloseable {
 			gl.glFramebufferTexture2D(GL.GL_FRAMEBUFFER,
 					GL.GL_COLOR_ATTACHMENT0, GL.GL_TEXTURE_2D,
 					createdTexture.textureId(), 0);
+			if (options.depth()) {
+				gl.glGenRenderbuffers(1, createdDepthBuffer, 0);
+				gl.glBindRenderbuffer(GL.GL_RENDERBUFFER, createdDepthBuffer[0]);
+				gl.glRenderbufferStorage(GL.GL_RENDERBUFFER,
+						GL3.GL_DEPTH_COMPONENT24, width, height);
+				gl.glFramebufferRenderbuffer(GL.GL_FRAMEBUFFER,
+						GL3.GL_DEPTH_ATTACHMENT, GL.GL_RENDERBUFFER,
+						createdDepthBuffer[0]);
+			}
 			int status = gl.glCheckFramebufferStatus(GL.GL_FRAMEBUFFER);
 			if (status != GL.GL_FRAMEBUFFER_COMPLETE)
 				throw new IllegalStateException(
@@ -111,7 +130,10 @@ public final class GLRenderTarget implements AutoCloseable {
 			gl.glViewport(0, 0, width, height);
 			gl.glDisable(GL.GL_SCISSOR_TEST);
 			gl.glClearColor(0, 0, 0, 0);
-			gl.glClear(GL.GL_COLOR_BUFFER_BIT);
+			gl.glDepthMask(true);
+			gl.glClearDepth(0);
+			gl.glClear(GL.GL_COLOR_BUFFER_BIT
+					| (options.depth() ? GL.GL_DEPTH_BUFFER_BIT : 0));
 			if (options.picking()) {
 				gl.glGenTextures(1, createdPickingTexture, 0);
 				gl.glGenFramebuffers(1, createdPickingFramebuffer, 0);
@@ -136,6 +158,16 @@ public final class GLRenderTarget implements AutoCloseable {
 				gl.glFramebufferTexture2D(GL.GL_FRAMEBUFFER,
 						GL.GL_COLOR_ATTACHMENT0, GL.GL_TEXTURE_2D,
 						createdPickingTexture[0], 0);
+				if (options.depth()) {
+					gl.glGenRenderbuffers(1, createdPickingDepthBuffer, 0);
+					gl.glBindRenderbuffer(GL.GL_RENDERBUFFER,
+							createdPickingDepthBuffer[0]);
+					gl.glRenderbufferStorage(GL.GL_RENDERBUFFER,
+							GL3.GL_DEPTH_COMPONENT24, width, height);
+					gl.glFramebufferRenderbuffer(GL.GL_FRAMEBUFFER,
+							GL3.GL_DEPTH_ATTACHMENT, GL.GL_RENDERBUFFER,
+							createdPickingDepthBuffer[0]);
+				}
 				gl.glDrawBuffers(1,
 						new int[] { GL.GL_COLOR_ATTACHMENT0 }, 0);
 				status = gl.glCheckFramebufferStatus(GL.GL_FRAMEBUFFER);
@@ -144,19 +176,27 @@ public final class GLRenderTarget implements AutoCloseable {
 							"Render-target picking framebuffer is incomplete: 0x"
 									+ Integer.toHexString(status));
 				gl.glClearBufferuiv(GL3.GL_COLOR, 0, new int[] { 0 }, 0);
+				if (options.depth())
+					gl.glClearBufferfv(GL3.GL_DEPTH, 0, new float[] { 0 }, 0);
 			}
 			owner = renderer;
 			texture = createdTexture;
 			framebuffer = createdFramebuffer[0];
+			depthBuffer = createdDepthBuffer[0];
 			pickingTexture = createdPickingTexture[0];
 			pickingFramebuffer = createdPickingFramebuffer[0];
+			pickingDepthBuffer = createdPickingDepthBuffer[0];
 		} catch (RuntimeException error) {
+			if (createdPickingDepthBuffer[0] != 0)
+				gl.glDeleteRenderbuffers(1, createdPickingDepthBuffer, 0);
 			if (createdPickingFramebuffer[0] != 0)
 				gl.glDeleteFramebuffers(1, createdPickingFramebuffer, 0);
 			if (createdPickingTexture[0] != 0)
 				gl.glDeleteTextures(1, createdPickingTexture, 0);
 			if (createdFramebuffer[0] != 0)
 				gl.glDeleteFramebuffers(1, createdFramebuffer, 0);
+			if (createdDepthBuffer[0] != 0)
+				gl.glDeleteRenderbuffers(1, createdDepthBuffer, 0);
 			createdTexture.dispose(gl);
 			throw error;
 		} finally {
@@ -167,6 +207,7 @@ public final class GLRenderTarget implements AutoCloseable {
 			gl.glBindTexture(GL.GL_TEXTURE_2D, previousTexture[0]);
 			gl.glClearColor(previousClearColor[0], previousClearColor[1],
 					previousClearColor[2], previousClearColor[3]);
+			gl.glDepthMask(previousDepthMask[0] != 0);
 			if (previousScissor)
 				gl.glEnable(GL.GL_SCISSOR_TEST);
 			else
@@ -218,6 +259,13 @@ public final class GLRenderTarget implements AutoCloseable {
 		gl.glViewport(0, 0, width, height);
 		gl.glDisable(GL.GL_SCISSOR_TEST);
 		gl.glClearBufferuiv(GL3.GL_COLOR, 0, new int[] { 0 }, 0);
+		if (options.depth()) {
+			int[] previousDepthMask = new int[1];
+			gl.glGetIntegerv(GL.GL_DEPTH_WRITEMASK, previousDepthMask, 0);
+			gl.glDepthMask(true);
+			gl.glClearBufferfv(GL3.GL_DEPTH, 0, new float[] { 0 }, 0);
+			gl.glDepthMask(previousDepthMask[0] != 0);
+		}
 		gl.glBindFramebuffer(GL3.GL_DRAW_FRAMEBUFFER, previousDraw[0]);
 		gl.glViewport(previousViewport[0], previousViewport[1],
 				previousViewport[2], previousViewport[3]);
@@ -244,10 +292,16 @@ public final class GLRenderTarget implements AutoCloseable {
 			gl.glDeleteFramebuffers(1, new int[] { pickingFramebuffer }, 0);
 		if (pickingTexture != 0)
 			gl.glDeleteTextures(1, new int[] { pickingTexture }, 0);
+		if (depthBuffer != 0)
+			gl.glDeleteRenderbuffers(1, new int[] { depthBuffer }, 0);
+		if (pickingDepthBuffer != 0)
+			gl.glDeleteRenderbuffers(1, new int[] { pickingDepthBuffer }, 0);
 		if (texture != null && !texture.isDisposed())
 			texture.dispose(gl);
 		framebuffer = 0;
+		depthBuffer = 0;
 		pickingFramebuffer = 0;
+		pickingDepthBuffer = 0;
 		pickingTexture = 0;
 		texture = null;
 		pickingRecords.reset();

@@ -16,6 +16,7 @@ Dieses Kapitel trennt vier Fragen ausdrücklich:
 - [Immediate, Recording und Replay](#immediate-recording-und-replay)
 - [Overload-Konvention](#overload-konvention)
 - [Nicht-UI-Pipelines](#nicht-ui-filled-batch)
+- [2.5D-Sprite-Pipeline](#25d-sprite-pipeline)
 - [UI-Pipeline](#ui-pipeline)
 - [Pfade](#pfade)
 - [Zeichenreihenfolge und Entscheidungshilfe](#zeichenreihenfolge-und-überlappung)
@@ -161,6 +162,20 @@ RGBA-Rasterstufe. Ein MSDF-Icon erzeugt für diesen Pfad bei Bedarf lazy eine
 RGBA-Repräsentation, weil ein beliebiger Texture-Shader die MSDF-Distanz nicht
 automatisch interpretieren kann. Der aktive TextureShader wirkt auf alle
 Methoden dieser Tabelle.
+
+## 2.5D-Sprite-Pipeline
+
+| Methode | Varianten | Recordbar |
+|---|---|---|
+| `drawSprite(sprite,x,y)` | Natürliche Größe, aktuelle Context-Tiefe | Ja |
+| `drawSprite(sprite,x,y,w,h[,tint[,depth]])` | Skaliert, optional Tint und Basis-Tiefe | Ja |
+| `drawMaterial(material,x,y,w,h)` | Direktes Material, aktuelle Context-Tiefe | Ja |
+| `drawMaterial(material,x,y,w,h,tint,depth)` | Vollständig explizit | Ja |
+
+Bounds sind lokale Benutzerkoordinaten, Tint ist `java.awt.Color` und Depth
+dimensionslos `0..1`. Die Pipeline verwendet eigene Color-/Depth-/Normal-UVs
+und bleibt von Texture- und UI-Batch getrennt. Details zu Materialbuilder,
+Alpha-Modi, Licht und Picking: [Depth und 2.5D-Materialien](depth-materials.md).
 
 ## Nicht-UI: Text-Batch
 
