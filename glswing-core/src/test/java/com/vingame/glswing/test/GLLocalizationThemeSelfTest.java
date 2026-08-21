@@ -45,8 +45,8 @@ public final class GLLocalizationThemeSelfTest {
 		check("missing.key".equals(GLLocalizer.ENGLISH.text("missing.key")),
 				"Missing localization key did not fall back to itself");
 		check("Sprache".equals(GLLocalizer.GERMAN.withBundle(
-				"com.vingame.glswing.demo.languages.Showcase")
-				.text("showcase.menu.language")),
+				"com.vingame.glswing.test.languages.TestMessages")
+				.text("test.menu.language")),
 				"Application bundle did not override/extend library texts");
 	}
 

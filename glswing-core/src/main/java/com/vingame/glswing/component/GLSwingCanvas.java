@@ -23,9 +23,9 @@ import com.vingame.glswing.rendering.internal.SceneFramebuffer;
  * restrictions of {@link GLCanvas} still apply.
  * <p>
  * On modular Java runtimes, JOGL's Windows AWT backend requires these VM opens:
- * {@code --add-opens=java.base/java.lang=jogamp.fat},
- * {@code --add-opens=java.desktop/sun.awt=jogamp.fat} and
- * {@code --add-opens=java.desktop/sun.java2d=jogamp.fat}.
+ * {@code --add-opens=java.base/java.lang=ALL-UNNAMED},
+ * {@code --add-opens=java.desktop/sun.awt=ALL-UNNAMED} and
+ * {@code --add-opens=java.desktop/sun.java2d=ALL-UNNAMED}.
  */
 public abstract class GLSwingCanvas extends GLCanvas implements GLEventListener {
 
@@ -34,9 +34,9 @@ public abstract class GLSwingCanvas extends GLCanvas implements GLEventListener 
 	public static final String AWT_NO_ERASE_BACKGROUND_PROPERTY =
 			"sun.awt.noerasebackground";
 	public static final String REQUIRED_WINDOWS_VM_ARGUMENTS =
-			"--add-opens=java.base/java.lang=jogamp.fat "
-			+ "--add-opens=java.desktop/sun.awt=jogamp.fat "
-			+ "--add-opens=java.desktop/sun.java2d=jogamp.fat";
+			"--add-opens=java.base/java.lang=ALL-UNNAMED "
+			+ "--add-opens=java.desktop/sun.awt=ALL-UNNAMED "
+			+ "--add-opens=java.desktop/sun.java2d=ALL-UNNAMED";
 
 	private final int requestedAntialiasingSamples;
 	private final int swapInterval;

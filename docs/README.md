@@ -49,7 +49,9 @@ Einsatz und wiederholen nicht die vollständige Methodensammlung.
 
 ## Ausführbare Referenzen
 
-Die Klassen in `src/com/vingame/glswing/demo` ergänzen das Handbuch:
+Die Klassen in
+`glswing-examples/src/main/java/com/vingame/glswing/demo` ergänzen das
+Handbuch:
 
 - `DrawingApiDemo`, `PathDemo`, `SvgImportDemo`
 - `CustomShaderDemo`, `RecordingParameterDemo`, `LayerDemo`

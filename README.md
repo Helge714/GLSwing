@@ -18,9 +18,85 @@ Temurin 25 ist eine freie, Java-SE-kompatible OpenJDK-Distribution und eine
 sinnvolle Standardwahl. Das neuere Entwicklungs-JDK ändert die erzeugte
 Java-17-Kompatibilität nicht, solange der Compiler mit Release 17 arbeitet.
 
-In Eclipse verwendet das Projekt deshalb die Execution Environment
-`JavaSE-17`. Ein konfiguriertes Temurin 25 kann diese bedienen; es muss kein
-separates JDK 17 installiert werden.
+Maven kompiliert deshalb unabhängig vom verwendeten Entwicklungs-JDK mit
+`--release 17`. Ein konfiguriertes Temurin 25 kann den Build ausführen; es muss
+kein separates JDK 17 installiert werden.
+
+## Build und JOGL
+
+GLSwing bindet JOGL 2.6.0 reproduzierbar über Maven Central ein. Benötigt
+werden weder eine lokale `jogamp-fat.jar` noch manuell kopierte native
+Bibliotheken:
+
+```bash
+./mvnw clean verify
+```
+
+Unter Windows lautet derselbe Aufruf `mvnw.cmd clean verify`. Der eingecheckte
+Maven Wrapper lädt bei Bedarf die festgelegte Maven-Version 3.9.11; eine lokale
+Maven-Installation ist nicht erforderlich.
+
+Der Build besteht aus zwei Modulen:
+
+| Modul | Inhalt |
+|---|---|
+| `glswing-core` | Bibliothek, interne Shader, Themes, Sprachen und Tests |
+| `glswing-examples` | Demos und Benchmarks; wird nicht Teil des Core-JARs |
+
+Das Release-Profil erzeugt zusätzlich das Javadoc-JAR:
+
+```bash
+./mvnw -Prelease clean package
+```
+
+Danach liegen Binary-, Source- und Javadoc-JAR unter
+`glswing-core/target`.
+
+`glswing-core/target/glswing-0.1.0-SNAPSHOT.jar` ist ein schlankes
+Bibliotheks-JAR. JOGL, GlueGen und die plattformspezifischen nativen JARs
+bleiben normale transitive Abhängigkeiten. Für ein lokales Projekt kann die
+Bibliothek zunächst installiert werden:
+
+```bash
+./mvnw clean install
+```
+
+```xml
+<dependency>
+    <groupId>com.vingame</groupId>
+    <artifactId>glswing</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+</dependency>
+```
+
+Das Core-JAR besitzt den stabilen Manifestnamen
+`Automatic-Module-Name: com.vingame.glswing`. Ein eigenes `module-info.java`
+wird vorerst bewusst nicht ausgeliefert, weil JOGL 2.6.0 seine Java-Pakete als
+automatische Module bereitstellt. Dadurch läuft GLSwing klassisch auf dem
+Classpath und erzeugt keine Warnung über `requires transitive` auf ein
+automatisches Modul.
+
+### Eclipse
+
+Eclipse/m2e verwendet beim Import standardmäßig den Maven-`artifactId` als
+Projektnamen. Das Core-Modul heißt deshalb in Eclipse `glswing` und kollidiert
+unter Windows mit einem noch registrierten Altprojekt `GLSwing`, obwohl sich
+die Schreibweise unterscheidet.
+
+Empfohlen: Das alte Projekt `GLSwing` mit **Delete** aus dem Eclipse-Workspace
+entfernen, dabei **Delete project contents on disk** ausdrücklich nicht
+aktivieren. Danach über **File → Import → Existing Maven Projects** den Ordner
+`GLSwingNext` auswählen und die drei Maven-Projekte importieren. Die
+vorhandenen `.launch`-Dateien verwenden diese Standardnamen.
+
+Falls beide Projekte gleichzeitig im selben Workspace bleiben müssen, im
+Importdialog unter **Advanced → Name template** stattdessen
+`[groupId].[artifactId]` wählen. Das ergibt eindeutige Namen wie
+`com.vingame.glswing`; entsprechende Launch-Konfigurationen müssen dann einmal
+auf diese Projektnamen umgestellt werden.
+
+Eclipse/m2e erzeugt die Classpath-Konfiguration aus den POM-Dateien; ein
+absoluter JOGL-JAR-Pfad ist nicht mehr nötig.
 
 ## Dokumentation
 
@@ -33,8 +109,10 @@ separates JDK 17 installiert werden.
 - [Offene Vorhaben](TODO.md)
 
 Die README bleibt bewusst kurz. Ausführliche Anleitungen gehören nach `docs`,
-vollständig startbare Szenen nach `src/com/vingame/glswing/demo` und gezielte
-Regressionstests nach `src/com/vingame/glswing/test`.
+vollständig startbare Szenen nach
+`glswing-examples/src/main/java/com/vingame/glswing/demo` und gezielte
+Regressionstests nach
+`glswing-core/src/test/java/com/vingame/glswing/test`.
 
 ## Schnellstart mit `GLFrame`
 
@@ -150,10 +228,10 @@ dialog.closedFuture().thenRun(() -> System.out.println("geschlossen"));
 ## Themes und Sprachen
 
 Das vollständige Standard-Theme liegt ausschließlich unter
-`resources/com/vingame/glswing/themes/default.gltheme`. `dark.gltheme` und
-`light.gltheme` überschreiben nur ihre Abweichungen. Eigene Dateien werden mit
-`GLThemeLoader.load(Path)` geladen; `GLThemeWatcher` kann sie während der
-Entwicklung live neu laden.
+`glswing-core/src/main/resources/com/vingame/glswing/themes/default.gltheme`.
+`dark.gltheme` und `light.gltheme` überschreiben nur ihre Abweichungen. Eigene
+Dateien werden mit `GLThemeLoader.load(Path)` geladen; `GLThemeWatcher` kann
+sie während der Entwicklung live neu laden.
 
 ```properties
 theme.extends=dark
@@ -186,7 +264,7 @@ Rendering, Recording und Eingabe gezielt reproduzierbar sind.
 ## Ressourcenstruktur
 
 ```text
-resources/com/vingame/glswing/
+glswing-core/src/main/resources/com/vingame/glswing/
   languages/   UTF-8-Properties und Locale-Fallbacks
   themes/      default.gltheme, dark.gltheme und light.gltheme
   shaders/     interne Vertex- und Fragmentshader

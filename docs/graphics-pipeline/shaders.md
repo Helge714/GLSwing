@@ -199,7 +199,8 @@ mitgelieferten `ui_quad.frag` behandeln: runde und asymmetrische Flächen und
 Border, Fill+Border, MSDF-Text, RGBA-Texturen, Checkmark, Chevron,
 Fortschrittsverläufe, Hit-Area und analytischen Schatten. Der praktikable
 Startpunkt ist daher eine Kopie von
-`resources/com/vingame/glswing/shaders/ui_quad.frag`, in die nur der gewünschte
+`glswing-core/src/main/resources/com/vingame/glswing/shaders/ui_quad.frag`, in
+die nur der gewünschte
 Effekt eingebaut wird. Das interne Picking bleibt unabhängig davon erhalten.
 
 Der Shaderwechsel selbst erzeugt nur dann einen Flush, wenn gerade UI-Instanzen

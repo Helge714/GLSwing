@@ -35,7 +35,8 @@ betroffenen Recordings und Layouts automatisch.
 ## Eingebaute Themes und externe Dateien
 
 `GLThemes.DEFAULT`, `DARK` und `LIGHT` laden die Ressourcen unter
-`resources/com/vingame/glswing/themes`. `default.gltheme` ist vollständig;
+`glswing-core/src/main/resources/com/vingame/glswing/themes`.
+`default.gltheme` ist vollständig;
 abgeleitete Themes enthalten mit `theme.extends=...` nur ihre Abweichungen.
 
 ```properties
@@ -149,7 +150,8 @@ nichts anderes nennt. Farben sind normales, nicht-prämultipliziertes
 
 `GLLocalizer` ist ein unveränderlicher UTF-8-Resolver auf Basis von
 `ResourceBundle`. Die Bibliothek liefert Root-, englische und deutsche
-Properties unter `resources/com/vingame/glswing/languages`.
+Properties unter
+`glswing-core/src/main/resources/com/vingame/glswing/languages`.
 
 ```java
 GLLocalizer texts = GLLocalizer.forLocale(Locale.GERMANY)
