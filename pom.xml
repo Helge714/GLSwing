@@ -6,11 +6,43 @@
 
     <groupId>com.vingame</groupId>
     <artifactId>glswing-parent</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.1.0</version>
     <packaging>pom</packaging>
 
     <name>GLSwingNext Parent</name>
     <description>GPU-accelerated 2D rendering and lightweight UI for Java</description>
+    <url>https://github.com/Helge97/GLSwingNext</url>
+
+    <licenses>
+        <license>
+            <name>Apache License, Version 2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
+    <developers>
+        <developer>
+            <id>Helge97</id>
+            <name>Helge97</name>
+            <url>https://github.com/Helge97</url>
+            <roles>
+                <role>developer</role>
+            </roles>
+        </developer>
+    </developers>
+
+    <scm>
+        <connection>scm:git:https://github.com/Helge97/GLSwingNext.git</connection>
+        <developerConnection>scm:git:ssh://git@github.com/Helge97/GLSwingNext.git</developerConnection>
+        <url>https://github.com/Helge97/GLSwingNext</url>
+        <tag>v0.1.0</tag>
+    </scm>
+
+    <issueManagement>
+        <system>GitHub Issues</system>
+        <url>https://github.com/Helge97/GLSwingNext/issues</url>
+    </issueManagement>
 
     <modules>
         <module>glswing-core</module>

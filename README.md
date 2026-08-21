@@ -52,7 +52,7 @@ Das Release-Profil erzeugt zusätzlich das Javadoc-JAR:
 Danach liegen Binary-, Source- und Javadoc-JAR unter
 `glswing-core/target`.
 
-`glswing-core/target/glswing-0.1.0-SNAPSHOT.jar` ist ein schlankes
+`glswing-core/target/glswing-0.1.0.jar` ist ein schlankes
 Bibliotheks-JAR. JOGL, GlueGen und die plattformspezifischen nativen JARs
 bleiben normale transitive Abhängigkeiten. Für ein lokales Projekt kann die
 Bibliothek zunächst installiert werden:
@@ -65,7 +65,7 @@ Bibliothek zunächst installiert werden:
 <dependency>
     <groupId>com.vingame</groupId>
     <artifactId>glswing</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.1.0</version>
 </dependency>
 ```
 
@@ -273,3 +273,9 @@ glswing-core/src/main/resources/com/vingame/glswing/
 Pflichtressourcen wie Root-Sprache, Standard-Theme und interne Shader gehören
 zur Bibliothek. Fehlen sie, meldet GLSwing den Fehler klar, statt still eine
 abweichende Ersatzdarstellung zu verwenden.
+
+## Lizenz
+
+GLSwing wird unter der [Apache License 2.0](LICENSE) veröffentlicht. Sie erlaubt
+private und kommerzielle Nutzung, Änderung und Weitergabe; maßgeblich ist der
+vollständige Lizenztext im Repository und in den erzeugten JAR-Dateien.
