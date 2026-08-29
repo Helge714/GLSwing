@@ -56,6 +56,7 @@ public final class UIQuadBatchGpuSelfTest {
 				testMixedRecordedInstances(gl, renderer, font);
 				testAsymmetricRoundedFill(gl, renderer);
 				testScreenSpaceBorderUnderZoom(gl, renderer);
+				testMinimumProgressInsideBorder(gl, renderer);
 				testSliderPrimitives(gl, renderer);
 				testCustomUIShader(gl, renderer);
 				testThousandRecordedControls(gl, renderer, font);
@@ -134,6 +135,9 @@ public final class UIQuadBatchGpuSelfTest {
 		context.setMouseTarget(target, 10, 10);
 		context.fillUIRoundRect(10, 10, 60, 40,
 				new GLCornerRadii(12, 0, 12, 0), Color.RED);
+		context.fillAndDrawUIRoundRect(90, 10, 60, 40,
+				new GLCornerRadii(10, 0, 10, 0), 2, Color.RED, Color.BLUE,
+				GLStroke.WidthSpace.SCREEN);
 		context.clearMouseTarget();
 		renderer.endFrame();
 
@@ -145,6 +149,12 @@ public final class UIQuadBatchGpuSelfTest {
 				"asymmetric rounded bottom-right corner");
 		checkColor(gl, 11, 48, Color.RED,
 				"asymmetric square bottom-left corner");
+		checkDominantColor(gl, 96, 11, Color.BLUE,
+				"combined asymmetric rounded border");
+		checkDominantColor(gl, 148, 11, Color.BLUE,
+				"combined asymmetric square border");
+		checkDominantColor(gl, 120, 30, Color.RED,
+				"combined asymmetric fill");
 		if (renderer.readPickResult(gl, 10, 10).isHit())
 			throw new AssertionError(
 					"Transparent asymmetric UI corner was pickable");
@@ -175,12 +185,28 @@ public final class UIQuadBatchGpuSelfTest {
 		checkVisibleBrightPixels(gl, 150, 10, 18, 32, "right chevron");
 	}
 
+	private static void testMinimumProgressInsideBorder(GL3 gl,
+			GLRenderer2D renderer) {
+		GLContext2D context = renderer.beginFrame(gl, WIDTH, HEIGHT,
+				Projection2D.TOP_LEFT_PIXELS.create(WIDTH, HEIGHT));
+		context.clear(Color.BLACK);
+		context.fillUISlider(10, 10, 100, 32, 2, 0.03f, 2,
+				new Color(45, 45, 45), Color.RED, new Color(120, 0, 0),
+				Color.BLUE, GLStroke.WidthSpace.SCREEN);
+		renderer.endFrame();
+
+		checkDominantColor(gl, 11, 37, Color.BLUE,
+				"minimum slider progress behind bottom-left border");
+		checkDominantColor(gl, 11, 25, Color.BLUE,
+				"minimum slider progress behind left border");
+	}
+
 	private static void testScreenSpaceBorderUnderZoom(GL3 gl,
 			GLRenderer2D renderer) {
 		GLContext2D context = renderer.beginFrame(gl, WIDTH, HEIGHT,
 				Projection2D.TOP_LEFT_PIXELS.create(WIDTH, HEIGHT));
 		context.clear(Color.BLACK);
-		context.fillAndDrawUIRoundRect(10, 10, 30, 20, 0, 2,
+		context.fillAndDrawUIRoundRect(10, 10, 30, 20, 0.5f, 2,
 				Color.RED, Color.BLUE, GLStroke.WidthSpace.SCREEN);
 		context.setTransform(new GLTransform().translate(70, 10).scale(3));
 		context.fillAndDrawUIRoundRect(0, 0, 20, 20, 0, 2,
@@ -191,6 +217,12 @@ public final class UIQuadBatchGpuSelfTest {
 				"unscaled screen-space border");
 		checkDominantColor(gl, 14, 20, Color.RED,
 				"unscaled border interior");
+		checkDominantColor(gl, 10, 29, Color.BLUE,
+				"square bottom-left border corner");
+		checkDominantColor(gl, 12, 12, Color.RED,
+				"square top-left fill corner");
+		checkDominantColor(gl, 39, 10, Color.BLUE,
+				"square top-right border corner");
 		checkDominantColor(gl, 71, 40, Color.BLUE,
 				"zoomed screen-space border");
 		checkDominantColor(gl, 74, 40, Color.RED,

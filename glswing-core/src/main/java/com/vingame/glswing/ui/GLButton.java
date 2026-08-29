@@ -120,17 +120,23 @@ public class GLButton extends GLControl {
 			return;
 		float border = style.borderWidth();
 
-		context.withParameters(backgroundParameters, () ->
+		context.withParameters(backgroundParameters, () -> {
+			if (border > 0)
+				context.fillAndDrawUIRoundRect(0, 0, width, height,
+						style.cornerRadius(), border, Color.WHITE,
+						style.borderColor(), GLStroke.WidthSpace.SCREEN);
+			else
 				context.fillUIRoundRect(0, 0, width, height,
-						style.cornerRadius(), Color.WHITE));
+						style.cornerRadius(), Color.WHITE);
+		});
+		float gradientInset = border > 0 ? Math.min(border + 1,
+				Math.min(width, height) * 0.5f) : 0;
 		context.withParameters(pressedGradientParameters, () ->
-				context.fillUIVerticalGradientRoundRect(0, 0, width, height,
-						style.cornerRadius(), style.pressedLightColor(),
-						style.pressedDarkColor()));
-		if (border > 0)
-			context.drawUIRoundRect(0, 0, width, height,
-					style.cornerRadius(), border, style.borderColor(),
-					GLStroke.WidthSpace.SCREEN);
+				context.fillUIVerticalGradientRoundRect(gradientInset, gradientInset,
+						Math.max(0.0001f, width - gradientInset * 2),
+						Math.max(0.0001f, height - gradientInset * 2),
+						Math.max(0, style.cornerRadius() - gradientInset),
+						style.pressedLightColor(), style.pressedDarkColor()));
 
 		float focusInset = border;
 		if (isFocusable() && width > focusInset * 2 && height > focusInset * 2) {

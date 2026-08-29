@@ -391,12 +391,14 @@ public class GLComboBox<T> extends GLControl
 		float bottomRadius = popupDirection == GLPopupDirection.BELOW ? 0 : radius;
 		GLCornerRadii radii = new GLCornerRadii(topRadius, topRadius,
 				bottomRadius, bottomRadius);
-		context.withParameters(backgroundParameters, () ->
-				context.fillUIRoundRect(0, 0, width, height, radii, Color.WHITE));
-		if (style.borderWidth() > 0)
-			context.drawUIRoundRect(0, 0, width, height, radii,
-					style.borderWidth(), style.borderColor(),
-					GLStroke.WidthSpace.SCREEN);
+		context.withParameters(backgroundParameters, () -> {
+			if (style.borderWidth() > 0)
+				context.fillAndDrawUIRoundRect(0, 0, width, height, radii,
+						style.borderWidth(), Color.WHITE, style.borderColor(),
+						GLStroke.WidthSpace.SCREEN);
+			else
+				context.fillUIRoundRect(0, 0, width, height, radii, Color.WHITE);
+		});
 
 		GLItemPresentation selectedPresentation = selectedEntry == null
 				? GLItemPresentation.text("") : presentation(selectedEntry.value);

@@ -8,6 +8,8 @@ flat in vec2 vSize;
 flat in uint vPickId;
 flat in vec4 vSecondaryColor;
 flat in int vTextureSlot;
+flat in vec4 vAux;
+flat in vec4 vTertiaryColor;
 
 uniform sampler2D uTextures[16];
 uniform float uTextAlphaThreshold;
@@ -77,9 +79,43 @@ float asymmetricRoundedDistance(vec2 local, vec2 size, vec4 radii) {
     return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - radius;
 }
 
+float insetRoundedDistance(vec2 local, vec2 size, float radius, float inset) {
+	vec2 innerSize = max(size - vec2(inset * 2.0), vec2(0.0001));
+	return roundedDistance(local - vec2(inset), innerSize,
+			max(radius - inset, 0.0));
+}
+
+float insetAsymmetricRoundedDistance(vec2 local, vec2 size, vec4 radii,
+		float inset) {
+	vec2 innerSize = max(size - vec2(inset * 2.0), vec2(0.0001));
+	return asymmetricRoundedDistance(local - vec2(inset), innerSize,
+			max(radii - vec4(inset), vec4(0.0)));
+}
+
+bool squareRadii(vec4 radii) {
+	return all(lessThanEqual(radii, vec4(1.0)));
+}
+
 float edgeCoverage(float distance) {
 	float antialias = max(length(vec2(dFdx(distance), dFdy(distance))), 0.0001);
     return 1.0 - smoothstep(-antialias, antialias, distance);
+}
+
+float squareInsetCoverage(vec2 inset) {
+	vec2 width = fwidth(vLocal);
+	vec2 lower = smoothstep(inset - width, inset + width, vLocal);
+	vec2 upperDistance = vSize - vLocal;
+	vec2 upper = smoothstep(inset - width, inset + width, upperDistance);
+	return min(min(lower.x, lower.y), min(upper.x, upper.y));
+}
+
+vec2 resolvedSquareStrokeInset() {
+	if (vParameters.w < 0.5)
+		return vec2(vParameters.z);
+	vec2 xDerivative = vec2(dFdx(vLocal.x), dFdy(vLocal.x)) * uDeviceScale;
+	vec2 yDerivative = vec2(dFdx(vLocal.y), dFdy(vLocal.y)) * uDeviceScale;
+	return vParameters.z * max(vec2(length(xDerivative), length(yDerivative)),
+			vec2(0.0001));
 }
 
 float resolvedStrokeWidth(float distance) {
@@ -159,11 +195,17 @@ void main() {
 	float alpha = vAlpha;
     float threshold = uTextAlphaThreshold;
     if (mode == 0) {
-        coverage = edgeCoverage(roundedDistance(vLocal, vSize, vParameters.y));
+        coverage = vParameters.y <= 1.0 ? 1.0
+				: edgeCoverage(roundedDistance(vLocal, vSize, vParameters.y));
     } else if (mode == 1) {
         float distance = roundedDistance(vLocal, vSize, vParameters.y);
-        coverage = max(0.0, edgeCoverage(distance)
-				- edgeCoverage(distance + resolvedStrokeWidth(distance)));
+		float strokeWidth = resolvedStrokeWidth(distance);
+		float outer = vParameters.y <= 1.0 ? 1.0 : edgeCoverage(distance);
+		float inner = vParameters.y <= 1.0
+				? squareInsetCoverage(resolvedSquareStrokeInset())
+				: edgeCoverage(insetRoundedDistance(vLocal, vSize,
+						vParameters.y, strokeWidth));
+		coverage = max(0.0, outer - inner);
     } else if (mode == 2) {
         coverage = msdfCoverage();
     } else if (mode == 3) {
@@ -187,8 +229,10 @@ void main() {
 	} else if (mode == 10) {
 		float distance = asymmetricRoundedDistance(
 				vLocal, vSize, vSecondaryColor);
-		coverage = max(0.0, edgeCoverage(distance)
-				- edgeCoverage(distance + resolvedStrokeWidth(distance)));
+		float strokeWidth = resolvedStrokeWidth(distance);
+		coverage = max(0.0, edgeCoverage(distance) - edgeCoverage(
+				insetAsymmetricRoundedDistance(vLocal, vSize,
+						vSecondaryColor, strokeWidth)));
 	} else if (mode == 11) {
 		vec4 radii = vec4(vParameters.y, vParameters.y,
 				vParameters.w, vParameters.w);
@@ -200,6 +244,25 @@ void main() {
 				: edgeCoverage(vLocal.x - vSize.x * progress);
 		coverage = outer * progressCoverage;
 		alpha = max(vAlpha, vSecondaryColor.a);
+	} else if (mode == 13) {
+		coverage = squareRadii(vAux) ? 1.0
+				: edgeCoverage(asymmetricRoundedDistance(vLocal, vSize, vAux));
+		alpha = max(vAlpha, vSecondaryColor.a);
+	} else if (mode == 14) {
+		float distance = roundedDistance(vLocal, vSize, vParameters.y);
+		float outer = vParameters.y <= 1.0 ? 1.0
+				: distance <= 0.0 ? 1.0 : 0.0;
+		float progress = clamp(vParameters.z, 0.0, 1.0);
+		float progressCoverage = progress <= 0.0 ? 0.0
+				: progress >= 1.0 ? 1.0
+				: edgeCoverage(vLocal.x - vSize.x * progress);
+		coverage = outer * progressCoverage;
+		alpha = max(vAlpha, vSecondaryColor.a);
+	} else if (mode == 15) {
+		coverage = vParameters.y <= 1.0 ? 1.0
+				: edgeCoverage(roundedDistance(vLocal, vSize, vParameters.y));
+		alpha = max(max(vAlpha, vSecondaryColor.a),
+				max(vAux.a, vTertiaryColor.a));
 	} else {
 		coverage = edgeCoverage(roundedDistance(vLocal, vSize, vParameters.y));
 		alpha = max(vAlpha, vSecondaryColor.a);

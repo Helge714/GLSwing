@@ -206,7 +206,8 @@ public final class ShaderProgram {
 				new AttributeRequirement("aParameters", 6),
 				new AttributeRequirement("aSize", 7),
 				new AttributeRequirement("aSecondaryColor", 9),
-				new AttributeRequirement("aTextureSlot", 10)
+				new AttributeRequirement("aTextureSlot", 10),
+				new AttributeRequirement("aTertiaryColor", 11)
 		}, new String[] {
 				"uProjection", "uDeviceScale",
 				"uTextures[0]", "uTextures[1]", "uTextures[2]", "uTextures[3]",

@@ -8,7 +8,7 @@ import com.vingame.glswing.rendering.GLTransform;
 /** CPU-side layout and compilers for instanced standard UI quads. */
 public final class UIQuadInstanceFormat {
 
-	public static final int FLOATS_PER_INSTANCE = 24;
+	public static final int FLOATS_PER_INSTANCE = 28;
 	public static final float MODE_ROUNDED_FILL = 0;
 	public static final float MODE_ROUNDED_STROKE = 1;
 	public static final float MODE_MSDF_TEXT = 2;
@@ -22,6 +22,9 @@ public final class UIQuadInstanceFormat {
 	public static final float MODE_ASYMMETRIC_ROUNDED_STROKE = 10;
 	public static final float MODE_VERTICAL_CORNER_PROGRESS_GRADIENT = 11;
 	public static final float MODE_ROUNDED_SHADOW = 12;
+	public static final float MODE_ASYMMETRIC_ROUNDED_FILL_BORDER = 13;
+	public static final float MODE_INNER_PROGRESS_GRADIENT = 14;
+	public static final float MODE_SLIDER_FILL_PROGRESS_BORDER = 15;
 
 	private UIQuadInstanceFormat() {
 	}
@@ -113,6 +116,23 @@ public final class UIQuadInstanceFormat {
 		return result;
 	}
 
+	/** Builds one asymmetric rounded fill and inner border without overlap. */
+	public static float[] roundedRectangleWithBorder(float x, float y,
+			float width, float height, GLCornerRadii radii, float strokeWidth,
+			boolean screenSpaceStroke, Color fillColor, Color borderColor,
+			GLTransform transform) {
+		if (radii == null)
+			throw new IllegalArgumentException("UI corner radii must not be null");
+		float[] result = roundedRectangleWithBorder(x, y, width, height, 0,
+				strokeWidth, screenSpaceStroke, fillColor, borderColor, transform);
+		result[14] = MODE_ASYMMETRIC_ROUNDED_FILL_BORDER;
+		result[6] = radii.topLeft();
+		result[7] = radii.topRight();
+		result[8] = radii.bottomRight();
+		result[9] = radii.bottomLeft();
+		return result;
+	}
+
 	/**
 	 * Builds a soft analytic shadow around an offset rounded rectangle. The
 	 * returned quad contains only the shadow and is intended to be followed by
@@ -191,6 +211,31 @@ public final class UIQuadInstanceFormat {
 		result[14] = MODE_PROGRESS_GRADIENT;
 		result[16] = progress;
 		putSecondaryColor(result, 0, bottomColor);
+		return result;
+	}
+
+	/** Progress fill whose rounded outer contour is hard-clipped inside a border. */
+	public static float[] innerProgressGradient(float x, float y, float width,
+			float height, float radius, float progress, Color topColor,
+			Color bottomColor, GLTransform transform) {
+		float[] result = progressGradient(x, y, width, height, radius, progress,
+				topColor, bottomColor, transform);
+		result[14] = MODE_INNER_PROGRESS_GRADIENT;
+		return result;
+	}
+
+	/** Builds one gap-free slider background, progress gradient, and border. */
+	public static float[] slider(float x, float y, float width, float height,
+			float radius, float progress, float strokeWidth,
+			boolean screenSpaceStroke, Color background, Color progressTop,
+			Color progressBottom, Color border, GLTransform transform) {
+		float[] result = progressGradient(x, y, width, height, radius, progress,
+				progressTop, progressBottom, transform);
+		result[14] = MODE_SLIDER_FILL_PROGRESS_BORDER;
+		result[17] = screenSpaceStroke ? -strokeWidth : strokeWidth;
+		putUv(result, 0, border.getRed() / 255f, border.getGreen() / 255f,
+				border.getBlue() / 255f, border.getAlpha() / 255f);
+		putTertiaryColor(result, 0, background);
 		return result;
 	}
 
@@ -366,5 +411,12 @@ public final class UIQuadInstanceFormat {
 		target[offset + 21] = color.getGreen() / 255f;
 		target[offset + 22] = color.getBlue() / 255f;
 		target[offset + 23] = color.getAlpha() / 255f;
+	}
+
+	private static void putTertiaryColor(float[] target, int offset, Color color) {
+		target[offset + 24] = color.getRed() / 255f;
+		target[offset + 25] = color.getGreen() / 255f;
+		target[offset + 26] = color.getBlue() / 255f;
+		target[offset + 27] = color.getAlpha() / 255f;
 	}
 }

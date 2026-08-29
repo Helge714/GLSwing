@@ -10,6 +10,7 @@ layout(location = 6) in vec4 aParameters;
 layout(location = 7) in vec2 aSize;
 layout(location = 9) in vec4 aSecondaryColor;
 layout(location = 10) in int aTextureSlot;
+layout(location = 11) in vec4 aTertiaryColor;
 
 uniform mat4 uProjection;
 
@@ -20,6 +21,8 @@ flat out vec4 vParameters;
 flat out vec2 vSize;
 flat out vec4 vSecondaryColor;
 flat out int vTextureSlot;
+flat out vec4 vAux;
+flat out vec4 vTertiaryColor;
 
 void main() {
     vec2 position = aP00
@@ -32,5 +35,7 @@ void main() {
     vSize = aSize;
     vSecondaryColor = aSecondaryColor;
     vTextureSlot = aTextureSlot;
+    vAux = aUvRect;
+    vTertiaryColor = aTertiaryColor;
     gl_Position = uProjection * vec4(position, 0.0, 1.0);
 }

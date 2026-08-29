@@ -7,6 +7,17 @@ may change in subsequent `0.x` releases.
 
 ### Rendering
 
+- Square UI borders now use an explicitly inset square inner contour, avoiding
+  corner rounding and single-pixel fill leaks when the corner radius is zero.
+- Slider progress is clipped to the inner border contour so values near the
+  minimum cannot bleed into the rounded outer border. Background, progress,
+  and border are composited in one analytic instance, keeping both transitions
+  antialiased without gaps or hard clipping.
+- Subpixel corner radii up to one logical pixel resolve to stable square
+  corners instead of producing diagonal corner-pixel asymmetry.
+- Buttons, combo boxes, and text editors now compose fill and border from one
+  analytic contour, including controls with asymmetric corner radii.
+
 - Batched 2D rendering for shapes, lines, textures, MSDF text, and UI.
 - Transforms, projections, cameras, picking, and reusable recordings.
 - Paths, Bézier curves, dashed strokes, and SVG import.

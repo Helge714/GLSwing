@@ -56,7 +56,6 @@ public class GLTextEditor extends GLControl {
 	private final GLRenderParameters textParameters = new GLRenderParameters();
 	private final GLRenderParameters selectionParameters = new GLRenderParameters();
 	private final GLRenderParameters caretParameters = new GLRenderParameters();
-	private final GLRenderParameters borderParameters = new GLRenderParameters();
 	private final Timer caretTimer;
 	private final Timer validationFeedbackTimer;
 	private final GLHistoryManager editingHistory = new GLHistoryManager();
@@ -427,8 +426,17 @@ public class GLTextEditor extends GLControl {
 		GLInsets padding = style.padding();
 		GLCornerRadii radii = containerRadii == null
 				? GLCornerRadii.all(style.cornerRadius()) : containerRadii;
-		context.withParameters(backgroundParameters, () ->
-				context.fillUIRoundRect(0, 0, width, height, radii, Color.WHITE));
+		context.withParameters(backgroundParameters, () -> {
+			if (containerBorderVisible && style.borderWidth() > 0) {
+				Color borderColor = invalid ? style.invalidBorderColor()
+						: isFocused() ? style.focusedBorderColor()
+								: style.borderColor();
+				context.fillAndDrawUIRoundRect(0, 0, width, height, radii,
+						style.borderWidth(), Color.WHITE, borderColor,
+						GLStroke.WidthSpace.SCREEN);
+			} else
+				context.fillUIRoundRect(0, 0, width, height, radii, Color.WHITE);
+		});
 
 		float clipInset = style.borderWidth() > 0
 				? style.borderWidth() + 1 : 0;
@@ -471,11 +479,6 @@ public class GLTextEditor extends GLControl {
 					width - clipInset - fadeWidth,
 					width - clipInset, height, false);
 		context.endLayer();
-		if (containerBorderVisible && style.borderWidth() > 0)
-			context.withParameters(borderParameters, () ->
-					context.drawUIRoundRect(0, 0, width, height,
-							radii, style.borderWidth(), Color.WHITE,
-							GLStroke.WidthSpace.SCREEN));
 	}
 
 	private static void drawOverflowFade(GLContext2D context,
@@ -873,8 +876,7 @@ public class GLTextEditor extends GLControl {
 				? style.textColor() : style.disabledTextColor());
 		selectionParameters.setColor(style.selectionColor());
 		caretParameters.setColor(style.caretColor());
-		borderParameters.setColor(invalid ? style.invalidBorderColor()
-				: isFocused() ? style.focusedBorderColor() : style.borderColor());
+		invalidateRecording();
 		repaintGL();
 	}
 

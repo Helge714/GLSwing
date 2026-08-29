@@ -87,6 +87,7 @@ public final class UIQuadBatch {
 			attribute(gl, 6, 4, byteStride, 14);
 			attribute(gl, 7, 2, byteStride, 18);
 			attribute(gl, 9, 4, byteStride, 20);
+			attribute(gl, 11, 4, byteStride, 24);
 
 			gl.glGenBuffers(1, ids, 0);
 			pickVbo = ids[0];
@@ -211,6 +212,7 @@ public final class UIQuadBatch {
 			instances.put(modifier.secondaryBlue(values[source + 22]));
 			instances.put(modifier.secondaryAlpha(values[source + 23]));
 		}
+		instances.put(values, source + 24, 4);
 	}
 
 	public int flush(GL3 gl, float[] projection, ShaderProgram shaderOverride,

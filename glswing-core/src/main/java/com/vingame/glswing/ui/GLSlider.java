@@ -95,6 +95,7 @@ public class GLSlider extends GLControl {
 		defaultValue = value;
 		validationFeedbackTimer = new Timer(450, event -> {
 			validationFeedbackActive = false;
+			invalidateRecording();
 			updateColors();
 		});
 		validationFeedbackTimer.setRepeats(false);
@@ -367,8 +368,17 @@ public class GLSlider extends GLControl {
 		GLCornerRadii radii = sliderGroup == null
 				? GLCornerRadii.all(style.cornerRadius())
 				: sliderGroup.cornerRadii(this, style.cornerRadius());
-		context.withParameters(backgroundParameters, () ->
-				context.fillUIRoundRect(0, 0, width, height, radii, Color.WHITE));
+		float border = sliderGroup == null ? style.borderWidth() : 0;
+		boolean compositeFixed = sliderGroup == null && mode == Mode.FIXED
+				&& border > 0;
+		if (!compositeFixed) context.withParameters(backgroundParameters, () -> {
+			if (border > 0)
+				context.fillAndDrawUIRoundRect(0, 0, width, height,
+						style.cornerRadius(), border, Color.WHITE,
+						style.borderColor(), GLStroke.WidthSpace.SCREEN);
+			else
+				context.fillUIRoundRect(0, 0, width, height, radii, Color.WHITE);
+		});
 
 		if (mode == Mode.FIXED) {
 			float progress = (float) ((value - minimum) / (maximum - minimum));
@@ -376,12 +386,31 @@ public class GLSlider extends GLControl {
 			Color progressLight = sliderGroup == null
 					|| sliderGroup.usesProgressGradient(this)
 					? style.progressLightColor() : progressDark;
-			context.withParameters(progressParameters, () -> {
-				if (sliderGroup == null)
-					context.fillUIProgressRoundRect(0, 0, width, height,
-							style.cornerRadius(), progress,
+			if (compositeFixed) {
+				GLControlState presentationState = groupGesturePressed && isEnabled()
+						? GLControlState.PRESSED : getControlState();
+				float progressOpacity = isEnabled() ? 1 : 0.45f;
+				Color borderColor = validationFeedbackActive
+						? getGLTheme().textEditorStyle().invalidBorderColor()
+						: style.borderColor();
+				context.fillUISlider(0, 0, width, height, style.cornerRadius(),
+						progress, border, style.background(presentationState),
+						withOpacity(progressLight, progressOpacity),
+						withOpacity(progressDark, progressOpacity), borderColor,
+						GLStroke.WidthSpace.SCREEN);
+			} else context.withParameters(progressParameters, () -> {
+				if (sliderGroup == null) {
+					float progressInset = Math.min(border,
+							Math.min(width, height) * 0.5f);
+					float progressWidth = Math.max(0.0001f,
+							width - progressInset * 2);
+					float progressHeight = Math.max(0.0001f,
+							height - progressInset * 2);
+					context.fillUIInnerProgressRoundRect(progressInset, progressInset,
+							progressWidth, progressHeight,
+							Math.max(0, style.cornerRadius() - progressInset), progress,
 							progressLight, progressDark);
-				else
+				} else
 					context.fillUIProgressRoundRect(0, 0, width, height,
 							radii.topLeft(), radii.bottomLeft(), progress,
 							progressLight, progressDark);
@@ -391,13 +420,19 @@ public class GLSlider extends GLControl {
 			recordArrowButton(context, style, radii, false);
 		}
 
-		if (sliderGroup == null && style.borderWidth() > 0)
+		if (!compositeFixed && sliderGroup == null && border > 0
+				&& validationFeedbackActive)
 			context.withParameters(borderParameters, () ->
 					context.drawUIRoundRect(0, 0, width, height,
 							style.cornerRadius(), style.borderWidth(), Color.WHITE,
 							GLStroke.WidthSpace.SCREEN));
 
 		recordText(context, style, width, height);
+	}
+
+	private static Color withOpacity(Color color, float opacity) {
+		return new Color(color.getRed(), color.getGreen(), color.getBlue(),
+				Math.round(color.getAlpha() * opacity));
 	}
 
 	private void recordArrowButton(GLContext2D context, GLSliderStyle style,
@@ -698,6 +733,7 @@ public class GLSlider extends GLControl {
 				: style.borderColor());
 		progressParameters.setOpacity(isEnabled() ? 1 : 0.45f);
 		updateArrowColors();
+		invalidateRecording();
 		repaintGL();
 	}
 
@@ -830,6 +866,7 @@ public class GLSlider extends GLControl {
 
 	void showValidationFailure() {
 		validationFeedbackActive = true;
+		invalidateRecording();
 		updateColors();
 		validationFeedbackTimer.restart();
 	}

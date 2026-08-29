@@ -1731,6 +1731,20 @@ public final class GLContext2D {
 		submitUI(null, instances, pickId, mouseTarget, x, y);
 	}
 
+	/** Draws one asymmetric rounded fill and inner border without overlap. */
+	public void fillAndDrawUIRoundRect(float x, float y, float width, float height,
+			GLCornerRadii radii, float strokeWidth, Color fillColor,
+			Color borderColor, GLStroke.WidthSpace widthSpace) {
+		if (widthSpace == null)
+			throw new IllegalArgumentException("UI width space must not be null");
+		float[] instances = UIQuadInstanceFormat.roundedRectangleWithBorder(
+				x, y, width, height, radii, strokeWidth,
+				widthSpace == GLStroke.WidthSpace.SCREEN,
+				requireColor(fillColor), requireColor(borderColor),
+				renderer.currentTransform());
+		submitUI(null, instances, pickId, mouseTarget, x, y);
+	}
+
 	/**
 	 * Draws an unpickable soft shadow for a rounded UI rectangle through the
 	 * shared instanced UI batch. No layer, framebuffer or blur pass is created.
@@ -1775,6 +1789,33 @@ public final class GLContext2D {
 		float[] instances = UIQuadInstanceFormat.progressGradient(
 				x, y, width, height, radius, progress,
 				requireColor(topColor), requireColor(bottomColor),
+				renderer.currentTransform());
+		submitUI(null, instances, pickId, mouseTarget, x, y);
+	}
+
+	/** Draws progress exactly to an inner border contour without a second AA seam. */
+	public void fillUIInnerProgressRoundRect(float x, float y, float width,
+			float height, float radius, float progress,
+			Color topColor, Color bottomColor) {
+		float[] instances = UIQuadInstanceFormat.innerProgressGradient(
+				x, y, width, height, radius, progress,
+				requireColor(topColor), requireColor(bottomColor),
+				renderer.currentTransform());
+		submitUI(null, instances, pickId, mouseTarget, x, y);
+	}
+
+	/** Draws a complete slider body as one analytically composited instance. */
+	public void fillUISlider(float x, float y, float width, float height,
+			float radius, float progress, float strokeWidth,
+			Color background, Color progressTop, Color progressBottom,
+			Color border, GLStroke.WidthSpace widthSpace) {
+		if (widthSpace == null)
+			throw new IllegalArgumentException("UI width space must not be null");
+		float[] instances = UIQuadInstanceFormat.slider(x, y, width, height,
+				radius, progress, strokeWidth,
+				widthSpace == GLStroke.WidthSpace.SCREEN,
+				requireColor(background), requireColor(progressTop),
+				requireColor(progressBottom), requireColor(border),
 				renderer.currentTransform());
 		submitUI(null, instances, pickId, mouseTarget, x, y);
 	}
