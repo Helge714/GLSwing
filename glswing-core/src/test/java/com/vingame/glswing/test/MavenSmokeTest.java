@@ -59,4 +59,9 @@ final class MavenSmokeTest {
 	void configurationEditors() throws Exception {
 		GLConfigurationEditorSelfTest.main(NO_ARGS);
 	}
+
+	@Test
+	void textEditor() {
+		GLTextEditorSelfTest.main(NO_ARGS);
+	}
 }

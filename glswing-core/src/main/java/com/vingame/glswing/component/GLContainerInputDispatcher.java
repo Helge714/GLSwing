@@ -470,11 +470,11 @@ final class GLContainerInputDispatcher {
 			public void keyPressed(KeyEvent event) {
 				GLInputMap inputMap = host.focusedGLTarget() instanceof GLContainer container
 						? container.getGLInputMap() : host.getGLInputMap();
-				if (GLHistoryManager.isHistoryShortcut(event, inputMap)
-						&& host.focusedGLTarget() instanceof GLTextEditor editor
-						&& editor.hasUncommittedChanges()
-						&& !editor.commit())
+				if (host.focusedGLTarget() instanceof GLTextEditor editor
+						&& editor.handleEditingHistoryKeyPressed(event, inputMap)) {
+					host.repaintColorOnly();
 					return;
+				}
 				GLHistoryManager history = host.focusedGLTarget()
 						instanceof GLContainer container
 								? container.getGLHistoryManager()

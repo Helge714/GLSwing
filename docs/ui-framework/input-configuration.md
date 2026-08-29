@@ -76,6 +76,7 @@ modifier.slider.precise=SHIFT
 modifier.slider.coarse=CTRL
 value.slider.precise-factor=0.1
 value.slider.coarse-factor=10
+value.text.history-coalesce-millis=750
 
 modifier.node.horizontal-wheel=CTRL
 modifier.node.vertical-wheel=SHIFT
@@ -84,6 +85,10 @@ modifier.node.toggle-selection=SHIFT
 
 An individual slider may override configured factors with
 `setPreciseDragFactor(...)` and `setCoarseDragFactor(...)`.
+`text.history-coalesce-millis` controls how long compatible consecutive typing
+or deletion operations remain one text-editor undo step. Each editor may
+override the inherited value with `setHistoryCoalesceMillis(...)`; zero disables
+coalescing for that editor.
 
 ## Inheritance and scopes
 

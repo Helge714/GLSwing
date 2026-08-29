@@ -100,6 +100,13 @@ with the nearest inherited history manager. Programmatic setters do not necessar
 history; user gestures do. Composite controls can disable a child editor's
 history with `setHistoryEnabled(false)` and record one higher-level operation.
 
+While a `GLTextEditor` is focused, undo and redo operate on its private editing
+session. Consecutive text operations may be coalesced, and each entry restores
+text, caret, and selection. A successful commit clears that session and adds
+one complete value change to the inherited document history; cancel clears the
+session without adding a document edit. The coalescing interval is configured
+through the [input map](input-configuration.md).
+
 ## Saved-state tracking
 
 `markPersisted()` marks the current history position as the persisted document

@@ -36,6 +36,8 @@ public final class GLInputActions {
 	public static final String TEXT_BACKSPACE = "text.backspace";
 	public static final String TEXT_DELETE = "text.delete";
 	public static final String TEXT_COMMIT = "text.commit";
+	public static final String TEXT_HISTORY_COALESCE_MILLIS =
+			"text.history-coalesce-millis";
 
 	public static final String NODE_DELETE = "node.delete-selection";
 	public static final String NODE_TOGGLE_SELECTION = "node.toggle-selection";

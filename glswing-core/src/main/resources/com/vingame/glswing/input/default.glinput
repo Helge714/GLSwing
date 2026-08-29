@@ -32,6 +32,7 @@ key.text.move-end=END, shift+END
 key.text.backspace=BACK_SPACE
 key.text.delete=DELETE
 key.text.commit=ENTER
+value.text.history-coalesce-millis=750
 
 key.node.delete-selection=DELETE, BACK_SPACE
 modifier.node.toggle-selection=SHIFT

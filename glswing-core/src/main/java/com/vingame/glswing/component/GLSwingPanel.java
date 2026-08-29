@@ -997,11 +997,12 @@ public abstract class GLSwingPanel extends GLJPanel
 			public void keyPressed(KeyEvent event) {
 				GLInputMap resolvedInputMap = focusedTarget instanceof GLContainer container
 						? container.getGLInputMap() : inputMap;
-				if (GLHistoryManager.isHistoryShortcut(event, resolvedInputMap)
-						&& focusedTarget instanceof GLTextEditor editor
-						&& editor.hasUncommittedChanges()
-						&& !editor.commit())
+				if (focusedTarget instanceof GLTextEditor editor
+						&& editor.handleEditingHistoryKeyPressed(event,
+								resolvedInputMap)) {
+					repaintColorOnly();
 					return;
+				}
 				GLHistoryManager history = focusedTarget instanceof GLContainer container
 						? container.getGLHistoryManager() : historyManager;
 				if (history != null && history.handleKeyPressed(event, resolvedInputMap)) {

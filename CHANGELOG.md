@@ -26,6 +26,8 @@ may change in subsequent `0.x` releases.
   pointer modifiers, and interaction sensitivity.
 - Editable theme and input-map override drafts with previews, reset-to-default,
   shortcut capture and conflict detection, and atomic persistence.
+- Per-editor temporary text histories with caret/selection restoration,
+  configurable edit coalescing, and single-step document commits.
 
 ### Build and platforms
 

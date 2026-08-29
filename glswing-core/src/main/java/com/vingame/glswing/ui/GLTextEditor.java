@@ -10,6 +10,7 @@ import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 
 import javax.swing.Timer;
@@ -19,6 +20,8 @@ import javax.swing.event.ChangeListener;
 import com.vingame.glswing.component.GLParent;
 import com.vingame.glswing.input.GLKeyEvent;
 import com.vingame.glswing.input.GLInputActions;
+import com.vingame.glswing.input.GLInputMap;
+import com.vingame.glswing.history.GLHistoryManager;
 import com.vingame.glswing.input.GLMouseEvent;
 import com.vingame.glswing.input.GLPointerController;
 import com.vingame.glswing.input.GLPointerCursor;
@@ -32,6 +35,7 @@ import com.vingame.glswing.rendering.GLStroke;
 
 /** Reusable single-line GPU text editor with selection and validation. */
 public class GLTextEditor extends GLControl {
+	public static final long DEFAULT_HISTORY_COALESCE_MILLIS = 750;
 
 	public enum ValidationFailureMode {
 		/** Leaves invalid text in place until it is corrected or cancelled. */
@@ -55,6 +59,7 @@ public class GLTextEditor extends GLControl {
 	private final GLRenderParameters borderParameters = new GLRenderParameters();
 	private final Timer caretTimer;
 	private final Timer validationFeedbackTimer;
+	private final GLHistoryManager editingHistory = new GLHistoryManager();
 
 	private String text;
 	private String editBaseline;
@@ -66,6 +71,8 @@ public class GLTextEditor extends GLControl {
 	private boolean invalid;
 	private boolean ending;
 	private boolean commitOnFocusLost = true;
+	private Long historyCoalesceMillis;
+	private EditGroup activeEditGroup;
 	private boolean historyEnabled = true;
 	private GLCornerRadii containerRadii;
 	private boolean containerBorderVisible = true;
@@ -112,6 +119,7 @@ public class GLTextEditor extends GLControl {
 		text = requireText(text);
 		if (this.text.equals(text))
 			return;
+		activeEditGroup = null;
 		this.text = text;
 		caret = Math.min(caret, text.length());
 		anchor = Math.min(anchor, text.length());
@@ -138,6 +146,7 @@ public class GLTextEditor extends GLControl {
 	}
 
 	public final void selectAll() {
+		activeEditGroup = null;
 		anchor = 0;
 		caret = text.length();
 		ensureCaretVisible();
@@ -229,6 +238,43 @@ public class GLTextEditor extends GLControl {
 		return !text.equals(editBaseline);
 	}
 
+	/** Temporary undo/redo history for the current editing session. */
+	public final GLHistoryManager getEditingHistoryManager() {
+		return editingHistory;
+	}
+
+	public final long getHistoryCoalesceMillis() {
+		if (historyCoalesceMillis != null) return historyCoalesceMillis;
+		double configured = getGLInputMap().getValue(
+				GLInputActions.TEXT_HISTORY_COALESCE_MILLIS,
+				DEFAULT_HISTORY_COALESCE_MILLIS);
+		return Math.max(0, Math.round(configured));
+	}
+
+	/** Overrides the input-map cooldown; zero disables edit coalescing. */
+	public final void setHistoryCoalesceMillis(long milliseconds) {
+		if (milliseconds < 0)
+			throw new IllegalArgumentException("History cooldown must not be negative");
+		historyCoalesceMillis = milliseconds;
+		activeEditGroup = null;
+	}
+
+	/** Restores the cooldown inherited from the nearest input map. */
+	public final void clearHistoryCoalesceMillis() {
+		historyCoalesceMillis = null;
+		activeEditGroup = null;
+	}
+
+	/** Handles undo/redo inside the active editing session. */
+	public final boolean handleEditingHistoryKeyPressed(KeyEvent event,
+			GLInputMap inputMap) {
+		if (!isFocused() || !GLHistoryManager.isHistoryShortcut(event, inputMap))
+			return false;
+		activeEditGroup = null;
+		editingHistory.handleKeyPressed(event, inputMap);
+		return true;
+	}
+
 	/** Overrides the outer editor shape without changing its reusable style. */
 	public final void setContainerShape(GLCornerRadii radii,
 			boolean borderVisible) {
@@ -297,6 +343,7 @@ public class GLTextEditor extends GLControl {
 					contentChanged();
 					showValidationFailure(true);
 					fireValidationFailed();
+					resetEditingHistory();
 					requestGLFocus(null);
 				} finally {
 					ending = false;
@@ -320,9 +367,10 @@ public class GLTextEditor extends GLControl {
 			if (historyEnabled && !before.equals(after)) {
 				var manager = getGLHistoryManager();
 				if (manager != null)
-					manager.record("Edit text", () -> setText(before),
-							() -> setText(after));
+					manager.record("Edit text", () -> applyCommittedText(before),
+							() -> applyCommittedText(after));
 			}
+			resetEditingHistory();
 			return true;
 		} finally {
 			ending = false;
@@ -342,6 +390,7 @@ public class GLTextEditor extends GLControl {
 					"cancel", System.currentTimeMillis(), 0);
 			for (ActionListener listener : cancelListeners)
 				listener.actionPerformed(event);
+			resetEditingHistory();
 		} finally {
 			ending = false;
 		}
@@ -526,7 +575,7 @@ public class GLTextEditor extends GLControl {
 				|| getGLInputMap().hasModifiers(GLInputActions.TEXT_COMMAND, modifiers)
 				|| (modifiers & InputEvent.ALT_DOWN_MASK) != 0)
 			return;
-		replaceSelection(Character.toString(character));
+		replaceSelection(Character.toString(character), EditKind.INSERT);
 		event.consume();
 	}
 
@@ -534,6 +583,7 @@ public class GLTextEditor extends GLControl {
 	protected void controlFocusChanged(boolean focused) {
 		if (focused) {
 			editBaseline = text;
+			resetEditingHistory();
 			showCaret();
 			caretTimer.start();
 		} else {
@@ -566,6 +616,7 @@ public class GLTextEditor extends GLControl {
 	}
 
 	private void moveCaret(int position, boolean extend) {
+		activeEditGroup = null;
 		position = Math.max(0, Math.min(text.length(), position));
 		if (!extend)
 			anchor = position;
@@ -603,23 +654,30 @@ public class GLTextEditor extends GLControl {
 
 	private void backspace() {
 		if (anchor != caret)
-			replaceSelection("");
+			replaceSelection("", EditKind.REPLACE);
 		else if (caret > 0) {
+			TextState before = textState();
 			anchor = caret - 1;
-			replaceSelection("");
+			replaceSelection("", EditKind.BACKSPACE, before);
 		}
 	}
 
 	private void deleteForward() {
 		if (anchor != caret)
-			replaceSelection("");
+			replaceSelection("", EditKind.REPLACE);
 		else if (caret < text.length()) {
+			TextState before = textState();
 			anchor = caret + 1;
-			replaceSelection("");
+			replaceSelection("", EditKind.DELETE, before);
 		}
 	}
 
-	private void replaceSelection(String replacement) {
+	private void replaceSelection(String replacement, EditKind kind) {
+		replaceSelection(replacement, kind, textState());
+	}
+
+	private void replaceSelection(String replacement, EditKind kind,
+			TextState before) {
 		int start = getSelectionStart();
 		int end = getSelectionEnd();
 		String candidate = text.substring(0, start) + replacement
@@ -632,6 +690,89 @@ public class GLTextEditor extends GLControl {
 		caret = anchor = start + replacement.length();
 		clearValidationFeedback();
 		contentChanged();
+		recordEditingChange(before, textState(), kind);
+	}
+
+	private void recordEditingChange(TextState before, TextState after,
+			EditKind kind) {
+		if (!isFocused() || before.equals(after) || editingHistory.isApplying()) return;
+		long now = System.nanoTime();
+		long cooldownNanos = TimeUnit.MILLISECONDS.toNanos(
+				getHistoryCoalesceMillis());
+		if (activeEditGroup != null && activeEditGroup.kind == kind
+				&& kind.coalescible && cooldownNanos > 0
+				&& now - activeEditGroup.lastChangeNanos <= cooldownNanos
+				&& activeEditGroup.after.equals(before)) {
+			activeEditGroup.after = after;
+			activeEditGroup.lastChangeNanos = now;
+			return;
+		}
+		EditGroup group = new EditGroup(kind, before, after, now);
+		editingHistory.record(kind.label, () -> applyTextState(group.before),
+				() -> applyTextState(group.after));
+		activeEditGroup = kind.coalescible ? group : null;
+	}
+
+	private TextState textState() {
+		return new TextState(text, caret, anchor);
+	}
+
+	private void applyTextState(TextState state) {
+		text = state.text;
+		caret = Math.min(state.caret, text.length());
+		anchor = Math.min(state.anchor, text.length());
+		clearValidationFeedback();
+		contentChanged();
+	}
+
+	private void applyCommittedText(String committedText) {
+		text = committedText;
+		editBaseline = committedText;
+		lastValidText = committedText;
+		caret = anchor = committedText.length();
+		clearValidationFeedback();
+		resetEditingHistory();
+		contentChanged();
+	}
+
+	private void resetEditingHistory() {
+		activeEditGroup = null;
+		editingHistory.reset();
+	}
+
+	private record TextState(String text, int caret, int anchor) {
+	}
+
+	private enum EditKind {
+		INSERT("Insert text", true),
+		BACKSPACE("Delete text", true),
+		DELETE("Delete text", true),
+		REPLACE("Replace text", false),
+		CUT("Cut text", false),
+		PASTE("Paste text", false);
+
+		private final String label;
+		private final boolean coalescible;
+
+		EditKind(String label, boolean coalescible) {
+			this.label = label;
+			this.coalescible = coalescible;
+		}
+	}
+
+	private static final class EditGroup {
+		private final EditKind kind;
+		private final TextState before;
+		private TextState after;
+		private long lastChangeNanos;
+
+		private EditGroup(EditKind kind, TextState before, TextState after,
+				long lastChangeNanos) {
+			this.kind = kind;
+			this.before = before;
+			this.after = after;
+			this.lastChangeNanos = lastChangeNanos;
+		}
 	}
 
 	private void copySelection() {
@@ -649,7 +790,7 @@ public class GLTextEditor extends GLControl {
 		if (anchor == caret)
 			return;
 		copySelection();
-		replaceSelection("");
+		replaceSelection("", EditKind.CUT);
 	}
 
 	private void pasteClipboard() {
@@ -657,7 +798,8 @@ public class GLTextEditor extends GLControl {
 			Object value = Toolkit.getDefaultToolkit().getSystemClipboard()
 					.getData(DataFlavor.stringFlavor);
 			if (value instanceof String string)
-				replaceSelection(string.replace("\r", "").replace("\n", ""));
+				replaceSelection(string.replace("\r", "").replace("\n", ""),
+						EditKind.PASTE);
 		} catch (Exception ignored) {
 		}
 	}

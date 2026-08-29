@@ -3,6 +3,7 @@ package com.vingame.glswing.test;
 import java.awt.Canvas;
 import java.awt.Cursor;
 import java.awt.event.KeyEvent;
+import java.awt.event.InputEvent;
 import java.awt.event.MouseEvent;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -10,6 +11,9 @@ import com.vingame.glswing.component.GLSwingPanel;
 import com.vingame.glswing.input.GLKeyEvent;
 import com.vingame.glswing.input.GLMouseEvent;
 import com.vingame.glswing.input.GLPickResult;
+import com.vingame.glswing.input.GLInputActions;
+import com.vingame.glswing.input.GLInputMap;
+import com.vingame.glswing.input.GLInputMaps;
 import com.vingame.glswing.ui.GLTextEditor;
 import com.vingame.glswing.ui.GLTextInputFormats;
 import com.vingame.glswing.rendering.GLContext2D;
@@ -25,6 +29,8 @@ public final class GLTextEditorSelfTest {
 		testValidationCommitAndCancel();
 		testInputFormatAndRestoreMode();
 		testTextCursor();
+		testEditingHistoryAndCommitBoundary();
+		testHistoryCooldownPreference();
 		System.out.println("GL text editor self-test passed.");
 	}
 
@@ -104,6 +110,66 @@ public final class GLTextEditorSelfTest {
 		editor.cancel();
 		check(editor.getText().equals("34") && cancellations.get() == 1,
 				"Cancel did not restore the last committed text");
+	}
+
+	private static void testEditingHistoryAndCommitBoundary() {
+		TestPanel panel = new TestPanel();
+		GLTextEditor editor = new GLTextEditor("");
+		panel.addGL(editor);
+		panel.requestGLFocus(editor);
+		type(editor, 'a');
+		type(editor, 'b');
+		type(editor, 'c');
+		check(editor.getEditingHistoryManager().canUndo(),
+				"Typing did not enter the private editing history");
+		pressHistory(editor, KeyEvent.VK_Z, InputEvent.CTRL_DOWN_MASK);
+		check(editor.getText().isEmpty() && editor.getCaretPosition() == 0,
+				"Coalesced typing undo did not restore text and caret");
+		pressHistory(editor, KeyEvent.VK_Z, InputEvent.CTRL_DOWN_MASK
+				| InputEvent.SHIFT_DOWN_MASK);
+		check(editor.getText().equals("abc") && editor.getCaretPosition() == 3,
+				"Editing redo did not restore text and caret");
+		check(editor.commit(), "Valid editing session did not commit");
+		check(!editor.getEditingHistoryManager().canUndo()
+				&& panel.getGLHistoryManager().canUndo(),
+				"Commit did not transfer one complete change to document history");
+		check(panel.getGLHistoryManager().undo() && editor.getText().isEmpty(),
+				"Document undo did not restore the committed baseline");
+		type(editor, 'x');
+		editor.cancel();
+		check(editor.getText().isEmpty()
+				&& !editor.getEditingHistoryManager().canUndo(),
+				"Cancel did not restore the baseline and clear session history");
+	}
+
+	private static void testHistoryCooldownPreference() {
+		TestPanel panel = new TestPanel();
+		GLTextEditor editor = new GLTextEditor("");
+		GLInputMap input = new GLInputMap(java.util.Map.of(), java.util.Map.of(),
+				java.util.Map.of(GLInputActions.TEXT_HISTORY_COALESCE_MILLIS, 1.0));
+		editor.setGLInputMap(input);
+		panel.addGL(editor);
+		panel.requestGLFocus(editor);
+		check(editor.getHistoryCoalesceMillis() == 1,
+				"Editor did not resolve the external cooldown preference");
+		editor.setHistoryCoalesceMillis(0);
+		type(editor, 'a');
+		type(editor, 'b');
+		pressHistory(editor, KeyEvent.VK_Z, InputEvent.CTRL_DOWN_MASK);
+		check(editor.getText().equals("a"),
+				"Zero cooldown did not keep typing edits separate");
+		editor.clearHistoryCoalesceMillis();
+		check(editor.getHistoryCoalesceMillis() == 1,
+				"Clearing the local cooldown did not restore inheritance");
+	}
+
+	private static void pressHistory(GLTextEditor editor, int keyCode,
+			int modifiers) {
+		KeyEvent event = new KeyEvent(new Canvas(), KeyEvent.KEY_PRESSED,
+				System.currentTimeMillis(), modifiers, keyCode,
+				KeyEvent.CHAR_UNDEFINED);
+		check(editor.handleEditingHistoryKeyPressed(event, GLInputMaps.DEFAULT),
+				"Focused editor did not consume its history shortcut");
 	}
 
 	private static void type(GLTextEditor editor, char character) {

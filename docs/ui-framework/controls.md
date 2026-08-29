@@ -97,6 +97,18 @@ editor.setInputFilter(GLTextInputFormats.DECIMAL_NUMBER);
 editor.setInputVerifier(text -> parseAndValidate(text));
 ```
 
+Each focused editor owns a temporary undo/redo history for its current editing
+session. Text, caret, and selection are restored together. Compatible runs of
+typing, Backspace, or Delete are coalesced according to the inherited
+`text.history-coalesce-millis` [input preference](input-configuration.md).
+Paste, cut, and selection replacement remain individual steps.
+
+Commit clears the temporary history and records one complete before/after value
+in the nearest document history. Cancel restores the session baseline without
+creating a document edit and also clears the temporary history. Applications
+can inspect the session manager through `getEditingHistoryManager()` and set a
+per-editor cooldown with `setHistoryCoalesceMillis(...)`.
+
 The input filter validates each intermediate string; the verifier validates the
 committed value. Keep intermediate states such as a lone minus sign legal when
 appropriate. `commit()` returns success and `cancel()` restores the pre-edit
