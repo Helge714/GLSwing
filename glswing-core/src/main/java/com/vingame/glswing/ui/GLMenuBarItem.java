@@ -8,6 +8,7 @@ import com.vingame.glswing.input.GLMouseEvent;
 import com.vingame.glswing.layout.GLSize;
 import com.vingame.glswing.rendering.GLContext2D;
 import com.vingame.glswing.rendering.GLFont;
+import com.vingame.glswing.rendering.GLIcon;
 import com.vingame.glswing.rendering.GLRenderParameters;
 
 /** One top-level entry in a {@link GLMenuBar}. */
@@ -26,10 +27,12 @@ public final class GLMenuBarItem extends GLControl {
 	private int displayedMnemonicIndex = -1;
 	private GLMenuBar owner;
 	private boolean active;
+	private GLIcon icon;
+	private GLIcon disabledIcon;
 
 	GLMenuBarItem(String text, GLPopupMenu menu) {
 		super(false);
-		this.text = requireText(text);
+		this.text = displayText(text);
 		if (menu == null)
 			throw new IllegalArgumentException("Menu-bar popup must not be null");
 		this.menu = menu;
@@ -41,7 +44,7 @@ public final class GLMenuBarItem extends GLControl {
 	}
 
 	public void setText(String text) {
-		text = requireText(text);
+		text = displayText(text);
 		if (this.text.equals(text))
 			return;
 		this.text = text;
@@ -52,10 +55,15 @@ public final class GLMenuBarItem extends GLControl {
 		updatePresentation();
 	}
 
+	private static String displayText(String text) {
+		return GLDisplayText.normalizeEllipses(requireText(text));
+	}
+
 	public int getMnemonic() {
 		return mnemonic;
 	}
 
+	/** Pins an explicit key; {@code VK_UNDEFINED} restores automatic allocation. */
 	public void setMnemonic(int mnemonic) {
 		mnemonic = GLMnemonicSupport.requireMnemonic(mnemonic);
 		if (mnemonic == KeyEvent.VK_UNDEFINED) {
@@ -72,6 +80,7 @@ public final class GLMenuBarItem extends GLControl {
 		mnemonicAssignmentChanged();
 	}
 
+	/** Restores conflict-free mnemonic selection from the current visible text. */
 	public void useAutomaticMnemonic() {
 		if (explicitMnemonic == null && mnemonicEnabled)
 			return;
@@ -88,6 +97,7 @@ public final class GLMenuBarItem extends GLControl {
 		return mnemonicEnabled;
 	}
 
+	/** Includes or excludes this item from mnemonic allocation and dispatch. */
 	public void setMnemonicEnabled(boolean enabled) {
 		if (mnemonicEnabled == enabled)
 			return;
@@ -112,6 +122,32 @@ public final class GLMenuBarItem extends GLControl {
 
 	public GLPopupMenu getMenu() {
 		return menu;
+	}
+
+	public GLIcon getIcon() {
+		return icon;
+	}
+
+	public void setIcon(GLIcon icon) {
+		if (this.icon == icon)
+			return;
+		this.icon = icon;
+		updatePresentation();
+	}
+
+	public void clearIcon() {
+		setIcon(null);
+	}
+
+	public GLIcon getDisabledIcon() {
+		return disabledIcon;
+	}
+
+	public void setDisabledIcon(GLIcon icon) {
+		if (disabledIcon == icon)
+			return;
+		disabledIcon = icon;
+		invalidateRecording();
 	}
 
 	public boolean isActive() {
@@ -142,14 +178,24 @@ public final class GLMenuBarItem extends GLControl {
 		});
 		GLFont font = getGLFont(style.font());
 		float x = style.itemHorizontalPadding();
+		float iconSize = icon == null ? 0 : Math.min(16, Math.max(1, height - 8));
+		GLIcon renderedIcon = !isEnabled() && disabledIcon != null
+				? disabledIcon : icon;
+		if (renderedIcon != null) {
+			context.drawUIIcon(renderedIcon, x, (height - iconSize) * 0.5f,
+					iconSize, iconSize, isEnabled() ? style.textColor()
+							: style.disabledTextColor());
+			x += iconSize + 5;
+		}
 		String renderedText = GLTextFitter.ellipsize(font, text,
-				Math.max(0, width - style.itemHorizontalPadding() * 2));
+				Math.max(0, width - x - style.itemHorizontalPadding()));
 		float baseline = (height - font.getLineHeight()) * 0.5f + font.getAscent();
+		float textX = x;
 		context.withParameters(textParameters, () ->
 				{
-					context.drawUIText(font, renderedText, x, baseline, Color.WHITE);
+					context.drawUIText(font, renderedText, textX, baseline, Color.WHITE);
 					GLMnemonicSupport.drawUnderline(context, font, renderedText,
-							displayedMnemonicIndex, x, baseline, Color.WHITE);
+							displayedMnemonicIndex, textX, baseline, Color.WHITE);
 				});
 	}
 
@@ -227,7 +273,9 @@ public final class GLMenuBarItem extends GLControl {
 		GLMenuBarStyle style = style();
 		GLFont font = style.font().measurementFont();
 		setIntrinsicPreferredGLSize(new GLSize(
-				font.measureText(text) + style.itemHorizontalPadding() * 2,
+				font.measureText(text) + style.itemHorizontalPadding() * 2
+						+ (icon == null ? 0 : Math.min(16,
+								Math.max(1, style.height() - 8)) + 5),
 				style.height()));
 		updateColors();
 		invalidateRecording();

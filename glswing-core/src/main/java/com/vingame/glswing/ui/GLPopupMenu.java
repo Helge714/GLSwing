@@ -29,6 +29,7 @@ import com.vingame.glswing.rendering.GLComposite;
 import com.vingame.glswing.rendering.GLContext2D;
 import com.vingame.glswing.rendering.GLCornerRadii;
 import com.vingame.glswing.rendering.GLFont;
+import com.vingame.glswing.rendering.GLIcon;
 import com.vingame.glswing.rendering.GLLayerEffects;
 import com.vingame.glswing.rendering.GLRenderParameters;
 import com.vingame.glswing.rendering.GLStroke;
@@ -74,6 +75,7 @@ public class GLPopupMenu extends GLContainer {
 	private GLComposite viewportComposite = GLComposite.DEFAULT;
 	private boolean viewportClipRequired;
 	private String title = "";
+	private GLIcon titleIcon;
 	private GLPopupTitlePosition titlePosition = GLPopupTitlePosition.TOP;
 	private float rootWidth = Float.NaN;
 	private float activeRootWidth = Float.NaN;
@@ -215,6 +217,15 @@ public class GLPopupMenu extends GLContainer {
 				.map(GLMenuItem.class::cast).toList();
 	}
 
+	final boolean hasIconColumn() {
+		return getItems().stream().anyMatch(item -> item.getIcon() != null
+				|| item.getDisabledIcon() != null);
+	}
+
+	final float iconSize() {
+		return Math.min(18, Math.max(1, getGLStyle().itemHeight() - 8));
+	}
+
 	void validateExplicitMnemonic(GLMenuItem source, int mnemonic) {
 		if (mnemonic == java.awt.event.KeyEvent.VK_UNDEFINED)
 			return;
@@ -263,6 +274,23 @@ public class GLPopupMenu extends GLContainer {
 		this.title = title;
 		titleView.invalidateRecording();
 		invalidateMenuLayout();
+	}
+
+	public final GLIcon getTitleIcon() {
+		return titleIcon;
+	}
+
+	/** Sets an optional icon displayed before the fixed popup title. */
+	public final void setTitleIcon(GLIcon icon) {
+		if (titleIcon == icon)
+			return;
+		titleIcon = icon;
+		titleView.invalidateRecording();
+		invalidateMenuLayout();
+	}
+
+	public final void clearTitleIcon() {
+		setTitleIcon(null);
 	}
 
 	public final GLPopupTitlePosition getTitlePosition() {
@@ -957,12 +985,20 @@ public class GLPopupMenu extends GLContainer {
 			context.fillRect(0, 0, width, height, style.background());
 			context.addUIHitArea(0, 0, width, height);
 			GLFont font = menu.getGLFont(style.font());
+			float left = style.itemHorizontalPadding();
+			if (menu.titleIcon != null) {
+				float iconSize = menu.iconSize();
+				context.drawUIIcon(menu.titleIcon, left,
+						(height - iconSize) * 0.5f, iconSize, iconSize,
+						style.textColor());
+				left += iconSize + style.columnGap();
+			}
 			float baseline = (height - font.getLineHeight()) * 0.5f
 					+ font.getAscent();
 			String renderedTitle = GLTextFitter.ellipsize(font, menu.title,
-					Math.max(0, width - style.itemHorizontalPadding() * 2));
+					Math.max(0, width - left - style.itemHorizontalPadding()));
 			context.drawUIText(font, renderedTitle,
-					style.itemHorizontalPadding(), baseline, style.textColor());
+					left, baseline, style.textColor());
 			float separatorY = menu.titlePosition == GLPopupTitlePosition.TOP
 					? height - 1 : 0;
 			context.fillRect(style.itemHorizontalPadding(), separatorY,
@@ -978,7 +1014,9 @@ public class GLPopupMenu extends GLContainer {
 
 		private float requiredWidth(GLMenuStyle style) {
 			return style.font().measurementFont().measureText(menu.title)
-					+ style.itemHorizontalPadding() * 2;
+					+ style.itemHorizontalPadding() * 2
+					+ (menu.titleIcon == null ? 0
+							: menu.iconSize() + style.columnGap());
 		}
 	}
 

@@ -7,6 +7,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import com.vingame.glswing.component.GLSwingPanel;
 import com.vingame.glswing.input.GLInputMaps;
 import com.vingame.glswing.rendering.GLContext2D;
+import com.vingame.glswing.rendering.GLIcon;
+import com.vingame.glswing.ui.GLComboBox;
+import com.vingame.glswing.ui.GLItemPresentation;
 import com.vingame.glswing.ui.GLMenuBar;
 import com.vingame.glswing.ui.GLMenuBarItem;
 import com.vingame.glswing.ui.GLMenuItem;
@@ -22,7 +25,9 @@ public final class GLMenuSelfTest {
 	}
 
 	public static void main(String[] args) {
+		testEllipsisNormalization();
 		testMnemonics();
+		testIconsAndPresentations();
 		TestPanel host = new TestPanel();
 		host.setSize(400, 300);
 		AtomicInteger actions = new AtomicInteger();
@@ -135,6 +140,48 @@ public final class GLMenuSelfTest {
 		}
 
 		System.out.println("GL menu self-test passed.");
+	}
+
+	private static void testEllipsisNormalization() {
+		GLMenuItem item = new GLMenuItem("Öffnen ...");
+		if (!"Öffnen …".equals(item.getText()))
+			throw new AssertionError("Menu ellipsis was not normalized");
+		if (!"Öffnen …".equals(item.getActionCommand()))
+			throw new AssertionError("Default action command does not match display text");
+	}
+
+	private static void testIconsAndPresentations() {
+		TestPanel host = new TestPanel();
+		host.setSize(400, 300);
+		GLIcon icon = GLIcon.fromSvgResource(
+				"com/vingame/glswing/icons/test_icon.svg");
+		GLPopupMenu plain = new GLPopupMenu();
+		plain.addItem("Action");
+		plain.addItem("An intentionally wide aligned menu entry");
+		plain.setTitle("Tools");
+		plain.show(host, 10, 10);
+		float plainWidth = plain.getWidth();
+		plain.close();
+
+		GLPopupMenu illustrated = new GLPopupMenu();
+		GLMenuItem action = illustrated.addItem("Action");
+		action.setIcon(icon);
+		illustrated.addItem("An intentionally wide aligned menu entry");
+		illustrated.setTitle("Tools");
+		illustrated.setTitleIcon(icon);
+		illustrated.show(host, 10, 10);
+		if (action.getIcon() != icon || illustrated.getTitleIcon() != icon
+				|| illustrated.getWidth() <= plainWidth)
+			throw new AssertionError(
+					"Popup icons were not retained or included in layout");
+		illustrated.close();
+
+		GLComboBox<String> combo = new GLComboBox<>(java.util.List.of("One"));
+		combo.setItemPresentationProvider(
+				value -> new GLItemPresentation(value, icon));
+		if (combo.getPopupMenu().getItems().get(0).getIcon() != icon)
+			throw new AssertionError(
+					"Combo-box presentation did not populate popup icons");
 	}
 
 	private static void testMnemonics() {

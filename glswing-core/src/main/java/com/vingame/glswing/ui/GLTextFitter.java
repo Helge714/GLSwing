@@ -4,7 +4,7 @@ import com.vingame.glswing.rendering.GLFont;
 
 /** Small shared text fitting helpers used by lightweight controls. */
 public final class GLTextFitter {
-	private static final String ELLIPSIS = "...";
+	private static final String ELLIPSIS = "\u2026";
 
 	private GLTextFitter() {
 	}
@@ -14,10 +14,9 @@ public final class GLTextFitter {
 			return "";
 		if (font.measureText(text) <= maximumWidth)
 			return text;
-		String suffix = fittingDots(font, maximumWidth);
-		if (suffix.isEmpty())
+		if (font.measureText(ELLIPSIS) > maximumWidth)
 			return "";
-		float suffixWidth = font.measureText(suffix);
+		float suffixWidth = font.measureText(ELLIPSIS);
 		int codePoints = text.codePointCount(0, text.length());
 		int low = 0;
 		int high = codePoints;
@@ -30,15 +29,6 @@ public final class GLTextFitter {
 			else
 				high = middle - 1;
 		}
-		return text.substring(0, text.offsetByCodePoints(0, low)) + suffix;
-	}
-
-	private static String fittingDots(GLFont font, float maximumWidth) {
-		for (int count = ELLIPSIS.length(); count > 0; count--) {
-			String dots = ELLIPSIS.substring(0, count);
-			if (font.measureText(dots) <= maximumWidth)
-				return dots;
-		}
-		return "";
+		return text.substring(0, text.offsetByCodePoints(0, low)) + ELLIPSIS;
 	}
 }

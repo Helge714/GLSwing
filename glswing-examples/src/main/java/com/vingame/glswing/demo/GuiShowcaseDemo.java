@@ -31,6 +31,7 @@ import com.vingame.glswing.component.GLFrameProfile;
 import com.vingame.glswing.component.GLParent;
 import com.vingame.glswing.component.GLSwingPanel;
 import com.vingame.glswing.rendering.GLContext2D;
+import com.vingame.glswing.rendering.GLIcon;
 import com.vingame.glswing.rendering.GLStroke;
 import com.vingame.glswing.ui.GLButton;
 import com.vingame.glswing.ui.GLCheckBox;
@@ -38,6 +39,7 @@ import com.vingame.glswing.ui.GLComboBox;
 import com.vingame.glswing.ui.GLFontSpec;
 import com.vingame.glswing.ui.GLLabel;
 import com.vingame.glswing.ui.GLLabelStyle;
+import com.vingame.glswing.ui.GLItemPresentation;
 import com.vingame.glswing.ui.GLLocalizer;
 import com.vingame.glswing.ui.GLMenuBar;
 import com.vingame.glswing.ui.GLMenuBarItem;
@@ -327,6 +329,10 @@ public final class GuiShowcaseDemo {
 	}
 
 	static final class ShowcaseSurface extends GLContainer {
+		private static final GLIcon ACTION_ICON = GLIcon.fromSvgResource(
+				"com/vingame/glswing/icons/test_icon.svg");
+		private static final GLIcon LINK_ICON = GLIcon.fromSvgResource(
+				"com/vingame/glswing/icons/link_icon.svg");
 		private static final Color SURFACE = new Color(24, 31, 45);
 		private static final Color CARD = new Color(34, 43, 60);
 		private static final Color CARD_BORDER = new Color(66, 81, 108);
@@ -408,16 +414,19 @@ public final class GuiShowcaseDemo {
 		private void buildMenuBar() {
 			GLMenuItem create = fileMenu.addItem("Neu",
 					event -> host.report("Datei > Neu"));
+			create.setIcon(ACTION_ICON);
 			create.setAcceleratorText("Ctrl+N");
-			fileMenu.addItem("Oeffnen ...",
+			GLMenuItem open = fileMenu.addItem("Öffnen ...",
 					event -> host.report("Datei > Oeffnen"));
+			open.setIcon(LINK_ICON);
 			fileMenu.addSeparator();
 			GLPopupMenu export = new GLPopupMenu();
 			export.addItem("PNG",
 					event -> host.report("Export > PNG"));
 			export.addItem("SVG",
 					event -> host.report("Export > SVG"));
-			fileMenu.addSubMenu("Exportieren", export);
+			GLMenuItem exportItem = fileMenu.addSubMenu("Exportieren", export);
+			exportItem.setIcon(LINK_ICON);
 			GLMenuItem unavailable = fileMenu.addItem("Nicht verfuegbar");
 			unavailable.setEnabled(false);
 
@@ -438,6 +447,7 @@ public final class GuiShowcaseDemo {
 			germanItem = languageMenu.addItem("Deutsch",
 					event -> host.setLanguage(Locale.GERMAN));
 			languageBarItem = menuBar.addMenu("Sprache", languageMenu);
+			languageBarItem.setIcon(ACTION_ICON);
 			defaultThemeItem = themeMenu.addItem("Default",
 					event -> host.watchShowcaseTheme("default.gltheme",
 						GLThemes.DEFAULT,
@@ -451,6 +461,7 @@ public final class GuiShowcaseDemo {
 						GLThemes.LIGHT,
 						"showcase.theme.light"));
 			themeBarItem = menuBar.addMenu("Theme", themeMenu);
+			themeBarItem.setIcon(LINK_ICON);
 			GLPopupMenu disabledMenu = new GLPopupMenu();
 			var disabledItem = menuBar.addMenu("Deaktiviert", disabledMenu);
 			disabledItem.setEnabled(false);
@@ -584,6 +595,11 @@ public final class GuiShowcaseDemo {
 					786, 105, 370, 590);
 			caption(section, "STANDARD MIT TITEL", 18, 50);
 			normalCombo.setPopupTitle("Farbe waehlen");
+			normalCombo.setItemPresentationProvider(value ->
+					new GLItemPresentation(value,
+							value.equals("Blau") || value.equals("Gruen")
+									? LINK_ICON : ACTION_ICON));
+			normalCombo.getPopupMenu().setTitleIcon(ACTION_ICON);
 			normalCombo.addActionListener(event -> host.report(
 					"Farbe: " + normalCombo.getSelectedItem()));
 			addControl(section, normalCombo, 18, 72, 334, 26);
@@ -743,6 +759,7 @@ public final class GuiShowcaseDemo {
 
 		private void buildStandalonePopup() {
 			standalonePopup.setTitle("Werkzeuge");
+			standalonePopup.setTitleIcon(ACTION_ICON);
 			standalonePopup.addItem("Schnellaktion",
 					event -> host.report("Popup-Schnellaktion"));
 			standalonePopup.addSeparator();

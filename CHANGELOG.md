@@ -28,8 +28,12 @@ may change in subsequent `0.x` releases.
   shortcut capture and conflict detection, and atomic persistence.
 - Per-editor temporary text histories with caret/selection restoration,
   configurable edit coalescing, and single-step document commits.
+- Typographic ellipses for intentional `...` menu-label suffixes and automatic
+  text truncation, including the required glyph in default font atlases.
 - Automatic, conflict-free, localized keyboard mnemonics for menu bars, popup
   items, and nested submenus, with configurable activation and explicit overrides.
+- Shared `GLIcon` presentation for menu rows, popup titles, menu bars, and combo
+  box values, including aligned icon columns and disabled-state variants.
 
 ### Build and platforms
 

@@ -403,6 +403,7 @@ public final class GLFont {
 		StringBuilder characters = new StringBuilder();
 		for (int codePoint = 32; codePoint <= 255; codePoint++)
 			characters.append((char) codePoint);
+		characters.append('\u2026');
 		characters.append('\ufffd');
 		return characters.toString();
 	}

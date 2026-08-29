@@ -12,6 +12,7 @@ import com.vingame.glswing.input.GLMouseWheelEvent;
 import com.vingame.glswing.layout.GLSize;
 import com.vingame.glswing.rendering.GLContext2D;
 import com.vingame.glswing.rendering.GLFont;
+import com.vingame.glswing.rendering.GLIcon;
 import com.vingame.glswing.rendering.GLRenderParameters;
 import com.vingame.glswing.rendering.GLStroke;
 
@@ -34,11 +35,13 @@ public class GLMenuItem extends GLControl {
 	private String actionCommand;
 	private GLPopupMenu ownerMenu;
 	private GLPopupMenu subMenu;
+	private GLIcon icon;
+	private GLIcon disabledIcon;
 
 	public GLMenuItem(String text) {
 		super(false);
-		this.text = requireText(text);
-		actionCommand = text;
+		this.text = displayText(text);
+		actionCommand = this.text;
 		updatePresentation();
 	}
 
@@ -62,7 +65,7 @@ public class GLMenuItem extends GLControl {
 	}
 
 	public final void setText(String text) {
-		text = requireText(text);
+		text = displayText(text);
 		if (this.text.equals(text))
 			return;
 		String previous = this.text;
@@ -76,10 +79,15 @@ public class GLMenuItem extends GLControl {
 		updatePresentation();
 	}
 
+	private static String displayText(String text) {
+		return GLDisplayText.normalizeEllipses(requireText(text));
+	}
+
 	public final int getMnemonic() {
 		return mnemonic;
 	}
 
+	/** Pins an explicit key; {@code VK_UNDEFINED} restores automatic allocation. */
 	public final void setMnemonic(int mnemonic) {
 		mnemonic = GLMnemonicSupport.requireMnemonic(mnemonic);
 		if (mnemonic == KeyEvent.VK_UNDEFINED) {
@@ -96,7 +104,7 @@ public class GLMenuItem extends GLControl {
 		mnemonicAssignmentChanged();
 	}
 
-	/** Restores conflict-free mnemonic selection by the owning menu. */
+	/** Restores conflict-free mnemonic selection from the current visible text. */
 	public final void useAutomaticMnemonic() {
 		if (explicitMnemonic == null && mnemonicEnabled)
 			return;
@@ -113,6 +121,7 @@ public class GLMenuItem extends GLControl {
 		return mnemonicEnabled;
 	}
 
+	/** Includes or excludes this row from mnemonic allocation and dispatch. */
 	public final void setMnemonicEnabled(boolean enabled) {
 		if (mnemonicEnabled == enabled)
 			return;
@@ -137,6 +146,38 @@ public class GLMenuItem extends GLControl {
 
 	public final String getAcceleratorText() {
 		return acceleratorText;
+	}
+
+	public final GLIcon getIcon() {
+		return icon;
+	}
+
+	/** Sets the leading icon; {@code null} removes it. */
+	public final void setIcon(GLIcon icon) {
+		if (this.icon == icon)
+			return;
+		this.icon = icon;
+		updatePresentation();
+	}
+
+	public final void clearIcon() {
+		setIcon(null);
+	}
+
+	public final GLIcon getDisabledIcon() {
+		return disabledIcon;
+	}
+
+	/** Sets an optional disabled-state icon; the normal icon is the fallback. */
+	public final void setDisabledIcon(GLIcon icon) {
+		if (disabledIcon == icon)
+			return;
+		disabledIcon = icon;
+		invalidateRecording();
+	}
+
+	public final void clearDisabledIcon() {
+		setDisabledIcon(null);
 	}
 
 	/** Sets display text such as {@code Ctrl+S}; shortcut dispatch remains external. */
@@ -215,6 +256,18 @@ public class GLMenuItem extends GLControl {
 		float baseline = (height - font.getLineHeight()) * 0.5f + font.getAscent();
 		float left = style.itemHorizontalPadding();
 		float right = width - style.itemHorizontalPadding();
+		if (ownerMenu != null && ownerMenu.hasIconColumn()) {
+			float iconSize = ownerMenu.iconSize();
+			GLIcon renderedIcon = !isEnabled() && disabledIcon != null
+					? disabledIcon : icon;
+			if (renderedIcon != null) {
+				Color tint = isEnabled() ? style.textColor()
+						: style.disabledTextColor();
+				context.drawUIIcon(renderedIcon, left,
+						(height - iconSize) * 0.5f, iconSize, iconSize, tint);
+			}
+			left += iconSize + style.columnGap();
+		}
 		float reservedWidth = 0;
 		if (subMenu != null)
 			reservedWidth = Math.min(13, height - 8) + style.columnGap();
@@ -224,10 +277,11 @@ public class GLMenuItem extends GLControl {
 				? GLTextFitter.ellipsize(font, text,
 						Math.max(0, right - left - reservedWidth))
 				: text;
+		float textLeft = left;
 		context.withParameters(textParameters, () -> {
-			context.drawUIText(font, renderedText, left, baseline, Color.WHITE);
+			context.drawUIText(font, renderedText, textLeft, baseline, Color.WHITE);
 			GLMnemonicSupport.drawUnderline(context, font, renderedText,
-					displayedMnemonicIndex, left, baseline, Color.WHITE);
+					displayedMnemonicIndex, textLeft, baseline, Color.WHITE);
 		});
 
 		if (subMenu != null) {
@@ -289,6 +343,8 @@ public class GLMenuItem extends GLControl {
 	final float requiredWidth(GLMenuStyle style) {
 		GLFont font = style.font().measurementFont();
 		float width = style.itemHorizontalPadding() * 2 + font.measureText(text);
+		if (ownerMenu != null && ownerMenu.hasIconColumn())
+			width += ownerMenu.iconSize() + style.columnGap();
 		if (subMenu != null)
 			width += style.columnGap();
 		else if (!acceleratorText.isEmpty())

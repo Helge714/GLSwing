@@ -22,6 +22,7 @@ import com.vingame.glswing.layout.GLSize;
 import com.vingame.glswing.rendering.GLContext2D;
 import com.vingame.glswing.rendering.GLCornerRadii;
 import com.vingame.glswing.rendering.GLFont;
+import com.vingame.glswing.rendering.GLIcon;
 import com.vingame.glswing.rendering.GLRenderParameters;
 import com.vingame.glswing.rendering.GLStroke;
 import com.vingame.glswing.rendering.GLTransform;
@@ -64,6 +65,7 @@ public class GLComboBox<T> extends GLControl
 	private final GLRenderParameters arrowParameters = new GLRenderParameters();
 	private Function<? super T, String> itemTextProvider =
 			item -> item == null ? "" : item.toString();
+	private Function<? super T, GLItemPresentation> itemPresentationProvider;
 	private GLComboBoxStyle localStyle;
 	private GLComboBoxStyle appliedStyle;
 	private ValueEntry<T> selectedEntry;
@@ -270,6 +272,30 @@ public class GLComboBox<T> extends GLControl
 		return itemTextProvider;
 	}
 
+	/** Supplies text and icons for both the selected value and popup rows. */
+	public final void setItemPresentationProvider(
+			Function<? super T, GLItemPresentation> provider) {
+		if (provider == null)
+			throw new IllegalArgumentException(
+					"Item presentation provider must not be null");
+		itemPresentationProvider = provider;
+		rebuildPopupItems();
+		updatePresentation();
+	}
+
+	public final Function<? super T, GLItemPresentation>
+			getItemPresentationProvider() {
+		return itemPresentationProvider;
+	}
+
+	public final void clearItemPresentationProvider() {
+		if (itemPresentationProvider == null)
+			return;
+		itemPresentationProvider = null;
+		rebuildPopupItems();
+		updatePresentation();
+	}
+
 	public final void addActionListener(ActionListener listener) {
 		if (listener == null)
 			throw new IllegalArgumentException("Action listener must not be null");
@@ -372,17 +398,34 @@ public class GLComboBox<T> extends GLControl
 					style.borderWidth(), style.borderColor(),
 					GLStroke.WidthSpace.SCREEN);
 
-		String selectedText = selectedEntry == null ? "" : text(selectedEntry.value);
+		GLItemPresentation selectedPresentation = selectedEntry == null
+				? GLItemPresentation.text("") : presentation(selectedEntry.value);
+		String selectedText = selectedPresentation.text();
 		if (!selectedText.isEmpty()) {
 			GLFont font = getGLFont(style.font());
+			GLIcon selectedIcon = !isEnabled()
+					&& selectedPresentation.disabledIcon() != null
+							? selectedPresentation.disabledIcon()
+							: selectedPresentation.icon();
+			float iconSize = selectedIcon == null ? 0
+					: Math.min(18, Math.max(1, height - 8));
+			float textX = style.padding().left();
+			if (selectedIcon != null) {
+				context.drawUIIcon(selectedIcon, textX,
+						(height - iconSize) * 0.5f, iconSize, iconSize,
+						isEnabled() ? style.text(getControlState())
+								: style.disabledTextColor());
+				textX += iconSize + 5;
+			}
 			float availableTextWidth = Math.max(0, width
-					- style.arrowAreaWidth() - style.padding().horizontal());
+					- style.arrowAreaWidth() - style.padding().right() - textX);
 			String renderedText = GLTextFitter.ellipsize(font, selectedText,
 					availableTextWidth);
 			float baseline = (height - font.getLineHeight()) * 0.5f + font.getAscent();
+			float renderedTextX = textX;
 			context.withParameters(textParameters, () ->
 					context.drawUIText(font, renderedText,
-							style.padding().left(), baseline, Color.WHITE));
+							renderedTextX, baseline, Color.WHITE));
 		}
 
 		float arrowSize = Math.min(11, Math.max(4, height - 8));
@@ -474,7 +517,11 @@ public class GLComboBox<T> extends GLControl
 			if (entry instanceof ValueEntry<?> rawValue) {
 				@SuppressWarnings("unchecked")
 				ValueEntry<T> value = (ValueEntry<T>) rawValue;
-				menu.addItem(text(value.value), event -> selectEntry(value));
+				GLItemPresentation presentation = presentation(value.value);
+				GLMenuItem item = menu.addItem(presentation.text(),
+						event -> selectEntry(value));
+				item.setIcon(presentation.icon());
+				item.setDisabledIcon(presentation.disabledIcon());
 			} else if (entry instanceof GroupEntry<?> rawGroup) {
 				@SuppressWarnings("unchecked")
 				GroupEntry<T> group = (GroupEntry<T>) rawGroup;
@@ -491,11 +538,18 @@ public class GLComboBox<T> extends GLControl
 		appliedStyle = style;
 		GLFont font = measurementFont(style.font());
 		float widest = 0;
-		for (ValueEntry<T> item : items)
-			widest = Math.max(widest, font.measureText(text(item.value)));
+		boolean hasIcons = false;
+		for (ValueEntry<T> item : items) {
+			GLItemPresentation presentation = presentation(item.value);
+			widest = Math.max(widest, font.measureText(presentation.text()));
+			hasIcons |= presentation.icon() != null
+					|| presentation.disabledIcon() != null;
+		}
 		GLInsets padding = style.padding();
 		setIntrinsicPreferredGLSize(new GLSize(
 				Math.max(style.minimumWidth(), widest + padding.horizontal()
+						+ (hasIcons ? Math.min(18,
+								Math.max(1, style.height() - 8)) + 5 : 0)
 						+ style.arrowAreaWidth()), style.height()));
 		updateColors();
 		invalidateRecording();
@@ -513,7 +567,15 @@ public class GLComboBox<T> extends GLControl
 	}
 
 	private String text(T item) {
-		return Objects.requireNonNullElse(itemTextProvider.apply(item), "");
+		return presentation(item).text();
+	}
+
+	private GLItemPresentation presentation(T item) {
+		if (itemPresentationProvider == null)
+			return GLItemPresentation.text(
+					Objects.requireNonNullElse(itemTextProvider.apply(item), ""));
+		return Objects.requireNonNull(itemPresentationProvider.apply(item),
+				"Item presentation provider returned null");
 	}
 
 	private GLFont measurementFont(GLFontSpec specification) {

@@ -166,6 +166,43 @@ override; duplicate explicit keys in one menu are rejected.
 `setDisplayedMnemonicIndex(...)` to override the underline position for an
 explicit mnemonic.
 
+Menu labels normalize three consecutive periods to the typographic ellipsis.
+Write `new GLMenuItem("Open ...")` when an action opens a dialog; it is exposed
+and rendered as `Open …`. GLSwing does not infer whether an action needs an
+ellipsis, and it does not alter editable user text. Overflow truncation also
+uses the single Unicode ellipsis character.
+The default `GLFont` atlas includes this glyph. When constructing a `GLFont`
+with an explicit character set, include `…` if menu labels or overflow
+truncation can use it.
+
+Menus accept the renderer-independent `GLIcon` type, including raster images,
+adaptive SVG icons, and tintable MSDF icons. A popup reserves one shared leading
+column when any row has an icon, keeping every label aligned:
+
+```java
+GLIcon saveIcon = GLIcon.fromSvgResource("icons/save.svg");
+GLMenuItem save = fileMenu.addItem("Save", event -> save());
+save.setIcon(saveIcon);
+save.setDisabledIcon(disabledSaveIcon); // optional; normal icon is the fallback
+
+fileMenu.setTitle("File actions");
+fileMenu.setTitleIcon(saveIcon);
+```
+
+`GLMenuBarItem` supports the same normal and disabled icons. Icon color follows
+the resolved normal or disabled text color, so monochrome icons adapt to the
+active theme automatically.
+
+Combo boxes use `GLItemPresentation` when values need both labels and icons. The
+same presentation is used for the selected value and its popup row:
+
+```java
+combo.setItemPresentationProvider(value ->
+        new GLItemPresentation(label(value), icon(value), disabledIcon(value)));
+```
+
+Clearing the presentation provider restores `setItemTextProvider(...)`.
+
 `show(host,x,y)` expects host coordinates. Menus and submenus render as topmost
 overlays. `setImmediateCpuPickingEnabled(true)` is available when menu hover
 must update without waiting for the normal GPU-picking snapshot.
