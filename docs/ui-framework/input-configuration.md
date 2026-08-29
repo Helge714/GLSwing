@@ -47,7 +47,7 @@ with `#` are ignored.
 | Prefix | Purpose | Example |
 |---|---|---|
 | `key.` | Alternative key combinations | `key.history.undo=shortcut+Z` |
-| `modifier.` | Modifier held during a pointer gesture | `modifier.slider.precise=SHIFT` |
+| `modifier.` | Required modifier combination | `modifier.menu.mnemonic=ALT` |
 | `value.` | Finite positive behavior value | `value.slider.precise-factor=0.1` |
 
 Invalid properties, duplicate entries, invalid values, missing files, and
@@ -64,6 +64,7 @@ resolves to Control on Windows and Linux and Command/Meta on macOS.
 key.history.undo=shortcut+Z
 key.history.redo=shortcut+shift+Z, shortcut+Y
 key.application.save=shortcut+S
+modifier.menu.mnemonic=ALT
 ```
 
 A binding matches its exact keyboard modifiers. `CTRL+S` therefore does not
@@ -170,3 +171,9 @@ if (container.getGLInputMap().matches("application.save", event)) {
 
 Menu shortcut labels are presentation text; dispatch remains driven by the
 input map.
+
+Menu mnemonics are object-specific key codes rather than global shortcuts.
+`modifier.menu.mnemonic` configures the modifier used to open a top-level menu;
+the default is `ALT`. Once a menu is open, pressing an item's mnemonic activates
+that item or opens its submenu. Assign mnemonics through `GLMenuBarItem` and
+`GLMenuItem`.

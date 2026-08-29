@@ -1,12 +1,16 @@
 package com.vingame.glswing.test;
 
+import java.awt.event.InputEvent;
+import java.awt.event.KeyEvent;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import com.vingame.glswing.component.GLSwingPanel;
+import com.vingame.glswing.input.GLInputMaps;
 import com.vingame.glswing.rendering.GLContext2D;
 import com.vingame.glswing.ui.GLMenuBar;
 import com.vingame.glswing.ui.GLMenuBarItem;
 import com.vingame.glswing.ui.GLMenuItem;
+import com.vingame.glswing.ui.GLMenuMnemonics;
 import com.vingame.glswing.ui.GLPopupMenu;
 import com.vingame.glswing.ui.GLPopupTitlePosition;
 import com.vingame.glswing.ui.GLPopupTextOverflow;
@@ -18,6 +22,7 @@ public final class GLMenuSelfTest {
 	}
 
 	public static void main(String[] args) {
+		testMnemonics();
 		TestPanel host = new TestPanel();
 		host.setSize(400, 300);
 		AtomicInteger actions = new AtomicInteger();
@@ -130,6 +135,64 @@ public final class GLMenuSelfTest {
 		}
 
 		System.out.println("GL menu self-test passed.");
+	}
+
+	private static void testMnemonics() {
+		TestPanel host = new TestPanel();
+		host.setSize(400, 300);
+		AtomicInteger actions = new AtomicInteger();
+		GLPopupMenu file = new GLPopupMenu();
+		GLMenuItem save = file.addItem("Save",
+				event -> actions.incrementAndGet());
+		GLMenuItem saveAs = file.addItem("Save As");
+		GLMenuBar bar = new GLMenuBar();
+		GLMenuBarItem fileItem = bar.addMenu("File", file);
+		bar.setBounds(0, 0, 400, bar.getPreferredGLSize().height());
+		host.addGL(bar);
+
+		if (fileItem.getMnemonic() != KeyEvent.VK_F
+				|| fileItem.getDisplayedMnemonicIndex() != 0
+				|| save.getMnemonic() != KeyEvent.VK_S
+				|| save.getDisplayedMnemonicIndex() != 0
+				|| saveAs.getMnemonic() != KeyEvent.VK_A)
+			throw new AssertionError(
+					"Automatic mnemonics were not unique or correctly displayed");
+		saveAs.setText("Speichern unter");
+		if (saveAs.getMnemonic() != KeyEvent.VK_U
+				|| saveAs.getDisplayedMnemonicIndex() != 10)
+			throw new AssertionError(
+					"Automatic mnemonic did not follow localized text");
+		saveAs.setMnemonic(KeyEvent.VK_U);
+		try {
+			file.addItem(new GLMenuItem("Use", KeyEvent.VK_U));
+			throw new AssertionError("Duplicate explicit mnemonic was accepted");
+		} catch (IllegalArgumentException expected) {
+			// Expected.
+		}
+		saveAs.setMnemonicEnabled(false);
+		if (saveAs.getMnemonic() != KeyEvent.VK_UNDEFINED)
+			throw new AssertionError("Disabled mnemonic remained assigned");
+		saveAs.useAutomaticMnemonic();
+		if (saveAs.getMnemonic() != KeyEvent.VK_U)
+			throw new AssertionError("Automatic mnemonic was not restored");
+		file.show(host, 0, bar.getHeight());
+		KeyEvent itemKey = key(host, KeyEvent.VK_S, 0);
+		if (!GLMenuMnemonics.handleKeyPressed(host, itemKey, GLInputMaps.DEFAULT)
+				|| !itemKey.isConsumed() || actions.get() != 1 || file.isShowing())
+			throw new AssertionError("Open-menu mnemonic did not activate its item");
+
+		file.show(host, 0, bar.getHeight());
+		KeyEvent wrongModifier = key(host, KeyEvent.VK_S,
+				InputEvent.CTRL_DOWN_MASK);
+		if (GLMenuMnemonics.handleKeyPressed(host, wrongModifier,
+				GLInputMaps.DEFAULT) || actions.get() != 1)
+			throw new AssertionError("Menu mnemonic ignored configured modifiers");
+		file.close();
+	}
+
+	private static KeyEvent key(TestPanel host, int keyCode, int modifiers) {
+		return new KeyEvent(host, KeyEvent.KEY_PRESSED, System.currentTimeMillis(),
+				modifiers, keyCode, KeyEvent.CHAR_UNDEFINED);
 	}
 
 	private static final class TestPanel extends GLSwingPanel {

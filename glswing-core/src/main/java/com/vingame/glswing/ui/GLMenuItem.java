@@ -4,6 +4,7 @@ import java.awt.Color;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.MouseEvent;
+import java.awt.event.KeyEvent;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import com.vingame.glswing.input.GLMouseEvent;
@@ -25,6 +26,10 @@ public class GLMenuItem extends GLControl {
 	private final GLRenderParameters secondaryParameters =
 			new GLRenderParameters();
 	private String text;
+	private int mnemonic = KeyEvent.VK_UNDEFINED;
+	private Integer explicitMnemonic;
+	private boolean mnemonicEnabled = true;
+	private int displayedMnemonicIndex = -1;
 	private String acceleratorText = "";
 	private String actionCommand;
 	private GLPopupMenu ownerMenu;
@@ -37,6 +42,21 @@ public class GLMenuItem extends GLControl {
 		updatePresentation();
 	}
 
+	public GLMenuItem(String text, int mnemonic) {
+		this(text);
+		setMnemonic(mnemonic);
+	}
+
+	public GLMenuItem(String text, ActionListener listener) {
+		this(text);
+		addActionListener(listener);
+	}
+
+	public GLMenuItem(String text, int mnemonic, ActionListener listener) {
+		this(text, mnemonic);
+		addActionListener(listener);
+	}
+
 	public final String getText() {
 		return text;
 	}
@@ -47,9 +67,72 @@ public class GLMenuItem extends GLControl {
 			return;
 		String previous = this.text;
 		this.text = text;
+		if (ownerMenu != null)
+			ownerMenu.updateMnemonics();
+		else
+			displayedMnemonicIndex = GLMnemonicSupport.findIndex(text, mnemonic);
 		if (actionCommand.equals(previous))
 			actionCommand = text;
 		updatePresentation();
+	}
+
+	public final int getMnemonic() {
+		return mnemonic;
+	}
+
+	public final void setMnemonic(int mnemonic) {
+		mnemonic = GLMnemonicSupport.requireMnemonic(mnemonic);
+		if (mnemonic == KeyEvent.VK_UNDEFINED) {
+			useAutomaticMnemonic();
+			return;
+		}
+		if (ownerMenu != null)
+			ownerMenu.validateExplicitMnemonic(this, mnemonic);
+		if (explicitMnemonic != null && explicitMnemonic == mnemonic
+				&& mnemonicEnabled)
+			return;
+		explicitMnemonic = mnemonic;
+		mnemonicEnabled = true;
+		mnemonicAssignmentChanged();
+	}
+
+	/** Restores conflict-free mnemonic selection by the owning menu. */
+	public final void useAutomaticMnemonic() {
+		if (explicitMnemonic == null && mnemonicEnabled)
+			return;
+		explicitMnemonic = null;
+		mnemonicEnabled = true;
+		mnemonicAssignmentChanged();
+	}
+
+	public final boolean isAutomaticMnemonic() {
+		return explicitMnemonic == null && mnemonicEnabled;
+	}
+
+	public final boolean isMnemonicEnabled() {
+		return mnemonicEnabled;
+	}
+
+	public final void setMnemonicEnabled(boolean enabled) {
+		if (mnemonicEnabled == enabled)
+			return;
+		if (enabled && ownerMenu != null && explicitMnemonic != null)
+			ownerMenu.validateExplicitMnemonic(this, explicitMnemonic);
+		mnemonicEnabled = enabled;
+		mnemonicAssignmentChanged();
+	}
+
+	public final int getDisplayedMnemonicIndex() {
+		return displayedMnemonicIndex;
+	}
+
+	public final void setDisplayedMnemonicIndex(int index) {
+		if (index < -1 || index >= text.length())
+			throw new IllegalArgumentException("Mnemonic index is outside the text");
+		if (displayedMnemonicIndex == index)
+			return;
+		displayedMnemonicIndex = index;
+		invalidateRecording();
 	}
 
 	public final String getAcceleratorText() {
@@ -141,8 +224,11 @@ public class GLMenuItem extends GLControl {
 				? GLTextFitter.ellipsize(font, text,
 						Math.max(0, right - left - reservedWidth))
 				: text;
-		context.withParameters(textParameters, () ->
-				context.drawUIText(font, renderedText, left, baseline, Color.WHITE));
+		context.withParameters(textParameters, () -> {
+			context.drawUIText(font, renderedText, left, baseline, Color.WHITE);
+			GLMnemonicSupport.drawUnderline(context, font, renderedText,
+					displayedMnemonicIndex, left, baseline, Color.WHITE);
+		});
 
 		if (subMenu != null) {
 			float arrowSize = Math.min(13, height - 8);
@@ -193,6 +279,10 @@ public class GLMenuItem extends GLControl {
 		if (menu != null && ownerMenu != null && ownerMenu != menu)
 			throw new IllegalStateException("Menu item already belongs to another menu");
 		ownerMenu = menu;
+		if (menu == null)
+			applyMnemonic(!mnemonicEnabled ? KeyEvent.VK_UNDEFINED
+					: explicitMnemonic == null ? KeyEvent.VK_UNDEFINED
+							: explicitMnemonic);
 		updatePresentation();
 	}
 
@@ -208,6 +298,35 @@ public class GLMenuItem extends GLControl {
 
 	final void menuStyleChanged() {
 		updatePresentation();
+	}
+
+	final boolean matchesMnemonic(int keyCode) {
+		return GLMnemonicSupport.matches(mnemonic, keyCode);
+	}
+
+	final boolean hasExplicitMnemonic() {
+		return mnemonicEnabled && explicitMnemonic != null;
+	}
+
+	final int explicitMnemonic() {
+		return explicitMnemonic == null ? KeyEvent.VK_UNDEFINED : explicitMnemonic;
+	}
+
+	final void applyMnemonic(int mnemonic) {
+		if (this.mnemonic == mnemonic)
+			return;
+		this.mnemonic = mnemonic;
+		displayedMnemonicIndex = GLMnemonicSupport.findIndex(text, mnemonic);
+		invalidateRecording();
+	}
+
+	private void mnemonicAssignmentChanged() {
+		if (ownerMenu != null)
+			ownerMenu.updateMnemonics();
+		else
+			applyMnemonic(!mnemonicEnabled ? KeyEvent.VK_UNDEFINED
+					: explicitMnemonic == null ? KeyEvent.VK_UNDEFINED
+							: explicitMnemonic);
 	}
 
 	private void activate() {

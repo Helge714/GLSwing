@@ -3,6 +3,7 @@ key.history.undo=shortcut+Z
 key.history.redo=shortcut+shift+Z, shortcut+Y
 key.focus.next=TAB
 key.focus.previous=shift+TAB
+modifier.menu.mnemonic=ALT
 
 key.control.activate=SPACE, ENTER
 key.control.cancel=ESCAPE

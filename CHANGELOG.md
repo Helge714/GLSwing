@@ -28,6 +28,8 @@ may change in subsequent `0.x` releases.
   shortcut capture and conflict detection, and atomic persistence.
 - Per-editor temporary text histories with caret/selection restoration,
   configurable edit coalescing, and single-step document commits.
+- Automatic, conflict-free, localized keyboard mnemonics for menu bars, popup
+  items, and nested submenus, with configurable activation and explicit overrides.
 
 ### Build and platforms
 

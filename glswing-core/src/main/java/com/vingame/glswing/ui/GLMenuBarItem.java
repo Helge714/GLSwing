@@ -2,6 +2,7 @@ package com.vingame.glswing.ui;
 
 import java.awt.Color;
 import java.awt.event.MouseEvent;
+import java.awt.event.KeyEvent;
 
 import com.vingame.glswing.input.GLMouseEvent;
 import com.vingame.glswing.layout.GLSize;
@@ -19,6 +20,10 @@ public final class GLMenuBarItem extends GLControl {
 			new GLRenderParameters();
 	private final GLRenderParameters textParameters = new GLRenderParameters();
 	private String text;
+	private int mnemonic = KeyEvent.VK_UNDEFINED;
+	private Integer explicitMnemonic;
+	private boolean mnemonicEnabled = true;
+	private int displayedMnemonicIndex = -1;
 	private GLMenuBar owner;
 	private boolean active;
 
@@ -40,7 +45,69 @@ public final class GLMenuBarItem extends GLControl {
 		if (this.text.equals(text))
 			return;
 		this.text = text;
+		if (owner != null)
+			owner.updateMnemonics();
+		else
+			displayedMnemonicIndex = GLMnemonicSupport.findIndex(text, mnemonic);
 		updatePresentation();
+	}
+
+	public int getMnemonic() {
+		return mnemonic;
+	}
+
+	public void setMnemonic(int mnemonic) {
+		mnemonic = GLMnemonicSupport.requireMnemonic(mnemonic);
+		if (mnemonic == KeyEvent.VK_UNDEFINED) {
+			useAutomaticMnemonic();
+			return;
+		}
+		if (owner != null)
+			owner.validateExplicitMnemonic(this, mnemonic);
+		if (explicitMnemonic != null && explicitMnemonic == mnemonic
+				&& mnemonicEnabled)
+			return;
+		explicitMnemonic = mnemonic;
+		mnemonicEnabled = true;
+		mnemonicAssignmentChanged();
+	}
+
+	public void useAutomaticMnemonic() {
+		if (explicitMnemonic == null && mnemonicEnabled)
+			return;
+		explicitMnemonic = null;
+		mnemonicEnabled = true;
+		mnemonicAssignmentChanged();
+	}
+
+	public boolean isAutomaticMnemonic() {
+		return explicitMnemonic == null && mnemonicEnabled;
+	}
+
+	public boolean isMnemonicEnabled() {
+		return mnemonicEnabled;
+	}
+
+	public void setMnemonicEnabled(boolean enabled) {
+		if (mnemonicEnabled == enabled)
+			return;
+		if (enabled && owner != null && explicitMnemonic != null)
+			owner.validateExplicitMnemonic(this, explicitMnemonic);
+		mnemonicEnabled = enabled;
+		mnemonicAssignmentChanged();
+	}
+
+	public int getDisplayedMnemonicIndex() {
+		return displayedMnemonicIndex;
+	}
+
+	public void setDisplayedMnemonicIndex(int index) {
+		if (index < -1 || index >= text.length())
+			throw new IllegalArgumentException("Mnemonic index is outside the text");
+		if (displayedMnemonicIndex == index)
+			return;
+		displayedMnemonicIndex = index;
+		invalidateRecording();
 	}
 
 	public GLPopupMenu getMenu() {
@@ -79,7 +146,11 @@ public final class GLMenuBarItem extends GLControl {
 				Math.max(0, width - style.itemHorizontalPadding() * 2));
 		float baseline = (height - font.getLineHeight()) * 0.5f + font.getAscent();
 		context.withParameters(textParameters, () ->
-				context.drawUIText(font, renderedText, x, baseline, Color.WHITE));
+				{
+					context.drawUIText(font, renderedText, x, baseline, Color.WHITE);
+					GLMnemonicSupport.drawUnderline(context, font, renderedText,
+							displayedMnemonicIndex, x, baseline, Color.WHITE);
+				});
 	}
 
 	@Override
@@ -121,6 +192,35 @@ public final class GLMenuBarItem extends GLControl {
 
 	void menuBarStyleChanged() {
 		updatePresentation();
+	}
+
+	boolean matchesMnemonic(int keyCode) {
+		return GLMnemonicSupport.matches(mnemonic, keyCode);
+	}
+
+	boolean hasExplicitMnemonic() {
+		return mnemonicEnabled && explicitMnemonic != null;
+	}
+
+	int explicitMnemonic() {
+		return explicitMnemonic == null ? KeyEvent.VK_UNDEFINED : explicitMnemonic;
+	}
+
+	void applyMnemonic(int mnemonic) {
+		if (this.mnemonic == mnemonic)
+			return;
+		this.mnemonic = mnemonic;
+		displayedMnemonicIndex = GLMnemonicSupport.findIndex(text, mnemonic);
+		invalidateRecording();
+	}
+
+	private void mnemonicAssignmentChanged() {
+		if (owner != null)
+			owner.updateMnemonics();
+		else
+			applyMnemonic(!mnemonicEnabled ? KeyEvent.VK_UNDEFINED
+					: explicitMnemonic == null ? KeyEvent.VK_UNDEFINED
+							: explicitMnemonic);
 	}
 
 	private void updatePresentation() {

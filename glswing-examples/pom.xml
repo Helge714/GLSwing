@@ -22,6 +22,10 @@
             <artifactId>glswing</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>org.jogamp.jogl</groupId>
+            <artifactId>jogl-all-main</artifactId>
+        </dependency>
     </dependencies>
 
     <build>

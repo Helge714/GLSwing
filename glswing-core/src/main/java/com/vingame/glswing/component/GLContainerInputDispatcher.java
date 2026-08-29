@@ -30,6 +30,7 @@ import com.vingame.glswing.input.GLPointerController;
 import com.vingame.glswing.input.GLPointerControllers;
 import com.vingame.glswing.history.GLHistoryManager;
 import com.vingame.glswing.ui.GLTextEditor;
+import com.vingame.glswing.ui.GLMenuMnemonics;
 
 /** Input bridge shared by retained controls hosted on a direct GL canvas. */
 final class GLContainerInputDispatcher {
@@ -470,6 +471,10 @@ final class GLContainerInputDispatcher {
 			public void keyPressed(KeyEvent event) {
 				GLInputMap inputMap = host.focusedGLTarget() instanceof GLContainer container
 						? container.getGLInputMap() : host.getGLInputMap();
+				if (GLMenuMnemonics.handleKeyPressed(host, event, inputMap)) {
+					host.repaintColorOnly();
+					return;
+				}
 				if (host.focusedGLTarget() instanceof GLTextEditor editor
 						&& editor.handleEditingHistoryKeyPressed(event, inputMap)) {
 					host.repaintColorOnly();

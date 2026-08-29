@@ -413,15 +413,20 @@ public final class GuiShowcaseDemo {
 					event -> host.report("Datei > Oeffnen"));
 			fileMenu.addSeparator();
 			GLPopupMenu export = new GLPopupMenu();
-			export.addItem("PNG", event -> host.report("Export > PNG"));
-			export.addItem("SVG", event -> host.report("Export > SVG"));
+			export.addItem("PNG",
+					event -> host.report("Export > PNG"));
+			export.addItem("SVG",
+					event -> host.report("Export > SVG"));
 			fileMenu.addSubMenu("Exportieren", export);
 			GLMenuItem unavailable = fileMenu.addItem("Nicht verfuegbar");
 			unavailable.setEnabled(false);
 
-			viewMenu.addItem("Zoom 100 %", event -> host.setZoom(1));
-			viewMenu.addItem("Zoom 150 %", event -> host.setZoom(1.5f));
-			viewMenu.addItem("Zoom 75 %", event -> host.setZoom(0.75f));
+			viewMenu.addItem("Zoom 100 %",
+					event -> host.setZoom(1));
+			viewMenu.addItem("Zoom 150 %",
+					event -> host.setZoom(1.5f));
+			viewMenu.addItem("Zoom 75 %",
+					event -> host.setZoom(0.75f));
 			helpMenu.addItem("Ueber GLSwingNext",
 					event -> host.report("GPU-gerenderte Lightweight-GUI"));
 
@@ -742,8 +747,10 @@ public final class GuiShowcaseDemo {
 					event -> host.report("Popup-Schnellaktion"));
 			standalonePopup.addSeparator();
 			GLPopupMenu modes = new GLPopupMenu();
-			modes.addItem("Einfach", event -> host.report("Modus: Einfach"));
-			modes.addItem("Erweitert", event -> host.report("Modus: Erweitert"));
+			modes.addItem("Einfach",
+					event -> host.report("Modus: Einfach"));
+			modes.addItem("Erweitert",
+					event -> host.report("Modus: Erweitert"));
 			standalonePopup.addSubMenu("Modus", modes);
 			for (int index = 1; index <= 22; index++) {
 				int number = index;

@@ -26,4 +26,3 @@ Items are removed when completed or intentionally rejected.
 ## Further investigation
 
 - Accessibility interfaces for GPU-rendered controls.
-- Consistent keyboard shortcuts and menu mnemonics.

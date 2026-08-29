@@ -57,6 +57,7 @@ import com.vingame.glswing.ui.GLFontSpec;
 import com.vingame.glswing.ui.GLLocalizer;
 import com.vingame.glswing.ui.GLTheme;
 import com.vingame.glswing.ui.GLTextEditor;
+import com.vingame.glswing.ui.GLMenuMnemonics;
 
 /**
  * Base class for event-driven OpenGL rendering inside Swing.
@@ -997,6 +998,11 @@ public abstract class GLSwingPanel extends GLJPanel
 			public void keyPressed(KeyEvent event) {
 				GLInputMap resolvedInputMap = focusedTarget instanceof GLContainer container
 						? container.getGLInputMap() : inputMap;
+				if (GLMenuMnemonics.handleKeyPressed(GLSwingPanel.this, event,
+						resolvedInputMap)) {
+					repaintColorOnly();
+					return;
+				}
 				if (focusedTarget instanceof GLTextEditor editor
 						&& editor.handleEditingHistoryKeyPressed(event,
 								resolvedInputMap)) {

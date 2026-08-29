@@ -7,6 +7,7 @@ public final class GLInputActions {
 	public static final String HISTORY_REDO = "history.redo";
 	public static final String FOCUS_NEXT = "focus.next";
 	public static final String FOCUS_PREVIOUS = "focus.previous";
+	public static final String MENU_MNEMONIC = "menu.mnemonic";
 
 	public static final String ACTIVATE = "control.activate";
 	public static final String CANCEL = "control.cancel";

@@ -8,8 +8,10 @@ import java.awt.event.ComponentEvent;
 import java.awt.event.InputEvent;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.WeakHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -107,6 +109,17 @@ public class GLPopupMenu extends GLContainer {
 		return addItem(new GLMenuItem(text));
 	}
 
+	public final GLMenuItem addItem(String text, int mnemonic) {
+		return addItem(new GLMenuItem(text, mnemonic));
+	}
+
+	public final GLMenuItem addItem(String text, int mnemonic,
+			ActionListener listener) {
+		GLMenuItem item = new GLMenuItem(text, mnemonic);
+		item.addActionListener(listener);
+		return addItem(item);
+	}
+
 	public final GLMenuItem addItem(String text, ActionListener listener) {
 		GLMenuItem item = new GLMenuItem(text);
 		item.addActionListener(listener);
@@ -123,8 +136,11 @@ public class GLPopupMenu extends GLContainer {
 		GLPopupMenu subMenu = item.getSubMenu();
 		if (subMenu == this || subMenu != null && subMenu.reaches(this))
 			throw new IllegalArgumentException("Submenu assignment creates a cycle");
+		if (item.hasExplicitMnemonic())
+			validateExplicitMnemonic(item, item.explicitMnemonic());
 		item.setOwnerMenu(this);
 		rows.add(item);
+		updateMnemonics();
 		addGL(item);
 		invalidateMenuLayout();
 		return item;
@@ -137,6 +153,7 @@ public class GLPopupMenu extends GLContainer {
 			return false;
 		item.setOwnerMenu(null);
 		removeGL(item);
+		updateMnemonics();
 		invalidateMenuLayout();
 		return true;
 	}
@@ -151,17 +168,37 @@ public class GLPopupMenu extends GLContainer {
 			removeGL(row);
 		}
 		rows.clear();
+		updateMnemonics();
 		invalidateMenuLayout();
 	}
 
 	public final GLMenuItem addSubMenu(String text, GLPopupMenu subMenu) {
+		return addSubMenu(text, java.awt.event.KeyEvent.VK_UNDEFINED, subMenu);
+	}
+
+	public final GLMenuItem addSubMenu(String text, int mnemonic,
+			GLPopupMenu subMenu) {
 		if (subMenu == null)
 			throw new IllegalArgumentException("Submenu must not be null");
 		if (subMenu == this || subMenu.reaches(this))
 			throw new IllegalArgumentException("Submenu assignment creates a cycle");
-		GLMenuItem item = new GLMenuItem(text);
+		GLMenuItem item = new GLMenuItem(text, mnemonic);
 		item.setSubMenu(subMenu);
 		return addItem(item);
+	}
+
+	static boolean activateOpenMnemonic(GLParent host, int keyCode,
+			int actualModifiers) {
+		MenuSession current;
+		synchronized (ACTIVE) {
+			WeakReference<MenuSession> reference = ACTIVE.get(host);
+			current = reference == null ? null : reference.get();
+		}
+		return current != null
+				&& (actualModifiers == 0 || actualModifiers
+						== GLMenuMnemonics.mnemonicModifiers(
+								current.rootMenu.getGLInputMap()))
+				&& current.activateMnemonic(keyCode);
 	}
 
 	public final void addSeparator() {
@@ -176,6 +213,42 @@ public class GLPopupMenu extends GLContainer {
 	public final List<GLMenuItem> getItems() {
 		return rows.stream().filter(GLMenuItem.class::isInstance)
 				.map(GLMenuItem.class::cast).toList();
+	}
+
+	void validateExplicitMnemonic(GLMenuItem source, int mnemonic) {
+		if (mnemonic == java.awt.event.KeyEvent.VK_UNDEFINED)
+			return;
+		for (GLMenuItem item : getItems())
+			if (item != source && item.hasExplicitMnemonic()
+					&& item.explicitMnemonic() == mnemonic)
+				throw new IllegalArgumentException(
+						"Duplicate explicit menu mnemonic "
+								+ java.awt.event.KeyEvent.getKeyText(mnemonic));
+	}
+
+	void updateMnemonics() {
+		Set<Integer> used = new HashSet<>();
+		List<GLMenuItem> items = getItems();
+		for (GLMenuItem item : items)
+			if (item.hasExplicitMnemonic())
+				used.add(item.explicitMnemonic());
+		for (GLMenuItem item : items) {
+			if (!item.isMnemonicEnabled()) {
+				item.applyMnemonic(java.awt.event.KeyEvent.VK_UNDEFINED);
+				continue;
+			}
+			if (item.hasExplicitMnemonic()) {
+				item.applyMnemonic(item.explicitMnemonic());
+				continue;
+			}
+			int assigned = java.awt.event.KeyEvent.VK_UNDEFINED;
+			for (int candidate : GLMnemonicSupport.candidates(item.getText()))
+				if (used.add(candidate)) {
+					assigned = candidate;
+					break;
+				}
+			item.applyMnemonic(assigned);
+		}
 	}
 
 	public final String getTitle() {
@@ -1280,6 +1353,19 @@ public class GLPopupMenu extends GLContainer {
 		private final ComponentAdapter resizeListener;
 		private GLImmediateHoverRegistry.Registration immediateHoverRegistration;
 		private boolean closed;
+
+		private boolean activateMnemonic(int keyCode) {
+			for (int menuIndex = openMenus.size() - 1; menuIndex >= 0; menuIndex--) {
+				GLPopupMenu menu = openMenus.get(menuIndex);
+				for (GLMenuItem item : menu.getItems())
+					if (item.isVisible() && item.isEnabled()
+							&& item.matchesMnemonic(keyCode)) {
+						item.doClick();
+						return true;
+					}
+			}
+			return false;
+		}
 
 		private MenuSession(GLParent host, GLPopupMenu rootMenu,
 				boolean anchoredToMenuBar, ComboAnchor comboAnchor) {

@@ -2,7 +2,9 @@ package com.vingame.glswing.ui;
 
 import java.awt.Color;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import com.vingame.glswing.component.GLContainer;
 import com.vingame.glswing.component.GLParent;
@@ -23,6 +25,10 @@ public final class GLMenuBar extends GLContainer implements GLPopupMenuListener 
 	}
 
 	public GLMenuBarItem addMenu(String text, GLPopupMenu menu) {
+		return addMenu(text, java.awt.event.KeyEvent.VK_UNDEFINED, menu);
+	}
+
+	public GLMenuBarItem addMenu(String text, int mnemonic, GLPopupMenu menu) {
 		if (menu == null)
 			throw new IllegalArgumentException("Menu-bar popup must not be null");
 		for (GLMenuBarItem item : items)
@@ -31,12 +37,24 @@ public final class GLMenuBar extends GLContainer implements GLPopupMenuListener 
 						"A popup menu can only occur once in a menu bar");
 		menu.claimMenuBar(this);
 		GLMenuBarItem item = new GLMenuBarItem(text, menu);
+		item.setMnemonic(mnemonic);
+		validateExplicitMnemonic(item, item.explicitMnemonic());
 		item.attach(this);
 		items.add(item);
+		updateMnemonics();
 		menu.addPopupMenuListener(this);
 		addGL(item);
 		updatePreferredSizeAndLayout();
 		return item;
+	}
+
+	boolean activateMnemonic(int keyCode) {
+		for (GLMenuBarItem item : items)
+			if (item.isEnabled() && item.matchesMnemonic(keyCode)) {
+				open(item);
+				return true;
+			}
+		return false;
 	}
 
 	public List<GLMenuBarItem> getItems() {
@@ -126,6 +144,41 @@ public final class GLMenuBar extends GLContainer implements GLPopupMenuListener 
 
 	void itemPresentationChanged() {
 		updatePreferredSizeAndLayout();
+	}
+
+	void validateExplicitMnemonic(GLMenuBarItem source, int mnemonic) {
+		if (mnemonic == java.awt.event.KeyEvent.VK_UNDEFINED)
+			return;
+		for (GLMenuBarItem item : items)
+			if (item != source && item.hasExplicitMnemonic()
+					&& item.explicitMnemonic() == mnemonic)
+				throw new IllegalArgumentException(
+						"Duplicate explicit menu-bar mnemonic "
+								+ java.awt.event.KeyEvent.getKeyText(mnemonic));
+	}
+
+	void updateMnemonics() {
+		Set<Integer> used = new HashSet<>();
+		for (GLMenuBarItem item : items)
+			if (item.hasExplicitMnemonic())
+				used.add(item.explicitMnemonic());
+		for (GLMenuBarItem item : items) {
+			if (!item.isMnemonicEnabled()) {
+				item.applyMnemonic(java.awt.event.KeyEvent.VK_UNDEFINED);
+				continue;
+			}
+			if (item.hasExplicitMnemonic()) {
+				item.applyMnemonic(item.explicitMnemonic());
+				continue;
+			}
+			int assigned = java.awt.event.KeyEvent.VK_UNDEFINED;
+			for (int candidate : GLMnemonicSupport.candidates(item.getText()))
+				if (used.add(candidate)) {
+					assigned = candidate;
+					break;
+				}
+			item.applyMnemonic(assigned);
+		}
 	}
 
 	private void open(GLMenuBarItem item) {

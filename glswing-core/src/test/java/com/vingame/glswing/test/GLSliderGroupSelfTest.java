@@ -1,14 +1,22 @@
 package com.vingame.glswing.test;
 
+import java.awt.Canvas;
 import java.awt.Cursor;
+import java.awt.event.InputEvent;
+import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
 
 import javax.swing.JPanel;
 
+import com.vingame.glswing.component.GLSwingPanel;
+import com.vingame.glswing.input.GLInputMaps;
+import com.vingame.glswing.input.GLKeyEvent;
 import com.vingame.glswing.input.GLMouseEvent;
 import com.vingame.glswing.input.GLPickResult;
+import com.vingame.glswing.rendering.GLContext2D;
 import com.vingame.glswing.ui.GLSlider;
 import com.vingame.glswing.ui.GLSliderGroup;
+import com.vingame.glswing.ui.GLTextEditor;
 
 /** CPU checks for grouped layout, drag linking and the FREE hover cursor. */
 public final class GLSliderGroupSelfTest {
@@ -17,9 +25,82 @@ public final class GLSliderGroupSelfTest {
 
 	public static void main(String[] args) {
 		testLayoutAndGestureLinking();
+		testLinkedEditingHistory();
 		testCompatibilityChecks();
 		testFreeSliderCursor();
 		System.out.println("GL slider group self-test passed.");
+	}
+
+	private static void testLinkedEditingHistory() {
+		GLSlider first = GLSlider.fixed("First", 0, 100, 10);
+		GLSlider second = GLSlider.fixed("Second", 0, 100, 20);
+		GLSliderGroup group = new GLSliderGroup(first, second);
+		group.setBounds(0, 0, 180, 40);
+		TestPanel panel = new TestPanel();
+		panel.addGL(group);
+		JPanel source = new JPanel();
+
+		openLinkedEditor(source, first);
+		GLTextEditor active = valueEditor(first);
+		GLTextEditor mirror = valueEditor(second);
+		type(active, '4');
+		type(active, '2');
+		check(active.getText().equals("42") && mirror.getText().equals("42"),
+				"Linked editor did not mirror typed text");
+		pressHistory(active, KeyEvent.VK_Z, InputEvent.CTRL_DOWN_MASK);
+		check(active.getText().equals("10") && mirror.getText().equals("10"),
+				"Linked editing undo did not restore and mirror the baseline");
+		pressHistory(active, KeyEvent.VK_Z, InputEvent.CTRL_DOWN_MASK
+				| InputEvent.SHIFT_DOWN_MASK);
+		check(active.getText().equals("42") && mirror.getText().equals("42"),
+				"Linked editing redo did not restore the mirrored edit");
+		check(active.commit(), "Linked slider edit did not commit");
+		check(close(first.getValue(), 42) && close(second.getValue(), 42)
+				&& !first.isValueEditing() && !second.isValueEditing(),
+				"Linked commit did not update and close the complete group");
+		check(panel.getGLHistoryManager().undo()
+				&& close(first.getValue(), 10) && close(second.getValue(), 20),
+				"One document undo did not restore all grouped slider values");
+
+		openLinkedEditor(source, first);
+		active = valueEditor(first);
+		type(active, '9');
+		active.cancel();
+		check(close(first.getValue(), 10) && close(second.getValue(), 20)
+				&& !panel.getGLHistoryManager().canUndo(),
+				"Cancelling linked editing changed values or recorded history");
+	}
+
+	private static void openLinkedEditor(JPanel source, GLSlider first) {
+		first.mousePressed(event(source, first, MouseEvent.MOUSE_PRESSED,
+				MouseEvent.BUTTON1, 20, 10, 0, 0));
+		first.mouseDragged(event(source, first, MouseEvent.MOUSE_DRAGGED,
+				MouseEvent.NOBUTTON, 21, 30, 1, 20));
+		first.mouseReleased(event(source, first, MouseEvent.MOUSE_RELEASED,
+				MouseEvent.BUTTON1, 21, 30, 0, 0));
+	}
+
+	private static GLTextEditor valueEditor(GLSlider slider) {
+		return slider.getGLChildren().stream()
+				.filter(GLTextEditor.class::isInstance)
+				.map(GLTextEditor.class::cast)
+				.findFirst()
+				.orElseThrow(() -> new AssertionError("Slider editor was not opened"));
+	}
+
+	private static void type(GLTextEditor editor, char character) {
+		KeyEvent event = new KeyEvent(new Canvas(), KeyEvent.KEY_TYPED,
+				System.currentTimeMillis(), 0, KeyEvent.VK_UNDEFINED, character);
+		editor.keyTyped(new GLKeyEvent(event));
+	}
+
+	private static void pressHistory(GLTextEditor editor, int keyCode,
+			int modifiers) {
+		KeyEvent event = new KeyEvent(new Canvas(), KeyEvent.KEY_PRESSED,
+				System.currentTimeMillis(), modifiers, keyCode,
+				KeyEvent.CHAR_UNDEFINED);
+		check(editor.handleEditingHistoryKeyPressed(event, GLInputMaps.DEFAULT),
+				"Linked editor did not consume its history shortcut");
 	}
 
 	private static void testLayoutAndGestureLinking() {
@@ -143,5 +224,13 @@ public final class GLSliderGroupSelfTest {
 	private static void check(boolean condition, String message) {
 		if (!condition)
 			throw new AssertionError(message);
+	}
+
+	private static final class TestPanel extends GLSwingPanel {
+		private static final long serialVersionUID = 1L;
+
+		@Override
+		protected void render(GLContext2D context) {
+		}
 	}
 }

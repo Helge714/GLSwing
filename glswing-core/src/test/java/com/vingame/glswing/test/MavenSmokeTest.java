@@ -64,4 +64,14 @@ final class MavenSmokeTest {
 	void textEditor() {
 		GLTextEditorSelfTest.main(NO_ARGS);
 	}
+
+	@Test
+	void sliderGroup() {
+		GLSliderGroupSelfTest.main(NO_ARGS);
+	}
+
+	@Test
+	void menus() {
+		GLMenuSelfTest.main(NO_ARGS);
+	}
 }

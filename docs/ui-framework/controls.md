@@ -131,15 +131,40 @@ to the visible area. `setPopupMatchesComboWidth(true)` aligns widths;
 `setPopupTitle(...)` adds a fixed heading. `GLPopupTextOverflow.EXPAND` may widen
 the popup, while `ELLIPSIS` truncates labels.
 
-`GLMenuItem` supports text, accelerator display text, action command, listeners,
-`doClick()`, and an optional submenu. Accelerator text is presentational; bind
-the actual global shortcut in the application.
+`GLMenuItem` supports text, mnemonic keys, accelerator display text, action
+commands, listeners, `doClick()`, and an optional submenu. Accelerator text is
+presentational; bind the actual global shortcut in the application.
 
 ```java
 GLPopupMenu menu = new GLPopupMenu();
-menu.add(new GLMenuItem("Delete", event -> deleteSelection()));
+menu.addItem(new GLMenuItem("Delete", event -> deleteSelection()));
 menu.show(host, screenX, screenY);
 ```
+
+Menu mnemonics provide conventional keyboard access. Menu bars and popup menus
+assign unique mnemonics automatically, preferring word initials and then unused
+characters elsewhere in each label:
+
+```java
+GLPopupMenu fileMenu = new GLPopupMenu();
+fileMenu.addItem("Save", event -> save());
+fileMenu.addItem("Save As", event -> saveAs());
+
+GLMenuBar menuBar = new GLMenuBar();
+menuBar.addMenu("File", fileMenu);
+```
+
+With the default input map, `Alt+F` opens the File menu, `S` activates Save, and
+`A` activates Save As. Changing a label recalculates the automatic allocation,
+so localized menus require no separate mnemonic configuration. The assigned
+character is underlined automatically.
+
+`setMnemonic(...)` pins an explicit key when an application needs a stable
+override; duplicate explicit keys in one menu are rejected.
+`useAutomaticMnemonic()` restores allocation, while
+`setMnemonicEnabled(false)` excludes an item. Applications can use
+`setDisplayedMnemonicIndex(...)` to override the underline position for an
+explicit mnemonic.
 
 `show(host,x,y)` expects host coordinates. Menus and submenus render as topmost
 overlays. `setImmediateCpuPickingEnabled(true)` is available when menu hover
