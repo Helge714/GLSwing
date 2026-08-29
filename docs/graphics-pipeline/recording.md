@@ -1,280 +1,121 @@
-# Recording und Laufzeitparameter
+# Recordings and Runtime Parameters
 
-[Zur API-Landkarte](../graphics-pipeline.md) · [Zeichenbefehle](drawing.md) · [Weiter: Shader](shaders.md)
+[Rendering guide](../graphics-pipeline.md) · [Picking](picking.md) · [Next: Resources](resources.md)
 
-Ein `GLRecording` ist eine unveränderliche Folge normalisierter
-Renderanweisungen. Es ist keine isolierte OpenGL-Displaylist und kein einzelner
-Drawcall: Beim Replay werden die gespeicherten Anweisungen wieder in die gerade
-offenen Rendererbatches eingespeist. Dadurch können mehrere Recordings und
-Immediate-Befehle weiterhin gemeinsam gebatcht werden.
+`GLRecording` caches prepared drawing commands for repeated replay.
+`GLRenderParameters` change transform, tint, color, and opacity without
+re-recording. `GLSpriteBuffer` is the GPU-resident alternative for large static
+sprite sets.
 
-## Inhalt
+## Contents
 
-- [Was Recording spart](#was-recording-spart)
-- [Manuelle und automatische Aufnahme](#manuelle-aufnahme)
-- [Replay und äußerer Zustand](#replay-und-äußerer-zustand)
-- [Laufzeitparameter](#parameter-für-ein-komplettes-recording)
-- [Gespeicherte und nicht recordbare Inhalte](#was-genau-gespeichert-wird)
-- [GPU-residente Sprite-Puffer](#gpu-residente-sprite-puffer)
-- [Lebensdauer und Diagnose](#referenzen-und-lebensdauer)
+- [When to record](#when-to-record)
+- [Creating recordings](#creating-recordings)
+- [Container recordings](#container-recordings)
+- [Replay and parameters](#replay-and-parameters)
+- [Recorded operations](#recorded-operations)
+- [Sprite buffers](#sprite-buffers)
+- [Lifetime and diagnostics](#lifetime-and-diagnostics)
 
-## Was Recording spart
+## When to record
 
-- Polygon- und Path-Tessellierung
-- Stroke-, Dash-, Join- und Cap-Geometrie
-- Textvertex-Erzeugung
-- viele kleine öffentliche Context-Aufrufe
-- wiederholtes Normalisieren kompatibler Befehle
+Recording avoids repeated path/stroke tessellation, text layout, icon selection,
+and command construction. It does not reduce fragment work, layer passes, or
+the draw calls required by incompatible state.
 
-Es spart nicht automatisch Fragmentarbeit, Layerpasses oder die Anzahl der
-sichtbar notwendigen Shader-/Typwechsel.
-
-## Manuelle Aufnahme
+## Creating recordings
 
 ```java
-GLRecording card;
-
+GLRecording recording;
 g.beginRecording();
 try {
-    g.fillRoundRect(0, 0, 240, 110, 14, new Color(45, 80, 135));
-    g.drawLine(20, 76, 220, 76, new Color(100, 220, 255));
-    card = g.endRecording();
-} catch (RuntimeException error) {
-    if (g.isRecording())
-        g.cancelRecording();
-    throw error;
+    drawStaticContent(g);
+    recording = g.endRecording();
+} catch (RuntimeException ex) {
+    g.cancelRecording();
+    throw ex;
 }
 
-g.translate(300, 120);
-g.draw(card);
-```
-
-`beginRecording` sichert den äußeren Renderer- und Contextzustand und startet
-mit einem Identitäts-Modeltransform. `endRecording` oder `cancelRecording`
-restauriert den äußeren Zustand. Ein Frame darf nicht mit offener Aufnahme
-enden.
-
-## Automatisches Recording in `GLContainer`
-
-`GLContainer.record(g)` wird lazy aufgerufen, sobald sein Cache dirty ist.
-`render(g)` spielt standardmäßig das Ergebnis. Kinder sind nicht Teil des
-Parent-Recordings, sondern besitzen unabhängige Caches.
-
-```java
-final class Badge extends GLContainer {
-    private Color background = Color.BLUE;
-
-    void setBackground(Color value) {
-        background = value;
-        invalidateRecording();
-    }
-
-    @Override
-    protected void record(GLContext2D g) {
-        g.fillRoundRect(0, 0, getWidth(), getHeight(), 8, background);
-    }
-}
-```
-
-`invalidateRecording()` ist richtig, wenn sich gespeicherte Geometrie, Text,
-Ressource oder nichtparametrisierte Farbe ändert. Ein reines Verschieben über
-Component-Bounds oder Parent-Transform benötigt keine neue Aufnahme.
-
-## Replay und äußerer Zustand
-
-```java
 g.draw(recording);
+```
+
+Recordings begin with an identity model transform and restore outer
+context state on completion. A frame must not finish with an open recording.
+
+## Container recordings
+
+`GLContainer#record(GLContext2D)` is called lazily when its cache is dirty;
+`render(GLContext2D)` replays the result by default. Children maintain separate
+caches and are not embedded in their parent's recording. Call
+`invalidateRecording()` when the recorded appearance changes. Bounds or parent
+transform changes normally require only replay with a different transform.
+
+## Replay and parameters
+
+```java
+GLRenderParameters parameters = new GLRenderParameters();
+parameters.setTranslation(x, y);
+parameters.setTint(Color.WHITE);
+parameters.setOpacity(0.75f);
 g.draw(recording, parameters);
 ```
 
-Ein Recording wird unterhalb des aktuellen Modeltransforms abgespielt. Sein
-initialer Zustand und seine internen Zustandswechsel gelten nur während des
-Replays; danach wird der äußere Rendererzustand restauriert. Eine Aufnahme kann
-nur auf dem Renderer abgespielt werden, der sie erzeugt hat.
-
-Playback während einer anderen aktiven Aufnahme ist derzeit nicht unterstützt.
-
-## Parameter für ein komplettes Recording
-
-```java
-GLRenderParameters state = new GLRenderParameters()
-        .setTranslation(300, 120)
-        .setTint(new Color(210, 235, 255))
-        .setOpacity(0.8f);
-
-g.draw(card, state);
-
-state.setTransform(new GLTransform()
-        .translate(420, 180)
-        .rotate(0.1f)
-        .scale(1.15f));
-```
-
-| Parameter | Bedeutung |
+| Parameter | Effect |
 |---|---|
-| `setTransform`, `resetTransform` | Vollständiger Replay-Transform; Matrixeinheiten wie im [Konfigurationskapitel](context-configuration.md#gltransform-referenz) |
-| `setTranslation` | Transform durch Translation in lokalen Benutzerkoordinaten ersetzen |
-| `translate`, `rotate`, `scale` | Benutzerkoordinaten, Radiant beziehungsweise dimensionslose Faktoren |
-| `setTint`, `resetTint` | Aufgezeichnete RGBA-Farben multiplizieren |
-| `setColor`, `clearColor` | Aufgezeichnete RGB-/Vertexfarben ersetzen/zurücksetzen |
-| `setOpacity` | Vertexalpha mit einem dimensionslosen Faktor `0..1` multiplizieren |
-| `reset` | Alle Werte auf Identität/Weiß/Original/1 setzen |
+| `setTransform`, `resetTransform`, `translate`, `rotate`, `scale` | Complete replay transform |
+| `setTint`, `resetTint` | Multiplies recorded texture and icon color |
+| `setColor`, `clearColor` | Replaces eligible recorded vertex colors |
+| `setOpacity` | Multiplies per-command alpha by `0..1` |
+| `reset` | Restores identity, original colors, and full opacity |
 
-`getTransform` liefert eine Kopie. Setter validieren Null, Endlichkeit und den
-Opacitybereich `0..1`. Weitere Abfragen sind `getTint`, `hasColor`, `getColor`
-und `getOpacity`.
+Opacity is applied to each command, not once to the finished group. Use a layer
+when overlapping shapes must receive group opacity after composition.
 
-Parameter-Opacity ist keine Gruppen-Opacity. Überlappen sich zwei Formen im
-Recording, wird Alpha pro Form angewandt und die Überlappung bleibt sichtbar.
-Für einmaliges Alpha auf das fertige Ergebnis dient ein Layer.
+`beginParameters(parameters)` and `endParameters()` create nested parameter
+regions during recording. `withParameters(...)` balances the scope on failure.
+Mutating a referenced parameter object affects the next replay.
 
-## Parameterregionen
+## Recorded operations
 
-Eine Aufnahme kann Referenzen auf mehrere mutable Parametersätze enthalten:
+Geometry, model transforms, paint/stroke state, projection/view changes,
+numeric picking, compatible shader/uniform changes, and balanced clips/layers
+can be recorded. `GLIcon` remains high-level so replay can select an adaptive
+variant. Screen-space strokes cache geometry per relevant view transform.
 
-```java
-GLRenderParameters surface = new GLRenderParameters();
-GLRenderParameters accent = new GLRenderParameters();
+Render-target updates and drawing another `GLRecording` while recording are not
+supported. Use immediate rendering for frame-dependent target updates.
 
-g.beginRecording();
-g.withParameters(surface, () ->
-        g.fillRect(0, 0, 260, 150, Color.WHITE));
-g.withParameters(accent, () -> {
-    g.fillCircle(35, 35, 12, Color.WHITE);
-    g.drawLine(60, 35, 220, 35, Color.WHITE);
-});
-GLRecording panel = g.endRecording();
-
-surface.setColor(new Color(48, 89, 150));
-accent.setColor(new Color(95, 220, 255));
-g.draw(panel);
-```
-
-`beginParameters`/`endParameters` dürfen verschachtelt werden, aber nur während
-einer Aufnahme. `withParameters` schließt die Region auch bei einer Exception.
-Änderungen am Parameterobjekt wirken beim nächsten Replay ohne Neuaufnahme.
-
-## Was genau gespeichert wird
-
-| Inhalt | Recordingverhalten |
-|---|---|
-| Filled-/Texture-/Textgeometrie | Kompatible Nachbarn werden beim Aufnehmen zusammengefasst |
-| UI-Instanzen | Als UI-Replaybefehl gespeichert |
-| Modeltransform | Interne Transformoperationen werden gespeichert; Aufnahme startet bei Identität |
-| Projection/View | Als Replayzustand gespeichert |
-| Filled-/Texture-/Text-/UI-Shader und Uniforms | Als Replayzustand gespeichert |
-| Clips/Layer | Verschachtelung wird gespeichert und beim Abschluss validiert |
-| Color/Stroke/Picking | Bei Geometrieerzeugung eingebacken beziehungsweise zugeordnet |
-| `GLIcon` | Icon bleibt high-level; passende adaptive Variante wird beim Replay gewählt |
-| Screen-Space-Stroke | View-abhängiger Compiler mit Transform-/View-Cache |
-| MouseTarget | Schwache Referenz, verhindert Garbage Collection nicht |
-
-## Nicht recordbar
-
-- `beginRenderTarget`, `endRenderTarget`, `withRenderTarget`
-- `drawRenderTarget`
-- `draw(GLRecording)` während einer aktiven Aufnahme
-
-RenderTargets sind dynamische, frameabhängige Ressourcen. Sie werden im
-Immediate-Renderpfad aktualisiert und dargestellt.
-
-## GPU-residente Sprite-Puffer
-
-Ein `GLRecording` spart Geometrieaufbereitung, speist seine Daten beim Replay
-aber erneut in dynamische Batches ein. Für große, unveränderte Sprite-Mengen
-stellt `GLSpriteBuffer` die Instanzdaten dagegen einmalig als statischen
-GPU-Puffer bereit:
+## Sprite buffers
 
 ```java
-GLSpriteBuffer terrain;
-
+GLSpriteBuffer buffer;
 g.beginSpriteBuffer();
 try {
-    for (Tile tile : tiles) {
-        g.setMouseTarget(tile);
-        g.drawSprite(tile.sprite(), tile.x(), tile.y(), 32, 32,
-                Color.WHITE, tile.depth());
-    }
-    g.clearMouseTarget();
-    terrain = g.endSpriteBuffer();
-} catch (RuntimeException error) {
-    if (g.isRecordingSpriteBuffer())
-        g.cancelSpriteBuffer();
-    throw error;
+    drawStaticSprites(g);
+    buffer = g.endSpriteBuffer();
+} catch (RuntimeException ex) {
+    throw ex;
 }
-
-g.translate(worldX, worldY);
-g.draw(terrain);
-
-// Wenn die Ressource endgültig nicht mehr gebraucht wird:
-terrain.close();
+g.draw(buffer);
 ```
 
-Die Aufnahme startet wie ein normales Recording mit Identität und wird beim
-Zeichnen relativ zum aktuellen Modeltransform, zur aktuellen Projection und
-zum aktuellen Licht ausgewertet. `drawSprite`, `drawMaterial`, Transform- und
-Pickingzustand sowie ein explizites `flush()` sind im Aufnahmescope erlaubt.
-Andere Zeichenpipelines, Layer, Clips und RenderTarget-Updates gehören nicht in
-einen Sprite-Puffer und werden mit einer verständlichen Exception abgewiesen.
+Sprite buffers upload immutable instance sections with `GL_STATIC_DRAW` on
+first use by a renderer. Supported content includes sprites, materials,
+transforms, depth, light, and picking. Source `GLImage` channels must use
+`Usage.STATIC`. Shader/material changes, texture-slot exhaustion, and explicit
+`flush()` create sections.
 
-Beim ersten `draw(buffer)` löst jeder Renderer die Bilder auf und lädt
-kompatible Materialabschnitte lazy mit `GL_STATIC_DRAW` hoch. Weitere Draws
-übertragen die Instanzgeometrie nicht erneut. Shader-, Alpha- oder
-Depthstate-Wechsel, mehr als fünf Textursets und ein während der Aufnahme
-gesetztes `flush()` bilden Abschnitts- und damit Drawcallgrenzen.
-Die verwendeten `GLImage`-Kanäle müssen `Usage.STATIC` besitzen; dynamische
-Bilder würden die einmal aufgenommenen Texture-IDs/UVs ungültig machen und
-werden deshalb bereits bei der Aufnahme abgewiesen.
+Use one buffer per independently changing chunk. Partial instance updates are
+not part of the 0.1.0 API; close and rebuild the affected buffer. Bounds getters,
+`getInstanceCount()`, and `isEmpty()` describe recorded content.
 
-Numerische Pick-IDs und `GLMouseTarget` funktionieren weiter. MouseTargets
-liegen als schwache Referenzen vor; frame-lokale GPU-Pick-IDs werden beim Draw
-neu zugeordnet. Ein vollständig nicht pickbarer Puffer benötigt diesen kleinen
-ID-Upload nicht. `close()` markiert den Puffer sofort ungültig; die eigentlichen
-renderergebundenen GL-Objekte werden sicher am Beginn eines folgenden Frames
-oder beim Renderer-Dispose freigegeben.
+## Lifetime and diagnostics
 
-| Statischer Inhalt | Geeigneter Weg |
-|---|---|
-| Shapes, Text, UI oder häufig mit anderen Befehlen zusammen batchen | `GLRecording` |
-| Sehr viele unveränderte Sprites/Materialquads | `GLSpriteBuffer` |
-| Einzelne Sprites ändern sich pro Frame | Dynamisches `drawSprite` |
-| Welt in selten geänderten Teilen | Ein `GLSpriteBuffer` pro Chunk |
+Recordings do not own fonts, images, icons, or shaders; keep them valid through
+every replay. Direct `GLMouseTarget` references are weak. A recording can replay
+only on the renderer that created it, while a sprite buffer may create a
+renderer-specific GPU copy from its renderer-independent CPU description.
 
-Partielle Updates innerhalb eines bestehenden Puffers sind noch nicht Teil der
-API. Ändert sich ein Chunk, wird sein Puffer geschlossen und neu aufgenommen.
-`getInstanceCount()` und `isEmpty()` beschreiben den aufgenommenen Inhalt;
-`getMinX/Y` und `getMaxX/Y` liefern seine lokale achsenparallele Boundingbox in
-Benutzerkoordinaten. `isClosed()` zeigt den Lebenszykluszustand. Die kompakte
-CPU-Beschreibung bleibt rendererunabhängig, daher darf derselbe offene Puffer
-ohne kontextgebundenen eigenen Materialshader in mehreren Renderern lazy jeweils
-eine eigene GPU-Kopie erhalten. Ein eigener `ShaderProgram` bleibt wie bisher
-an den GL-Kontext gebunden, in dem er erstellt wurde.
-
-## Typische Entscheidungen
-
-| Situation | Vorgehen |
-|---|---|
-| Form ändert sich selten | Recording neu bauen, wenn dirty |
-| Nur Position/Rotation/Skalierung ändert sich | Replaytransform/Componenttransform |
-| Nur Farbe oder Opacity ändert sich | `GLRenderParameters` |
-| Einzelne Bereiche ändern sich unabhängig | Parameterregionen oder getrennte Components |
-| Shaderuniform ändert sich pro Frame | Immediate rendern oder passenden Parameteransatz entwerfen; Uniformwechsel bleibt Flushgrenze |
-| Inhalt ist ein aktueller FBO | Nicht aufnehmen; `drawRenderTarget` immediate |
-
-## Referenzen und Lebensdauer
-
-Ein Recording besitzt Fonts, Texturen, Bilder oder Shader nicht. Diese müssen
-mindestens so lange gültig bleiben wie das Replay. `GLMouseTarget` ist eine
-Ausnahme: Es wird per `WeakReference` gehalten. Ist das Ziel sonst nicht mehr
-erreichbar, liefert die Referenz `null` und blockiert den Garbage Collector
-nicht.
-
-## Diagnose
-
-- `getCommandCount()` zählt koaleszierte Replaybefehle, nicht ursprüngliche
-  Contextaufrufe und nicht zwingend Drawcalls.
-- `isEmpty()` erkennt leere Aufnahmen.
-- Unbalancierte Layer, Clips oder Parameterregionen werden bei `endRecording`
-  abgewiesen.
-- Screen-Space-Strokes dürfen bei Viewänderung etwas CPU-Zeit zur
-  Neukompilierung benötigen; danach greift wieder der Cache.
+Call `close()` on sprite buffers. `getCommandCount()` counts coalesced replay
+commands, not original context calls or guaranteed draw calls. Unbalanced
+layers, clips, and parameter regions are rejected when recording ends.

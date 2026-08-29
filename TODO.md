@@ -1,75 +1,29 @@
-# GLSwingNext – TODO
+# GLSwing Roadmap
 
-Diese Datei sammelt bewusst zurückgestellte Aufgaben. Aktive Vorhaben gehören
-nicht automatisch hierher; ein Punkt wird entfernt, sobald er umgesetzt oder
-bewusst verworfen wurde.
+This internal roadmap tracks deferred work that has not yet been scheduled.
+Items are removed when completed or intentionally rejected.
 
-## Eingabe und Fokus
+## Input and focus
 
-- Vollständige Tastatursteuerung und Fokus-Traversierung ergänzen.
-  - `Tab` und `Shift+Tab` wechseln zwischen fokussierbaren Elementen.
-  - `Enter` und `Leertaste` bedienen Buttons und Checkboxen.
-  - Pfeiltasten steuern Slider, Menüs, ComboBoxen und Tabs.
-  - `Escape` schließt Editor, Popup oder Dialog.
-  - Fokusreihenfolge beziehungsweise optionalen `tabIndex` festlegen.
-  - Fokus beim Entfernen, Verstecken oder Deaktivieren eines Elements sicher
-    weitergeben.
-  - Theme-konfigurierbaren Fokusring anbieten.
+- Complete keyboard operation and focus traversal, including conventional
+  navigation keys, focus order, safe focus transfer, and a themed focus ring.
 
-## Datenansichten
+## Data views
 
-- `GLScrollPane` im allgemeinen GUI-Showcase vollständig demonstrieren und
-  Resize, Mausrad, Scrollbar-Dragging sowie verschachteltes Clipping testen.
-- Generische `GLList<T>` entwickeln.
-  - Single- und später Multi-Selection unterstützen.
-  - Austauschbaren `GLListCellRenderer<T>` vorsehen.
-  - Große Datenmengen durch Virtualisierung auf sichtbare Einträge begrenzen.
-- Auf dem Listen- und Auswahlmodell später `GLTree<T>` und `GLTable` aufbauen.
+- Complete the `GLScrollPane` showcase and interaction tests.
+- Develop a virtualized generic `GLList<T>` with selection and replaceable cell renderers.
+- Build future `GLTree<T>` and `GLTable` controls on the list selection model.
 
-## Rendering und Farbräume
+## Rendering and color spaces
 
-- `GLSpriteBuffer` später um gezielte partielle Instanzupdates ergänzen, falls
-  reale Chunk-/Streaming-Workloads den Neuaufbau einzelner Puffer als Engpass
-  zeigen. Kontextverlust gemeinsam mit allen rendererlokalen Ressourcen
-  behandeln; Tile-Chunks und World-Streaming bleiben Anwendungslogik.
+- Add partial `GLSpriteBuffer` updates if measured streaming workloads require them.
+- Extend 2.5D lighting based on measured application needs, including possible
+  multiple lights, material maps, transparency strategies, and sampleable depth.
+- Develop a reusable UI material system that preserves efficient batching.
+- Add and benchmark GPU interpolation in `SRGB`, `LINEAR_RGB`, `OKLAB`, `HSV`,
+  and `OKLCH`, including gamut handling and custom-shader compatibility.
 
-- 2.5D-Licht nach realer Nutzung gezielt erweitern.
-  - Mehrere Richtungs-, Punkt- oder Spotlichter erst nach einem Benchmark als
-    Forward-, Forward+- oder separaten Lichtpass entwerfen.
-  - Optional specular/roughness/emissive Maps ergänzen, ohne den einfachen
-    `GLMaterial2D`-Pfad mit ungenutzten Kosten zu belasten.
-  - Sortierhilfen oder Order-independent Transparency nur bei echtem Bedarf
-    untersuchen; der aktuelle `BLEND`-Modus bleibt bewusst back-to-front.
-  - Falls Anwendungen Depth nachbearbeiten müssen, eine samplebare
-    Depth-Textur-Option für `GLRenderTarget` ergänzen; derzeit sind
-    Depth-Attachments absichtlich günstige Renderbuffer.
+## Further investigation
 
-- UI-Materialsystem auf Basis des Universal-UI-Shaders entwickeln.
-  - Shader und immutable Uniform-/Stilwerte in einem wiederverwendbaren
-    `GLUIMaterial` bündeln.
-  - Benachbarte Instanzen mit demselben Material ohne zusätzlichen Flush
-    gemeinsam zeichnen und Materialwechsel als klare Batchgrenze behandeln.
-  - Prüfen, welche Materialparameter als UI-Instanzdaten oder über einen
-    GPU-Puffer transportiert werden können, damit unterschiedliche Looks mit
-    demselben Basis-Shader im selben Drawcall bleiben.
-  - Zusammenspiel mit Themes, Recordings, Picking und dem vollständigen
-    `setUIShader`-Vertrag festlegen.
-  - Eine einfache Material-API beibehalten; Shader-/Uniformzustände bleiben
-    der flexible Low-Level-Weg.
-- Allgemeine GPU-Farbrauminterpolation für Vertexverläufe entwickeln.
-  - Für beliebige Dreiecke und Polygone mindestens `SRGB`, `LINEAR_RGB` und
-    `OKLAB` unterstützen.
-  - Den Interpolationsmodus möglichst als Vertexattribut transportieren, damit
-    ein Wechsel das Batching nicht durch zusätzliche Flushes unterbricht.
-  - Farbattribute vor der Rasterizer-Interpolation in den gewählten Farbraum
-    überführen und im Fragmentshader wieder nach sRGB konvertieren.
-  - Eindimensionale Verläufe zusätzlich über Endfarben und einen
-    Verlaufsparameter `t` abbilden, damit zyklische `HSV`- und
-    `OKLCH`-Interpolation eindeutig möglich ist.
-  - Zusätzliche Vertexbandbreite, Fragmentshader-Kosten, Gamut-Clipping und die
-    Kompatibilität mit eigenen Filled-Shadern messen und dokumentieren.
-
-## Später prüfen
-
-- Barrierefreiheits-Schnittstellen für GPU-gerenderte Controls untersuchen.
-- Einheitliche Tastenkürzel und Mnemonics für Menüs konzipieren.
+- Accessibility interfaces for GPU-rendered controls.
+- Consistent keyboard shortcuts and menu mnemonics.

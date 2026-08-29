@@ -1,166 +1,87 @@
-# Undo/Redo mit `GLSaveManager`
+# Undo and Redo with `GLSaveManager`
 
-[UI-Übersicht](../ui-framework.md) · [Komponenten](components.md) ·
-[Controls](controls.md) · [Node-System](nodes.md)
+[UI guide](../ui-framework.md) · [Controls](controls.md) · [Node editor](nodes.md)
 
-## Inhalt
+`GLSaveManager` stores named reversible edits, groups related operations, and
+tracks whether the current state differs from the last saved state.
 
-- [Einrichten](#einrichten)
-- [Status und Befehle](#status-und-befehle)
-- [Bereits ausgeführte Änderung aufzeichnen](#bereits-ausgeführte-änderung-aufzeichnen)
-- [Änderung ausführen und aufzeichnen](#änderung-ausführen-und-aufzeichnen)
-- [Transaktionen](#transaktionen)
-- [Tastenkürzel](#tastenkürzel)
-- [Automatisch integrierte Komponenten](#automatisch-integrierte-komponenten)
-- [Speicherstatus](#speicherstatus)
+## Contents
 
-Der frühere gedankliche „URManager“ heißt in der aktuellen API
-`GLSaveManager`: Er verwaltet Undo/Redo und zusätzlich den Speicherstatus eines
-Dokuments. Die History gehört in der Regel an den Root-Host, sodass alle
-Controls und Nodes desselben Dokuments dieselbe Zeitlinie benutzen.
+- [Setup and status](#setup-and-status)
+- [Recording completed changes](#recording-completed-changes)
+- [Performing changes](#performing-changes)
+- [Transactions](#transactions)
+- [Keyboard shortcuts](#keyboard-shortcuts)
+- [Integrated controls](#integrated-controls)
+- [Saved-state tracking](#saved-state-tracking)
 
-## Einrichten
+## Setup and status
 
-```java
-GLSaveManager history = new GLSaveManager(200);
-frame.setGLSaveManager(history);
-
-history.addListener(manager -> {
-    undoButton.setEnabled(manager.canUndo());
-    redoButton.setEnabled(manager.canRedo());
-    updateWindowTitle(manager.isDirty());
-});
-```
-
-Ohne Argument gilt `DEFAULT_HISTORY_LIMIT` (`100`). Das Limit ist mindestens
-eins und lässt sich mit `setHistoryLimit(...)` ändern. Alte Einträge werden bei
-Bedarf am Anfang verworfen.
-
-`GLFrame`, `GLSwingContainerCanvas` und `GLSwingPanel` bieten
-`setGLSaveManager(...)`. Kinder erreichen die Instanz über
-`getGLSaveManager()` ihres Parent-Baums.
-
-## Status und Befehle
-
-| API | Bedeutung |
-|---|---|
-| `canUndo()` / `canRedo()` | Ob ein Schritt verfügbar ist. |
-| `getUndoName()` / `getRedoName()` | Anzeigename des nächsten Schritts oder `null`. |
-| `undo()` / `redo()` | Führt aus und meldet Erfolg als `boolean`. |
-| `isApplying()` | `true`, während Undo oder Redo den Modellzustand verändert. |
-| `isInTransaction()` | Ob gerade eine zusammengesetzte Änderung aufgenommen wird. |
-| `isDirty()` | Ob die aktuelle Position vom markierten Speicherstand abweicht. |
-| `markSaved()` | Markiert die aktuelle Position als gespeichert. |
-| `reset()` | Löscht die History und betrachtet den aktuellen Zustand als gespeichert. |
-
-`undo()` und `redo()` sind während einer offenen Transaktion nicht erlaubt.
-Auch `markSaved()` und `reset()` verlangen einen abgeschlossenen konsistenten
-Zustand.
-
-## Bereits ausgeführte Änderung aufzeichnen
-
-`record(...)` wird verwendet, wenn die Anwendung den neuen Wert bereits gesetzt
-hat:
+Hosts provide a manager through `getGLSaveManager()`. Replace it with
+`setGLSaveManager(...)` when several views must share one document history.
 
 ```java
-Color oldColor = model.getColor();
-Color newColor = chosenColor;
-model.setColor(newColor);
-
-history.record("Change color",
-        () -> model.setColor(oldColor),
-        () -> model.setColor(newColor));
-```
-
-Alternativ kapselt `GLUndoableEdit.of(name, undo, redo)` denselben Vertrag.
-Während `isApplying()` wahr ist, ignoriert der Manager neue Record-Aufrufe. Ein
-Undo-Callback erzeugt daher nicht versehentlich weitere History-Einträge.
-
-Callbacks sollten den vollständigen Modellzustand und das nötige UI-Repaint
-wiederherstellen. Flüchtige lokale Variablen werden am besten als unveränderliche
-Vorher-/Nachher-Snapshots erfasst.
-
-## Änderung ausführen und aufzeichnen
-
-`perform(...)` ist die kompakte Variante, wenn der Manager die Vorwärtsänderung
-jetzt ausführen soll:
-
-```java
-history.perform("Rename layer",
-        () -> layer.setName(newName),
-        () -> layer.setName(oldName));
-```
-
-Der `change`-Callback ist zugleich die Redo-Aktion. Schlägt die Ausführung mit
-einer Exception fehl, wird kein gültiger neuer History-Schritt angenommen.
-
-## Transaktionen
-
-Mehrere Einträge lassen sich zu genau einem Undo-Schritt bündeln. Das
-`AutoCloseable`-Muster stellt auch bei Exceptions das korrekte Ende sicher:
-
-```java
-try (GLSaveManager.Transaction ignored =
-        history.beginTransaction("Move selection")) {
-    move(first, dx, dy);
-    move(second, dx, dy);
+GLSaveManager history = host.getGLSaveManager();
+if (history.canUndo()) {
+    undoItem.setText("Undo " + history.getUndoName());
 }
 ```
 
-Transaktionen dürfen verschachtelt werden. Die innere Transaktion wird als Teil
-der äußeren gesammelt; nur die äußerste erzeugt einen sichtbaren History-Schritt.
-Leere Transaktionen erzeugen keinen Eintrag. Handles müssen in umgekehrter
-Öffnungsreihenfolge geschlossen werden.
+`canUndo()`, `canRedo()`, `getUndoName()`, and `getRedoName()` support command
+state. `undo()`, `redo()`, and `reset()` execute or clear history.
+`setHistoryLimit(...)` controls retained edits; the default is
+`DEFAULT_HISTORY_LIMIT`.
 
-Undo läuft innerhalb eines zusammengesetzten Eintrags rückwärts, Redo vorwärts.
-Dadurch werden voneinander abhängige Änderungen in natürlicher Reihenfolge
-zurückgenommen.
+## Recording completed changes
 
-## Tastenkürzel
+Use `record(...)` after application code has already applied a change:
 
 ```java
-@Override
-public void keyPressed(KeyEvent event) {
-    if (history.handleKeyPressed(event))
-        return;
-    // weitere Shortcuts
-}
+float before = model.getValue();
+model.setValue(after);
+history.record(GLUndoableEdit.of(
+        "Change value",
+        () -> model.setValue(before),
+        () -> model.setValue(after)));
 ```
 
-`handleKeyPressed(...)` unterstützt plattformgerecht Strg/Cmd+Z,
-Strg/Cmd+Shift+Z und Strg/Cmd+Y und konsumiert behandelte Events.
-`isHistoryShortcut(...)` prüft nur, ob ein Event zu dieser Familie gehört.
+Undo and redo callbacks must restore the complete affected state and trigger
+the same repaint/model notifications as an ordinary change.
 
-Die verwalteten GLSwing-Hosts binden diese Shortcuts bereits in ihre
-Eingabekette ein. Vor Undo/Redo wird ein fokussierter Texteditor nach Möglichkeit
-committet, damit Textzustand und Dokument-History konsistent bleiben.
+## Performing changes
 
-## Automatisch integrierte Komponenten
+Use `perform(...)` when the manager should execute and record the redo action
+atomically. If execution fails, no incomplete edit should enter history.
+`isApplying()` is true while undo or redo callbacks run and prevents listeners
+from recording recursive edits.
 
-Folgende Benutzerinteraktionen verwenden den geerbten Manager bereits:
+## Transactions
 
-- erfolgreicher Commit eines `GLTextEditor`, sofern `historyEnabled` aktiv ist,
-- Slider-Drag, Texteingabe und Reset,
-- gemeinsame Wertänderungen einer `GLSliderGroup`,
-- Node-Titelbearbeitung, Verschieben und Skalieren,
-- Verbindungen sowie Löschen und Bewegen einer Node-Auswahl.
+Transactions merge several edits into one named undo step. They may be nested.
+Use the returned `AutoCloseable` in try-with-resources or pair the documented
+begin/end calls so a failure cannot leave the manager inside a transaction.
+`isInTransaction()` reports current state.
 
-Programmatische Setter sind im Allgemeinen keine Benutzeraktion und werden
-nicht automatisch aufgezeichnet. Das verhindert, dass Laden, Synchronisieren
-oder Animationen die History fluten. Solche Änderungen werden bei Bedarf
-explizit mit `record`, `perform` oder einer Transaktion beschrieben.
+Transactions are appropriate for multi-slider drags, moving several selected
+nodes, and compound model operations that users perceive as one action.
 
-## Speicherstatus
+## Keyboard shortcuts
 
-Nach erfolgreichem Speichern:
+`isHistoryShortcut(...)` identifies platform-appropriate undo/redo gestures;
+`handleKeyPressed(...)` performs them. Invoke it from the host keyboard path
+only when an active editor has not consumed the event.
 
-```java
-saveDocument();
-history.markSaved();
-```
+## Integrated controls
 
-`isDirty()` vergleicht die aktuelle History-Position mit diesem Checkpoint. Ein
-Undo zurück zum gespeicherten Stand macht das Dokument wieder sauber, ein Redo
-erneut dirty. Wird der markierte Stand durch das History-Limit abgeschnitten,
-bleibt die Information konservativ: Der aktuelle Zustand wird nicht irrtümlich
-als gespeichert gemeldet.
+`GLTextEditor`, sliders, `GLSliderGroup`, and node-editor operations integrate
+with the nearest host manager. Programmatic setters do not necessarily create
+history; user gestures do. Composite controls can disable a child editor's
+history with `setHistoryEnabled(false)` and record one higher-level operation.
+
+## Saved-state tracking
+
+`markSaved()` marks the current history position as the persisted document
+state. `isDirty()` changes as edits, undo, and redo move relative to that point.
+Call `markSaved()` only after a successful save. Clearing or truncating history
+can make the previous saved position unreachable, in which case dirty state
+remains conservative.

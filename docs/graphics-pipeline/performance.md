@@ -1,180 +1,103 @@
-# Batching, Performance und Lebensdauer
+# Performance, Batching, and Resource Lifetime
 
-[Zur API-Landkarte](../graphics-pipeline.md) · [Picking](picking.md)
+[Rendering guide](../graphics-pipeline.md) · [Recording](recording.md) · [Depth and materials](depth-materials.md)
 
-GLSwing optimiert die CPU-Aufbereitung und die Zahl der GPU-Drawcalls, kann aber
-die tatsächliche Pixelarbeit, Host-Präsentation oder VSync nicht wegoptimieren.
-Dieses Kapitel erklärt die wichtigsten Grenzen und Messwerte.
+GLSwing batches compatible commands and submits them when state or destination
+changes require a boundary. Applications generally obtain the best throughput
+by drawing related content consecutively and reusing long-lived resources.
 
-## Inhalt
+## Contents
 
-- [Renderfluss und Batchgrenzen](#renderfluss)
-- [Standard- und UI-Pipeline](#standardpipeline-gegen-ui-pipeline)
-- [Recording, Atlanten und Layer](#recording)
-- [Damage und Hosts](#damage-und-culling)
-- [Renderauflösung und HiDPI](#renderauflösung-und-hidpi)
-- [Messen](#messen)
-- [Lebensdauer und Checkliste](#ressourcenlebensdauer)
+- [Frame flow](#frame-flow)
+- [Batch boundaries](#batch-boundaries)
+- [Choosing a caching strategy](#choosing-a-caching-strategy)
+- [Layers and render targets](#layers-and-render-targets)
+- [Damage and resolution](#damage-and-resolution)
+- [Measurement](#measurement)
+- [Resource lifetime](#resource-lifetime)
 
-## Renderfluss
+## Frame flow
 
-```text
-GLContainer-Hierarchie
-  -> Damage/Culling
-  -> Recording-Replay oder Immediate-Aufbau
-  -> Filled / Texture / Text / Universal UI
-  -> Layer- und RenderTarget-Pässe
-  -> Farbausgabe + Picking-Snapshot
-  -> GLCanvas oder GLSwingPanel-Präsentation
-```
+Each frame initializes context state, records or replays dirty containers,
+renders visible content, resolves picking, and presents the framebuffer.
+Filled, texture, text, sprite, and UI commands use separate batches.
 
-## Was einen Batch beendet
+## Batch boundaries
 
-- Wechsel zwischen Filled, Texture, Text und Universal-UI,
-- Shaderwechsel oder Uniformänderung,
-- Projection-/View-Wechsel,
-- Clip-, Layer- oder RenderTarget-Wechsel,
-- Änderung der Color-/Pickingausgaben,
-- `clear()` oder `flush()`,
-- Vertex-/Instanzkapazität oder Texturslotgrenze.
+The following operations submit at least one open batch:
 
-Model-Transforms allein müssen nicht flushen. Die CPU transformiert
-Geometrie/Instanzen passend, bevor sie im Batch landet.
+- switching between rendering pipelines;
+- changing shaders, uniforms, projection, depth state, or output masks;
+- exhausting texture slots or changing incompatible image/material state;
+- starting or ending a layer, clip, or render target;
+- clearing, explicit `flush()`, and external OpenGL access.
 
-## Standardpipeline gegen UI-Pipeline
+Avoid alternating pipelines unnecessarily—for example, repeated
+`Fill -> Text -> Fill -> Text`. Draw order still defines compositing, so never
+reorder commands when that would change the image.
 
-Die Standardpipeline ist flexibler und unterstützt eigene Shader pro Typ. Bei
-einem klassischen Buttonmuster `Fill -> Text -> Fill -> Text` müsste sie die
-sichtbare Reihenfolge mit Typwechseln bewahren. Der Universal-UI-Batch codiert
-Flächen, MSDF-Glyphen und Bilder dagegen als kompatible Instanzen und hält viele
-Controls in wenigen Drawcalls.
+## Choosing a caching strategy
 
-Verwende die UI-Pipeline nicht pauschal für beliebige Kunstgrafik: Ihre
-analytischen Formen sind absichtlich spezialisiert und ignorieren eigene
-Filled-/Texture-/Textshader.
-Ein eigener UI-Shader ist zwar möglich, muss aber den kompletten UI-Vertrag
-implementieren. Viele Instanzen mit demselben UI-Shader und identischen
-Uniforms bleiben zusammen; ein Shader- oder Uniformwechsel pro Objekt erzeugt
-dagegen eine Batchgrenze.
-
-## Recording
-
-Recording reduziert CPU-Kosten für stabile Geometrie erheblich, besonders bei
-Paths, runden/dashed Strokes und Text. Replay bleibt batchfreundlich. Eine
-Geometrieänderung benötigt `invalidateRecording`; reine Transform-/Farbwechsel
-können oft `GLRenderParameters` nutzen.
-
-Screen-Space-Strokes bleiben viewabhängig. Ihre Geometrie wird bei geänderter
-Model-/Viewmatrix einmal neu kompiliert und anschließend gecacht.
-
-Für sehr große, unveränderte Sprite-Mengen geht `GLSpriteBuffer` einen Schritt
-weiter: Die kompakten Instanzdaten werden beim ersten Draw einmalig pro
-Renderer mit `GL_STATIC_DRAW` hochgeladen und bleiben danach GPU-resident.
-Modeltransform, Projection und Licht dürfen sich ohne Neuaufnahme ändern.
-Nicht pickbare Puffer verursachen beim Replay keinen Instanzupload; bei Picking
-werden nur die frame-lokalen Integer-IDs aktualisiert. Der residente Draw ist
-eine bewusste Batchgrenze und verschmilzt nicht mit dem dynamischen Spritebatch.
-
-## Atlanten und Slots
-
-Kleine statische Bilder gemeinsam in Atlaspages zu speichern reduziert
-Texturwechsel. Der UI-Batch besitzt 16 Texturslots; eine Page mit vielen Icons
-belegt nur einen. Große, dynamische und Repeat-Bilder bleiben Standalone.
-
-Adaptive RGBA-Icons rasterisieren fehlende Größen im Hintergrund und laden
-höchstens kontrolliert neue Varianten in den Renderer, damit Zoom keinen langen
-Frame blockiert.
-
-## Layerkosten
-
-Layerarbeit skaliert vor allem mit der bearbeiteten Pixelregion:
-
-- ohne Effekt: ein zusätzlicher Compositepass,
-- einfacher Effekt: ein zusätzlicher Pass,
-- Blur/DropShadow/InnerShadow: zwei zusätzliche Passes je Effekt,
-- jeder weitere Effekt verarbeitet das Ergebnis des vorherigen.
-
-`beginLayer()` sammelt automatisch die tatsächlich beschriebenen Screenbounds
-und begrenzt Resolve, Effekte und Composite darauf. Explizites
-`beginLayer(x,y,w,h)` ist dennoch strikter: Der Scissor gilt schon beim
-Zeichnen des Inhalts und kann außerhalb liegende Geometrie früh verwerfen.
-Verwende daher automatische Bounds für flexible Inhalte und explizite Bounds,
-wenn die Region ohnehin bekannt ist oder bewusst clippen soll.
-
-## RenderTargets
-
-Ein Target mit 2048×2048 bearbeitet unabhängig von seiner späteren
-Darstellungsgröße Millionen Pixel. Wähle die kleinste sachlich ausreichende
-Auflösung. Ping-Pong-Simulationen bleiben auf der GPU; synchrones Readback im
-Framepfad vermeiden.
-
-## Damage und Culling
-
-`GLContainer` prüft visuelle Bounds gegen die Damage-Region und spielt nur
-relevante eigene Inhalte ab. `visualOverflow` berücksichtigt Schatten und
-andere Außenpixel. Innerhalb eines großen eigenen Renderhooks kann
-`intersectsRedrawBounds` zusätzliche teure Teilbereiche überspringen.
-
-Damage-Tracking reduziert Arbeit bei statischen Oberflächen; eine hohe
-theoretische FPS ist nicht sein einziges Ziel. Wenn kein sichtbarer Inhalt
-dirty ist, muss die Bibliothek nicht künstlich Frames erzeugen.
-
-## Canvas gegen `GLSwingPanel`
-
-- Direkter `GLCanvas`: OpenGL präsentiert unmittelbar im heavyweight Canvas;
-  höchste und stabilste Renderingrate.
-- `GLSwingPanel`: integriert sich in Swing-Painting und dessen Scheduling;
-  praktisch für gemischte Oberflächen, aber zusätzliche Präsentationskosten.
-- `GLFrame`: Komforthost um die direkte Canvasvariante.
-
-Ein weiterer FBO beseitigt die Swing-/AWT-Präsentationsgrenze nicht automatisch.
-
-## Renderauflösung und HiDPI
-
-`setRenderResolutionScale` am Host reduziert/erhöht die physische
-Renderauflösung. Der Wert ist ein dimensionsloser Faktor (`1` = native
-HiDPI-Framebufferauflösung). Logische Koordinaten bleiben stabil. Niedrigere Skalen sparen
-Pixelarbeit, können aber Text, Kanten und Effekte weicher machen. Eingebaute
-Effekte und adaptive Icons berücksichtigen DeviceScale.
-
-## Messen
-
-Am Host stehen typischerweise bereit:
-
-| Messwert | Aussage |
+| Workload | API |
 |---|---|
-| `getFramesPerSecond()` | Präsentierte Frames pro Sekunde (`1/s`) |
-| `getAverageFrameTimeMillis()` | Gemittelte End-to-End-Framezeit in Millisekunden |
-| `getLastDrawCallCount()` | Dimensionslose Drawcallanzahl des letzten Frames |
-| `getFrameProfile()` | Detaillierte CPU-/GPU-/Präsentationsphasen |
-| `getActualAntialiasingSamples()` | Dimensionslose tatsächliche MSAA-Sampleanzahl |
-| `getActualSwapInterval()` | Swap-Interval in Bildschirm-Refreshperioden (`0` = ungebremst) |
-| Surface-/Renderpixelgröße | Physische Framebufferpixel; zeigt HiDPI- und Resolution-Scale-Kosten |
+| Small or changing every frame | Immediate `GLContext2D` calls |
+| Stable shapes, text, icons, and UI | `GLRecording` |
+| Stable geometry with changing transform, tint, or opacity | `GLRecording` plus `GLRenderParameters` |
+| Large immutable sprite sets | `GLSpriteBuffer` |
+| Independently changing world chunks | One sprite buffer per chunk |
 
-FPS allein ist nicht ausreichend: VSync, Swing-Scheduling und Fensterzustand
-können die Rate deckeln, obwohl CPU und GPU freie Zeit besitzen.
+Recordings cache CPU preparation but replay into dynamic batches. Sprite
+buffers retain static instance data on the GPU. Call `invalidateRecording()`
+only when recorded content changes; moving a component normally changes only
+its replay transform.
 
-## Ressourcenlebensdauer
+Images may use an atlas when their options and dimensions are compatible.
+Atlases reduce texture switches. Standalone textures remain appropriate for
+large, repeating, render-target, or frequently updated images.
 
-| Typ | Besitzerregel |
+## Layers and render targets
+
+`beginLayer(x,y,w,h)` limits off-screen allocation to known bounds. Effects
+increase those bounds by their padding and may add multiple full-area passes.
+`beginLayer()` uses the whole active surface and should be reserved for cases
+that genuinely need it.
+
+Render targets persist across frames and suit cached scenes, simulations, and
+multi-pass rendering. Their memory cost scales with physical pixel area,
+attachment count, multisampling, and depth/picking options.
+
+## Damage and resolution
+
+`GLContainer` uses damage tracking and `intersectsRedrawBounds(...)` to skip
+unaffected work. Components with shadows or other overflow must report
+`visualOverflow` so invalidation includes their visible extent.
+
+`setRenderResolutionScale(float)` scales physical rendering while preserving
+logical coordinates. Lower values reduce fragment and off-screen effect cost.
+`GLSwingPanel` includes an additional transfer into Swing; use a direct
+`GLCanvas` or `GLFrame` for latency- or throughput-sensitive windows.
+
+## Measurement
+
+Measure representative scenes after warm-up. Host metrics include:
+
+- `getFramesPerSecond()` and `getAverageFrameTimeMillis()`;
+- `getLastDrawCallCount()`;
+- `getFrameProfile()`;
+- `getActualAntialiasingSamples()` and `getActualSwapInterval()`.
+
+GPU timers such as `GL_TIME_ELAPSED` distinguish GPU work from CPU submission.
+Use the supplied benchmark demos for reproducible comparisons.
+
+## Resource lifetime
+
+| Resource | Release operation |
 |---|---|
-| `GLImage`, `GLIcon` | CPU-Ressource; Renderer verwaltet seine GPU-Auflösung |
-| `GLTexture`, `ShaderProgram`, eigener `GLFont` | Im passenden GL-Disposehook freigeben |
-| `GLRecording` | Gehört seinem Renderer; besitzt referenzierte Ressourcen nicht |
-| `GLSpriteBuffer` | Rendererunabhängige CPU-Beschreibung plus lazy GPU-Kopie; explizit `close()` aufrufen |
-| `GLRenderTarget`, `GLFeedbackBuffer` | Mit `close()` beenden; renderergebunden |
+| `GLRenderTarget`, `GLFeedbackBuffer`, `GLSpriteBuffer` | `close()` |
+| `GLImage`, `GLIcon` | Renderer-independent objects; released when no longer referenced |
+| `GLTexture`, `GLFont`, `ShaderProgram` | `dispose(gl)` with a current context |
+| `GLRecording`, `GLRenderParameters` | Garbage-collected; referenced GPU resources must remain valid |
 
-Niemals Low-Level-GL-Ressourcen auf einem beliebigen AWT-Thread erstellen oder
-löschen, wenn dort kein passender GL-Kontext current ist.
-
-## Praktische Checkliste
-
-1. Stabile komplexe Geometrie recorden.
-2. Sehr große statische Spritefelder in wenige `GLSpriteBuffer`-Chunks legen.
-3. Standardcontrols über den UI-Batch zeichnen.
-4. Kleine statische Bilder der Atlasautomatik überlassen.
-5. Shader-/Uniformwechsel gruppieren.
-6. Layer auf echte Bounds begrenzen und Effektketten bewusst ordnen.
-7. RenderTargets nur aktualisieren, wenn ein neuer Zustand nötig ist.
-8. GPU-Readbacks im interaktiven Framepfad vermeiden.
-9. Mit Frameprofil und Drawcalls messen, nicht nur mit FPS urteilen.
+Create context-bound resources during host initialization and dispose them from
+the corresponding resource-disposal callback. Do not allocate images, fonts,
+targets, or shaders inside a per-frame render method.

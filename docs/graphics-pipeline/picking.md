@@ -1,185 +1,91 @@
-# Picking und Mausziele
+# Picking and Mouse Targets
 
-[Zur API-Landkarte](../graphics-pipeline.md) · [Ressourcen](resources.md) · [Weiter: Performance](performance.md)
+[Rendering guide](../graphics-pipeline.md) · [Drawing commands](drawing.md) · [Next: Recording](recording.md)
 
-GLSwing rendert neben Farbe optional einen Picking-FBO. Jeder pickbare Pixel
-enthält eine intern auflösbare GPU-ID. Die öffentliche API bietet zwei Modelle:
-eine eigene Integer-ID oder ein direktes `GLMouseTarget`.
+GLSwing renders object identity into a picking attachment alongside color.
+Draws may carry either a numeric ID, a direct `GLMouseTarget`, or neither.
 
-## Inhalt
+## Contents
 
-- [Numerische Pick-ID](#numerische-pick-id)
-- [Direktes GLMouseTarget](#direktes-glmousetarget)
-- [Ereignisse und Koordinaten](#ereignisse)
-- [Maus-Capture](#maus-capture)
-- [Textur-Alpha und Renderausgaben](#textur-alpha)
-- [Asynchroner Snapshot](#asynchroner-snapshot)
-- [Recording, Grenzen und Fehler](#recording-und-referenzen)
+- [Numeric IDs](#numeric-ids)
+- [Direct targets](#direct-targets)
+- [Pick results and events](#pick-results-and-events)
+- [Pointer capture](#pointer-capture)
+- [Alpha and output masks](#alpha-and-output-masks)
+- [Timing and lifetime](#timing-and-lifetime)
 
-## Numerische Pick-ID
+## Numeric IDs
 
 ```java
-g.setPickId(17);
-g.fillCircle(80, 80, 30, Color.ORANGE);
+g.setPickId(42);
+g.fillRect(x, y, width, height, color);
 g.clearPickId();
 ```
 
-Alternativ besitzen viele Standard-Zeichenmethoden einen `int pickId`-Overload:
+`NO_PICK_ID` means no numeric object. `pick(x,y)` returns the ID from the most
+recent completed picking snapshot. Prefer IDs when application state already
+has a stable integer key.
+
+## Direct targets
 
 ```java
-g.fillRect(20, 20, 100, 40, Color.BLUE, 17);
-```
-
-IDs müssen nichtnegativ sein; `0`/`NO_PICK_ID` bedeutet kein ID-Ziel. Die
-Zuordnung von ID zu Domänenobjekt verwaltet die Anwendung. Hosts bieten
-`pick(x,y)` für die ID und `pickResult(x,y)` für das vollständige Ergebnis.
-
-## Direktes `GLMouseTarget`
-
-```java
-GLMouseTarget target = new GLMouseTarget() {
-    @Override
-    public void mousePressed(GLMouseEvent event) {
-        System.out.println(event.getLocalX() + ", " + event.getLocalY());
-    }
-};
-
-g.setMouseTarget(target, 40, 25);
-g.fillRect(40, 25, 180, 60, Color.BLUE);
+g.setMouseTarget(target);
+g.drawImage(image, x, y);
 g.clearMouseTarget();
 ```
 
-`setMouseTarget` ersetzt die aktive Pick-ID; `setPickId` ersetzt das MouseTarget.
-Mit explizitem Ursprung sind lokale Koordinaten relativ zu diesem Punkt. Ohne
-Ursprung bestimmt der erste folgende Zeichenbefehl den Ursprung aus seiner
-linken oberen Bounds-Ecke beziehungsweise seinem ersten Punkt; er bleibt bis
-zum Wechsel/Clear stabil.
+`GLMouseTarget` receives mouse callbacks without a separate ID map. UI controls
+and containers use this mechanism. `addUIHitArea(...)` can add an analytic hit
+region when the visible content is too small or contains gaps.
 
-`GLContainer` implementiert `GLMouseTarget` und setzt sich beim Rendering
-automatisch mit lokalem Ursprung `(0,0)`, solange
-`isMouseTargetEnabled()` nicht `false` liefert.
+## Pick results and events
 
-## Ereignisse
+`pickResult(x,y)` returns `GLPickResult.none()` or a hit containing the numeric
+ID, target, screen coordinates, and—when available—target-local coordinates.
+Use `hasId()`, `hasTarget()`, `hasLocalPosition()`, `getId()`, `getTarget()`,
+and `getTarget(Class<T>)` to inspect it.
 
-`GLMouseTarget` besitzt Defaultmethoden für:
+`GLMouseEvent` exposes button, click count, modifiers, timestamp, screen and
+local coordinates, deltas, and the original AWT event. Call `consume()` to stop
+further dispatch. `GLMouseWheelEvent` additionally exposes precise rotation,
+wheel rotation, scroll amount, and scroll type.
 
-- `mouseEntered`, `mouseExited`, `mouseMoved`,
-- `mousePressed`, `mouseDragged`, `mouseReleased`,
-- `mouseCaptureLost`, `mouseClicked`,
-- `mouseWheelMoved(GLMouseWheelEvent)`.
+Targets can use `GLPickResult#toScreen(localX,localY)`, `at(...)`, and
+`retarget(...)` when forwarding an interaction through a composite component.
 
-`GLMouseEvent` stellt bereit:
+## Pointer capture
 
-| Daten | Methoden |
-|---|---|
-| Original-AWT-Event | `getOriginalEvent` |
-| Treffer | `getPickResult`, `getTarget` |
-| Screenposition | `getScreenX`, `getScreenY` |
-| Lokale Position | `hasLocalPosition`, `getLocalX`, `getLocalY` |
-| Dragdelta | `getDeltaX`, `getDeltaY` |
-| Maustaste/Clicks/Modifier/Zeit | `getButton`, `getClickCount`, `getModifiersEx`, `getWhen` |
-| Eventfluss | `consume`, `isConsumed` |
-| Pointer | `requestPointerWarp`, `getPointerController` |
+The host's `GLPointerController` keeps drag and release events routed to the
+pressed target even when the pointer leaves it. A target receives
+`mouseCaptureLost` if capture ends unexpectedly. Pointer warping is available
+through `requestPointerWarp(...)`; use it only for interactions that require
+unbounded relative movement.
 
-Screenposition, Dragdelta und Pointer-Warp verwenden logische, zum Host
-lokale Screenpixel. Lokale X/Y-Werte liegen nach inverser Draw-Transformation
-im Benutzerkoordinatenraum des Ziels. Maustaste, Klickzahl und Modifier sind
-dimensionslose Integerwerte; `getWhen` übernimmt den AWT-Zeitstempel in
-Millisekunden seit der Epoche.
+## Alpha and output masks
 
-`GLMouseWheelEvent` ergänzt `getWheelRotation`, `getPreciseWheelRotation`,
-`getScrollAmount`, `getScrollType`.
-
-## `GLPickResult`
+Texture-backed commands apply `setTexturePickAlphaThreshold(float)` to texture
+alpha multiplied by tint alpha. This prevents transparent pixels from becoming
+hits. Analytic shapes, text, and UI geometry use their own fragment coverage.
 
 ```java
-GLPickResult hit = canvas.pickResult(mouseX, mouseY);
-if (hit.isHit()) {
-    int id = hit.getId();
-    GLMouseTarget object = hit.getTarget();
-}
-```
-
-Methoden:
-
-- `none`, `isHit`, `hasId`, `getId`,
-- `hasTarget`, `getTarget`, `getTarget(Class<T>)`,
-- `getScreenX/Y`, `hasLocalPosition`, `getLocalX/Y`,
-- `toScreen(localX,localY)`,
-- `at(newScreenX,newScreenY)` mit derselben eingefrorenen Transform,
-- `retarget(newTarget)` für Event-Bubbling zu einem Parent.
-
-Lokale Koordinaten entstehen durch die beim Drawcall gespeicherte inverse
-Transform. Bei einer nicht invertierbaren Transform ist
-`hasLocalPosition()` false.
-
-## Maus-Capture
-
-Nach `mousePressed` kann der Inputdispatcher das getroffene Ziel für den Drag
-capturen. Dadurch gehen Drag/Release weiter an dasselbe Objekt, auch wenn der
-Cursor seine sichtbare Geometrie verlässt. Wird das Ziel entfernt oder die
-Capture anderweitig ungültig, folgt `mouseCaptureLost`.
-
-`requestPointerWarp(x,y)` unterstützt endlose Draggesten wie den FREE-Slider.
-Die Hostimplementierung unterdrückt das daraus entstehende künstliche
-Mausevent. Der `GLPointerController` erlaubt außerdem Cursoränderungen über den
-jeweiligen Fensterbackend.
-
-## Textur-Alpha
-
-```java
-g.setTexturePickAlphaThreshold(0.2f);
-```
-
-Für Texture-Batches wird `textureAlpha * tintAlpha >= threshold` geprüft. Die
-Alphawerte und der Threshold sind dimensionslose Werte von `0..1`. Die
-Grenze gilt für `drawTexture`, `drawImage` und `drawRenderTarget` sowie für
-texturgebundene Instanzen des UI-Batches wie `drawUIImage` und Icons. Filled,
-Standardtext und rein analytische UI-Geometrie sind nicht betroffen.
-
-## Color und Picking getrennt schreiben
-
-```java
-g.setOutputMask(true, false);
-drawDecorationOnly(g);
-
 g.setOutputMask(false, true);
-g.addUIHitArea(20, 20, 260, 50);
-
+drawPickingOnly(g);
 g.setOutputMask(true, true);
 ```
 
-Zustandswechsel flushen und sind recordbar. Beide Outputs sind zu Framebeginn
-aktiv. Die Outputmaske steuert jede nachfolgende Geometrie. `addUIHitArea` ist
-dagegen ein konkreter unsichtbarer UI-Zeichenbefehl: Er erzeugt eine
-rechteckige Pickingfläche, aber absichtlich keine Farbausgabe.
+Color and picking writes can be enabled independently. `drawTexture`,
+`drawImage`, `drawUIImage`, and `drawRenderTarget` preserve their configured
+pick behavior. A render target must have picking enabled to retain pick data.
 
-## Asynchroner Snapshot
+## Timing and lifetime
 
-Der normale Hoverpfad liest den bereits verfügbaren Picking-Snapshot statt die
-GPU bei jeder Mausbewegung synchron anzuhalten. Dadurch kann ein Treffer bei
-einer View-/Geometrieänderung höchstens kurz hinterherhinken, die Framerate und
-gefühlte Latenz sind aber deutlich besser. Explizite Hostabfragen verwenden
-ebenfalls die aktuelle Snapshotlogik.
+Picking normally reads an asynchronous snapshot from the last rendered frame;
+event handlers should not assume that newly submitted geometry is immediately
+available. `repaintAndRebuildPicking(source)` requests a fresh frame and pick
+snapshot. Immediate CPU picking is available on selected UI hosts for cases
+such as menu hover.
 
-Wenn eine Strukturänderung sofort eine neue Pickingdarstellung benötigt, sorgt
-die Component-/Host-Infrastruktur über Repaint und Picking-Invalidierung für
-den Neuaufbau. `repaintAndRebuildPicking(source)` ist der gezielte Hostweg.
-
-## Recording und Referenzen
-
-Pick-IDs werden als Werte gespeichert. MouseTargets werden in Recordings per
-`WeakReference` gehalten: Ein Recording verhindert nicht, dass ein sonst nicht
-mehr erreichbares Objekt vom Garbage Collector entfernt wird. Beim Replay ist
-ein eingesammeltes Ziel einfach nicht mehr interaktiv.
-
-## Grenzen und typische Fehler
-
-- Pick-ID/MouseTarget nach temporärem Einsatz löschen oder bewusst ersetzen.
-- Nach `setOutputMask(false,true)` den Normalzustand restaurieren.
-- Bei mehreren sichtbaren Treffern gewinnt der zuletzt darüber gezeichnete
-  Pixel; Z-Order ist daher automatisch berücksichtigt.
-- Ein Layer-Schatten/Glow ist nicht pickbar, weil Effekte den Picking-FBO nicht
-  nachträglich verändern.
-- Lokale Koordinaten beziehen sich auf den gesetzten/automatischen Ursprung,
-  nicht automatisch auf beliebige Objektbounds.
+Recordings preserve numeric IDs. Direct mouse targets are stored as
+`WeakReference`s, so a recording does not keep a detached component alive.
+`isMouseTargetEnabled()` allows a target to reject interaction without changing
+the recorded geometry.

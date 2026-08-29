@@ -1,65 +1,57 @@
-# GLSwingNext
+# GLSwing
 
-GLSwingNext ist eine leichtgewichtige, JOGL-basierte 2D-Grafik- und
-GUI-Bibliothek für Java. Sie verbindet eine an `Graphics2D` angelehnte API mit
-GPU-Batching, scharfem MSDF-Text, Picking, wiederverwendbaren Recordings,
-Layer-Effekten und eigenen GPU-gerenderten Bedienelementen.
+GLSwing is a GPU-accelerated 2D rendering and user-interface library for Java.
+It combines a `Graphics2D`-inspired drawing API with JOGL-based batching,
+high-quality text, retained UI components, GPU picking, off-screen rendering,
+layer effects, and a node-editor toolkit.
 
-Das Projekt befindet sich in aktiver Entwicklung. Die aktuelle API ist die
-einzige unterstützte Fassung; veraltete Zwischenstände werden nicht durch eine
-Kompatibilitätsschicht konserviert.
+The library can run as a standalone OpenGL application, inside a conventional
+`JFrame`, or as an OpenGL-backed component in an existing Swing interface.
 
-## Java-Voraussetzungen
+> **Project status:** GLSwing 0.1.0 is an early-access release. The library is
+> usable, but its API may change between releases while the public surface is
+> refined.
 
-GLSwingNext wird mit Java 17 als Mindest- und API-Ziel kompiliert. Anwendungen
-können die Bibliothek daher unter Java 17 oder jeder neueren Java-Version
-verwenden. Für die Entwicklung empfiehlt sich ein aktuelles LTS-JDK; Eclipse
-Temurin 25 ist eine freie, Java-SE-kompatible OpenJDK-Distribution und eine
-sinnvolle Standardwahl. Das neuere Entwicklungs-JDK ändert die erzeugte
-Java-17-Kompatibilität nicht, solange der Compiler mit Release 17 arbeitet.
+## Highlights
 
-Maven kompiliert deshalb unabhängig vom verwendeten Entwicklungs-JDK mit
-`--release 17`. Ein konfiguriertes Temurin 25 kann den Build ausführen; es muss
-kein separates JDK 17 installiert werden.
+- batched shape, stroke, image, text, UI, and 2.5D sprite rendering;
+- logical-pixel coordinates with HiDPI-aware output;
+- paths, cubic Bézier curves, SVG import, dashed strokes, caps, and joins;
+- crisp MSDF text and icons plus automatic RGBA texture atlases;
+- model transforms, projections, cameras, depth testing, normal maps, and light;
+- color-ID and object-target picking with pointer capture;
+- reusable recordings and GPU-resident sprite buffers;
+- nested layers with opacity, blend modes, blur, shadows, outlines, and clips;
+- persistent render targets and ping-pong feedback for GPU simulations;
+- retained UI controls, layouts, themes, localization, dialogs, and undo/redo;
+- an interactive node-editor foundation with ports and Bézier connections.
 
-## Build und JOGL
+## Requirements
 
-GLSwing bindet JOGL 2.6.0 reproduzierbar über Maven Central ein. Benötigt
-werden weder eine lokale `jogamp-fat.jar` noch manuell kopierte native
-Bibliotheken:
+- Java 17 or newer;
+- a desktop OpenGL implementation supported by JOGL 2.6.0;
+- Maven 3.9.11 or the included Maven Wrapper when building from source.
 
-```bash
-./mvnw clean verify
-```
+GLSwing targets Java 17 bytecode. A newer JDK can build the project because the
+Maven compiler is configured with `--release 17`.
 
-Unter Windows lautet derselbe Aufruf `mvnw.cmd clean verify`. Der eingecheckte
-Maven Wrapper lädt bei Bedarf die festgelegte Maven-Version 3.9.11; eine lokale
-Maven-Installation ist nicht erforderlich.
+## Installation
 
-Der Build besteht aus zwei Modulen:
+### Build and install from source
 
-| Modul | Inhalt |
-|---|---|
-| `glswing-core` | Bibliothek, interne Shader, Themes, Sprachen und Tests |
-| `glswing-examples` | Demos und Benchmarks; wird nicht Teil des Core-JARs |
-
-Das Release-Profil erzeugt zusätzlich das Javadoc-JAR:
-
-```bash
-./mvnw -Prelease clean package
-```
-
-Danach liegen Binary-, Source- und Javadoc-JAR unter
-`glswing-core/target`.
-
-`glswing-core/target/glswing-0.1.0.jar` ist ein schlankes
-Bibliotheks-JAR. JOGL, GlueGen und die plattformspezifischen nativen JARs
-bleiben normale transitive Abhängigkeiten. Für ein lokales Projekt kann die
-Bibliothek zunächst installiert werden:
+Clone the repository and install the library into the local Maven repository:
 
 ```bash
 ./mvnw clean install
 ```
+
+On Windows:
+
+```powershell
+mvnw.cmd clean install
+```
+
+Then add GLSwing to the application POM:
 
 ```xml
 <dependency>
@@ -69,213 +61,129 @@ Bibliothek zunächst installiert werden:
 </dependency>
 ```
 
-Das Core-JAR besitzt den stabilen Manifestnamen
-`Automatic-Module-Name: com.vingame.glswing`. Ein eigenes `module-info.java`
-wird vorerst bewusst nicht ausgeliefert, weil JOGL 2.6.0 seine Java-Pakete als
-automatische Module bereitstellt. Dadurch läuft GLSwing klassisch auf dem
-Classpath und erzeugt keine Warnung über `requires transitive` auf ein
-automatisches Modul.
+JOGL, GlueGen, and their platform-specific native libraries are declared as
+transitive Maven dependencies. No manually managed `jogamp-fat.jar` is needed.
 
-### Eclipse
+### Use the release JAR directly
 
-Eclipse/m2e verwendet beim Import standardmäßig den Maven-`artifactId` als
-Projektnamen. Das Core-Modul heißt deshalb in Eclipse `glswing` und kollidiert
-unter Windows mit einem noch registrierten Altprojekt `GLSwing`, obwohl sich
-die Schreibweise unterscheidet.
+`glswing-0.1.0.jar` is the runtime library and can be added to a Java project's
+classpath like any other JAR. When Maven is not used, the JOGL and GlueGen
+runtime JARs, including the native JARs for the target platform, must also be
+present.
 
-Empfohlen: Das alte Projekt `GLSwing` mit **Delete** aus dem Eclipse-Workspace
-entfernen, dabei **Delete project contents on disk** ausdrücklich nicht
-aktivieren. Danach über **File → Import → Existing Maven Projects** den Ordner
-`GLSwingNext` auswählen und die drei Maven-Projekte importieren. Die
-vorhandenen `.launch`-Dateien verwenden diese Standardnamen.
+The optional artifacts improve IDE integration:
 
-Falls beide Projekte gleichzeitig im selben Workspace bleiben müssen, im
-Importdialog unter **Advanced → Name template** stattdessen
-`[groupId].[artifactId]` wählen. Das ergibt eindeutige Namen wie
-`com.vingame.glswing`; entsprechende Launch-Konfigurationen müssen dann einmal
-auf diese Projektnamen umgestellt werden.
+- `glswing-0.1.0-sources.jar` provides navigable source code;
+- `glswing-0.1.0-javadoc.jar` provides offline API documentation.
 
-Eclipse/m2e erzeugt die Classpath-Konfiguration aus den POM-Dateien; ein
-absoluter JOGL-JAR-Pfad ist nicht mehr nötig.
+The main artifact declares
+`Automatic-Module-Name: com.vingame.glswing` and works on both the classpath and
+the module path as an automatic module.
 
-## Dokumentation
+## Quick start
 
-- [Dokumentationsübersicht](docs/README.md)
-- [Grafikpipeline und `GLContext2D`](docs/graphics-pipeline.md) – vollständige
-  Befehls- und Konfigurationsreferenz mit Beispielen für Shader, Atlanten,
-  Recording, Picking, Layer und RenderTargets
-- [UI-Framework](docs/ui-framework.md) – Komponenten, Hosts, Layouts, alle
-  Controls, Themes, Sprachen, Undo/Redo und das Node-System
-- [Offene Vorhaben](TODO.md)
-
-Die README bleibt bewusst kurz. Ausführliche Anleitungen gehören nach `docs`,
-vollständig startbare Szenen nach
-`glswing-examples/src/main/java/com/vingame/glswing/demo` und gezielte
-Regressionstests nach
-`glswing-core/src/test/java/com/vingame/glswing/test`.
-
-## Schnellstart mit `GLFrame`
-
-`GLFrame` kombiniert `JFrame`, direkte `GLSwingContainerCanvas`, Animator und
-sicheren Shutdown. Der manuelle Aufbau mit `JFrame` und Canvas sowie die
-Einbettung per `GLSwingPanel` bleiben ebenfalls unterstützt.
+`GLFrame` provides a managed standalone window with a direct OpenGL canvas,
+render loop, root component hierarchy, and orderly shutdown:
 
 ```java
-GLFrame.RenderingSettings rendering = GLFrame.RenderingSettings.DEFAULT
-        .withAntialiasingSamples(4)
-        .withVSync(true)
-        .withTargetFps(144);
+import java.awt.Color;
 
-GLFrame frame = new GLFrame("Anwendung", rendering);
-frame.setSize(1280, 800);
-frame.setRenderResolutionScale(1f);
-frame.setGLClearColor(new Color(20, 25, 35));
-frame.addGL(root);
-frame.setVisible(true);
+import com.vingame.glswing.component.GLContainer;
+import com.vingame.glswing.component.GLFrame;
+import com.vingame.glswing.layout.GLConstraints;
+import com.vingame.glswing.layout.GLGridLayout;
+import com.vingame.glswing.rendering.GLContext2D;
+import com.vingame.glswing.ui.GLButton;
+import com.vingame.glswing.ui.GLLabel;
+
+public final class HelloGLSwing {
+    public static void main(String[] args) {
+        GLContainer root = new GLContainer() {
+            @Override
+            protected void record(GLContext2D g) {
+                // Draw cached component visuals here when needed.
+            }
+        };
+        root.setGLLayout(new GLGridLayout(1).withGap(8));
+        root.setGLPadding(16);
+
+        GLLabel status = new GLLabel("Ready");
+        GLButton button = new GLButton("Start");
+        button.addActionListener(event -> status.setText("Running"));
+
+        root.addGL(status, GLConstraints.auto().fillHorizontal());
+        root.addGL(button, GLConstraints.auto().fillHorizontal());
+
+        GLFrame frame = new GLFrame("GLSwing");
+        frame.setGLClearColor(new Color(20, 24, 32));
+        frame.addGL(root);
+        frame.packGL();
+        frame.setVisible(true);
+    }
+}
 ```
 
-Geerbte Swing-Inhaltsmethoden wie `add(Component)`, `setContentPane(...)` und
-`setJMenuBar(...)` funktionieren technisch, sind auf `GLFrame` aber deprecated.
-Für garantiertes GLSwing-Verhalten dienen `addGL(...)` und die GPU-gerenderte
-Menüleiste. `getGLCanvas()` gibt bei Bedarf Zugriff auf den direkten Canvas.
+For immediate-mode rendering, subclass `GLSwingCanvas` or `GLSwingPanel` and
+implement its rendering callback with `GLContext2D`. For a retained interface,
+compose `GLContainer` and the standard controls, then attach the root container
+with `addGL(...)`.
 
-Unter Windows benötigt der direkte Canvas zusätzliche `--add-opens`-Argumente.
-Die mitgelieferten Eclipse-Launch-Konfigurationen enthalten sie bereits.
+## Documentation
 
-## Funktionsumfang
+The [user guide](docs/README.md) is the entry point for the complete
+documentation:
 
-### Grafikpipeline
+- [Rendering guide and `GLContext2D` reference](docs/graphics-pipeline.md)
+- [UI framework and component reference](docs/ui-framework.md)
+- [Examples and recommended learning paths](docs/README.md#examples)
+- [Release notes](CHANGELOG.md)
 
-- gebatchte Filled-, Texture-, Text- und 2.5D-Sprite-Pipelines
-- universeller instanzierter UI-Batch für Controls, MSDF-Text und Icons
-- Linien, Dashes, Caps, Joins, Offset und World-/Screen-Space-Breiten
-- Polygone, Beziers, `GLPath2D` und SVG-Import
-- Model-Transforms, Projektionen und `GLCamera2D`
-- numerisches Picking oder direkte `GLMouseTarget`-Ziele
-- Recordings mit verschachtelbaren Laufzeitparametern
-- GPU-residente statische Sprite-Puffer mit relativem Draw-Transform
-- verschachtelte, begrenzte Layer mit Blendmodi und Effektketten
-- persistente RenderTargets und Ping-Pong-Feedback ohne CPU-Readback
-- optionaler Z-Buffer sowie Sprite-Materialien mit Color-, Depth- und Normalmap
-- Cutout-/Blend-Alpha, depth-korrektes Picking und Ambient-/Richtungslicht
-- eigene Filled-, Texture-, Text- und Layer-Shader mit typgeprüften Uniforms
-- automatische RGBA-Atlanten, Mipmapping, MSDF-Icons und adaptive SVG-Rasterung
+The generated Javadoc is the authoritative member-level API reference. The
+guides explain concepts, units, lifecycle rules, interactions between systems,
+and recommended usage patterns.
 
-### GUI
+## Examples
 
-- leichte `GLContainer`-Hierarchie mit Layout, Culling und Damage-Tracking
-- Buttons, Checkboxen, Slider, ComboBoxen, Menüs und Menüleisten
-- Texteditoren, Tabs, Scrollbereiche und Dialoge
-- gruppierte Slider und interaktive Node-Editor-Grundlagen
-- Z-Order, Themes, Sprachen und Undo/Redo
+The `glswing-examples` module contains complete applications for drawing,
+recording, custom shaders, layers, image atlases, render targets, picking,
+2.5D sprites, UI controls, and node editing. Build it together with the library:
 
-## Wichtige Demos
+```bash
+./mvnw -pl glswing-examples -am package
+```
 
-| Demo | Zweck |
+Useful starting points include:
+
+| Example | Demonstrates |
 |---|---|
-| `GuiShowcaseDemo` | Gesamtdemo der GUI-Controls und Zustände |
-| `CanvasGuiShowcaseDemo` | Gleiche GUI über den direkten Canvas |
-| `GLFrameDemo` | Verwaltetes Standalone-Fenster |
-| `DrawingApiDemo` | Formen, Linien und Farben pro Punkt |
-| `PathDemo`, `SvgImportDemo` | Pfade, Strokes und SVG-Dokumente |
-| `CustomShaderDemo` | Eigene Filled-, Texture- und Textshader |
-| `RecordingParameterDemo` | Recordings und Laufzeitparameter |
-| `LayerDemo` | Gruppen-Alpha, Blendmodi und Effekte |
-| `ImageAtlasDemo` | Bilder, Icons, Atlanten und adaptives Rasterisieren |
-| `DepthSpriteDemo` | Pixelgenaue Sprite-Tiefe, Normalmaps, Licht und Picking |
-| `SpritePipelineBenchmarkDemo` | Interaktiver End-to-End-Vergleich von Kanälen, Alpha, Bewegung und Picking |
-| `SpritePipelineBenchmark` | Reproduzierbare Offscreen-CPU-/GPU-Messung ohne Präsentation |
-| `ResidentSpriteBenchmark` | Direkter A/B-Test von dynamischen und GPU-residenten Sprite-Instanzen |
-| `PickingDemo` | Picking für Formen, Texturen und Text |
-| `NodeEditorDemo` | Interaktiver Node-Editor |
-| `GameOfLifeDemo` | RenderTargets und GPU-Ping-Pong |
+| `GLFrameDemo` | Managed standalone window |
+| `DrawingApiDemo` | Shapes, strokes, and per-vertex colors |
+| `GuiShowcaseDemo` | Controls, layouts, themes, and dialogs |
+| `CustomShaderDemo` | Custom rendering programs and uniforms |
+| `RecordingParameterDemo` | Reusable recorded drawing commands |
+| `LayerDemo` | Group compositing and effects |
+| `ImageAtlasDemo` | Images, icons, atlases, and adaptive SVG rasterization |
+| `DepthSpriteDemo` | Sprite depth, normal maps, lighting, and picking |
+| `NodeEditorDemo` | Nodes, ports, selection, and connections |
+| `GameOfLifeDemo` | Render-target feedback entirely on the GPU |
 
-Die zugehörigen `.launch`-Dateien starten die wichtigsten Szenen direkt in
-Eclipse. Performancewerte stehen in den entsprechenden Fenstertiteln oder
-Statusanzeigen.
+## Building release artifacts
 
-## GUI-Kurzbeispiel
+The project is a Maven reactor with two modules:
 
-```java
-GLScrollPane scrollPane = new GLScrollPane(largeContent);
+| Module | Artifact |
+|---|---|
+| `glswing-core` | Runtime library, resources, and tests |
+| `glswing-examples` | Demonstrations and benchmarks |
 
-GLTabbedPane tabs = new GLTabbedPane();
-tabs.addTab("Liste", scrollPane);
-tabs.addTab("Einstellungen", settings);
-tabs.setEnabledAt(1, false);
+Run the release profile to create the binary, source, and Javadoc JARs:
 
-frame.addGL(tabs);
+```bash
+./mvnw -Prelease clean verify
 ```
 
-`GLScrollPane` zeigt Scrollbars bei Bedarf und unterstützt verschachteltes
-Clipping. `GLTabbedPane` kürzt zu breite Titel und scrollt seine Tab-Leiste,
-wenn selbst die Mindestbreiten nicht mehr passen.
+Artifacts are written to `glswing-core/target`.
 
-## Dialoge
+## License
 
-`GLDialog` zeigt einen `GLContainer` als frei bewegliches, an seinen Owner
-gekoppeltes Betriebssystemfenster. Verschachtelte Dialoge werden an den direkt
-aufrufenden Dialog gekoppelt.
-
-```java
-GLDialog dialog = new GLDialog("Einstellungen", settingsContainer);
-dialog.setSize(520, 360);
-dialog.setModality(GLDialog.Modality.OWNER_MODAL);
-dialog.show(owner);
-dialog.closedFuture().thenRun(() -> System.out.println("geschlossen"));
-```
-
-## Themes und Sprachen
-
-Das vollständige Standard-Theme liegt ausschließlich unter
-`glswing-core/src/main/resources/com/vingame/glswing/themes/default.gltheme`.
-`dark.gltheme` und `light.gltheme` überschreiben nur ihre Abweichungen. Eigene
-Dateien werden mit `GLThemeLoader.load(Path)` geladen; `GLThemeWatcher` kann
-sie während der Entwicklung live neu laden.
-
-```properties
-theme.extends=dark
-palette.accent=rgba(1f, 0.5f, 0.5f, 1f)
-state.pressed=${palette.accent}
-metrics.cornerRadius=7
-```
-
-Farben unterstützen `#RRGGBB`, `#RRGGBBAA`, `rgb(...)` und `rgba(...)` mit
-0–255-Werten, Floatwerten `0f..1f` oder Prozenten. Freie Tokens bleiben über
-`theme.values()` für eigene Controls zugänglich.
-
-`GLLocalizer` liest UTF-8-Properties mit der üblichen Locale-Kette, zum
-Beispiel `de_AT -> de -> Root`. Anwendungstexte können ein eigenes Bundle und
-direkte Overrides vor das Bibliotheksbundle setzen:
-
-```java
-GLLocalizer texts = GLLocalizer.forLocale(Locale.GERMAN)
-        .withBundle("com.example.languages.Messages")
-        .with("myapp.special", "Spezial");
-frame.setGLLocalizer(texts);
-```
-
-## Tests
-
-Die Klassen unter `com.vingame.glswing.test` sind eigenständig startbare CPU-,
-GPU- und Robot-Regressionstests. Sie bleiben getrennt von Demos, damit Fehler in
-Rendering, Recording und Eingabe gezielt reproduzierbar sind.
-
-## Ressourcenstruktur
-
-```text
-glswing-core/src/main/resources/com/vingame/glswing/
-  languages/   UTF-8-Properties und Locale-Fallbacks
-  themes/      default.gltheme, dark.gltheme und light.gltheme
-  shaders/     interne Vertex- und Fragmentshader
-```
-
-Pflichtressourcen wie Root-Sprache, Standard-Theme und interne Shader gehören
-zur Bibliothek. Fehlen sie, meldet GLSwing den Fehler klar, statt still eine
-abweichende Ersatzdarstellung zu verwenden.
-
-## Lizenz
-
-GLSwing wird unter der [Apache License 2.0](LICENSE) veröffentlicht. Sie erlaubt
-private und kommerzielle Nutzung, Änderung und Weitergabe; maßgeblich ist der
-vollständige Lizenztext im Repository und in den erzeugten JAR-Dateien.
+GLSwing is available under the [Apache License 2.0](LICENSE).

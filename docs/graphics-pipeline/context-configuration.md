@@ -1,118 +1,82 @@
-# Context konfigurieren
+# Context Configuration
 
-[Zur API-Landkarte](../graphics-pipeline.md) · [Weiter: Zeichenbefehle](drawing.md)
+[Rendering guide](../graphics-pipeline.md) · [Next: Drawing commands](drawing.md)
 
-`GLContext2D` wird zu Beginn jedes Frames auf definierte Defaults gesetzt. Ein
-`GLContainer` sichert beim Zeichnen zusätzlich Transform, Farbe, Stroke und
-Pickingzustand und stellt sie danach wieder her. Innerhalb eines eigenen
-Renderhooks sollten temporäre Änderungen trotzdem möglichst lokal und bewusst
-bleiben.
+`GLContext2D` begins every frame with defined defaults. `GLContainer` restores
+its transform, paint, stroke, and picking state after rendering. Keep temporary
+state changes local and balance every begin/end operation.
 
-## Inhalt
+## Contents
 
-- [Einheiten](#einheiten)
-- [Zeichenstil](#zeichenstil)
-- [Koordinatensysteme](#koordinatensysteme)
-- [Depth und Licht](#depth-und-licht)
-- [Frameausgaben und Clipping](#frameausgaben-und-clipping)
-- [Shaderzustände](#shaderzustände)
-- [Getter und Kopien](#getter-und-kopien)
+- [Units](#units)
+- [Paint and strokes](#paint-and-strokes)
+- [Coordinate systems](#coordinate-systems)
+- [Depth and lighting](#depth-and-lighting)
+- [Outputs and clipping](#outputs-and-clipping)
+- [Shader state](#shader-state)
+- [Returned values](#returned-values)
 
-## Einheiten
+## Units
 
-| Wertart | Einheit |
+| Value | Unit |
 |---|---|
-| Lokale X/Y-Koordinaten, Breiten und Höhen | Aktuelle Benutzerkoordinaten; mit `TOP_LEFT_PIXELS` logische Pixel |
-| Screen-Werte | Logische Pixel, unabhängig von der physischen HiDPI-Auflösung |
-| Winkel | Radiant; im Top-Left-System wirkt ein positiver Winkel optisch im Uhrzeigersinn |
-| Transform-Skalierung, Miter-Limit, Alpha und Schwellwerte | Dimensionslos |
-| Farben | `java.awt.Color`; Integer-Kanäle `0..255` |
+| Local coordinates | Current user space; logical pixels with `TOP_LEFT_PIXELS` |
+| Screen measurements | Logical pixels, independent of HiDPI framebuffer scale |
+| Angles | Radians; clockwise is positive in top-left coordinates |
+| Scale, alpha, and thresholds | Dimensionless |
+| Colors | `java.awt.Color` |
 
-„Logischer Pixel“ meint die Swing-/Benutzergröße. Der Renderer rechnet diese
-bei Windows-Skalierung mit dem Device-Scale in physische Framebufferpixel um.
+## Paint and strokes
 
-## Zeichenstil
-
-### Farbe
+The context color supplies the default for overloads without an explicit
+`Color`; a color argument affects only that command.
 
 ```java
 g.setColor(new Color(70, 140, 230));
-g.fillRect(20, 20, 120, 50);  // verwendet Contextfarbe
-Color current = g.getColor();
+g.fillRect(20, 20, 120, 50);
+g.fillCircle(200, 45, 25, Color.ORANGE);
 ```
 
-Die Contextfarbe gilt für Overloads ohne eigenes `Color`-Argument. Ein
-explizites `Color` gilt nur für den jeweiligen Befehl. Die Alpha-Komponente ist
-wie bei `java.awt.Color` ein Kanalwert von `0..255` und wird intern auf `0..1`
-normalisiert.
+### Strokes
 
-### Stroke
-
-`GLStroke` ist unveränderlich. Der Context bietet sowohl `setStroke` als auch
-Komfortsetter, die intern eine veränderte Kopie erzeugen.
+`GLStroke` is immutable. Context convenience setters replace it with a modified
+copy.
 
 ```java
 GLStroke stroke = new GLStroke(3)
         .withCap(GLStroke.Cap.ROUND)
         .withJoin(GLStroke.Join.ROUND)
         .withMiterLimit(8)
-        .withOffset(0)
         .withCurveTolerance(GLStroke.CURVE_TOLERANCE_FINE)
         .withWidthSpace(GLStroke.WidthSpace.SCREEN)
         .withDash(new float[] { 10, 6, 2, 6 }, 3);
 g.setStroke(stroke);
 ```
 
-| Eigenschaft | Einheit | Wirkung |
-|---|---|---|
-| Width | `WORLD`: lokale Benutzerkoordinaten; `SCREEN`: logische Pixel | Gesamtdicke, muss positiv sein |
-| Cap | – | `BUTT` endet am Punkt, `SQUARE` verlängert um eine halbe Strichbreite, `ROUND` halbkreisförmig |
-| Join | – | `MITER` spitz, `BEVEL` abgeschnitten, `ROUND` gerundet |
-| Miter limit | Dimensionsloses Verhältnis, mindestens `1` | Maximal zulässige Miter-Länge relativ zum jeweiligen äußeren Stroke-Radius; darüber wird sicher abgeschnitten |
-| Offset | Derselbe Raum wie Width | Verschiebt die Stroke-Mitte entlang der Pfadnormalen; `0` ist mittig |
-| Curve tolerance | Logische Screenpixel | Maximale sichtbare Abweichung runder Stroke-Geometrie; kleiner erzeugt mehr Segmente |
-| Width space | – | `WORLD` zoomt mit, `SCREEN` bleibt kosmetisch konstant |
-| Dash array | Derselbe Raum wie Width | Abwechselnd sichtbare und leere positive Längen |
-| Dash phase | Derselbe Raum wie Width | Bereits verbrauchte Musterlänge am Pfadanfang |
+| Property | Unit and behavior |
+|---|---|
+| Width | User units in `WORLD`; logical pixels in `SCREEN`; must be positive |
+| Cap | `BUTT`, `SQUARE`, or `ROUND` |
+| Join | `MITER`, `BEVEL`, or `ROUND` |
+| Miter limit | Dimensionless ratio of at least `1` |
+| Offset | Same space as width; `0` centers the stroke |
+| Curve tolerance | Maximum visible error in logical pixels |
+| Dash array and phase | Same space as width; all lengths are positive |
 
-Offset, Dash-Muster und Dash-Phase folgen also gemeinsam dem `WidthSpace`: Bei
-`WORLD` skalieren sie mit Model/View, bei `SCREEN` bleiben sie in logischen
-Bildschirmpixeln konstant. Das Miter-Limit ist dagegen immer nur ein Verhältnis
-und hat keine Längeneinheit.
+Odd-length dash arrays repeat like `BasicStroke` patterns. `withoutDash()`
+returns a solid stroke and `getStrokeDash()` returns a defensive copy or
+`null`. `GLStroke.DEFAULT` is a solid, one-unit world-space stroke.
 
-Bei einem ungeraden Dash-Array wird das Muster wiederholt wie bei
-`BasicStroke`. `getStrokeDash()` liefert eine defensive Kopie oder `null`.
-`setStrokeDashPhase` ist nur bei aktivem Muster erlaubt.
+`setCurveTolerance(float)` controls filled curves, paths, and rounded shapes;
+`setStrokeCurveTolerance(float)` controls stroke geometry. Presets are
+`CURVE_TOLERANCE_COARSE` (`0.4f`), `NORMAL` (`0.2f`), and `FINE` (`0.1f`).
 
-Die immutable `GLStroke`-API spiegelt alle Werte mit `getWidth`, `getCap`,
-`getJoin`, `getMiterLimit`, `getOffset`, `getCurveTolerance`, `getWidthSpace`,
-`getDashArray`, `getDashPhase` und `isDashed`. Fluent Kopien entstehen über
-`withWidth`, `withCap`, `withJoin`, `withMiterLimit`, `withOffset`,
-`withCurveTolerance`, `withWidthSpace`, `withDash`, `withDashPhase` und
-`withoutDash`. `DEFAULT` ist ein solider World-Space-Stroke mit Breite `1`.
+## Coordinate systems
 
-Strokezustand wird nicht als eigener Replay-Befehl gespeichert: Er wird beim
-Recording in die erzeugte Geometrie gebacken. Screen-Space-Geometrie speichert
-zusätzlich einen Compiler und wird beim Replay gecacht neu berechnet, sobald
-Transform oder View sich ändert.
-
-### Kurventoleranzen
-
-`setCurveTolerance(float)` steuert gefüllte runde Formen, Beziers und Paths.
-`setStrokeCurveTolerance(float)` gehört dagegen zum Stroke. Beide Werte sind
-maximale Abweichungen in logischen Screenpixeln: kleiner bedeutet glatter und
-mehr Geometrie. Voreinstellungen des Strokes:
-
-- `CURVE_TOLERANCE_COARSE = 0.4f` logische Pixel
-- `CURVE_TOLERANCE_NORMAL = 0.2f` logische Pixel
-- `CURVE_TOLERANCE_FINE = 0.1f` logische Pixel
-
-## Koordinatensysteme
-
-### Model-Transform
+### Model transform
 
 ```java
-GLTransform saved = g.getTransform(); // unabhängige Kopie
+GLTransform saved = g.getTransform();
 try {
     g.translate(200, 120);
     g.rotate((float) Math.toRadians(15));
@@ -123,147 +87,73 @@ try {
 }
 ```
 
-`translate` und Ankerkoordinaten verwenden lokale Benutzerkoordinaten,
-`rotate` Radiant und `scale` dimensionslose Faktoren. Positive Winkel wirken
-im üblichen Top-Left-Koordinatensystem optisch im Uhrzeigersinn.
-`rotate(radians, anchorX, anchorY)` rotiert um einen lokalen Anker.
-`resetTransform()` setzt Identität.
+`rotate(radians, anchorX, anchorY)` rotates around a local anchor;
+`resetTransform()` restores identity. Recordings start in identity model space
+and restore the previous transform when completed or cancelled.
 
-Model-Transforms werden auf Geometrie angewandt und müssen einen kompatiblen
-Batch nicht beenden. Während `beginRecording()` beginnt der Modelraum bewusst
-bei Identität; der vorherige Transform wird nach Ende/Abbruch restauriert.
+### `GLTransform` reference
 
-### GLTransform-Referenz
-
-`GLTransform` ist eine mutable affine 2D-Matrix. Konstruktoren: Identität,
-Kopiekonstruktor und sechs affine Werte. `m00`, `m10`, `m01` und `m11` sind
-dimensionslose lineare Faktoren; `m02` und `m12` sind Translationen in der
-jeweils transformierten Koordinateneinheit. Die fluent mutierenden Methoden
-geben dieselbe Instanz zurück.
-
-| Methoden | Zweck |
+| Methods | Purpose |
 |---|---|
-| `setToIdentity` | Identität setzen |
-| `setTransform(GLTransform)` / `(m00,m10,m01,m11,m02,m12)` | Matrix ersetzen |
-| `translate`, `rotate`, `scale` | Operation anhängen |
-| `concatenate` | Weitere affine Matrix anhängen |
-| `transform(float[],offset,count)` | X/Y-Punktpaare in-place transformieren; `offset` und `count` sind Arrayindex beziehungsweise Punktanzahl |
-| `transformVertices(float[],stride)` | Vertexarray mit X/Y am Stride-Anfang transformieren; `stride` ist die Float-Anzahl pro Vertex |
-| `transformX`, `transformY` | Einzelne Koordinate aus X/Y berechnen |
-| `isIdentity`, `isTranslation` | Spezialform testen |
-| `getScaleX`, `getScaleY`, `getShearX`, `getShearY` | Linearen Anteil lesen |
-| `getTranslateX`, `getTranslateY` | Translation lesen |
-| `copy` | Unabhängige Kopie |
-| `determinant` | Dimensionslose Determinante |
-| `getMaximumScale` | Größten wirksamen dimensionslosen Skalierungsfaktor abschätzen |
-| `createInverse` | Inverse Matrix; Fehler bei nicht invertierbarer Matrix |
-| `toMatrix4` | Spaltenmajor-`float[16]` für OpenGL |
+| `setToIdentity`, `setTransform(...)` | Replace the affine matrix |
+| `translate`, `rotate`, `scale`, `concatenate` | Append an operation |
+| `transform(float[],offset,count)` | Transform in-place X/Y pairs |
+| `transformVertices(float[],stride)` | Transform X/Y at the start of each vertex record |
+| `transformX`, `transformY` | Calculate one transformed component |
+| `isIdentity`, `isTranslation` | Test optimized forms |
+| `copy`, `createInverse` | Copy or invert the matrix |
+| `determinant`, `getMaximumScale` | Inspect invertibility and effective scale |
+| `toMatrix4` | Return a column-major OpenGL `float[16]` |
 
-`equals`, `hashCode` und `toString` vergleichen beziehungsweise beschreiben die
-sechs affinen Werte.
+### Projection and view
 
-### Projection und View
+Projection changes flush open batches because the matrix is a draw-call
+uniform.
 
-`setProjection` ändert die World-to-Clip-Matrix und flusht, weil diese Matrix
-eine Drawcall-Uniform ist.
-
-| Projection | Koordinatenraum |
+| Projection | Coordinates |
 |---|---|
-| `Projection2D.TOP_LEFT_PIXELS` | `(0,0)` links oben, logische Pixel |
-| `Projection2D.CENTERED_PIXELS` | Ursprung in Fenstermitte, logische Pixel |
-| `Projection2D.CENTERED_NORMALIZED` | Y `-1..1`, X mit Seitenverhältnis; dimensionslos |
-| `Projection2D.CLIP_SPACE` | X/Y `-1..1`, dimensionslos, Seitenverhältnis nicht korrigiert |
-| `Projection2D.fixed(transform)` | Unveränderliche eigene Matrix; Einheit durch diese Matrix definiert |
-
-```java
-g.setProjection(Projection2D.CENTERED_PIXELS);
-```
-
-`GLView2D` kombiniert die größenabhängige Berechnung in
-`createViewProjection(width,height)`; `width` und `height` sind logische
-Viewportpixel. `GLCamera2D` ist die fertige bewegliche View:
+| `TOP_LEFT_PIXELS` | Origin at top left; logical pixels |
+| `CENTERED_PIXELS` | Origin at viewport center; logical pixels |
+| `CENTERED_NORMALIZED` | Y spans `-1..1`; X is aspect-corrected |
+| `CLIP_SPACE` | X and Y span `-1..1`; no aspect correction |
+| `Projection2D.fixed(transform)` | Application-defined matrix |
 
 ```java
 GLCamera2D camera = new GLCamera2D(Projection2D.CENTERED_PIXELS);
-camera.setPosition(120, 40);                       // Projektionskoordinaten
-camera.setZoom(1.75f);                             // Faktor
-camera.setRotation((float) Math.toRadians(12));   // Radiant
+camera.setPosition(120, 40);
+camera.setZoom(1.75f);
+camera.setRotation((float) Math.toRadians(12));
 g.setView(camera);
 ```
 
-Weitere Kameramethoden: `move`, `rotate`, `zoomBy`, `setProjection`,
-`getProjection`, `getX`, `getY`, `getRotation`, `getZoom` sowie
-`createViewTransform` und `createViewProjection`.
-Projection/View-Wechsel sind recordbar und werden beim Replay erneut gesetzt.
+`GLView2D#createViewProjection(width,height)` receives the logical viewport
+size. Custom projections implement `Projection2D#create(width,height)`.
 
-`Projection2D` stellt zusätzlich die statischen Matrixfunktionen
-`topLeftPixels(width,height)`, `centeredPixels`, `centeredNormalized` und
-`clipSpace` bereit. `create(width,height)` ist die funktionale Kernmethode;
-Breite und Höhe sind logische Viewportpixel. `createViewProjection` delegiert
-darauf. Eigene Projektionen können als Lambda implementiert werden.
+`intersectsRedrawBounds(x,y,width,height)` tests transformed local bounds.
+`getScreenBounds(...)` returns `{x,y,width,height}` in logical screen pixels.
+`GLContainer` already performs component-level culling.
 
-### Screen-Bounds und Damage-Test
+## Depth and lighting
 
-```java
-if (g.intersectsRedrawBounds(x, y, width, height)) {
-    drawExpensiveThing(g);
-}
-float[] screen = g.getScreenBounds(x, y, width, height);
-```
+`setDepthState`, `setDepth`, `clearDepth`, and `setLighting` configure 2.5D
+rendering. Depth runs from `0` at the back to `1` at the front. Lighting values
+are non-negative dimensionless factors. See
+[Depth and 2.5D materials](depth-materials.md).
 
-Die Eingabebounds verwenden lokale Benutzerkoordinaten. Beide Methoden
-berücksichtigen Model und View; `getScreenBounds` liefert
-`{x, y, width, height}` als achsenparallele Bounds in logischen Screenpixeln.
-`GLContainer` nutzt diese Mechanik bereits für Culling; eigene Tests lohnen
-sich vor allem innerhalb großer dynamischer Renderhooks.
+## Outputs and clipping
 
-## Depth und Licht
-
-`setDepthState`, `setDepth`, `clearDepth` und `setLighting` bilden den
-2.5D-Zustand des Context. Tiefe ist dimensionslos (`0` hinten, `1` vorne),
-Lichtintensitäten sind dimensionslose nichtnegative Faktoren. Alle Änderungen
-sind recordbar; Depth-/Lichtwechsel flushen betroffene offene Batches.
-
-Die vollständige Semantik einschließlich Alpha, Maps, Picking und
-RenderTargets steht in [Depth und 2.5D-Materialien](depth-materials.md).
-
-## Frameausgaben und Clipping
-
-### Clear
+`clear()` uses `DEFAULT_CLEAR_COLOR`; `clear(Color)` submits open geometry and
+clears enabled outputs. `clearDepth()` clears the active depth attachment.
 
 ```java
-g.clear(new Color(18, 23, 34));
+g.setOutputMask(true, false);  // Color only
+g.setOutputMask(false, true);  // Picking only
+g.setOutputMask(true, true);   // Normal output
 ```
 
-`clear()` benutzt `DEFAULT_CLEAR_COLOR`. `clear(Color)` flusht offene Geometrie
-und löscht nur die derzeit aktivierten Renderausgaben. In einem Recording wird
-der Clear als Replay-Befehl gespeichert; das ist möglich, aber für normale
-Komponenten selten sinnvoll.
-
-### Farb- und Pickingausgabe
-
-```java
-g.setOutputMask(true, false);      // nur Farbe
-g.setColorRenderingEnabled(false);
-g.setPickingRenderingEnabled(true); // nur Picking
-g.setOutputMask(true, true);       // Frame-Normalzustand
-```
-
-Beide Outputs sind am Frameanfang aktiv. Eine Änderung flusht und ist
-recordbar. Bei temporären Änderungen muss der Aufrufer den gewünschten Zustand
-wiederherstellen.
-
-Die Maske bestimmt, **in welche vorhandenen Frameausgaben** nachfolgende
-Befehle schreiben. Sie wählt kein anderes Renderziel: Dafür dienen
-`beginRenderTarget` und `endRenderTarget`. `setOutputMask(false,true)` bedeutet
-also beispielsweise „nur in den Picking-FBO schreiben“, nicht „einen FBO als
-Target setzen“.
-
-`setTexturePickAlphaThreshold` erwartet einen dimensionslosen Wert von `0..1`
-und betrifft nur texturgebundene Geometrie: Verglichen wird Texturalpha mal
-Tintalpha. Filled, Text und UI-Analytik sind davon nicht betroffen.
-
-### Clip
+The output mask selects attachments of the current destination, not a render
+destination. Use `beginRenderTarget(...)` to change destinations.
+`setTexturePickAlphaThreshold` accepts `0..1` and applies to textured picking.
 
 ```java
 g.beginClip(20, 20, 300, 160);
@@ -274,36 +164,20 @@ try {
 }
 ```
 
-Die vier Argumente sind lokale Benutzerkoordinaten. Clips sind verschachtelbar
-und recordbar. Verwendet wird die transformierte, achsenparallele
-Screen-Boundingbox; es ist ein günstiger Scissor-Clip, kein runder
-Geometrieclip. `getClipDepth()` liefert eine dimensionslose Ebenenanzahl und
-hilft beim Diagnostizieren unbalancierter Paare. Für runde oder vollkommen
-freie Vektorkanten siehe `roundedClip` und `pathClip` im
-[Layerkapitel](layers-effects.md).
+Clips are nested, recordable scissor rectangles using transformed axis-aligned
+screen bounds. Use layer effects for curved boundaries. `getClipDepth()` helps
+detect unbalanced calls.
 
-### Damage
+## Shader state
 
-Die Damage-Region selbst wird vom Host in logischen Screenpixeln geführt.
-Komponenten können ihre äußeren Effektpixel über `visualOverflow` einbeziehen;
-die Contextabfrage dazu ist `intersectsRedrawBounds`, wie oben beschrieben.
+Filled, texture, text, sprite, and UI pipelines use separate shader contracts.
+Shader and uniform changes validate the target pipeline, flush its batch, and
+can be recorded. See [Custom shaders and uniforms](shaders.md).
 
-## Shaderzustände
+## Returned values
 
-Filled-, Texture-, Text- und UI-Shader sind getrennt, damit kein unverständliches
-Attributlayout-Mismatch entsteht. Shader- und Uniformwechsel sind recordbar,
-validieren ihre Zielpipeline und flushen deren offenen Batch. Der UI-Shader ist
-ein bewusster vollständiger Ersatz für alle UI-Modi. Die vollständigen
-Verträge und Einheiten der verwalteten Uniforms stehen im
-[Shaderkapitel](shaders.md).
-
-## Getter und Kopien
-
-- `getTransform` und `getProjection` liefern unabhängige Kopien.
-- `getStroke` darf direkt behalten werden, da `GLStroke` unveränderlich ist.
-- `getStrokeDash` liefert eine defensive Kopie.
-- Shader-Getter liefern die aktuell gesetzte Programminstanz oder `null` für
-  den jeweiligen Defaultshader.
-- Shadergetter liefern die aktuell gesetzte Instanz oder `null` für Default.
-- Depth-Getter liefern dimensionslose Anzahlen der aktuell offenen
-  Clip-/Layer-/RenderTarget-Ebenen.
+- `getTransform()` and `getProjection()` return independent copies.
+- `getStroke()` is safe to retain because `GLStroke` is immutable.
+- `getStrokeDash()` returns a defensive copy.
+- Shader getters return the custom program or `null` for the default.
+- Clip, layer, and render-target depth getters return current nesting counts.

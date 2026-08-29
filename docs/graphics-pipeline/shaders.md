@@ -1,315 +1,110 @@
-# Eigene Shader und Uniforms
+# Custom Shaders and Uniforms
 
-[Zur API-Landkarte](../graphics-pipeline.md) · [Recording](recording.md) · [Weiter: Layer und Effekte](layers-effects.md)
+[Rendering guide](../graphics-pipeline.md) · [Resources](resources.md) · [Next: Layers and effects](layers-effects.md)
 
-GLSwing trennt Filled-, Texture-, Text-, UI- und Layer-Shader, weil ihre
-Vertexlayouts und verwalteten Uniforms verschieden sind. Der Renderer validiert
-den Vertrag beim ersten Einsatz und meldet fehlende Attribute, falsche
-Locations oder inaktive Pflichtuniforms als Exception.
+GLSwing exposes separate shader contracts for filled geometry, textures, text,
+sprites, UI primitives, and layer effects. A custom program must keep every
+required attribute and managed uniform active after linking.
 
-## Inhalt
+## Contents
 
-- [Erzeugen und freigeben](#erzeugen-und-freigeben)
-- [Shaderverträge](#shaderverträge)
-- [Standardpipeline-Beispiele](#filled-beispiel)
-- [Eigener UI-Shader](#eigener-ui-shader)
-- [Context-Uniforms](#context-uniforms)
-- [Shader in Recordings](#shader-in-recordings)
-- [Eigene Layer-Shader](#eigener-layer-shader)
-- [Alpha und Low-Level-Zugriff](#premultiplied-alpha)
+- [Creation and lifetime](#creation-and-lifetime)
+- [Pipeline contracts](#pipeline-contracts)
+- [Context shaders and uniforms](#context-shaders-and-uniforms)
+- [Sprite material shaders](#sprite-material-shaders)
+- [UI shaders](#ui-shaders)
+- [Layer shaders](#layer-shaders)
+- [Alpha rules](#alpha-rules)
 
-## Erzeugen und freigeben
+## Creation and lifetime
 
-```java
-ShaderProgram shader = ShaderProgram.fromSource(gl, vertexSource, fragmentSource);
-ShaderProgram resourceShader = ShaderProgram.fromResources(
-        gl, "/com/example/my.vert", "/com/example/my.frag");
-```
-
-Beide Aufrufe sowie `dispose(gl)` benötigen einen aktuellen GL-Kontext. Sie
-gehören in `initialize(GL3)`/`disposeResources(GL3)` des verwendeten Hosts.
-`isDisposed()` zeigt die Lebensdauer. `fromBuiltInResources` lädt gezielt aus
-dem internen GLSwing-Shaderordner und ist hauptsächlich für Bibliothekscode.
-
-## Shaderverträge
-
-| Pipeline | Attribute | Verwaltete Pflichtuniforms |
-|---|---|---|
-| Filled | `aPosition` Location 0, `aColor` Location 1 | `uProjection` |
-| Texture | `aPosition` 0, `aTexCoord` 1, `aColor` 2 | `uProjection`, `uTexture` |
-| Text | wie Texture | `uProjection`, `uTexture`, `uMsdfPixelRange` |
-| UI | eingebauter instanzierter Vertexshader; Locations `0..7`, `9`, `10` wie unten | `uProjection`, `uDeviceScale`, alle `uTextures[0..15]` |
-| Sprite | instanziert: `aP00` 0, `aP10` 1, `aP11` 2, `aP01` 3, `aColorUvRect` 4, `aDepthUvRect` 5, `aNormalUvRect` 6, `aTint` 7, `aDepthData` 8, `aTangentX` 9, `aTangentY` 10, optional `aPickId` 11, `aTextureSlot` 12, `aFlags` 13 | `uProjection`, `uModel`, alle Color-/Depth-/Normal-Maps `[0..4]`, Ambient- und Richtungslicht |
-| Layer | interner Fullscreen-Vertexshader | `uTexture`, `uOpacity` |
-
-Attribute und Pflichtuniforms müssen aktiv sein. Ein GLSL-Compiler darf
-unbenutzte Werte wegoptimieren; bloßes Deklarieren ohne Benutzung reicht daher
-nicht immer.
-
-## Filled-Beispiel
+Create `ShaderProgram` objects during host resource initialization, when a
+current `GL3` is available. Factory methods combine application fragment source
+with compatible built-in vertex shaders where appropriate.
 
 ```java
-private static final String FILLED_VERTEX = """
-        #version 330 core
-        layout(location = 0) in vec2 aPosition;
-        layout(location = 1) in vec4 aColor;
-        uniform mat4 uProjection;
-        out vec4 vColor;
-        void main() {
-            vColor = aColor;
-            gl_Position = uProjection * vec4(aPosition, 0.0, 1.0);
-        }
-        """;
-
-private static final String FILLED_FRAGMENT = """
-        #version 330 core
-        in vec4 vColor;
-        uniform float uGamma;
-        out vec4 fragColor;
-        void main() {
-            fragColor = vec4(pow(vColor.rgb, vec3(1.0 / uGamma)), vColor.a);
-        }
-        """;
-
-// initialize(GL3 gl)
-filledShader = ShaderProgram.fromSource(gl, FILLED_VERTEX, FILLED_FRAGMENT);
-
-// render(GLContext2D g)
-g.setFilledShader(filledShader);
-g.setFilledUniform("uGamma", 2.2f);
-g.fillRect(20, 20, 180, 100, new Color(70, 150, 235));
-g.useDefaultFilledShader();
-
-// disposeResources(GL3 gl)
-filledShader.dispose(gl);
+ShaderProgram shader = ShaderProgram.fromUIFragmentSource(gl, fragmentSource);
 ```
 
-Filled-Shader wirken auf normale Fills, Strokes und Paths, nicht auf die
-analytischen `...UI...`-Methoden.
+Call `dispose(gl)` from the matching resource-disposal callback. `isDisposed()`
+reports lifetime state. `fromBuiltInResources(...)` is intended for GLSwing's
+packaged shader resources.
 
-## Texture-Shader
+## Pipeline contracts
 
-Ein Texture-Shader erhält Texturefarbe multipliziert mit Vertex-Tint. Ein
-minimaler Vertrag:
-
-```glsl
-#version 330 core
-in vec2 vTexCoord;
-in vec4 vColor;
-uniform sampler2D uTexture;
-uniform float uGamma;
-out vec4 fragColor;
-
-void main() {
-    vec4 sampled = texture(uTexture, vTexCoord);
-    fragColor = vec4(pow(sampled.rgb, vec3(1.0 / uGamma)), sampled.a) * vColor;
-}
-```
-
-Der passende Vertexshader verwendet die Texture-Attributtabelle oben.
-`setTextureShader` wirkt auf `drawTexture`, `drawImage` und
-`drawIcon` sowie `drawRenderTarget`, nicht auf `drawUIImage` oder
-`drawUIIcon`.
-
-## Text-Shader
-
-Text liest ein Multi-Channel Signed Distance Field. Ein eigener Shader muss
-`uMsdfPixelRange` benutzen und Coverage aus dem Median der drei Kanäle bilden.
-Die vollständige Referenzimplementierung steht in `CustomShaderDemo`.
-
-```glsl
-vec3 msdf = texture(uTexture, vTexCoord).rgb;
-float distance = max(min(msdf.r, msdf.g), min(max(msdf.r, msdf.g), msdf.b)) - 0.5;
-vec2 unitRange = vec2(uMsdfPixelRange) / vec2(textureSize(uTexture, 0));
-vec2 screenSize = vec2(1.0) / max(fwidth(vTexCoord), vec2(0.000001));
-float pixelRange = max(0.5 * dot(unitRange, screenSize), 1.0);
-float coverage = clamp(distance * pixelRange + 0.5, 0.0, 1.0);
-fragColor = vec4(vColor.rgb, vColor.a * coverage);
-```
-
-`setTextShader` betrifft `drawText`, nicht `drawUIText`.
-
-## Eigener Sprite-Materialshader
-
-```java
-ShaderProgram shader = ShaderProgram.fromSpriteFragmentSource(gl,
-        myFragmentSource);
-
-GLSprite sprite = GLSprite.builder(colorImage)
-        .depthMap(depthImage)
-        .normalMap(normalImage)
-        .shader(shader)
-        .uniform("uRoughness", 0.7f)
-        .build();
-```
-
-Sprite-Shader hängen nicht als globaler Contextzustand an allen Sprites,
-sondern am unveränderlichen `GLMaterial2D`. Damit bleiben Maps, Alpha-Modus,
-Depthstate, Shader und Uniforms eine geschlossene Materialbeschreibung. Die
-vollständige Semantik der Vertexdaten, der 15 Sampler, Beleuchtung und
-Batchgrenzen steht in [Depth und 2.5D-Materialien](depth-materials.md).
-
-`fromSpriteFragmentSource(...)` verwendet automatisch den eingebauten
-instanzierten Vertexshader. Nur ein vollständig eigenes Programm muss den
-Attributvertrag aus der Tabelle selbst umsetzen. `aDepthData` enthält
-`baseDepth`, hinteren Offset, vorderen Offset und Alpha-Cutoff. Der Vertexshader
-erzeugt seine lokale Quad-Ecke aus `gl_VertexID` (`0..5`); es gibt daher keinen
-separaten, pro Vertex übertragenen Positionsstrom mehr.
-`uModel` wird bei dynamischen Instanzen auf Identität und bei einem
-`GLSpriteBuffer` auf dessen aktuellen Draw-Transform gesetzt. Ein vollständig
-eigener Sprite-Vertexshader muss Position und Tangentenbasis damit
-transformieren; `fromSpriteFragmentSource(...)` erledigt dies automatisch.
-
-## Eigener UI-Shader
-
-```java
-// Vollständige eigene Variante des mitgelieferten ui_quad.frag:
-uiShader = ShaderProgram.fromUIFragmentSource(gl, myUIFragmentSource);
-
-g.setUIShader(uiShader);
-g.setUIUniform("uAccentStrength", 0.35f);
-drawMyControls(g);
-g.useDefaultUIShader();
-```
-
-`fromUIFragmentSource` kombiniert den eigenen Fragmentshader mit dem
-eingebauten instanzierten UI-Vertexshader. Der Fragmentshader erhält:
-
-| Eingang | GLSL-Typ | Inhalt |
-|---|---|---|
-| `vLocal` | `vec2` | Lokale Position innerhalb des Instanzquads |
-| `vTexCoord` | `vec2` | Atlas-/Textur-UV |
-| `vColor` | `vec4` | Primärfarbe |
-| `vParameters` | `flat vec4` | Modus und modusspezifische Werte |
-| `vSize` | `flat vec2` | Lokale Instanzgröße |
-| `vSecondaryColor` | `flat vec4` | Zweitfarbe, Eckradien oder Schattenbounds je Modus |
-| `vTextureSlot` | `flat int` | Index in `uTextures` |
-
-Der vollständige Vertexvertrag verwendet `aCorner`, `aP00`, `aP10`, `aP01`,
-`aUvRect`, `aColor`, `aParameters`, `aSize`, `aSecondaryColor` und
-`aTextureSlot` an den Locations `0,1,2,3,4,5,6,7,9,10`. Verwaltet werden die
-Projektionsmatrix `uProjection`, der logische-zu-physische Faktor
-`uDeviceScale` sowie alle 16 Sampler `uTextures[0]` bis `uTextures[15]`.
-Sämtliche Werte müssen im gelinkten Programm **aktiv** bleiben; andernfalls
-weist `setUIShader` den Shader mit einer verständlichen Vertragsverletzung
-zurück.
-
-Ein eigener UI-Shader ist ein kompletter Ersatz. Er muss alle Modi des
-mitgelieferten `ui_quad.frag` behandeln: runde und asymmetrische Flächen und
-Border, Fill+Border, MSDF-Text, RGBA-Texturen, Checkmark, Chevron,
-Fortschrittsverläufe, Hit-Area und analytischen Schatten. Der praktikable
-Startpunkt ist daher eine Kopie von
-`glswing-core/src/main/resources/com/vingame/glswing/shaders/ui_quad.frag`, in
-die nur der gewünschte
-Effekt eingebaut wird. Das interne Picking bleibt unabhängig davon erhalten.
-
-Der Shaderwechsel selbst erzeugt nur dann einen Flush, wenn gerade UI-Instanzen
-offen sind und sich das Programm wirklich ändert. Wiederholtes Setzen derselben
-Instanz und desselben Uniformwerts ist günstig. Unterschiedliche Uniformwerte
-pro Control bilden hingegen jeweils eine Batchgrenze.
-
-### Was mit einem Materialsystem gemeint ist
-
-Ein Material würde Shader und dessen Parameter als wiederverwendbaren,
-möglichst unveränderlichen Stilwert bündeln, etwa
-`GLUIMaterial(shader, uniforms)`. Viele Controls könnten dasselbe Material
-referenzieren; der Renderer sortiert nicht um, könnte aber benachbarte gleiche
-Materialien ohne Wechsel gemeinsam zeichnen. Eine fortgeschrittene Variante
-würde kleine Materialparameter als Instanzdaten oder über einen GPU-Puffer
-liefern, sodass sogar verschiedene Looks mit einem gemeinsamen Shader im
-selben Drawcall bleiben.
-
-Eine solche Abstraktion existiert derzeit bewusst noch nicht. Die jetzige
-`setUIShader`-/`setUIUniform`-API ist der direkte, flexible Grundbaustein. Für
-einzelne Control- oder Gruppeneffekte ohne Nachbau des kompletten UI-Shaders
-bleibt ein Layer mit `GLShaderEffect` die einfachere Wahl.
-
-## Context-Uniforms
-
-Jede Pipeline bietet:
-
-```java
-g.setFilledUniform("uValue", 1.0f);
-g.setFilledUniform("uOffset", 2.0f, 3.0f);
-g.setFilledUniform("uColor", 1.0f, 0.5f, 0.2f);
-g.setFilledUniform("uRect", 1f, 2f, 3f, 4f);
-g.setFilledUniform("uMode", 2);
-g.setFilledUniformMatrix4("uExtraMatrix", matrix16);
-```
-
-Ersetze `Filled` durch `Texture`, `Text` oder `UI` für die anderen Batches. Uniforms
-werden typgeprüft: `float`, `vec2`, `vec3`, `vec4`, `int`/`bool` und `mat4`.
-Name muss aktiv sein und zum Typ passen.
-
-Eigene Uniforms besitzen keine von GLSwing vorgegebene Einheit; ihr Shader
-definiert die Semantik. Im Beispiel ist `uGamma` dimensionslos. Soll eine
-Uniform auf Fenster- oder Layergrößen reagieren, sollten die unten
-aufgeführten verwalteten Auflösungsuniforms verwendet werden, damit physische
-und logische Pixel nicht unbemerkt vermischt werden.
-
-Shader- und Uniformänderungen flushen den betroffenen Batch, damit bereits
-gesammelte Vertices ihren alten Wert behalten. Dieselbe Shaderinstanz erneut zu
-setzen verursacht keinen Wechsel. `set...Shader(null)` entspricht
-`useDefault...Shader()`.
-
-## Shader in Recordings
-
-Shaderwechsel und Uniformwerte werden als Replaybefehle gespeichert. Das
-Recording besitzt den Shader nicht; er darf vor dem letzten Replay nicht
-disposed werden. Eine häufig pro Objekt wechselnde Uniform kann Batching trotz
-Recording begrenzen.
-
-## Eigener Layer-Shader
-
-```java
-ShaderProgram effectProgram = ShaderProgram.fromLayerFragmentSource(gl, """
-        #version 330 core
-        in vec2 vTexCoord;
-        uniform sampler2D uTexture;
-        uniform float uOpacity;
-        uniform float uAmount;
-        out vec4 fragColor;
-        void main() {
-            vec4 c = texture(uTexture, vTexCoord);
-            c.rgb = mix(c.rgb, vec3(1.0) - c.rgb, uAmount);
-            fragColor = c * uOpacity;
-        }
-        """);
-
-GLShaderEffect effect = GLLayerEffects.custom(effectProgram)
-        .withUniform("uAmount", 0.35f)
-        .withPadding(0);
-```
-
-Der Renderer verwaltet bei vorhandener Deklaration zusätzlich:
-
-| Uniform | Inhalt |
+| Pipeline | Required inputs and managed state |
 |---|---|
-| `uTexture` | Eingabetextur, dimensionsloser Texture-Unit-Index `0` |
-| `uOpacity` | Dimensionsloser Composite-Faktor `0..1` im letzten Pass, sonst `1` |
-| `uResolution` | Physische FBO-Größe in Framebufferpixeln |
-| `uTexelSize` | Normierte UV-Schrittweite pro physischem Pixel (`1 / uResolution`) |
-| `uLogicalResolution` | Logische Zielgröße in Screenpixeln |
-| `uDeviceScale` | Dimensionsloses Verhältnis physische/logische Pixel je Achse |
+| Filled | `aPosition`, `aColor`; `uProjection`, `uModel` |
+| Texture | `aPosition`, `aTexCoord`, `aColor`, texture slot; projection/model and samplers |
+| Text | Texture contract plus active `uMsdfPixelRange` and MSDF coverage |
+| UI | Instanced corner/quad, UV, color, parameter, size, secondary-color, and texture-slot data |
+| Sprite | Instanced quad, color/depth/normal UVs, tint, depth data, tangent basis, optional picking data |
+| Layer | Full-screen input texture plus resolution/texel information |
 
-Diese Namen dürfen nicht als Useruniform gesetzt werden. `withUniform` bietet
-dieselben Typen wie der Context. `withPadding` wird in logischen Screenpixeln
-angegeben und erklärt, wie weit der Shader außerhalb der ursprünglichen
-Layerbounds sichtbare Pixel erzeugen kann; ein zu kleiner Wert schneidet den
-Effekt ab.
+The GLSL compiler removes unused declarations. A required value must
+participate in the linked program, not merely appear in source. Contract
+validation reports missing attributes, uniforms, or incompatible types at the
+first assignment/use.
 
-## Premultiplied Alpha
+## Context shaders and uniforms
 
-Layer-Shader arbeiten mit premultiplied Alpha. RGB enthält also bereits den
-Alphafaktor. Eigene Effekte müssen dieses Modell erhalten, insbesondere beim
-Erzeugen transparenter Pixel. Ein gewöhnlicher Texture-/Textshader sollte
-hingegen die Semantik des jeweiligen Defaultshaders nachbilden.
+Assign programs with the pipeline-specific setters, for example
+`setTextureShader`, `setTextShader`, and `setUIShader`. Passing `null` or calling
+the matching `useDefault...Shader()` restores the built-in program.
 
-## Direkte `ShaderProgram`-Methoden
+Typed uniform setters support `float`, `vec2`, `vec3`, `vec4`, `int`/`bool`,
+and `mat4`. The uniform must be active and match the setter type.
 
-`use`, `setFloat`, `setVector2`, `setVector3`, `setVector4`, `setInteger` und
-`setMatrix4` sind
-Low-Level-Operationen für interne oder bewusste GL-Integration. Im normalen
-`GLContext2D`-Rendering sollen die Contextuniformmethoden verwendet werden,
-damit Flush, Validierung und Recording korrekt bleiben. `hasUniform` prüft, ob
-eine aktive Uniform existiert.
+```java
+g.setFilledShader(shader);
+g.setFilledUniform("uGamma", 2.2f);
+drawGeometry(g);
+g.useDefaultFilledShader();
+```
+
+Shader or uniform changes flush that pipeline's open batch. Reassigning the
+same program and value is inexpensive. Changes are recordable; referenced
+programs must remain alive for replay.
+
+Managed resolution uniforms distinguish physical target pixels from logical UI
+coordinates: `uResolution`, `uLogicalResolution`, `uDeviceScale`, and
+`uTexelSize`. Use the value appropriate to the effect instead of mixing spaces.
+
+## Sprite material shaders
+
+Custom sprite shaders belong to immutable `GLMaterial2D`, keeping shader,
+uniforms, maps, alpha mode, and depth state together. Use
+`fromSpriteFragmentSource(...)` to retain the built-in instanced vertex stage.
+A complete replacement must implement the documented sprite attributes,
+15 sampler bindings, lighting inputs, `uProjection`, and `uModel`.
+
+`aDepthData` contains base depth, back/front offsets, and alpha cutoff. Dynamic
+instances use identity `uModel`; `GLSpriteBuffer` supplies its draw transform.
+
+## UI shaders
+
+`fromUIFragmentSource(...)` retains the built-in UI vertex stage. The fragment
+stage receives `vLocal`, `vTexCoord`, `vColor`, `vParameters`, `vSize`,
+`vSecondaryColor`, and `vTextureSlot`.
+
+A custom UI fragment shader replaces all built-in UI modes, including rounded
+fills/borders, gradients, images, icons, MSDF text, progress fills, hit areas,
+and analytic shadows. Start from the packaged `ui_quad.frag` implementation and
+change only the required behavior. GPU picking remains a separate output.
+
+## Layer shaders
+
+Wrap a compatible program in `GLShaderEffect.of(shader)`, add uniforms through
+`withUniform(...)`, and declare sampling expansion with `withPadding(...)`.
+Layer effects receive premultiplied color and managed resolution/texel values.
+
+## Alpha rules
+
+GLSwing compositing uses premultiplied alpha. A fragment shader must output RGB
+already multiplied by alpha. Filtering, blur, and layer operations also assume
+premultiplied values; straight-alpha output causes dark or bright fringes.
+
+`ShaderProgram` also exposes low-level `use`, `hasUniform`, `setFloat`,
+`setInteger`, `setVector2/3/4`, and `setMatrix4` methods. Use them only while the
+correct program and GL context are active; the context-level API preserves
+batch ordering and recording semantics automatically.

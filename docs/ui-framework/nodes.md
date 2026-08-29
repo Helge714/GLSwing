@@ -1,235 +1,119 @@
-# Node-System
+# Node Editor
 
-[UI-Übersicht](../ui-framework.md) · [Controls](controls.md) ·
-[Themes](themes-localization.md) · [History](history.md) ·
-[Grafikpipeline: Picking](../graphics-pipeline/picking.md)
+[UI guide](../ui-framework.md) · [Controls](controls.md) · [Undo and redo](history.md)
 
-## Inhalt
+`GLNodeEditor` provides an interactive canvas for nodes, typed-direction ports,
+connections, selection, panning, zooming, and history integration. The
+application remains responsible for its domain graph and evaluation logic.
 
-- [Minimaler Graph](#minimaler-graph)
+## Contents
+
+- [Minimal graph](#minimal-graph)
 - [`GLNode`](#glnode)
-- [Ports und Verbindungsregeln](#ports-und-verbindungsregeln)
-- [Verbindungen](#verbindungen)
-- [Auswahl und Interaktion](#auswahl-und-interaktion)
-- [Ansicht](#ansicht)
-- [Verbindungsgeometrie und Einheiten](#verbindungsgeometrie-und-einheiten)
+- [Rows, content, and ports](#rows-content-and-ports)
+- [Connection rules](#connection-rules)
+- [Selection and interaction](#selection-and-interaction)
+- [View and geometry](#view-and-geometry)
 - [Styles](#styles)
-- [History und Modellgrenze](#history-und-modellgrenze)
+- [History and model synchronization](#history-and-model-synchronization)
 
-Das Node-System ist eine spezialisierte retained-mode UI auf Basis derselben
-`GLContainer`-, Picking-, Theme- und History-Infrastruktur. `GLNodeEditor`
-verwaltet Ansicht, Auswahl und Verbindungen; `GLNode` ordnet Inhalte und Ports
-an; das fachliche Graphmodell bleibt in der Anwendung.
-
-## Minimaler Graph
+## Minimal graph
 
 ```java
 GLNodeEditor editor = new GLNodeEditor();
 
-GLNode source = new GLNode("Quelle");
-GLNodePort colorOut = source.addOutput("color", new GLLabel("Farbe"));
-source.setResizeMode(GLNodeResizeMode.HORIZONTAL);
+GLNode source = new GLNode("Source");
+GLContainer sourceContent = new GLContainer();
+sourceContent.addGL(new GLLabel("Value"));
+GLNodePort out = source.addOutput("value", sourceContent);
 
-GLNode target = new GLNode("Ausgabe");
-GLNodePort colorIn = target.addInput("color", new GLComboBox<ColorMode>());
+GLNode sink = new GLNode("Sink");
+GLContainer sinkContent = new GLContainer();
+sinkContent.addGL(new GLLabel("Value"));
+GLNodePort in = sink.addInput("value", sinkContent);
 
-editor.addNode(source, 80, 100);
-editor.addNode(target, 420, 140);
-editor.connect(colorOut, colorIn);
+editor.addNode(source, 40, 80);
+editor.addNode(sink, 360, 80);
+editor.connect(out, in);
 ```
 
-Node-Positionen sind Weltkoordinaten des Editors. Zoom und Pan verändern nur die
-Ansicht und nicht die gespeicherten Bounds der Nodes.
+Use stable application IDs with `setName(...)` and `findPort(id)` when graphs
+are serialized.
 
 ## `GLNode`
 
-### Titel, Auswahl und Größe
+A node owns title, selection state, width, rows, and ports. Resize behavior is
+controlled by `GLNodeResizeMode` (`NONE`, `HORIZONTAL`, `VERTICAL`, or `BOTH`).
+The editor tracks the active node separately from the selected node set;
+`isActiveSelected()` distinguishes the primary selection.
 
-```java
-node.setTitle("Multiply");
-node.setTitleEditable(true);
-node.setTitleGradientEnabled(true);
-node.setResizeMode(GLNodeResizeMode.HORIZONTAL);
-node.setDragAnywhere(false);
-```
+Node content can be added and removed with `addContent(...)` and
+`removeContent(...)`. Input/output convenience methods create `GLNodeRow`
+structures. `getContents()`, `getPorts()`, `getInput()`, and `getOutput()` expose
+the current structure.
 
-Ein editierbarer Titel wird direkt in der Titelfläche bearbeitet; zusätzlich
-enthält das Kontextmenü den lokalisierten Bearbeiten-Eintrag. Der Node kann über
-die Titelzeile verschoben werden. Mit `dragAnywhere=true` gilt das auch für freie,
-nicht von einem pickbaren Kind belegte Inhaltsfläche.
+## Rows, content, and ports
 
-`GLNodeResizeMode` erlaubt `NONE`, `HORIZONTAL`, `VERTICAL` oder `BOTH`.
-`isSelected()` und `isActiveSelected()` unterscheiden normale Mehrfachauswahl
-vom zuletzt aktiv gewählten Node. Es kann höchstens einen aktiven Node geben.
+Rows align an input, center content, and output. `addInputOutput(...)` creates a
+row with both directions. A port can hide its associated content while
+connected through `setContentHiddenWhenConnected(true)`;
+`isContentHiddenByConnection()` reports the result.
 
-### Inhalte und Zeilen
+Port direction determines valid orientation. `setMaximumConnections(...)`
+limits fan-in or fan-out. `canConnectTo(...)` performs port-level checks;
+`editor.canConnect(...)` also applies editor policies and listener validation.
 
-```java
-node.addContent(new GLLabel("Nur Anzeige"));
-GLNodePort in = node.addInput("factor", slider);
-GLNodePort out = node.addOutput(combo, GLNodePort.output("result"));
-GLNodePorts pair = node.addInputOutput("min", minSlider, "max");
-```
+## Connection rules
 
-`addContent(...)`, `addInput(...)`, `addOutput(...)` und
-`addInputOutput(...)` bilden intern die notwendigen Zeilen, ohne dass die
-Anwendung einen öffentlichen `GLNodeRow` verwalten muss. Padding, vertikaler
-Abstand und Portpositionen kommen aus `GLNodeStyle`. Inputs liegen am linken,
-Outputs am rechten Rand.
+`GLNodeConnection` links compatible ports. Connections cannot attach a port to
+itself, duplicate a prohibited edge, or exceed connection limits. The editor
+owns displayed connections; add and remove them through editor methods so
+selection, repaint, callbacks, and history remain consistent.
 
-`getContents()`, `getPorts()` und `findPort(id)` dienen zur Navigation.
-`removeContent(...)` entfernt die zugehörige Zeile und ihre Ports; bestehende
-Verbindungen müssen über den Editor konsistent entfernt werden.
+`GLNodeEditorListener` receives graph interaction events and can validate or
+mirror changes into an application model. Keep listener work fast and avoid
+mutating editor collections recursively during dispatch.
 
-Alle `GLContainer` besitzen einen semantischen Namen. Ist
-`input.setContentHiddenWhenConnected(true)` aktiv, ersetzt der Node einen durch
-eine Verbindung verdeckten Editor durch ein Label dieses Namens. Controls mit
-Text liefern bereits sinnvolle Standardnamen; für rein grafische eigene Inhalte
-sollte `setName(...)` gesetzt werden.
+## Selection and interaction
 
-## Ports und Verbindungsregeln
+The editor supports single and multi-node selection, an active node, and a
+selected connection. Public methods include `setSelectedNode`,
+`setSelectedNodes`, `setNodeSelected`, `clearSelection`, and
+`setSelectedConnection`. `getSelectedNodes()` returns the current set.
 
-```java
-GLNodePort input = GLNodePort.input("roughness");
-input.setMaximumConnections(1);
-input.setColor(new Color(110, 170, 230));
-input.setContentHiddenWhenConnected(true);
-input.setConnectionValidator((own, other) -> isCompatible(own, other));
-```
+Users can drag nodes, resize enabled axes, create/remove connections, edit
+titles, pan, zoom, and select via click or marquee. `dragAnywhere=true` allows
+dragging from the node body instead of only its title region.
 
-Inputs erlauben standardmäßig eine Verbindung, Outputs beliebig viele.
-`setMaximumConnections(...)` passt das Limit an. `getConnectionCount()` und
-`isContentHiddenByConnection()` liefern den aktuellen Editorzustand.
+## View and geometry
 
-Eine Verbindung ist nur zulässig, wenn:
+Node positions and dimensions use editor/world units. Connection widths,
+borders, snap distance, and curve tolerance are style values in logical screen
+pixels unless the relevant style property documents otherwise.
 
-- genau ein Input und ein Output beteiligt sind,
-- beide Ports zu Nodes desselben Editors gehören,
-- die Verbindung nicht bereits existiert,
-- beide Kapazitätsregeln erfüllt sind; ein Input mit Maximum `1` ersetzt beim
-  Hinzufügen seine vorhandene Verbindung,
-- die Validatoren beider Ports zustimmen.
-
-`canConnectTo(...)` prüft die lokale Portregel; `editor.canConnect(...)` prüft
-den vollständigen Graphkontext. `clearColor()` stellt die vom Node-Style
-geerbte Input-/Outputfarbe wieder her.
-
-## Verbindungen
-
-`GLNodeConnection` verbindet immer `getOutput()` mit `getInput()`. Sie kann
-ausgewählt werden und optional mit `setWidth(...)` eine eigene Breite besitzen;
-`clearWidth()` stellt die Editor-Stylebreite wieder her. Die Linie erhält einen
-Farbverlauf von der Output- zur Inputfarbe. Standardmäßig interpoliert das Theme
-in sRGB; ein anderer `GLColorInterpolator` kann am Editor gesetzt werden.
-
-Beim Ziehen zeigt Snapping einen kompatiblen Port in der Nähe an. Wird eine
-bestehende Verbindung gelöst und außerhalb eines gültigen Ziels losgelassen,
-wird sie gelöscht. Kontextmenü und Entf/Delete löschen die ausgewählte
-Verbindung beziehungsweise Node-Auswahl.
-
-```java
-if (editor.canConnect(output, input)) {
-    GLNodeConnection connection = editor.connect(output, input);
-}
-editor.removeConnection(connection);
-```
-
-`addConnection(...)` nimmt ein bereits konstruiertes Verbindungsobjekt auf.
-`GLNodeEditorListener` meldet hinzugefügte/entfernte Verbindungen und
-Auswahländerungen. Das Hinzufügen und Entfernen der Nodes selbst stößt die
-Anwendung direkt über ihre eigenen Modelloperationen an.
-
-## Auswahl und Interaktion
-
-- Einfacher Klick selektiert genau dieses Element und löscht die übrige Auswahl.
-- Shift fügt einen Node hinzu. Ein bereits normal selektierter wird aktiv; ein
-  erneut mit Shift angeklickter aktiver Node wird entfernt.
-- Ziehen auf leerem Hintergrund erzeugt eine Marquee-Auswahl.
-- Es gibt maximal einen aktiven Node innerhalb der Mehrfachauswahl.
-- Entf/Delete löscht Nodes oder die ausgewählte Verbindung.
-- Mausrad zoomt um die Cursorposition.
-- Strg/Ctrl+Mausrad pannt horizontal, Shift+Mausrad vertikal.
-- Mittlere Maustaste pannt die Ansicht direkt.
-
-`setSelectedNode(...)`, `setSelectedNodes(...)`,
-`setNodeSelected(...)`, `setSelectedConnection(...)` und `clearSelection()`
-stellen dieselben Zustände programmatisch her. `getSelectedNodes()` liefert die
-gesamte Auswahl, `getActiveNode()` das aktive Element.
-
-## Ansicht
-
-```java
-editor.setZoomRange(0.25f, 4f);
-editor.setZoom(1f);
-editor.zoomByAtScreenPosition(1.2f, mouseX, mouseY);
-editor.setPan(0, 0);
-editor.panBy(24, -12);
-editor.setWheelPanDistance(36);
-editor.resetView();
-```
-
-Zoom ist ein dimensionsloser Faktor. Pan und Wheel-Pan-Distanz verwenden
-logische Bildschirm-Pixel. `zoomByAtScreenPosition(...)` hält den Weltpunkt
-unter dem angegebenen Screenpunkt fest.
-
-## Verbindungsgeometrie und Einheiten
-
-Alle Werte kommen standardmäßig aus `GLNodeEditorStyle` und lassen sich lokal
-mit `set...` überschreiben; die jeweilige `clear...`-Methode stellt das Theme
-wieder her.
-
-| Eigenschaft | Einheit | Wirkung |
-|---|---|---|
-| `connectionSnapDistance` | Bildschirm-Pixel | Maximaler Fangabstand zu einem kompatiblen Port. |
-| `connectionCurveTolerance` | Bildschirm-Pixel-Abweichung | Tessellierungsfehler der Bezierkurve; kleiner erzeugt mehr Segmente. |
-| `connectionHandleFactor` | dimensionslos | Horizontaler Kontrollpunktabstand relativ zur Portdistanz. |
-| `minimumConnectionHandleLength` | logische Welt-Pixel | Untergrenze des Kontrollpunktabstands. |
-| `connectionWidth` | Bildschirm-Pixel | Sichtbare Linienbreite unabhängig vom Zoom. |
-| `connectionBorderWidth` | Bildschirm-Pixel | Zusätzliche Outlinebreite je Seite. |
-
-Für vollständig gerade Verbindungen werden sowohl
-`connectionHandleFactor=0` als auch `minimumConnectionHandleLength=0` gesetzt.
-Nur den Faktor auf null zu setzen lässt die Mindestlänge weiterhin wirken.
-
-```java
-editor.setConnectionSnapDistance(24);
-editor.setConnectionCurveTolerance(0.5f);
-editor.setConnectionHandleFactor(0.55f);
-editor.setMinimumConnectionHandleLength(50);
-editor.setConnectionWidth(3);
-editor.setConnectionBorder(border);
-editor.setSelectedConnectionBorder(selectedBorder);
-editor.setConnectionBorderWidth(1);
-```
-
-Die Borderfarben werden über `setConnectionBorder(...)` und
-`setSelectedConnectionBorder(...)` gesetzt; die Breite über
-`setConnectionBorderWidth(...)`. `setConnectionColorInterpolator(...)` wählt
-die Farbinterpolation.
+`zoomByAtScreenPosition(...)` keeps the world point under the cursor stable.
+Connection curves use `connectionHandleFactor` and
+`minimumConnectionHandleLength`; setting both to zero produces the shortest
+direct handle behavior.
 
 ## Styles
 
-`GLNodeStyle` steuert Node-Hintergrund, Titelverlauf, Text, normale/selektierte/
-aktiv-selektierte Border, analytischen Schatten, Portfarben, Rundung, Abstände
-und Resize-Griffe. Der Schatten wird direkt im spezialisierten UI-Rendering
-berechnet und benötigt keinen separaten Layer pro Node; überlappende Nodes
-werden deshalb weiterhin korrekt in Z-Reihenfolge komponiert.
+`GLNodeStyle` controls individual node appearance. `GLNodeEditorStyle` controls
+canvas, connection, selection, snapping, and curve geometry. Apply local styles
+with `setGLStyle(...)` and return to theme inheritance with `clearGLStyle()`.
 
-`GLNodeEditorStyle` steuert Editorhintergrund, Verbindungslinien, Snapping,
-Kurvenqualität sowie Marquee. Beide Styles können lokal gesetzt und mit
-`clearGLStyle()` wieder aus dem Theme bezogen werden. Alle zugehörigen
-Dateischlüssel sind im Standard-Theme unter `node.*` und `nodeEditor.*`
-aufgeführt.
+Connection customization includes normal and selected color, border color and
+width, main width, curve tolerance, handle length, and a
+`GLColorInterpolator`. `clearColor()`, `clearWidth()`, and related clear methods
+restore inherited values.
 
-## History und Modellgrenze
+## History and model synchronization
 
-Bei einem am Host gesetzten `GLSaveManager` werden Titelbearbeitung, Bewegung,
-Resize, Verbindungen und Löschvorgänge als sinnvolle zusammengefasste Schritte
-aufgezeichnet. Mehrfachbewegungen bilden eine Transaktion statt eines Eintrags
-pro Node.
+User operations integrate with the host `GLSaveManager`. Treat one drag or
+multi-selection operation as one undo step. Programmatic graph loading should
+normally suppress or reset history, populate the editor, then call
+`markSaved()`.
 
-Das UI speichert jedoch nicht automatisch das fachliche Graphmodell. IDs,
-Node-Typen, Parameterwerte und Serialisierung bleiben Aufgabe der Anwendung.
-Empfohlen ist eine klare Zuordnung zwischen Modellobjekt und `GLNode`; Listener
-übertragen strukturelle UI-Änderungen ins Modell, und Laden baut Editor und
-Verbindungen aus diesem Modell neu auf.
+The editor is a view/controller, not the authoritative domain model. Mirror
+accepted edits through listeners, serialize stable node/port IDs and domain
+properties, then reconstruct nodes and connections when loading.

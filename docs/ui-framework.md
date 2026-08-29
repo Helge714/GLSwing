@@ -1,78 +1,73 @@
-# UI-Framework
+# UI Framework Guide
 
-Dieses Handbuch beschreibt die retained-mode GUI oberhalb von `GLContext2D`.
-Ein `GLContainer` besitzt Zustand und Bounds, wird in einen `GLParent`
-eingehängt und zeichnet seine unveränderten Anteile über ein gecachtes
-Recording. Controls, Popups und Nodes bauen auf demselben Komponentenbaum auf.
+GLSwing's retained UI framework is built on top of `GLContext2D`. A
+`GLContainer` owns state and bounds, participates in a `GLParent` hierarchy,
+and caches stable visuals in a recording. Standard controls, popup overlays,
+dialogs, and node editors use the same component model.
 
-Für unmittelbares Zeichnen, Shader, Layer, RenderTargets und Picking ist das
-[Handbuch der Grafikpipeline](graphics-pipeline.md) zuständig.
+For shapes, shaders, layers, render targets, resources, and custom picking,
+see the [rendering guide](graphics-pipeline.md).
 
-## Inhalt
+## Contents
 
-- [API-Landkarte](#api-landkarte)
-- [Koordinaten und Einheiten](#koordinaten-und-einheiten)
-- [Minimalbeispiel](#minimalbeispiel)
-- [Komponenten und Hosts](ui-framework/components.md)
-- [Layouts und Größen](ui-framework/layout.md)
-- [Controls](ui-framework/controls.md)
-- [Themes und Sprachen](ui-framework/themes-localization.md)
-- [Undo/Redo mit `GLSaveManager`](ui-framework/history.md)
-- [Node-System](ui-framework/nodes.md)
+- [API map](#api-map)
+- [Coordinates and units](#coordinates-and-units)
+- [Minimal application](#minimal-application)
+- [Detailed guides](#detailed-guides)
 
-## API-Landkarte
+## API map
 
-| Bereich | Zentrale Typen | Aufgabe |
+| Area | Main types | Responsibility |
 |---|---|---|
-| Hosts | `GLFrame`, `GLSwingContainerCanvas`, `GLSwingPanel`, `GLDialog` | OpenGL-Oberfläche, Animator, Root-Hierarchie und Fenster |
-| Komponentenbaum | `GLParent`, `GLContainer` | Kinder, Bounds, Z-Order, Culling, Damage und gecachtes Rendering |
-| Layout | `GLLayout`, `GLLayouts`, `GLGridLayout`, `GLConstraints`, `GLSize`, `GLInsets` | Messen und Anordnen |
-| Basis-Controls | `GLControl`, `GLLabel`, `GLButton`, `GLCheckBox`, `GLLine` | Zustand, Fokus und einfache Inhalte |
-| Werteingabe | `GLSlider`, `GLSliderGroup`, `GLTextEditor`, `GLTextInputFormats`, `GLComboBox<T>` | Werte wählen, validieren und editieren |
-| Navigation | `GLMenuBar`, `GLPopupMenu`, `GLMenuItem`, `GLTabbedPane` | Menüs, Popups und Ansichten |
-| Scrollen | `GLScrollPane`, `GLScrollBar` | Geclippte Viewports und Scrollmodelle |
-| Darstellung | `GLTheme`, `GLThemeValues`, Style-Records, `GLThemeLoader`, `GLThemeWatcher` | Globale und lokale Looks |
-| Sprache | `GLLocalizer`, `GLUiKeys` | UTF-8-Texte, Locale-Fallback und Anwendungsüberschreibungen |
-| History | `GLSaveManager`, `GLUndoableEdit` | Undo/Redo, Transaktionen und Speicherstatus |
-| Nodes | `GLNodeEditor`, `GLNode`, `GLNodePort`, `GLNodeConnection` | Zoombarer Node-Graph mit Verbindungen und Auswahl |
+| Hosts | `GLFrame`, `GLSwingContainerCanvas`, `GLSwingPanel`, `GLDialog` | OpenGL surface, animation, root hierarchy, and windows |
+| Component tree | `GLParent`, `GLContainer` | Children, bounds, z-order, culling, damage, and cached rendering |
+| Layout | `GLLayout`, `GLLayouts`, `GLGridLayout`, `GLConstraints`, `GLSize`, `GLInsets` | Measurement and arrangement |
+| Basic controls | `GLControl`, `GLLabel`, `GLButton`, `GLCheckBox`, `GLLine` | State, focus, actions, and simple content |
+| Value input | `GLSlider`, `GLSliderGroup`, `GLTextEditor`, `GLTextInputFormats`, `GLComboBox<T>` | Selection, validation, and editing |
+| Navigation | `GLMenuBar`, `GLPopupMenu`, `GLMenuItem`, `GLTabbedPane` | Menus, overlays, and view selection |
+| Scrolling | `GLScrollPane`, `GLScrollBar` | Clipped viewports and scroll models |
+| Appearance | `GLTheme`, style records, `GLThemeValues`, `GLThemeLoader`, `GLThemeWatcher` | Global and local presentation |
+| Localization | `GLLocalizer`, `GLUiKeys` | UTF-8 bundles, locale fallback, and overrides |
+| History | `GLSaveManager`, `GLUndoableEdit` | Undo, redo, transactions, and saved state |
+| Node editing | `GLNodeEditor`, `GLNode`, `GLNodePort`, `GLNodeConnection` | Zoomable graphs, connections, and selection |
 
-## Koordinaten und Einheiten
+## Coordinates and units
 
-Die UI verwendet logische Pixel. `x`, `y`, Breite, Höhe, Padding, Margins,
-Layout-Gaps und die meisten Style-Maße beziehen sich deshalb auf denselben
-lokalen Koordinatenraum wie die Bounds der Komponente. Betriebssystemskalierung
-und Renderauflösung werden vom Host behandelt.
+The UI uses logical pixels. Bounds, positions, preferred sizes, padding,
+margins, layout gaps, and most style measurements share the same local
+coordinate system. Hosts apply operating-system scaling and the configured
+render-resolution scale.
 
-Jedes Kind startet lokal bei `(0, 0)`. Seine `x`-/`y`-Position wird erst beim
-Rendern relativ zum Parent angewendet. Recordings bleiben dadurch ortsunabhängig
-und können nach Bewegung ohne erneute Tessellierung abgespielt werden.
+Every child starts at local `(0, 0)`. Its position is applied relative to the
+parent during rendering. Cached recordings therefore remain position
+independent and can be replayed after movement without retessellating geometry.
 
-Abweichende Einheiten werden an der jeweiligen API genannt. Besonders wichtig:
+Important exceptions:
 
-- Node-Verbindungsbreiten, Borders und Snapping sind bildschirmbezogen, damit
-  sie beim Zoomen bedienbar und optisch stabil bleiben.
-- Der Pan-Wert des Node-Editors ist in logischen Bildschirm-Pixeln angegeben.
-- `GLFrame#setRenderResolutionScale(float)` skaliert nur die interne
-  Renderauflösung, nicht Layout oder Komponentenkoordinaten.
+- node connection widths, borders, and snapping distances use screen space so
+  that interaction remains stable while zooming;
+- node-editor pan is expressed in logical screen pixels;
+- `GLFrame#setRenderResolutionScale(float)` changes the internal framebuffer
+  resolution, not component layout or input coordinates.
 
-## Minimalbeispiel
+## Minimal application
 
 ```java
 GLContainer root = new GLContainer() {
     @Override
     protected void record(GLContext2D g) {
-        // Der Parent selbst hat hier keinen Hintergrund.
+        // Optional cached visuals owned by this container.
     }
 };
 root.setGLLayout(new GLGridLayout(1).withGap(8));
 root.setGLPadding(12);
 
-GLLabel label = new GLLabel("Bereit");
-GLButton button = new GLButton("Start");
-button.addActionListener(event -> label.setText("Läuft"));
+GLLabel status = new GLLabel("Ready");
+GLButton start = new GLButton("Start");
+start.addActionListener(event -> status.setText("Running"));
 
-root.addGL(label, GLConstraints.auto().fillHorizontal());
-root.addGL(button, GLConstraints.auto().fillHorizontal());
+root.addGL(status, GLConstraints.auto().fillHorizontal());
+root.addGL(start, GLConstraints.auto().fillHorizontal());
 
 GLFrame frame = new GLFrame("GLSwing");
 frame.addGL(root);
@@ -80,7 +75,15 @@ frame.packGL();
 frame.setVisible(true);
 ```
 
-`record(...)` beschreibt nur die eigene, cachebare Darstellung eines
-Containers. Kinder werden automatisch danach gerendert und müssen dort nicht
-manuell aufgerufen werden.
+`record(...)` describes only the cacheable appearance owned by the container.
+The framework renders children afterward; applications do not call child
+render methods manually.
 
+## Detailed guides
+
+1. [Components and hosts](ui-framework/components.md)
+2. [Layouts and sizing](ui-framework/layout.md)
+3. [Standard controls](ui-framework/controls.md)
+4. [Themes and localization](ui-framework/themes-localization.md)
+5. [Undo and redo](ui-framework/history.md)
+6. [Node editor](ui-framework/nodes.md)

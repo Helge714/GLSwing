@@ -1,302 +1,132 @@
-# Bilder, Atlanten, Icons, Text, Pfade und SVG
+# Images, Textures, Fonts, Icons, Paths, and SVG
 
-[Zur API-Landkarte](../graphics-pipeline.md) · [RenderTargets](render-targets.md) · [Weiter: Picking](picking.md)
+[Rendering guide](../graphics-pipeline.md) · [Drawing commands](drawing.md) · [Next: Render targets](render-targets.md)
 
-Dieses Kapitel erklärt alle Ressourcen, die von den Zeichenbefehlen konsumiert
-werden. Die wichtigste Trennung ist High-Level (`GLImage`, `GLIcon`) gegen
-manuelle GL-Ressourcen (`GLTexture`, eigener `GLFont`, `ShaderProgram`).
+This chapter covers reusable rendering resources. Member-level constructor and
+method details are available in the generated Javadoc.
 
-## Inhalt
+## Contents
 
-- [Bilder und GLImageOptions](#glimage)
-- [Icons und adaptive Auflösung](#glicon)
-- [Texturslots und GLTexture](#texturslots)
-- [Fonts](#glfont)
-- [Pfade und SVG](#glpath2d)
-- [Lebensdauer](#lebensdauertabelle)
-
-Größen von CPU-Bildern, Texturen und Atlaspages sind ganzzahlige
-Raster-/Texturpixel. Zielbounds beim Zeichnen verwenden lokale
-Benutzerkoordinaten. Adaptive Iconauflösungen beziehen sich ausdrücklich auf
-physische Framebufferpixel; Zeitparameter mit `Millis` im Namen verwenden
-Millisekunden.
+- [`GLImage`](#glimage)
+- [Images and UI images](#images-and-ui-images)
+- [`GLIcon`](#glicon)
+- [`GLTexture`](#gltexture)
+- [`GLFont`](#glfont)
+- [Paths and shapes](#paths-and-shapes)
+- [SVG documents](#svg-documents)
+- [Lifetime](#lifetime)
 
 ## `GLImage`
 
-`GLImage` hält CPU-Pixel und Optionen und kann ohne aktuellen GL-Kontext geladen
-werden:
+`GLImage` is the standard managed RGBA image. Its immutable `GLImageOptions`
+select storage, usage, filtering, wrapping, and mipmapping.
 
 ```java
-GLImage fromMemory = GLImage.of(bufferedImage);
-GLImage fromFile = GLImage.load(path);
-GLImage fromResource = GLImage.loadResource(
-        MyApp.class, "/images/photo.png");
+GLImage image = GLImage.of(bufferedImage,
+        GLImageOptions.DEFAULT
+                .withStorage(GLImageOptions.Storage.ATLAS)
+                .withUsage(GLImageOptions.Usage.STATIC)
+                .withFilter(GLImageOptions.Filter.LINEAR)
+                .withMipmapping(GLImageOptions.Mipmapping.ENABLED));
 ```
 
-Alle Erzeugungswege besitzen eine Variante mit `GLImageOptions`. Getter:
-`getWidth`, `getHeight`, `getOptions`.
+| Option | Choices and use |
+|---|---|
+| Storage | `AUTO`, `ATLAS`, or `STANDALONE`; use standalone for large or repeating images |
+| Usage | `STATIC` for immutable content, `DYNAMIC` when `update(...)` is required |
+| Filter | `LINEAR` for smooth scaling, `NEAREST` for pixel art |
+| Wrap | `CLAMP` for ordinary images, `REPEAT` for tiled standalone textures |
+| Mipmapping | Reduces aliasing when images are minified |
 
-### Speicherentscheidung
+Convenience presets include `atlas()`, `standalone()`, `dynamic()`,
+`pixelArt()`, and `repeating()`. Atlas padding protects filtered and mipmapped
+edges. `prepareAsync()` performs CPU preparation; the first draw completes any
+required GL upload on the rendering thread.
 
-Beim ersten Zeichnen löst jeder Renderer das Bild lazy auf:
+Dynamic images retain standalone storage. Update their content with
+`update(...)`; do not place them in `GLSpriteBuffer`, whose texture references
+must remain stable.
 
-- `AUTO`: kleine statische Clamp-Bilder in Atlas, große als Standalone,
-- `ATLAS`: Atlas erzwingen; Fehler, wenn es nicht passt,
-- `STANDALONE`: eigene Textur erzwingen,
-- `REPEAT` oder `DYNAMIC`: immer Standalone.
+## Images and UI images
 
-Die gewünschte Atlaspage ist `2048 × 2048` Texturpixel groß, höchstens jedoch
-`GL_MAX_TEXTURE_SIZE`. In `AUTO` wird ein Bild nur atlasiert, wenn jede Dimension
-höchstens die halbe Pagegröße besitzt und es mit Padding passt.
-
-### `GLImageOptions`
-
-| Achse | Werte | Bedeutung |
-|---|---|---|
-| Storage | `AUTO`, `ATLAS`, `STANDALONE` | Speicherort |
-| Filter | `LINEAR`, `NEAREST` | Samplerfilter |
-| Wrap | `CLAMP`, `REPEAT` | Verhalten außerhalb `0..1` |
-| Usage | `STATIC`, `DYNAMIC` | Änderbarkeit |
-| Mipmapping | `NONE`, `AUTO`, `ENABLED` | Mipkette |
-
-Presets: `DEFAULT`, `atlas()`, `standalone()`, `pixelArt()`, `dynamic()`,
-`repeating()`. `withStorage`, `withFilter`, `withWrap`, `withUsage` und
-`withMipmapping` erzeugen immutable Kopien. Die Record-Accessors heißen
-`storage`, `filter`, `wrap`, `usage` und `mipmapping`. Atlasbilder
-müssen statisch und Clamp sein. Explizite Mipmaps erfordern statisch + linear.
-Nearest schaltet Mipmapping aus; Dynamic schaltet Atlas und Mipmapping aus.
-
-### Mipmaps und Atlasränder
-
-Statische linear gefilterte Bilder erhalten bei `AUTO` Mipmaps. Atlasbilder
-verwenden extrudierte Ränder und nur so viele Stufen, wie Bildgröße und Padding
-sicher erlauben. Dirty Atlas-Mipketten werden erst unmittelbar vor dem nächsten
-Sampling erzeugt.
-
-### Dynamische Bilder
-
-```java
-GLImage dynamic = GLImage.of(initialPixels, GLImageOptions.dynamic());
-dynamic.update(nextPixels);
-```
-
-`update` ist nur bei `Usage.DYNAMIC` erlaubt. Bleibt die Größe gleich, kann der
-Renderer die Standalone-Textur aktualisieren. Andere Renderer besitzen jeweils
-ihre eigene aufgelöste GPU-Kopie.
-
-## `drawImage` oder `drawUIImage`?
-
-- `drawImage`: normaler Texture-Batch, eigener TextureShader möglich.
-- `drawUIImage`: Universal-UI-Batch zusammen mit Controls/Text/Icons, aber kein
-  eigener TextureShader.
-
-Beide Wege verwenden dieselbe automatische Speicherauflösung.
+`drawImage` and `drawTexture` use the general texture batch and obey model/view
+transforms. `drawUIImage` uses the instanced UI batch and is appropriate inside
+controls. Source rectangles are image pixels; destination rectangles use the
+current user coordinate system.
 
 ## `GLIcon`
 
-```java
-GLIcon imageIcon = GLIcon.fromImage(image);
-GLIcon autoSvg = GLIcon.fromSvgResource("com/example/link.svg");
-GLIcon rgbaSvg = GLIcon.fromSvgResource(
-        "com/example/logo.svg", GLIcon.Format.RGBA);
-GLIcon pathIcon = GLIcon.fromPath(new GLPath2D()
-        .moveTo(0, 0).lineTo(24, 12).lineTo(0, 24).closePath());
-```
-
-Formate:
-
-| Format | Verhalten |
-|---|---|
-| `AUTO` | Monochromes SVG → MSDF, mehrfarbiges SVG → RGBA |
-| `MSDF` | Tintbares Signed-Distance-Field, eine feste Quellauflösung |
-| `RGBA` | Originalfarben, optional adaptive Rasterstufen |
-
-`fromSvg(document,format[,options])` arbeitet mit einem bereits geladenen
-`GLSvgDocument`. `fromPath(path[,format[,options]])` erzeugt aus einem
-gefüllten `GLPath2D` ein einfarbiges Icon; `AUTO` wählt deshalb MSDF. Der Path
-darf mehrere Konturen und seine Fill-Rule enthalten, muss aber endliche Bounds
-mit positiver Breite und Höhe besitzen. Getter: `getFormat`,
-`getRasterResolution`, `getOptions`, `getCachedVariantCount`.
-
-### `drawIcon` oder `drawUIIcon`?
-
-| Befehl | Pipeline | Darstellung | Eigener Shader |
-|---|---|---|---|
-| `drawUIIcon` | Universal-UI-Batch | MSDF bleibt MSDF; RGBA nutzt adaptive Rasterstufen | Vollständiger UI-Shader |
-| `drawIcon` | Normaler Texture-Batch | Immer RGBA; vektorbasierte Icons wählen adaptive Stufen | Freier TextureShader |
-
-Damit ist `GLIcon.fromPath(path)` zugleich die Brücke von beliebiger
-Pathgeometrie in den UI-Batch:
+`GLIcon` represents reusable vector-like icon content backed by `GLPath2D` or
+an adaptively rasterized RGBA source.
 
 ```java
-GLIcon search = GLIcon.fromPath(searchPath);
-g.drawUIIcon(search, 12, 12, 18, 18, theme.iconColor());
+GLPath2D path = GLPath2D.fromSvgPath("M 2 12 L 9 19 L 22 4");
+GLIcon icon = GLIcon.fromPath(path);
+g.drawUIIcon(icon, x, y, width, height, color);
 ```
 
-Soll ein spezieller TextureShader auf dasselbe Icon wirken, wird einfach der
-normale Pfad verwendet:
+`drawIcon` uses the general pipeline; `drawUIIcon` participates in UI batching.
+Monochrome icons accept a draw color. RGBA icons preserve source colors and can
+cache variants selected for the physical display size.
 
-```java
-g.setTextureShader(iconShader);
-g.setTextureUniform("uGlow", 0.4f);
-g.drawIcon(search, 40, 12, 18, 18, Color.CYAN);
-g.useDefaultTextureShader();
-```
-
-Ein MSDF kann nicht unverändert von einem beliebigen RGBA-TextureShader gelesen
-werden. Deshalb erzeugt ein vektorbasiertes MSDF-Icon beim ersten `drawIcon`
-lazy eine RGBA-Ausgangsstufe; `drawUIIcon` nutzt weiterhin direkt das scharfe
-MSDF. Wer den ersten RGBA-Aufbau vorziehen möchte, verwendet `prepareAsync`.
-
-### Adaptive RGBA-Auflösung
-
-```java
-GLIconOptions options = GLIconOptions.DEFAULT
-        .withResolutionRange(32, 1024)
-        .withResolutionStep(2)
-        .withOversampling(1.25f)
-        .withRasterizationDelayMillis(150);
-GLIcon adaptive = GLIcon.fromSvgResource(
-        "com/example/logo.svg", GLIcon.Format.RGBA, options);
-```
-
-Der Renderer bestimmt aus Bounds, Model, Projection und HiDPI die benötigten
-physischen Pixel. Fehlende Stufen werden nach der konfigurierten Verzögerung in
-einem Hintergrundworker rasterisiert. Bis dahin bleibt die beste vorhandene
-Stufe sichtbar; der kurze Upload folgt später im GL-Thread. Beim
-Recording-Replay wird die Stufe neu gewählt, ohne das Recording zu erneuern.
-
-`prepareAsync(physicalPixels)` wärmt eine quadratische **RGBA**-Stufe der
-angegebenen physischen Framebufferpixelzahl vor und liefert deren
-`CompletableFuture<GLImage>`. Das ist für adaptive RGBA-Icons und für den
-Texture-Batch-Pfad eines vektorbasierten MSDF-Icons relevant; reines
-`drawUIIcon` eines MSDF benötigt keine RGBA-Stufe.
-`GLIconOptions.fixed(resolution)` verwendet genau
-eine Größe in physischen Pixeln. Validierung: Auflösungen mindestens 16
-physische Pixel, Max >= Min, der `resolutionStep` ist ein dimensionsloser
-Faktor >= 2, `oversampling` ein dimensionsloser Faktor `>0..4` und die
-Verzögerung liegt bei `0..2000 ms`.
-
-Die immutable Options-API bietet `withRasterPolicy`, `withResolutionRange`,
-`withMinimumResolution`, `withMaximumResolution`, `withResolutionStep`,
-`withOversampling` und `withRasterizationDelayMillis`. Record-Accessors:
-`rasterPolicy`, `minimumResolution`, `maximumResolution`, `resolutionStep`,
-`oversampling`, `rasterizationDelayMillis`.
-
-## Texturslots
-
-Der Universal-UI-Batch kann bis zu 16 unterschiedliche Texturen gleichzeitig
-binden. Eine Atlaspage belegt einen Slot, nicht jedes darin liegende Bild.
-Weitere Texturen starten automatisch den nächsten Drawcall. Picking verwendet
-dieselben Slots.
+`GLIconOptions.fixed(resolution)` creates one fixed raster size. Adaptive
+options control minimum and maximum resolution, resolution step, oversampling,
+raster policy, and rasterization delay. `prepareAsync(physicalPixels)` can
+prewarm an expected variant.
 
 ## `GLTexture`
 
-```java
-GLTexture texture = GLTexture.create(gl, bufferedImage);
-g.drawTexture(texture, 20, 20, 200, 120);
-texture.dispose(gl);
-```
-
-`create`, `bind` und `dispose` benötigen einen aktuellen GL-Kontext. Getter:
-`getWidth`, `getHeight`, `isDisposed`. `bind(gl,unit)` ist Low-Level-Zugriff.
-Breite/Höhe sind Texturpixel; `unit` ist ein dimensionsloser ganzzahliger
-Texture-Unit-Index.
-`GLTexture` wird nicht automatisch atlasiert und ist für bewusste manuelle
-Integration; normale Bilder sollten `GLImage` verwenden.
+`GLTexture` is the low-level context-bound texture API. Create and initialize it
+with a current `GL3`, bind it with `bind(gl, unit)`, and release it with
+`dispose(gl)`. Prefer `GLImage` unless direct format, upload, or binding control
+is required.
 
 ## `GLFont`
 
-```java
-GLFont sans = new GLFont(GLFont.SANS_SERIF, GLFont.PLAIN, 18);
-GLFont custom = GLFont.fromFile(fontPath, GLFont.BOLD, 20);
-```
-
-Familienkonstanten: `DIALOG`, `DIALOG_INPUT`, `MONOSPACED`, `SANS_SERIF`,
-`SERIF`; Styles: `PLAIN`, `BOLD`, `ITALIC`. Konstruktoren akzeptieren Familie,
-Style, AWT-Schriftgröße und optional einen eingeschränkten Zeichensatz oder eine
-AWT-Font. Die Größe entspricht der `java.awt.Font`-Point-Size und wird als
-logische Benutzerraumgröße gerendert, nicht als physische HiDPI-Pixelzahl.
-
-`initialize(gl)` ist optional; der erste Renderzugriff initialisiert lazy.
-Metriken: `getAscent`, `getDescent`, `getLineHeight`, `measureText`; außerdem
-`getAwtFont`, `getFamily`, `getStyle`, `getSize`, `isInitialized`,
-`isDisposed`. Eigene Fonts mit `dispose(gl)` freigeben. Die GUI-Hierarchie
-bietet über `getGLFont(GLFontSpec)` einen verwalteten Cache.
-
-`drawText` verwendet den Standard-Textbatch; `drawUIText` den UI-Batch. Beide
-erwarten eine Baseline in lokalen Benutzerkoordinaten. Ascent, Descent,
-Zeilenhöhe und `measureText` liefern ebenfalls logische Benutzerraumlängen.
-
-## `GLPath2D`
-
-`GLPath2D` ist eine mutable geometrische Beschreibung:
+`GLFont` stores an MSDF atlas for an AWT font. Obtain cached fonts from the host:
 
 ```java
-GLPath2D path = new GLPath2D(GLPath2D.FillRule.NON_ZERO)
-        .moveTo(10, 10)
-        .lineTo(100, 10)
-        .quadTo(140, 50, 100, 90)
-        .cubicTo(70, 120, 30, 120, 10, 90)
-        .closePath();
-
-GLPath2D compound = GLPath2D.build(p -> {
-    p.append(GLShape2D.roundedRectangle(0, 0, 100, 40, 8));
-    p.append(GLShape2D.circle(82, 20, 7));
-});
+GLFont font = host.getGLFont(new GLFontSpec(Font.SANS_SERIF, Font.PLAIN, 16));
+float width = font.measureText("GLSwing");
+g.drawUIText(font, "GLSwing", x, baselineY, Color.WHITE);
 ```
 
-Methoden: `moveTo`, `lineTo`, `quadTo`, `cubicTo`, `closePath`,
-`set/getFillRule`, `isEmpty`, `getSegmentCount`, `getCommandCount`, `reset`,
-`copy`, `transformed`, `getBounds`, `fromSvgPath`.
+Text coordinates use the baseline. Metrics include ascent, descent, line
+height, and measured width. `drawText` uses the text batch; `drawUIText` uses
+the UI batch. Host-managed fonts should not be disposed by application code.
 
-Alle Pathkoordinaten und Bounds sind einheitenneutral und werden beim Zeichnen
-als aktuelle lokale Benutzerkoordinaten interpretiert.
+## Paths and shapes
 
-`NON_ZERO` berücksichtigt gerichtete Konturen; `EVEN_ODD` toggelt bei jeder
-Kreuzung. `setFillRule` und `getFillRule` ändern/lesen die Regel. Bounds
-enthalten exakte Kurvenextrema. `GLPath2D.Bounds` bietet die Record-Accessors
-`x`, `y`, `width`, `height` sowie die abgeleiteten Kanten `maximumX` und
-`maximumY`, jeweils in lokalen Benutzerkoordinaten. Der SVG-Pfadparser unterstützt
-`M/L/H/V/C/S/Q/T/A/Z` absolut und relativ; Arcs werden kubische Beziers.
+`GLPath2D` is a mutable path builder with `moveTo`, `lineTo`, `quadTo`,
+`cubicTo`, and `closePath`. It supports `NON_ZERO` and `EVEN_ODD` fill rules,
+SVG path parsing, copying, transformation, bounds, and segment inspection.
 
-`build(callback)` ist ein ausschließlich geometrischer Builder. `append` und
-sein Alias `add` übernehmen die Konturen eines `GLShape2D`; `combine` erzeugt
-aus mehreren Shapes einen neuen Path. Diese Operationen verknüpfen Konturen
-gemäß der Fill-Rule und führen keine boolesche Flächenoperation aus.
+`GLShape2D` provides immutable shape descriptions such as rectangles, rounded
+rectangles, ellipses, circles, polygons, and combined shapes. Convert a shape
+with `toPath()` when path operations are required.
 
-## `GLSvgDocument`
+## SVG documents
 
 ```java
-GLSvgDocument svg = GLSvgDocument.loadResource("com/example/logo.svg");
-GLSvgDocument fileSvg = GLSvgDocument.load(path);
-svg.draw(g, 20, 20, 220, 120);
+try (InputStream in = getClass().getResourceAsStream("/icons/sample.svg")) {
+    GLSvgDocument svg = GLSvgDocument.parse(in);
+    BufferedImage raster = svg.rasterize(256, 256);
+}
 ```
 
-Zusätzlich: `parse(InputStream)`, `getViewBoxX`, `getViewBoxY`,
-`getViewBoxWidth`, `getViewBoxHeight`, `getShapeCount`,
-`isMonochrome`, `rasterize(width,height)`. `draw` verwendet normale
-Contextbefehle und ist dadurch recordbar, batchbar und transformierbar. Für
-häufig gezeichnete Icons ist `GLIcon` meist effizienter.
+`GLSvgDocument` exposes view-box coordinates, shape count, and rasterization.
+Supported path commands include `M/L/H/V/C/S/Q/T/A/Z`. Keep SVG input on the
+CPU side and create a `GLImage` or `GLIcon` for repeated drawing.
 
-ViewBox-Werte sind SVG-Dokumenteinheiten. Die vier `draw`-Bounds sind lokale
-Benutzerkoordinaten; `rasterize(width,height)` erwartet ganzzahlige
-Ausgabepixel.
+## Lifetime
 
-Der derzeitige Importer unterstützt Pfade, verschachtelte Gruppen, ViewBox,
-affine SVG-Transforms, Fill-Regeln, Fill-Opacity, lineare Gradients im
-User-Space und pathbasierte Clips. Ein sichtbares, nicht unterstütztes
-SVG-Element führt ausdrücklich zu einem Fehler, statt unbemerkt in einer
-unvollständigen Grafik zu fehlen.
+| Resource | Ownership and release |
+|---|---|
+| `GLImage`, `GLIcon` | Renderer-independent objects; released when no longer referenced |
+| Host-cached `GLFont` | Host-owned |
+| Manually created `GLFont`, `GLTexture`, `ShaderProgram` | Call `dispose(gl)` with a current context |
+| `GLPath2D`, `GLShape2D`, `GLSvgDocument` | CPU objects; garbage-collected |
+| `GLRenderTarget` | Application-owned; call `close()` |
 
-## Lebensdauertabelle
-
-| Ressource | GL-Kontext bei Erzeugung? | Freigabe |
-|---|---|---|
-| `GLImage` | Nein | Renderer verwaltet GPU-Auflösung |
-| `GLIcon` | Nein | Renderer verwaltet Varianten |
-| `GLPath2D`, `GLSvgDocument` | Nein | normale Java-Objekte |
-| `GLFont` | Atlas lazy | eigener Font: `dispose(gl)` |
-| `GLTexture` | Ja | `dispose(gl)` |
-| `ShaderProgram` | Ja | `dispose(gl)` |
-| `GLRenderTarget` | Lazy | `close()` |
+Recordings do not own referenced resources. Keep every image, icon, font, and
+shader valid for as long as a recording can replay it.

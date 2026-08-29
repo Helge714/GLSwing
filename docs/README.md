@@ -1,65 +1,98 @@
-# GLSwingNext-Dokumentation
+# GLSwing User Guide
 
-Die README im Projektstamm ist der kurze Einstieg. Ausführliche, versionierte
-Anleitungen liegen hier, damit die öffentliche API nicht zwischen Demos und
-langen Featurelisten gesucht werden muss.
+This guide documents GLSwing 0.1.0 from an application developer's
+perspective. It covers the rendering pipeline, retained UI framework, resource
+lifecycle, extension points, and the behavior of the standard controls.
 
-## Inhalt
+## Contents
 
-- [Handbücher](#handbücher)
-- [Ausführbare Referenzen](#ausführbare-referenzen)
+- [Choose a starting point](#choose-a-starting-point)
+- [Rendering guide](#rendering-guide)
+- [UI framework guide](#ui-framework-guide)
+- [Examples](#examples)
+- [API reference and conventions](#api-reference-and-conventions)
 
-## Handbücher
+## Choose a starting point
 
-### UI-Framework
-
-Die [vollständige UI-API-Landkarte](ui-framework.md) führt von Hosts und
-`GLContainer` bis zum Node-Editor:
-
-| Kapitel | Inhalt |
+| Goal | Start here |
 |---|---|
-| [Komponenten und Hosts](ui-framework/components.md) | Lifecycle, Bounds, Z-Order, Damage, `GLFrame`, Canvas, Panel und Dialoge |
-| [Layouts und Größen](ui-framework/layout.md) | Freies Layout, Grid, Constraints, Messen und eigene Layouts |
-| [Controls](ui-framework/controls.md) | Alle Standardcontrols, Menüs, Tabs, Scrollen und Eingabe |
-| [Themes und Sprachen](ui-framework/themes-localization.md) | Styles, externe Theme-Dateien, Farben, Live-Reload und Locale-Fallback |
-| [Undo/Redo](ui-framework/history.md) | `GLSaveManager`, Transaktionen, Shortcuts und automatische Integration |
-| [Node-System](ui-framework/nodes.md) | Nodes, Ports, Verbindungen, Auswahl, Ansicht, Styles und History |
+| Create a standalone GLSwing application | [Components and hosts](ui-framework/components.md#hosts) |
+| Embed OpenGL rendering in Swing | [Components and hosts](ui-framework/components.md#hosts) |
+| Draw shapes, text, images, or SVG content | [Drawing commands](graphics-pipeline/drawing.md) |
+| Build an interface with standard controls | [Controls](ui-framework/controls.md) |
+| Arrange components | [Layouts and sizing](ui-framework/layout.md) |
+| Apply blur, shadows, outlines, or group opacity | [Layers and effects](graphics-pipeline/layers-effects.md) |
+| Cache expensive geometry | [Recordings](graphics-pipeline/recording.md) |
+| Render into an off-screen texture | [Render targets](graphics-pipeline/render-targets.md) |
+| Respond to pointer input on custom geometry | [Picking](graphics-pipeline/picking.md) |
+| Customize appearance or language | [Themes and localization](ui-framework/themes-localization.md) |
+| Create a node-based editor | [Node editor](ui-framework/nodes.md) |
 
-### Grafikpipeline
+## Rendering guide
 
-Beginne mit der [vollständigen `GLContext2D`-API-Landkarte](graphics-pipeline.md).
-Die Detailkapitel bauen in dieser Reihenfolge darauf auf:
+The [rendering overview](graphics-pipeline.md) contains a categorized map of
+the `GLContext2D` API and defines the coordinate, color, and lifetime
+conventions used by every rendering chapter.
 
-| Kapitel | Inhalt |
+| Chapter | Covers |
 |---|---|
-| [Context konfigurieren](graphics-pipeline/context-configuration.md) | Zeichenstil aus Farbe und Stroke, Koordinatensysteme, Einheiten, Clip und Outputs |
-| [Zeichenbefehle](graphics-pipeline/drawing.md) | Alle Draw-/Fill-Methoden, Overloads und klare Trennung von Immediate, Recording, UI und Nicht-UI |
-| [Recording](graphics-pipeline/recording.md) | Aufnahme, Replay, Parameterregionen, Caches und Referenzen |
-| [Shader](graphics-pipeline/shaders.md) | Alle Shaderlayouts, Uniformtypen und Custom-Layer-Shader |
-| [Depth und 2.5D-Materialien](graphics-pipeline/depth-materials.md) | Depth-State, Sprites, Color-/Depth-/Normalmaps, Alpha und Licht |
-| [Layer und Effekte](graphics-pipeline/layers-effects.md) | Compositing, Blendmodi und jeder eingebaute Effekt einzeln |
-| [RenderTargets](graphics-pipeline/render-targets.md) | Persistente FBOs, Feedback und Ping-Pong-Simulationen |
-| [Ressourcen](graphics-pipeline/resources.md) | Bilder, Atlanten, Icons, Text, Pfade und SVG |
-| [Picking](graphics-pipeline/picking.md) | IDs, MouseTargets, lokale Koordinaten, Events und Snapshotstrategie |
-| [Performance](graphics-pipeline/performance.md) | Flushgrenzen, UI-Batch, Layerkosten, Messwerte und Lebensdauer |
+| [Context configuration](graphics-pipeline/context-configuration.md) | Paint, strokes, transforms, projections, depth, clipping, and output masks |
+| [Drawing commands](graphics-pipeline/drawing.md) | Shapes, paths, images, text, UI primitives, sprites, and render order |
+| [Recordings](graphics-pipeline/recording.md) | Cached commands, replay parameters, and GPU-resident instance data |
+| [Shaders](graphics-pipeline/shaders.md) | Shader contracts, custom programs, uniforms, and alpha conventions |
+| [Depth and 2.5D materials](graphics-pipeline/depth-materials.md) | Depth tests, sprite depth maps, normal maps, alpha modes, and lighting |
+| [Layers and effects](graphics-pipeline/layers-effects.md) | Group compositing, blend modes, clipping, and all built-in effects |
+| [Render targets](graphics-pipeline/render-targets.md) | Persistent off-screen buffers and ping-pong feedback |
+| [Resources](graphics-pipeline/resources.md) | Images, texture atlases, icons, fonts, paths, and SVG documents |
+| [Picking](graphics-pipeline/picking.md) | Pick IDs, object targets, events, alpha thresholds, and asynchronous readback |
+| [Performance](graphics-pipeline/performance.md) | Batch boundaries, damage tracking, measurement, and resource ownership |
 
-Jedes Kapitel beginnt mit Querverweisen und verwendet dieselben Begriffe aus
-der API-Landkarte. Tabellen sind die Referenz; Beispiele zeigen den empfohlenen
-Einsatz und wiederholen nicht die vollständige Methodensammlung.
+## UI framework guide
 
-## Ausführbare Referenzen
+The [UI overview](ui-framework.md) introduces the component tree and provides
+an index of the retained-mode API.
 
-Die Klassen in
-`glswing-examples/src/main/java/com/vingame/glswing/demo` ergänzen das
-Handbuch:
+| Chapter | Covers |
+|---|---|
+| [Components and hosts](ui-framework/components.md) | Component lifecycle, bounds, children, z-order, damage, windows, canvas, panel, and dialogs |
+| [Layouts and sizing](ui-framework/layout.md) | Preferred sizes, padding, free layout, grid constraints, and custom layouts |
+| [Controls](ui-framework/controls.md) | Labels, buttons, check boxes, sliders, text editors, combo boxes, menus, tabs, and scrolling |
+| [Themes and localization](ui-framework/themes-localization.md) | Theme files, style records, color expressions, locale fallback, and live reload |
+| [Undo and redo](ui-framework/history.md) | Edits, transactions, keyboard shortcuts, and save state |
+| [Node editor](ui-framework/nodes.md) | Nodes, rows, ports, connections, selection, view controls, and history |
 
-- `DrawingApiDemo`, `PathDemo`, `SvgImportDemo`
-- `CustomShaderDemo`, `RecordingParameterDemo`, `LayerDemo`
-- `ImageAtlasDemo`, `DepthSpriteDemo`, `SpritePipelineBenchmarkDemo`,
-  `SpritePipelineBenchmark`, `PickingDemo`, `GameOfLifeDemo`
-- `GuiShowcaseDemo`, `CanvasGuiShowcaseDemo`, `GLFrameDemo`
-- `NodeEditorDemo`
+## Examples
 
-Die Dokumentation beschreibt die jeweils aktuelle API. In der derzeitigen
-Entwicklungsphase gibt es bewusst keine Kompatibilitätsschicht für ältere
-Zwischenstände.
+Runnable examples are located in
+`glswing-examples/src/main/java/com/vingame/glswing/demo`. They are intended to
+be copied, modified, and used alongside the guide.
+
+Recommended progression:
+
+1. `GLFrameDemo` or `DrawingApiDemo`
+2. `GuiShowcaseDemo`
+3. `RecordingParameterDemo` and `PickingDemo`
+4. `CustomShaderDemo`, `LayerDemo`, and `ImageAtlasDemo`
+5. `DepthSpriteDemo`, `GameOfLifeDemo`, or `NodeEditorDemo`
+
+Benchmarks are examples of measurement methodology, not fixed performance
+guarantees. Results depend on GPU, driver, display scaling, window system,
+resolution, and power-management state.
+
+## API reference and conventions
+
+- The generated Javadoc is the authoritative reference for individual
+  constructors, overloads, return values, and exceptions.
+- The guides describe system-level behavior and show representative API usage.
+- Coordinates and visual measurements use logical pixels unless a section
+  explicitly states screen space, world space, normalized values, or physical
+  framebuffer pixels.
+- Angles are expressed in radians.
+- Opacity and normalized color components use the range `0..1`.
+- Types in `.internal` packages are implementation details even if Java
+  visibility is required for communication between packages.
+- Objects implementing `AutoCloseable` own GPU or operating-system resources
+  and must be closed as documented.
+
+The documentation tracks the current release. GLSwing 0.x does not guarantee
+source compatibility between minor releases.

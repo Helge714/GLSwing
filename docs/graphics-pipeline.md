@@ -1,176 +1,161 @@
-# Handbuch der Grafikpipeline
+# Rendering Guide
 
-Dieses Handbuch dokumentiert die aktuelle öffentliche Rendering-API von
-GLSwingNext. Es ist in kurze, abgegrenzte Kapitel aufgeteilt: zuerst die
-vollständige API-Landkarte, dann Konfiguration, Zeichnen und anschließend die
-fortgeschrittenen Pipelinestufen.
+This guide documents the public 2D rendering API. Start with the context map
+below, then use the focused chapters for contracts, units, examples, and
+performance implications.
 
-## Inhalt
+## Contents
 
-- [Empfohlene Reihenfolge](#empfohlene-reihenfolge)
-- [Grundbegriffe und Einheiten](#grundbegriffe-und-einheiten)
-- [Vollständige GLContext2D-Übersicht](#vollständige-glcontext2d-übersicht)
-- [Konstanten](#konstanten)
-- [Welches Kapitel brauche ich?](#welches-kapitel-brauche-ich)
+- [Core concepts and units](#core-concepts-and-units)
+- [`GLContext2D` API map](#glcontext2d-api-map)
+- [Constants](#constants)
+- [Detailed guides](#detailed-guides)
 
-## Empfohlene Reihenfolge
+## Core concepts and units
 
-1. [Context konfigurieren](graphics-pipeline/context-configuration.md)
-2. [Zeichenbefehle und Renderpfade](graphics-pipeline/drawing.md)
-3. [Recording und Laufzeitparameter](graphics-pipeline/recording.md)
-4. [Eigene Shader und Uniforms](graphics-pipeline/shaders.md)
-5. [Depth und 2.5D-Materialien](graphics-pipeline/depth-materials.md)
-6. [Layer, Compositing und alle Effekte](graphics-pipeline/layers-effects.md)
-7. [RenderTargets und Feedback](graphics-pipeline/render-targets.md)
-8. [Bilder, Atlanten, Icons, Text und SVG](graphics-pipeline/resources.md)
-9. [Picking und Mausziele](graphics-pipeline/picking.md)
-10. [Batching, Performance und Lebensdauer](graphics-pipeline/performance.md)
-
-## Grundbegriffe und Einheiten
-
-| Begriff | Bedeutung |
+| Term | Meaning |
 |---|---|
-| Immediate | Ein Befehl wird im aktuellen Frame direkt an den Renderer übergeben. |
-| Recording | Derselbe Contextbefehl wird als wiederverwendbare Anweisung gespeichert. |
-| Replay | `draw(GLRecording)` speist gespeicherte Anweisungen wieder in die aktuellen Batches ein. |
-| Standardpipeline | Frei shaderbare Filled-, Texture- oder Text-Batches. |
-| UI-Pipeline | Spezialisierter instanzierter Batch für Standardcontrols, Text und Icons. |
-| Layer | Temporärer Offscreen-Inhalt, der als Gruppe zusammengesetzt und gefiltert wird. |
-| RenderTarget | Persistenter, anwendungsverwalteter RGBA-FBO. |
+| Immediate drawing | A command is submitted to the renderer during the current frame. |
+| Recording | Context commands are stored as reusable, preprocessed instructions. |
+| Replay | `draw(GLRecording)` feeds recorded instructions into the current batches. |
+| Standard pipeline | Customizable filled, texture, text, or sprite batches. |
+| UI pipeline | Instanced batch specialized for controls, MSDF text, and atlas icons. |
+| Layer | Temporary off-screen content composited and optionally filtered as a group. |
+| Render target | Persistent, application-owned off-screen color buffer. |
 
-Fast alle Zeichenbefehle funktionieren sowohl immediate als auch in einem
-Recording. Ausnahmen sind RenderTarget-Updates und `drawRenderTarget`, weil ihr
-Inhalt dynamisch ist. Details stehen in den Tabellen der jeweiligen Kapitel.
+Most drawing commands work both immediately and while recording. Render-target
+updates and `drawRenderTarget(...)` remain dynamic and are intentionally not
+recorded.
 
-Wenn eine Methode nichts Abweichendes sagt, gelten folgende Einheiten:
+Unless a method states otherwise, GLSwing uses these units:
 
-| Wertart | Einheit |
+| Value | Unit |
 |---|---|
-| Geometrie, Position und Größe | Aktuelle lokale Benutzerkoordinaten; bei `TOP_LEFT_PIXELS` entspricht eine Einheit einem logischen Pixel |
-| Explizite Screen-Werte | Logische Pixel; HiDPI-Skalierung in physische Framebufferpixel übernimmt der Renderer |
-| Winkel | Radiant |
-| Opacity, Alpha und normalisierte Anteile | Dimensionslos, üblicherweise `0..1` |
-| Farben | `java.awt.Color`; Kanalwerte der Integer-Konstruktoren `0..255` |
-| Zeitwerte mit `Millis` im Namen | Millisekunden |
+| Geometry, position, and size | Current local user coordinates; one unit is one logical pixel with `TOP_LEFT_PIXELS` |
+| Explicit screen-space values | Logical pixels; the renderer applies the physical HiDPI scale |
+| Angles | Radians |
+| Opacity, alpha, and normalized ratios | Dimensionless values, normally `0..1` |
+| Colors | `java.awt.Color`; integer constructor channels use `0..255` |
+| Names ending in `Millis` | Milliseconds |
 
-Stroke-Werte hängen teilweise von `GLStroke.WidthSpace` ab; die genaue Tabelle
-steht im [Konfigurationskapitel](graphics-pipeline/context-configuration.md#stroke).
+Stroke measurements can use world or screen space. See
+[Strokes](graphics-pipeline/context-configuration.md#strokes).
 
-## Vollständige `GLContext2D`-Übersicht
+## `GLContext2D` API map
 
-Die Übersicht listet jeden öffentlichen Methodennamen. Overloads derselben
-Operation sind zusammengefasst; das Zeichenkapitel enthält deren vollständige
-Varianten und Argumentregeln.
+Overloads of the same operation are grouped. The
+[drawing reference](graphics-pipeline/drawing.md) documents accepted geometry,
+color, picking, and pipeline variants.
 
-### Aufnahme und Replay
+### Recordings and replay
 
-| Methoden | Zweck |
+| Methods | Purpose |
 |---|---|
-| `beginRecording`, `endRecording`, `cancelRecording`, `isRecording` | Recording-Lebenszyklus |
-| `beginParameters`, `endParameters`, `withParameters` | Verschachtelbare Parameterregionen |
-| `draw(GLRecording)` | Recording abspielen |
-| `draw(GLRecording, GLRenderParameters)` | Recording parametrisiert abspielen |
-| `beginSpriteBuffer`, `endSpriteBuffer`, `cancelSpriteBuffer`, `isRecordingSpriteBuffer` | GPU-residente Sprite-Instanzen aufnehmen |
-| `draw(GLSpriteBuffer)` | Residenten Sprite-Puffer relativ zum aktuellen Modeltransform zeichnen |
+| `beginRecording`, `endRecording`, `cancelRecording`, `isRecording` | Manage a recording |
+| `beginParameters`, `endParameters`, `withParameters` | Define nestable parameter regions |
+| `draw(GLRecording)` | Replay a recording |
+| `draw(GLRecording, GLRenderParameters)` | Replay with parameter overrides |
+| `beginSpriteBuffer`, `endSpriteBuffer`, `cancelSpriteBuffer`, `isRecordingSpriteBuffer` | Build GPU-resident sprite instances |
+| `draw(GLSpriteBuffer)` | Draw resident instances relative to the current model transform |
 
-### Allgemeiner Zustand, Clear und Bounds
+### General state, clearing, and bounds
 
-| Methoden | Zweck |
+| Methods | Purpose |
 |---|---|
-| `setColor`, `getColor` | Aktuelle Standardfarbe |
-| `clear()`, `clear(Color)`, `clearDepth()` | Aktive Farb-/Pickingausgaben beziehungsweise Depth löschen |
-| `getScreenBounds` | Lokale Bounds in Screen-Bounds umrechnen |
-| `intersectsRedrawBounds` | Gegen aktuelle Damage-Region testen |
-| `flush` | Offene Batches ausdrücklich absenden |
+| `setColor`, `getColor` | Set or inspect the default drawing color |
+| `clear()`, `clear(Color)`, `clearDepth()` | Clear active color, picking, or depth outputs |
+| `getScreenBounds` | Transform local bounds into screen bounds |
+| `intersectsRedrawBounds` | Test geometry against the current damage region |
+| `flush` | Submit all open batches explicitly |
 
-### Transform, Projection und View
+### Transform, projection, and view
 
-| Methoden | Zweck |
+| Methods | Purpose |
 |---|---|
-| `getTransform`, `setTransform`, `resetTransform` | Model-Transform |
-| `translate` | Verschieben |
-| `rotate(radians)`, `rotate(radians,x,y)` | Rotieren, optional um Anker |
-| `scale(s)`, `scale(x,y)` | Gleichmäßig oder getrennt skalieren |
-| `getProjection`, `setProjection(GLTransform)` | Projektionsmatrix direkt |
-| `setProjection(Projection2D)` | Projektionsprovider anwenden |
-| `setView(GLView2D)` | Komplette View-Projection anwenden |
+| `getTransform`, `setTransform`, `resetTransform` | Manage the model transform |
+| `translate` | Translate subsequent geometry |
+| `rotate(radians)`, `rotate(radians,x,y)` | Rotate around the origin or an anchor |
+| `scale(s)`, `scale(x,y)` | Apply uniform or independent scaling |
+| `getProjection`, `setProjection(GLTransform)` | Read or replace the projection matrix |
+| `setProjection(Projection2D)` | Apply a projection provider |
+| `setView(GLView2D)` | Apply a complete view-projection configuration |
 
-### Depth und 2.5D-Licht
+### Depth and 2.5D lighting
 
-| Methoden | Zweck |
+| Methods | Purpose |
 |---|---|
-| `setDepthState`, `getDepthState` | Depth-Test, Schreibmaske und Vergleich |
-| `setDepth`, `getDepth` | Feste Tiefe normaler Geometrie; `0` hinten, `1` vorne |
-| `setLighting`, `getLighting` | Ambient- und Richtungslicht für Normalmap-Sprites |
+| `setDepthState`, `getDepthState` | Configure depth testing, writes, and comparison |
+| `setDepth`, `getDepth` | Set constant geometry depth; `0` is back and `1` is front |
+| `setLighting`, `getLighting` | Configure ambient and directional sprite lighting |
 
-### Stroke und Tessellierung
+### Stroke and curve tessellation
 
-| Methoden | Zweck |
+| Methods | Purpose |
 |---|---|
-| `setStroke`, `getStroke` | Vollständiger `GLStroke` |
-| `setStrokeWidth`, `getStrokeWidth` | Breite |
-| `setStrokeCap`, `getStrokeCap` | Endkappen |
-| `setStrokeJoin`, `getStrokeJoin` | Ecken |
-| `setStrokeOffset`, `getStrokeOffset` | Mittiger/seitlicher Versatz |
-| `setStrokeMiterLimit`, `getStrokeMiterLimit` | Miter-Grenze |
-| `setStrokeCurveTolerance`, `getStrokeCurveTolerance` | Rundungsqualität des Strokes |
-| `setStrokeWidthSpace`, `getStrokeWidthSpace` | `WORLD` oder `SCREEN` |
-| `setStrokeDash`, `getStrokeDash`, `clearStrokeDash` | Dash-Muster |
-| `setStrokeDashPhase`, `getStrokeDashPhase` | Dash-Startversatz |
-| `setCurveTolerance`, `getCurveTolerance` | Qualität gefüllter Kurven und Pfade |
+| `setStroke`, `getStroke` | Replace or inspect the complete `GLStroke` |
+| `setStrokeWidth`, `getStrokeWidth` | Line width |
+| `setStrokeCap`, `getStrokeCap` | End caps |
+| `setStrokeJoin`, `getStrokeJoin` | Joins |
+| `setStrokeOffset`, `getStrokeOffset` | Shift the stroke center along the path normal |
+| `setStrokeMiterLimit`, `getStrokeMiterLimit` | Limit sharp miter extensions |
+| `setStrokeCurveTolerance`, `getStrokeCurveTolerance` | Stroke curve approximation tolerance |
+| `setStrokeWidthSpace`, `getStrokeWidthSpace` | Select `WORLD` or `SCREEN` measurements |
+| `setStrokeDash`, `getStrokeDash`, `clearStrokeDash` | Configure a dash pattern |
+| `setStrokeDashPhase`, `getStrokeDashPhase` | Set the dash-pattern starting offset |
+| `setCurveTolerance`, `getCurveTolerance` | Filled path and curve approximation tolerance |
 
-### Picking und Ausgaben
+### Picking and output masks
 
-| Methoden | Zweck |
+| Methods | Purpose |
 |---|---|
-| `setOutputMask` | Farb- und Pickingausgabe gemeinsam ein-/ausschalten |
-| `setColorRenderingEnabled`, `isColorRenderingEnabled` | Farbausgabe |
-| `setPickingRenderingEnabled`, `isPickingRenderingEnabled` | Pickingausgabe |
-| `setTexturePickAlphaThreshold`, `getTexturePickAlphaThreshold` | Alpha-Grenze für Textur-Picking |
-| `setPickId`, `getPickId`, `clearPickId` | Numerisches Picking |
-| `setMouseTarget`, `getMouseTarget`, `clearMouseTarget` | Direktes `GLMouseTarget` |
+| `setOutputMask` | Enable or disable color and picking output together |
+| `setColorRenderingEnabled`, `isColorRenderingEnabled` | Control color output |
+| `setPickingRenderingEnabled`, `isPickingRenderingEnabled` | Control picking output |
+| `setTexturePickAlphaThreshold`, `getTexturePickAlphaThreshold` | Set alpha rejection for texture picking |
+| `setPickId`, `getPickId`, `clearPickId` | Manage a numeric pick ID |
+| `setMouseTarget`, `getMouseTarget`, `clearMouseTarget` | Manage a direct `GLMouseTarget` |
 
-### Shader und Uniforms
+### Shaders and uniforms
 
-| Methoden | Zweck |
+| Methods | Purpose |
 |---|---|
-| `setFilledShader`, `getFilledShader`, `useDefaultFilledShader` | Shader für Shapes und Strokes |
-| `setTextureShader`, `getTextureShader`, `useDefaultTextureShader` | Shader für Texturen/Bilder/Targets |
-| `setTextShader`, `getTextShader`, `useDefaultTextShader` | Shader für Standard-MSDF-Text |
-| `setUIShader`, `getUIShader`, `useDefaultUIShader` | Vollständiger Shaderersatz für den Universal-UI-Batch |
-| `setFilledUniform`, `setFilledUniformMatrix4` | Filled-Uniforms |
-| `setTextureUniform`, `setTextureUniformMatrix4` | Texture-Uniforms |
-| `setTextUniform`, `setTextUniformMatrix4` | Text-Uniforms |
-| `setUIUniform`, `setUIUniformMatrix4` | Uniforms des eigenen UI-Shaders |
+| `setFilledShader`, `getFilledShader`, `useDefaultFilledShader` | Shape and stroke shader |
+| `setTextureShader`, `getTextureShader`, `useDefaultTextureShader` | Texture, image, icon, and target shader |
+| `setTextShader`, `getTextShader`, `useDefaultTextShader` | Standard MSDF text shader |
+| `setUIShader`, `getUIShader`, `useDefaultUIShader` | Complete universal UI shader replacement |
+| `setFilledUniform`, `setFilledUniformMatrix4` | Uniforms for a custom filled shader |
+| `setTextureUniform`, `setTextureUniformMatrix4` | Uniforms for a custom texture shader |
+| `setTextUniform`, `setTextUniformMatrix4` | Uniforms for a custom text shader |
+| `setUIUniform`, `setUIUniformMatrix4` | Uniforms for a custom UI shader |
 
-Jede `set...Uniform`-Familie besitzt Overloads für `float`, `vec2`, `vec3`,
-`vec4` und `int`; die Matrixmethode erwartet 16 `float`-Werte.
+Each `set...Uniform` family accepts scalar `float`, `vec2`, `vec3`, `vec4`,
+and `int` values. Matrix methods accept 16 floats.
 
-### Clip und Layer
+### Clips and layers
 
-| Methoden | Zweck |
+| Methods | Purpose |
 |---|---|
-| `beginClip`, `endClip`, `getClipDepth` | Verschachtelbarer Scissor-Clip |
-| `beginLayer()` | Layer mit automatisch ermittelten Inhaltsbounds beginnen |
-| `beginLayer(x,y,w,h)` | Begrenzten Layer beginnen |
-| `beginLayer(x,y,w,h,screenInset)` | Begrenzten Layer mit Screen-Inset beginnen |
-| `endLayer()` | Normal zusammensetzen |
-| `endLayer(opacity)` | Mit Gruppen-Opacity zusammensetzen |
-| `endLayer(GLBlendMode)` | Mit Blendmodus zusammensetzen |
-| `endLayer(GLComposite)` | Mit Opacity, Blendmodus und Effekten zusammensetzen |
-| `getLayerDepth` | Offene Layer zählen |
+| `beginClip`, `endClip`, `getClipDepth` | Manage nested rectangular scissor clips |
+| `beginLayer()` | Start a layer covering the active surface |
+| `beginLayer(x,y,w,h)` | Start a layer with explicit local bounds |
+| `beginLayer(x,y,w,h,screenInset)` | Add screen-space room around explicit bounds |
+| `endLayer()` | Composite normally |
+| `endLayer(opacity)` | Composite with group opacity |
+| `endLayer(GLBlendMode)` | Composite with a blend mode |
+| `endLayer(GLComposite)` | Composite with opacity, blend mode, and effects |
+| `getLayerDepth` | Inspect the nesting depth |
 
-### Persistente RenderTargets
+### Persistent render targets
 
-| Methoden | Zweck |
+| Methods | Purpose |
 |---|---|
-| `beginRenderTarget`, `endRenderTarget`, `withRenderTarget` | In persistenten FBO rendern |
-| `getRenderTargetDepth` | Offene Target-Pässe zählen |
-| `drawRenderTarget` | Targetinhalt darstellen |
+| `beginRenderTarget`, `endRenderTarget`, `withRenderTarget` | Render into a persistent target |
+| `getRenderTargetDepth` | Inspect nested target passes |
+| `drawRenderTarget` | Draw target content through the texture pipeline |
 
-### Standard-Zeichenpipeline
+### Standard drawing pipeline
 
-| Methodenfamilie | Zielbatch |
+| Method family | Batch |
 |---|---|
 | `drawLine`, `drawPolyline`, `drawPolygon`, `drawCubicBezier` | Filled |
 | `drawPath`, `drawRect`, `drawRoundRect`, `drawEllipse`, `drawCircle` | Filled |
@@ -178,41 +163,42 @@ Jede `set...Uniform`-Familie besitzt Overloads für `float`, `vec2`, `vec3`,
 | `fillRoundRect`, `fillEllipse`, `fillCircle` | Filled |
 | `drawTexture`, `drawImage`, `drawIcon`, `drawRenderTarget` | Texture |
 | `drawText` | Text |
-| `drawSprite`, `drawMaterial` | Sprite-Materialbatch mit Color-/Depth-/Normalmaps |
+| `drawSprite`, `drawMaterial` | 2.5D sprite material |
 
-Strokes landen als tessellierte Dreiecke ebenfalls im Filled-Batch.
+Strokes are tessellated into triangles and therefore share the filled batch.
 
-### Universal-UI-Pipeline
+### Universal UI pipeline
 
-| Methodenfamilie | Inhalt |
+| Method family | Purpose |
 |---|---|
-| `fillUIRoundRect` | Analytische Fläche |
-| `drawUIRoundRect` | Analytischer innerer Border |
-| `fillAndDrawUIRoundRect` | Fläche und Border ohne AA-Bleeding |
-| `drawUIRoundRectShadow` | Analytischer, nicht pickbarer Schatten |
-| `drawUIText` | MSDF-Text |
-| `drawUICheckMark`, `drawUIChevron` | Standardsymbole |
-| `fillUIProgressRoundRect` | Fortschrittsverlauf |
-| `fillUIVerticalGradientRoundRect` | Vollständiger vertikaler Verlauf |
-| `addUIHitArea` | Nur Picking, keine Farbe |
-| `drawUIImage`, `drawUIIcon` | RGBA-/MSDF-Atlasinhalt |
+| `fillUIRoundRect` | Analytic rounded fill |
+| `drawUIRoundRect` | Analytic inner border |
+| `fillAndDrawUIRoundRect` | Combined fill and border without AA bleeding |
+| `drawUIRoundRectShadow` | Analytic, non-pickable shadow |
+| `drawUIText` | MSDF UI text |
+| `drawUICheckMark`, `drawUIChevron` | Standard symbols |
+| `fillUIProgressRoundRect` | Rounded progress gradient |
+| `fillUIVerticalGradientRoundRect` | Full rounded vertical gradient |
+| `addUIHitArea` | Picking-only rectangle with no color output |
+| `drawUIImage`, `drawUIIcon` | RGBA or MSDF atlas content |
 
-## Konstanten
+## Constants
 
-| Konstante | Wert/Bedeutung |
+| Constant | Value |
 |---|---|
-| `NO_PICK_ID` | `0`, kein numerisches Ziel |
-| `DEFAULT_CLEAR_COLOR` | Dunkler Standardhintergrund `(15,20,31)` |
+| `NO_PICK_ID` | `0`, no numeric picking target |
+| `DEFAULT_CLEAR_COLOR` | Dark background `(15, 20, 31)` |
 | `DEFAULT_TEXTURE_PICK_ALPHA_THRESHOLD` | `0.1f` |
 
-## Welches Kapitel brauche ich?
+## Detailed guides
 
-- Eine Form zeichnen: [Zeichenbefehle](graphics-pipeline/drawing.md)
-- Kamera, Stroke oder Projection setzen: [Konfiguration](graphics-pipeline/context-configuration.md)
-- Unveränderte Geometrie beschleunigen: [Recording](graphics-pipeline/recording.md)
-- Eigenes GLSL: [Shader](graphics-pipeline/shaders.md)
-- Pixelgenaue Tiefe, Sprites und Normalmaps: [Depth und 2.5D-Materialien](graphics-pipeline/depth-materials.md)
-- Blur, Schatten, Outline oder Gruppenalpha: [Layer und Effekte](graphics-pipeline/layers-effects.md)
-- Game of Life oder Offscreen-Canvas: [RenderTargets](graphics-pipeline/render-targets.md)
-- Bilder oder SVG-Icons: [Ressourcen](graphics-pipeline/resources.md)
-- Mausinteraktion: [Picking](graphics-pipeline/picking.md)
+1. [Context configuration](graphics-pipeline/context-configuration.md)
+2. [Drawing commands and render paths](graphics-pipeline/drawing.md)
+3. [Recordings and runtime parameters](graphics-pipeline/recording.md)
+4. [Custom shaders and uniforms](graphics-pipeline/shaders.md)
+5. [Depth and 2.5D materials](graphics-pipeline/depth-materials.md)
+6. [Layers, compositing, and effects](graphics-pipeline/layers-effects.md)
+7. [Render targets and feedback](graphics-pipeline/render-targets.md)
+8. [Images, atlases, icons, text, paths, and SVG](graphics-pipeline/resources.md)
+9. [Picking and pointer targets](graphics-pipeline/picking.md)
+10. [Batching, performance, and resource lifetime](graphics-pipeline/performance.md)
