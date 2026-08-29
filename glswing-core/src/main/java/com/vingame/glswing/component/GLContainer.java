@@ -9,7 +9,7 @@ import com.vingame.glswing.layout.GLConstraints;
 import com.vingame.glswing.layout.GLInsets;
 import com.vingame.glswing.layout.GLLayout;
 import com.vingame.glswing.layout.GLSize;
-import com.vingame.glswing.history.GLSaveManager;
+import com.vingame.glswing.history.GLHistoryManager;
 import com.vingame.glswing.rendering.GLContext2D;
 import com.vingame.glswing.rendering.GLComposite;
 import com.vingame.glswing.rendering.GLDropShadowEffect;
@@ -46,6 +46,7 @@ public abstract class GLContainer implements GLParent, GLMouseTarget {
 	private volatile GLSize maximumGLSize = GLSize.INFINITE;
 	private volatile GLTheme localTheme;
 	private volatile GLLocalizer localLocalizer;
+	private volatile GLHistoryManager localHistoryManager;
 	private volatile GLInsets visualOverflow = GLInsets.ZERO;
 	private volatile float[] lastVisualBounds;
 	private volatile float lastRenderedRootX;
@@ -475,9 +476,32 @@ public abstract class GLContainer implements GLParent, GLMouseTarget {
 	}
 
 	@Override
-	public final GLSaveManager getGLSaveManager() {
+	public final GLHistoryManager getGLHistoryManager() {
+		GLHistoryManager manager = localHistoryManager;
+		if (manager != null)
+			return manager;
 		GLParent parent = glParent;
-		return parent == null ? null : parent.getGLSaveManager();
+		return parent == null ? null : parent.getGLHistoryManager();
+	}
+
+	/**
+	 * Defines an independent undo/redo history for this complete subtree.
+	 * Descendants inherit this manager unless they define a nearer scope.
+	 */
+	public final void setGLHistoryManager(GLHistoryManager manager) {
+		if (manager == null)
+			throw new IllegalArgumentException("History manager must not be null");
+		localHistoryManager = manager;
+	}
+
+	/** Restores history inheritance from the nearest parent scope or host. */
+	public final void clearGLHistoryManager() {
+		localHistoryManager = null;
+	}
+
+	/** Whether this container starts an explicit history scope. */
+	public final boolean hasExplicitGLHistoryManager() {
+		return localHistoryManager != null;
 	}
 
 	@Override

@@ -1,13 +1,14 @@
-# Undo and Redo with `GLSaveManager`
+# Undo and Redo with `GLHistoryManager`
 
 [UI guide](../ui-framework.md) · [Controls](controls.md) · [Node editor](nodes.md)
 
-`GLSaveManager` stores named reversible edits, groups related operations, and
+`GLHistoryManager` stores named reversible edits, groups related operations, and
 tracks whether the current state differs from the last saved state.
 
 ## Contents
 
 - [Setup and status](#setup-and-status)
+- [Independent history scopes](#independent-history-scopes)
 - [Recording completed changes](#recording-completed-changes)
 - [Performing changes](#performing-changes)
 - [Transactions](#transactions)
@@ -17,11 +18,11 @@ tracks whether the current state differs from the last saved state.
 
 ## Setup and status
 
-Hosts provide a manager through `getGLSaveManager()`. Replace it with
-`setGLSaveManager(...)` when several views must share one document history.
+Hosts provide a manager through `getGLHistoryManager()`. Replace it with
+`setGLHistoryManager(...)` when several views must share one document history.
 
 ```java
-GLSaveManager history = host.getGLSaveManager();
+GLHistoryManager history = host.getGLHistoryManager();
 if (history.canUndo()) {
     undoItem.setText("Undo " + history.getUndoName());
 }
@@ -31,6 +32,26 @@ if (history.canUndo()) {
 state. `undo()`, `redo()`, and `reset()` execute or clear history.
 `setHistoryLimit(...)` controls retained edits; the default is
 `DEFAULT_HISTORY_LIMIT`.
+
+## Independent history scopes
+
+Every `GLContainer` inherits the nearest history manager from its parent. Set a
+local manager to make the container the root of an independent document or
+editing surface:
+
+```java
+GLHistoryManager documentHistory = new GLHistoryManager();
+documentSurface.setGLHistoryManager(documentHistory);
+```
+
+All controls below `documentSurface` now record into `documentHistory`, while
+sibling surfaces continue using their own scope or the host default. Nested
+scopes are supported. `clearGLHistoryManager()` restores inheritance and
+`hasExplicitGLHistoryManager()` reports whether a container starts a scope.
+
+Keyboard undo and redo resolve the manager from the focused component, so
+`Ctrl/Cmd+Z` affects the active surface rather than an unrelated host-level
+history.
 
 ## Recording completed changes
 
@@ -74,14 +95,14 @@ only when an active editor has not consumed the event.
 ## Integrated controls
 
 `GLTextEditor`, sliders, `GLSliderGroup`, and node-editor operations integrate
-with the nearest host manager. Programmatic setters do not necessarily create
+with the nearest inherited history manager. Programmatic setters do not necessarily create
 history; user gestures do. Composite controls can disable a child editor's
 history with `setHistoryEnabled(false)` and record one higher-level operation.
 
 ## Saved-state tracking
 
-`markSaved()` marks the current history position as the persisted document
-state. `isDirty()` changes as edits, undo, and redo move relative to that point.
-Call `markSaved()` only after a successful save. Clearing or truncating history
+`markPersisted()` marks the current history position as the persisted document
+state. `isModified()` changes as edits, undo, and redo move relative to that point.
+Call `markPersisted()` only after a successful save. Clearing or truncating history
 can make the previous saved position unreachable, in which case dirty state
 remains conservative.

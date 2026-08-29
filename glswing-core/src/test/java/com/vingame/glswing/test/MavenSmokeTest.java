@@ -46,7 +46,7 @@ final class MavenSmokeTest {
 	}
 
 	@Test
-	void saveManager() {
-		GLSaveManagerSelfTest.main(NO_ARGS);
+	void historyManager() {
+		GLHistoryManagerSelfTest.main(NO_ARGS);
 	}
 }

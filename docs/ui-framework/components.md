@@ -74,9 +74,10 @@ rectangle used by the host.
 
 ## Inherited services
 
-Theme, localizer, focus, font cache, and `GLSaveManager` flow from the host
-through containers. A container can override theme or localization for its
-subtree. Hooks `themeChanged()` and `localizerChanged()` invalidate dependent
+Theme, localizer, focus, font cache, and `GLHistoryManager` flow from the host
+through containers. A container can override theme, localization, or history
+for its subtree. A local history manager creates an independent undo/redo scope
+for a document or editing surface. Hooks `themeChanged()` and `localizerChanged()` invalidate dependent
 appearance. Use `requestGLFocus(...)` and `clearGLFocus(subtree)` for keyboard
 focus.
 

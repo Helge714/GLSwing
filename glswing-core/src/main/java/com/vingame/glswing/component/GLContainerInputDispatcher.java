@@ -26,7 +26,7 @@ import com.vingame.glswing.input.GLPickResult;
 import com.vingame.glswing.input.GLImmediateHoverRegistry;
 import com.vingame.glswing.input.GLPointerController;
 import com.vingame.glswing.input.GLPointerControllers;
-import com.vingame.glswing.history.GLSaveManager;
+import com.vingame.glswing.history.GLHistoryManager;
 import com.vingame.glswing.ui.GLTextEditor;
 
 /** Input bridge shared by retained controls hosted on a direct GL canvas. */
@@ -466,12 +466,16 @@ final class GLContainerInputDispatcher {
 			host.addKeyListener(new KeyAdapter() {
 			@Override
 			public void keyPressed(KeyEvent event) {
-				if (GLSaveManager.isHistoryShortcut(event)
+				if (GLHistoryManager.isHistoryShortcut(event)
 						&& host.focusedGLTarget() instanceof GLTextEditor editor
 						&& editor.hasUncommittedChanges()
 						&& !editor.commit())
 					return;
-				if (host.getGLSaveManager().handleKeyPressed(event)) {
+				GLHistoryManager history = host.focusedGLTarget()
+						instanceof GLContainer container
+								? container.getGLHistoryManager()
+								: host.getGLHistoryManager();
+				if (history != null && history.handleKeyPressed(event)) {
 					host.repaintColorOnly();
 					return;
 				}

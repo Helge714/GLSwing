@@ -1229,7 +1229,7 @@ public class GLNodeEditor extends GLContainer
 		RemovedNodes snapshot = captureRemovedNodes(removed);
 		for (GLNode node : removed)
 			removeNode(node);
-		var manager = getGLSaveManager();
+		var manager = getGLHistoryManager();
 		if (manager != null)
 			manager.record(removed.size() == 1 ? "Delete node" : "Delete nodes",
 					() -> restoreRemovedNodes(snapshot),
@@ -1284,7 +1284,7 @@ public class GLNodeEditor extends GLContainer
 			List<GLNodeConnection> after) {
 		if (before.equals(after))
 			return;
-		var manager = getGLSaveManager();
+		var manager = getGLHistoryManager();
 		if (manager != null)
 			manager.record("Change node connection",
 					() -> applyConnections(before), () -> applyConnections(after));
@@ -1305,7 +1305,7 @@ public class GLNodeEditor extends GLContainer
 		});
 		if (!changed)
 			return;
-		var manager = getGLSaveManager();
+		var manager = getGLHistoryManager();
 		if (manager != null)
 			manager.record(before.size() == 1 ? "Move node" : "Move nodes",
 					() -> applyLocations(before), () -> applyLocations(after));

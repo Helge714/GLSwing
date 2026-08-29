@@ -109,10 +109,10 @@ restore inherited values.
 
 ## History and model synchronization
 
-User operations integrate with the host `GLSaveManager`. Treat one drag or
+User operations integrate with the host `GLHistoryManager`. Treat one drag or
 multi-selection operation as one undo step. Programmatic graph loading should
 normally suppress or reset history, populate the editor, then call
-`markSaved()`.
+`markPersisted()`.
 
 The editor is a view/controller, not the authoritative domain model. Mirror
 accepted edits through listeners, serialize stable node/port IDs and domain

@@ -342,7 +342,7 @@ public final class GLSliderGroup extends GLContainer {
 				Double.compare(entry.getValue(), after.get(entry.getKey())) != 0);
 		if (!changed)
 			return;
-		var manager = getGLSaveManager();
+		var manager = getGLHistoryManager();
 		if (manager != null)
 			manager.record(name, () -> applyValues(before), () -> applyValues(after));
 	}

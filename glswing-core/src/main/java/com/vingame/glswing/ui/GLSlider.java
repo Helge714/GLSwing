@@ -885,7 +885,7 @@ public class GLSlider extends GLControl {
 	void recordValueChange(double before, double after, String name) {
 		if (Double.compare(before, after) == 0)
 			return;
-		var manager = getGLSaveManager();
+		var manager = getGLHistoryManager();
 		if (manager != null)
 			manager.record(name, () -> setValue(before), () -> setValue(after));
 	}

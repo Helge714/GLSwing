@@ -4,12 +4,12 @@ import java.awt.Canvas;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 
-import com.vingame.glswing.history.GLSaveManager;
+import com.vingame.glswing.history.GLHistoryManager;
 
 /** CPU-only checks for history, transactions, save points and shortcuts. */
-public final class GLSaveManagerSelfTest {
+public final class GLHistoryManagerSelfTest {
 
-	private GLSaveManagerSelfTest() {
+	private GLHistoryManagerSelfTest() {
 	}
 
 	public static void main(String[] args) {
@@ -17,26 +17,26 @@ public final class GLSaveManagerSelfTest {
 		testNestedTransactions();
 		testBranchAndLimit();
 		testKeyboardShortcuts();
-		System.out.println("GL save-manager self-test passed.");
+		System.out.println("GL history-manager self-test passed.");
 	}
 
 	private static void testUndoRedoAndSavePoint() {
-		GLSaveManager manager = new GLSaveManager();
+		GLHistoryManager manager = new GLHistoryManager();
 		int[] value = { 0 };
 		value[0] = 1;
 		manager.record("Set one", () -> value[0] = 0, () -> value[0] = 1);
-		check(manager.isDirty() && manager.canUndo() && !manager.canRedo(),
+		check(manager.isModified() && manager.canUndo() && !manager.canRedo(),
 				"Recording did not create a dirty undo state");
-		manager.markSaved();
-		check(!manager.isDirty(), "Saved checkpoint remained dirty");
-		check(manager.undo() && value[0] == 0 && manager.isDirty(),
+		manager.markPersisted();
+		check(!manager.isModified(), "Persisted checkpoint remained modified");
+		check(manager.undo() && value[0] == 0 && manager.isModified(),
 				"Undo did not restore the previous value");
-		check(manager.redo() && value[0] == 1 && !manager.isDirty(),
+		check(manager.redo() && value[0] == 1 && !manager.isModified(),
 				"Redo did not return to the saved checkpoint");
 	}
 
 	private static void testNestedTransactions() {
-		GLSaveManager manager = new GLSaveManager();
+		GLHistoryManager manager = new GLHistoryManager();
 		StringBuilder value = new StringBuilder();
 		try (var outer = manager.beginTransaction("Build value")) {
 			value.append('A');
@@ -58,7 +58,7 @@ public final class GLSaveManagerSelfTest {
 	}
 
 	private static void testBranchAndLimit() {
-		GLSaveManager manager = new GLSaveManager(2);
+		GLHistoryManager manager = new GLHistoryManager(2);
 		int[] value = { 0 };
 		for (int next = 1; next <= 3; next++) {
 			int before = value[0];
@@ -77,7 +77,7 @@ public final class GLSaveManagerSelfTest {
 	}
 
 	private static void testKeyboardShortcuts() {
-		GLSaveManager manager = new GLSaveManager();
+		GLHistoryManager manager = new GLHistoryManager();
 		int[] value = { 1 };
 		manager.record("Set", () -> value[0] = 0, () -> value[0] = 1);
 		Canvas source = new Canvas();

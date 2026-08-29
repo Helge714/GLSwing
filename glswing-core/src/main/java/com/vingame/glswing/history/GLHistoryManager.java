@@ -9,29 +9,30 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
- * Bounded undo/redo history with compound transactions and a saved-state
- * checkpoint. Edits are recorded after their change has already been applied.
+ * Bounded undo/redo history with compound transactions and a persisted-state
+ * checkpoint. File serialization and storage are intentionally outside this type.
+ * Edits are recorded after their change has already been applied.
  */
-public final class GLSaveManager {
+public final class GLHistoryManager {
 
 	public static final int DEFAULT_HISTORY_LIMIT = 100;
 
 	private final Deque<Entry> undo = new ArrayDeque<>();
 	private final Deque<Entry> redo = new ArrayDeque<>();
 	private final Deque<Transaction> transactions = new ArrayDeque<>();
-	private final CopyOnWriteArrayList<GLSaveManagerListener> listeners =
+	private final CopyOnWriteArrayList<GLHistoryManagerListener> listeners =
 			new CopyOnWriteArrayList<>();
 	private int historyLimit;
 	private long nextStateId;
 	private long currentStateId;
-	private long savedStateId;
+	private long persistedStateId;
 	private boolean applying;
 
-	public GLSaveManager() {
+	public GLHistoryManager() {
 		this(DEFAULT_HISTORY_LIMIT);
 	}
 
-	public GLSaveManager(int historyLimit) {
+	public GLHistoryManager(int historyLimit) {
 		setHistoryLimit(historyLimit);
 	}
 
@@ -63,8 +64,15 @@ public final class GLSaveManager {
 		return !transactions.isEmpty();
 	}
 
+	/** Whether the current history position differs from the persisted checkpoint. */
+	public boolean isModified() {
+		return currentStateId != persistedStateId || !transactions.isEmpty();
+	}
+
+	/** @deprecated Use {@link #isModified()}. */
+	@Deprecated(forRemoval = false)
 	public boolean isDirty() {
-		return currentStateId != savedStateId || !transactions.isEmpty();
+		return isModified();
 	}
 
 	public String getUndoName() {
@@ -75,22 +83,31 @@ public final class GLSaveManager {
 		return canRedo() ? redo.peekLast().edit.name() : null;
 	}
 
-	/** Marks the current history position as persisted. */
-	public void markSaved() {
+	/** Marks the current history position as successfully persisted. */
+	public void markPersisted() {
 		if (isInTransaction())
 			throw new IllegalStateException(
-					"Cannot mark a partially recorded transaction as saved");
-		savedStateId = currentStateId;
+					"Cannot persist a partially recorded transaction");
+		persistedStateId = currentStateId;
 		fireChanged();
 	}
 
-	/** Clears history and treats the current document state as saved. */
+	/**
+	 * Compatibility alias for the former terminology.
+	 * @deprecated Use {@link #markPersisted()}.
+	 */
+	@Deprecated(forRemoval = false)
+	public void markSaved() {
+		markPersisted();
+	}
+
+	/** Clears history and treats the current document state as persisted. */
 	public void reset() {
 		if (isInTransaction())
 			throw new IllegalStateException("Cannot reset during a transaction");
 		undo.clear();
 		redo.clear();
-		currentStateId = savedStateId = ++nextStateId;
+		currentStateId = persistedStateId = ++nextStateId;
 		fireChanged();
 	}
 
@@ -182,13 +199,13 @@ public final class GLSaveManager {
 						|| event.getKeyCode() == KeyEvent.VK_Y);
 	}
 
-	public void addListener(GLSaveManagerListener listener) {
+	public void addListener(GLHistoryManagerListener listener) {
 		if (listener == null)
 			throw new IllegalArgumentException("History listener must not be null");
 		listeners.addIfAbsent(listener);
 	}
 
-	public void removeListener(GLSaveManagerListener listener) {
+	public void removeListener(GLHistoryManagerListener listener) {
 		listeners.remove(listener);
 	}
 
@@ -234,7 +251,7 @@ public final class GLSaveManager {
 	}
 
 	private void fireChanged() {
-		for (GLSaveManagerListener listener : listeners)
+		for (GLHistoryManagerListener listener : listeners)
 			listener.historyChanged(this);
 	}
 
@@ -253,7 +270,7 @@ public final class GLSaveManager {
 
 		@Override
 		public void close() {
-			GLSaveManager.this.close(this);
+			GLHistoryManager.this.close(this);
 		}
 	}
 

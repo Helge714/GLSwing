@@ -317,7 +317,7 @@ public class GLTextEditor extends GLControl {
 			editBaseline = text;
 			lastValidText = text;
 			if (historyEnabled && !before.equals(after)) {
-				var manager = getGLSaveManager();
+				var manager = getGLHistoryManager();
 				if (manager != null)
 					manager.record("Edit text", () -> setText(before),
 							() -> setText(after));

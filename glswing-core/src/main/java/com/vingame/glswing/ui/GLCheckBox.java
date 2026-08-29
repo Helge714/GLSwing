@@ -246,7 +246,7 @@ public class GLCheckBox extends GLControl {
 		boolean before = selected;
 		boolean after = !before;
 		applySelectionAndFire(after);
-		var manager = getGLSaveManager();
+		var manager = getGLHistoryManager();
 		if (manager != null)
 			manager.record("Toggle checkbox",
 					() -> applySelectionAndFire(before),

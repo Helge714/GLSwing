@@ -7,7 +7,7 @@ import java.util.Map;
 
 import com.jogamp.opengl.GL3;
 import com.vingame.glswing.input.GLKeyTarget;
-import com.vingame.glswing.history.GLSaveManager;
+import com.vingame.glswing.history.GLHistoryManager;
 import com.vingame.glswing.input.GLMouseTarget;
 import com.vingame.glswing.layout.GLConstraints;
 import com.vingame.glswing.layout.GLInsets;
@@ -37,7 +37,7 @@ public abstract class GLSwingContainerCanvas extends GLSwingCanvas
 	private final GLDamageTracker damageTracker = new GLDamageTracker();
 	private volatile GLTheme theme = GLTheme.DEFAULT;
 	private volatile GLLocalizer localizer = GLLocalizer.DEFAULT;
-	private volatile GLSaveManager saveManager = new GLSaveManager();
+	private volatile GLHistoryManager historyManager = new GLHistoryManager();
 	private transient GLKeyTarget focusedTarget;
 
 	protected GLSwingContainerCanvas() {
@@ -203,14 +203,14 @@ public abstract class GLSwingContainerCanvas extends GLSwingCanvas
 	}
 
 	@Override
-	public final GLSaveManager getGLSaveManager() {
-		return saveManager;
+	public final GLHistoryManager getGLHistoryManager() {
+		return historyManager;
 	}
 
-	public final void setGLSaveManager(GLSaveManager saveManager) {
-		if (saveManager == null)
-			throw new IllegalArgumentException("Save manager must not be null");
-		this.saveManager = saveManager;
+	public final void setGLHistoryManager(GLHistoryManager historyManager) {
+		if (historyManager == null)
+			throw new IllegalArgumentException("History manager must not be null");
+		this.historyManager = historyManager;
 	}
 
 	@Override

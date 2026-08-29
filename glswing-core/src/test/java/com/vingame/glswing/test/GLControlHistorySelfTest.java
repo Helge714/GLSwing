@@ -6,7 +6,8 @@ import java.awt.event.KeyEvent;
 import java.util.List;
 
 import com.vingame.glswing.component.GLSwingPanel;
-import com.vingame.glswing.history.GLSaveManager;
+import com.vingame.glswing.component.GLContainer;
+import com.vingame.glswing.history.GLHistoryManager;
 import com.vingame.glswing.input.GLMouseEvent;
 import com.vingame.glswing.input.GLPickResult;
 import com.vingame.glswing.input.GLKeyEvent;
@@ -33,71 +34,72 @@ public final class GLControlHistorySelfTest {
 		testSlider(panel);
 		testTextEditor(panel);
 		testNodeDeletion(panel);
+		testIndependentHistoryScopes(panel);
 		System.out.println("GL control-history self-test passed.");
 	}
 
 	private static void testCheckBox(TestPanel panel) {
 		panel.removeAllGL();
-		panel.getGLSaveManager().reset();
+		panel.getGLHistoryManager().reset();
 		GLCheckBox checkBox = new GLCheckBox("Enabled");
 		panel.addGL(checkBox);
 		checkBox.mouseClicked(click(checkBox, MouseEvent.BUTTON1));
 		check(checkBox.isSelected(), "Checkbox click did not change its value");
-		check(panel.getGLSaveManager().undo() && !checkBox.isSelected(),
+		check(panel.getGLHistoryManager().undo() && !checkBox.isSelected(),
 				"Checkbox click was not undoable");
-		check(panel.getGLSaveManager().redo() && checkBox.isSelected(),
+		check(panel.getGLHistoryManager().redo() && checkBox.isSelected(),
 				"Checkbox click was not redoable");
 	}
 
 	private static void testComboBox(TestPanel panel) {
 		panel.removeAllGL();
-		panel.getGLSaveManager().reset();
+		panel.getGLHistoryManager().reset();
 		GLComboBox<String> combo = new GLComboBox<>(List.of("A", "B"));
 		panel.addGL(combo);
 		combo.getPopupMenu().getItems().get(1).doClick();
 		check("B".equals(combo.getSelectedItem()),
 				"Combo-box action did not select its item");
-		check(panel.getGLSaveManager().undo()
+		check(panel.getGLHistoryManager().undo()
 				&& "A".equals(combo.getSelectedItem()),
 				"Combo-box selection was not undoable");
-		check(panel.getGLSaveManager().redo()
+		check(panel.getGLHistoryManager().redo()
 				&& "B".equals(combo.getSelectedItem()),
 				"Combo-box selection was not redoable");
 	}
 
 	private static void testSlider(TestPanel panel) {
 		panel.removeAllGL();
-		panel.getGLSaveManager().reset();
+		panel.getGLHistoryManager().reset();
 		GLSlider slider = GLSlider.fixed("Value", 0, 10, 2);
 		slider.setDefaultValue(7);
 		panel.addGL(slider);
 		slider.getResetMenuItem().doClick();
 		check(slider.getValue() == 7, "Slider reset did not change its value");
-		check(panel.getGLSaveManager().undo() && slider.getValue() == 2,
+		check(panel.getGLHistoryManager().undo() && slider.getValue() == 2,
 				"Slider reset was not undoable");
-		check(panel.getGLSaveManager().redo() && slider.getValue() == 7,
+		check(panel.getGLHistoryManager().redo() && slider.getValue() == 7,
 				"Slider reset was not redoable");
 	}
 
 	private static void testTextEditor(TestPanel panel) {
 		panel.removeAllGL();
-		panel.getGLSaveManager().reset();
+		panel.getGLHistoryManager().reset();
 		GLTextEditor editor = new GLTextEditor("Before");
 		panel.addGL(editor);
 		editor.focusGained();
 		editor.setText("After");
 		check(editor.commit(), "Text editor rejected valid text");
-		check(panel.getGLSaveManager().undo()
+		check(panel.getGLHistoryManager().undo()
 				&& "Before".equals(editor.getText()),
 				"Committed editor text was not undoable");
-		check(panel.getGLSaveManager().redo()
+		check(panel.getGLHistoryManager().redo()
 				&& "After".equals(editor.getText()),
 				"Committed editor text was not redoable");
 	}
 
 	private static void testNodeDeletion(TestPanel panel) {
 		panel.removeAllGL();
-		panel.getGLSaveManager().reset();
+		panel.getGLHistoryManager().reset();
 		GLNodeEditor editor = new GLNodeEditor();
 		GLNode first = new GLNode("First");
 		GLNode second = new GLNode("Second");
@@ -110,7 +112,7 @@ public final class GLControlHistorySelfTest {
 		editor.setSelectedNodes(List.of(first, second));
 		panel.addGL(editor);
 		first.getContextMenu().getItems().get(1).doClick();
-		GLSaveManager history = panel.getGLSaveManager();
+		GLHistoryManager history = panel.getGLHistoryManager();
 		check(editor.getNodes().isEmpty(), "Node menu did not delete its selection");
 		check(history.undo() && editor.getNodes().equals(List.of(first, second))
 				&& editor.getSelectedNodes().equals(List.of(first, second))
@@ -139,6 +141,37 @@ public final class GLControlHistorySelfTest {
 		return new GLMouseEvent(original, pick, 0, 0);
 	}
 
+	private static void testIndependentHistoryScopes(TestPanel panel) {
+		panel.removeAllGL();
+		GLHistoryManager hostHistory = panel.getGLHistoryManager();
+		hostHistory.reset();
+		GLHistoryManager firstHistory = new GLHistoryManager();
+		GLHistoryManager secondHistory = new GLHistoryManager();
+		TestContainer firstScope = new TestContainer();
+		TestContainer secondScope = new TestContainer();
+		firstScope.setGLHistoryManager(firstHistory);
+		secondScope.setGLHistoryManager(secondHistory);
+		GLCheckBox first = new GLCheckBox("First");
+		GLCheckBox second = new GLCheckBox("Second");
+		firstScope.addGL(first);
+		secondScope.addGL(second);
+		panel.addGL(firstScope);
+		panel.addGL(secondScope);
+
+		first.mouseClicked(click(first, MouseEvent.BUTTON1));
+		second.mouseClicked(click(second, MouseEvent.BUTTON1));
+		check(!hostHistory.canUndo(), "Scoped edits leaked into host history");
+		check(firstHistory.undo() && !first.isSelected() && second.isSelected(),
+				"First history scope did not undo independently");
+		check(secondHistory.undo() && !second.isSelected(),
+				"Second history scope did not undo independently");
+
+		firstScope.clearGLHistoryManager();
+		check(first.getGLHistoryManager() == hostHistory
+				&& !firstScope.hasExplicitGLHistoryManager(),
+				"Clearing a history scope did not restore host inheritance");
+	}
+
 	private static void check(boolean condition, String message) {
 		if (!condition)
 			throw new AssertionError(message);
@@ -149,6 +182,12 @@ public final class GLControlHistorySelfTest {
 
 		@Override
 		protected void render(GLContext2D context) {
+		}
+	}
+
+	private static final class TestContainer extends GLContainer {
+		@Override
+		protected void record(GLContext2D context) {
 		}
 	}
 }

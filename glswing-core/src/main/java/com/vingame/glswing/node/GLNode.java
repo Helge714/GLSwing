@@ -665,7 +665,7 @@ public class GLNode extends GLContainer {
 		invalidateRecording();
 		if (commit && !before.equals(title)) {
 			String after = title;
-			var manager = getGLSaveManager();
+			var manager = getGLHistoryManager();
 			if (manager != null)
 				manager.record("Edit node title", () -> setTitle(before),
 						() -> setTitle(after));
@@ -830,7 +830,7 @@ public class GLNode extends GLContainer {
 		if (beginX == endX && beginY == endY && beginWidth == endWidth
 				&& beginHeight == endHeight)
 			return;
-		var manager = getGLSaveManager();
+		var manager = getGLHistoryManager();
 		if (manager != null)
 			manager.record(name,
 					() -> setBounds(beginX, beginY, beginWidth, beginHeight),

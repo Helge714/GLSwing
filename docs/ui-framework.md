@@ -28,7 +28,7 @@ see the [rendering guide](graphics-pipeline.md).
 | Scrolling | `GLScrollPane`, `GLScrollBar` | Clipped viewports and scroll models |
 | Appearance | `GLTheme`, style records, `GLThemeValues`, `GLThemeLoader`, `GLThemeWatcher` | Global and local presentation |
 | Localization | `GLLocalizer`, `GLUiKeys` | UTF-8 bundles, locale fallback, and overrides |
-| History | `GLSaveManager`, `GLUndoableEdit` | Undo, redo, transactions, and saved state |
+| History | `GLHistoryManager`, `GLUndoableEdit` | Scoped undo, redo, transactions, and persisted-state tracking |
 | Node editing | `GLNodeEditor`, `GLNode`, `GLNodePort`, `GLNodeConnection` | Zoomable graphs, connections, and selection |
 
 ## Coordinates and units

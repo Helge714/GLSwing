@@ -21,6 +21,7 @@ may change in subsequent `0.x` releases.
 - Buttons, checkboxes, sliders, text editors, combo boxes, and menus.
 - Tabs, scroll panes, dialogs, themes, and localization.
 - Node editor with ports, connections, selection, and undo/redo.
+- Inheritable `GLHistoryManager` scopes for independent documents and editing surfaces.
 
 ### Build and platforms
 

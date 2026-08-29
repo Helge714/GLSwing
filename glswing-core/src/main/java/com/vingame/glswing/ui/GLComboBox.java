@@ -553,7 +553,7 @@ public class GLComboBox<T> extends GLControl
 		if (before == index)
 			return;
 		setSelectedIndex(index);
-		var manager = getGLSaveManager();
+		var manager = getGLHistoryManager();
 		if (manager != null)
 			manager.record("Change combo-box selection",
 					() -> setSelectedIndex(before),
