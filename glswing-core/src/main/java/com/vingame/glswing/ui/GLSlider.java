@@ -16,6 +16,7 @@ import javax.swing.event.ChangeListener;
 import com.vingame.glswing.component.GLContainer;
 import com.vingame.glswing.component.GLParent;
 import com.vingame.glswing.input.GLKeyEvent;
+import com.vingame.glswing.input.GLInputActions;
 import com.vingame.glswing.input.GLMouseEvent;
 import com.vingame.glswing.input.GLPointerController;
 import com.vingame.glswing.input.GLPointerCursor;
@@ -62,8 +63,8 @@ public class GLSlider extends GLControl {
 	private double defaultValue;
 	private double step = 1;
 	private double dragSensitivity = DEFAULT_DRAG_SENSITIVITY;
-	private double preciseDragFactor = DEFAULT_PRECISE_DRAG_FACTOR;
-	private double coarseDragFactor = DEFAULT_COARSE_DRAG_FACTOR;
+	private double preciseDragFactor = Double.NaN;
+	private double coarseDragFactor = Double.NaN;
 	private DoubleFunction<String> valueFormatter = GLSlider::defaultValueText;
 	private GLSliderStyle localStyle;
 	private GLSliderStyle appliedStyle;
@@ -235,7 +236,9 @@ public class GLSlider extends GLControl {
 
 	/** Multiplier applied to the normal FREE drag rate while Shift is held. */
 	public final double getPreciseDragFactor() {
-		return preciseDragFactor;
+		return Double.isNaN(preciseDragFactor)
+				? getGLInputMap().getValue(GLInputActions.SLIDER_PRECISE_FACTOR,
+						DEFAULT_PRECISE_DRAG_FACTOR) : preciseDragFactor;
 	}
 
 	public final void setPreciseDragFactor(double preciseDragFactor) {
@@ -245,7 +248,9 @@ public class GLSlider extends GLControl {
 
 	/** Multiplier applied to the normal FREE drag rate while Control is held. */
 	public final double getCoarseDragFactor() {
-		return coarseDragFactor;
+		return Double.isNaN(coarseDragFactor)
+				? getGLInputMap().getValue(GLInputActions.SLIDER_COARSE_FACTOR,
+						DEFAULT_COARSE_DRAG_FACTOR) : coarseDragFactor;
 	}
 
 	public final void setCoarseDragFactor(double coarseDragFactor) {
@@ -621,29 +626,24 @@ public class GLSlider extends GLControl {
 
 	@Override
 	protected void controlKeyPressed(GLKeyEvent event) {
-		switch (event.getKeyCode()) {
-		case KeyEvent.VK_LEFT, KeyEvent.VK_DOWN -> {
+		if (getGLInputMap().matches(GLInputActions.NAVIGATE_LEFT, event)
+				|| getGLInputMap().matches(GLInputActions.NAVIGATE_DOWN, event)) {
 			changeValueFromUser(value - step, "Decrease slider");
 			event.consume();
-		}
-		case KeyEvent.VK_RIGHT, KeyEvent.VK_UP -> {
+		} else if (getGLInputMap().matches(GLInputActions.NAVIGATE_RIGHT, event)
+				|| getGLInputMap().matches(GLInputActions.NAVIGATE_UP, event)) {
 			changeValueFromUser(value + step, "Increase slider");
 			event.consume();
-		}
-		case KeyEvent.VK_HOME -> {
+		} else if (getGLInputMap().matches(GLInputActions.NAVIGATE_HOME, event)) {
 			if (mode == Mode.FIXED) {
 				changeValueFromUser(minimum, "Set slider to minimum");
 				event.consume();
 			}
-		}
-		case KeyEvent.VK_END -> {
+		} else if (getGLInputMap().matches(GLInputActions.NAVIGATE_END, event)) {
 			if (mode == Mode.FIXED) {
 				changeValueFromUser(maximum, "Set slider to maximum");
 				event.consume();
 			}
-		}
-		default -> {
-		}
 		}
 	}
 
@@ -940,10 +940,10 @@ public class GLSlider extends GLControl {
 
 	private double dragSensitivityFor(GLMouseEvent event) {
 		int modifiers = event.getModifiersEx();
-		if ((modifiers & MouseEvent.SHIFT_DOWN_MASK) != 0)
-			return dragSensitivity * preciseDragFactor;
-		if ((modifiers & MouseEvent.CTRL_DOWN_MASK) != 0)
-			return dragSensitivity * coarseDragFactor;
+		if (getGLInputMap().hasModifiers(GLInputActions.SLIDER_PRECISE, modifiers))
+			return dragSensitivity * getPreciseDragFactor();
+		if (getGLInputMap().hasModifiers(GLInputActions.SLIDER_COARSE, modifiers))
+			return dragSensitivity * getCoarseDragFactor();
 		return dragSensitivity;
 	}
 

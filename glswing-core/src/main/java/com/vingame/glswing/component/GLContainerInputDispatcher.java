@@ -17,6 +17,8 @@ import java.util.List;
 import java.util.function.Consumer;
 
 import com.vingame.glswing.input.GLKeyEvent;
+import com.vingame.glswing.input.GLInputActions;
+import com.vingame.glswing.input.GLInputMap;
 import com.vingame.glswing.input.GLKeyTarget;
 import com.vingame.glswing.input.GLMouseEvent;
 import com.vingame.glswing.input.GLMouseTarget;
@@ -466,7 +468,9 @@ final class GLContainerInputDispatcher {
 			host.addKeyListener(new KeyAdapter() {
 			@Override
 			public void keyPressed(KeyEvent event) {
-				if (GLHistoryManager.isHistoryShortcut(event)
+				GLInputMap inputMap = host.focusedGLTarget() instanceof GLContainer container
+						? container.getGLInputMap() : host.getGLInputMap();
+				if (GLHistoryManager.isHistoryShortcut(event, inputMap)
 						&& host.focusedGLTarget() instanceof GLTextEditor editor
 						&& editor.hasUncommittedChanges()
 						&& !editor.commit())
@@ -475,13 +479,13 @@ final class GLContainerInputDispatcher {
 						instanceof GLContainer container
 								? container.getGLHistoryManager()
 								: host.getGLHistoryManager();
-				if (history != null && history.handleKeyPressed(event)) {
+				if (history != null && history.handleKeyPressed(event, inputMap)) {
 					host.repaintColorOnly();
 					return;
 				}
-				if (event.getKeyCode() == KeyEvent.VK_TAB) {
-					focusNext((event.getModifiersEx()
-							& InputEvent.SHIFT_DOWN_MASK) != 0);
+				if (inputMap.matches(GLInputActions.FOCUS_NEXT, event)
+						|| inputMap.matches(GLInputActions.FOCUS_PREVIOUS, event)) {
+					focusNext(inputMap.matches(GLInputActions.FOCUS_PREVIOUS, event));
 					event.consume();
 					return;
 				}

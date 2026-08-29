@@ -175,7 +175,7 @@ public final class GLThemeLoader {
 		return bundledFallback;
 	}
 
-	private static GLTheme build(GLTheme base, Map<String, String> raw) {
+	static GLTheme build(GLTheme base, Map<String, String> raw) {
 		Map<String, String> merged = new LinkedHashMap<>(base.values().sourceMap());
 		merged.putAll(raw);
 		Map<String, String> resolved = resolveReferences(merged);

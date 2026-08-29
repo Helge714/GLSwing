@@ -15,6 +15,7 @@ import java.util.function.Function;
 import com.vingame.glswing.component.GLContainer;
 import com.vingame.glswing.component.GLParent;
 import com.vingame.glswing.input.GLKeyEvent;
+import com.vingame.glswing.input.GLInputActions;
 import com.vingame.glswing.input.GLMouseEvent;
 import com.vingame.glswing.layout.GLInsets;
 import com.vingame.glswing.layout.GLSize;
@@ -417,28 +418,22 @@ public class GLComboBox<T> extends GLControl
 
 	@Override
 	protected void controlKeyPressed(GLKeyEvent event) {
-		switch (event.getKeyCode()) {
-		case KeyEvent.VK_SPACE, KeyEvent.VK_ENTER -> {
+		if (getGLInputMap().matches(GLInputActions.ACTIVATE, event)) {
 			if (popupMenu.isShowing())
 				popupMenu.close();
 			else
 				showPopup();
 			event.consume();
-		}
-		case KeyEvent.VK_UP -> {
+		} else if (getGLInputMap().matches(GLInputActions.NAVIGATE_UP, event)) {
 			int selectedIndex = getSelectedIndex();
 			if (!items.isEmpty())
 				selectIndexFromUser(Math.max(0, selectedIndex - 1));
 			event.consume();
-		}
-		case KeyEvent.VK_DOWN -> {
+		} else if (getGLInputMap().matches(GLInputActions.NAVIGATE_DOWN, event)) {
 			int selectedIndex = getSelectedIndex();
 			if (!items.isEmpty())
 				selectIndexFromUser(Math.min(items.size() - 1, selectedIndex + 1));
 			event.consume();
-		}
-		default -> {
-		}
 		}
 	}
 

@@ -8,6 +8,7 @@ import java.awt.event.MouseEvent;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import com.vingame.glswing.input.GLKeyEvent;
+import com.vingame.glswing.input.GLInputActions;
 import com.vingame.glswing.input.GLMouseEvent;
 import com.vingame.glswing.layout.GLInsets;
 import com.vingame.glswing.layout.GLSize;
@@ -176,8 +177,7 @@ public class GLButton extends GLControl {
 
 	@Override
 	protected void controlKeyPressed(GLKeyEvent event) {
-		int code = event.getKeyCode();
-		if ((code == KeyEvent.VK_SPACE || code == KeyEvent.VK_ENTER)
+		if (getGLInputMap().matches(GLInputActions.ACTIVATE, event)
 				&& !isKeyboardPressed()) {
 			setKeyboardPressed(true);
 			event.consume();
@@ -186,8 +186,7 @@ public class GLButton extends GLControl {
 
 	@Override
 	protected void controlKeyReleased(GLKeyEvent event) {
-		int code = event.getKeyCode();
-		if ((code == KeyEvent.VK_SPACE || code == KeyEvent.VK_ENTER)
+		if (getGLInputMap().matches(GLInputActions.ACTIVATE, event)
 				&& isKeyboardPressed()) {
 			setKeyboardPressed(false);
 			fireActionPerformed();

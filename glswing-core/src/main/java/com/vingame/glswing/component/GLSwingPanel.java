@@ -33,6 +33,9 @@ import com.jogamp.opengl.awt.GLJPanel;
 import com.vingame.glswing.input.GLMouseEvent;
 import com.vingame.glswing.history.GLHistoryManager;
 import com.vingame.glswing.input.GLKeyTarget;
+import com.vingame.glswing.input.GLInputActions;
+import com.vingame.glswing.input.GLInputMap;
+import com.vingame.glswing.input.GLInputMaps;
 import com.vingame.glswing.input.GLMouseTarget;
 import com.vingame.glswing.input.GLMouseWheelEvent;
 import com.vingame.glswing.input.GLMouseWheelCaptureTarget;
@@ -79,6 +82,7 @@ public abstract class GLSwingPanel extends GLJPanel
 	private volatile GLTheme theme = GLTheme.DEFAULT;
 	private volatile GLLocalizer localizer = GLLocalizer.DEFAULT;
 	private volatile GLHistoryManager historyManager = new GLHistoryManager();
+	private volatile GLInputMap inputMap = GLInputMaps.DEFAULT;
 	private volatile int actualAntialiasingSamples;
 	private volatile int lastSurfaceWidth;
 	private volatile int lastSurfaceHeight;
@@ -400,6 +404,15 @@ public abstract class GLSwingPanel extends GLJPanel
 		if (historyManager == null)
 			throw new IllegalArgumentException("History manager must not be null");
 		this.historyManager = historyManager;
+	}
+
+	@Override
+	public final GLInputMap getGLInputMap() { return inputMap; }
+
+	public final void setGLInputMap(GLInputMap inputMap) {
+		if (inputMap == null)
+			throw new IllegalArgumentException("Input map must not be null");
+		this.inputMap = inputMap;
 	}
 
 	@Override
@@ -982,19 +995,23 @@ public abstract class GLSwingPanel extends GLJPanel
 		addKeyListener(new KeyAdapter() {
 			@Override
 			public void keyPressed(KeyEvent event) {
-				if (GLHistoryManager.isHistoryShortcut(event)
+				GLInputMap resolvedInputMap = focusedTarget instanceof GLContainer container
+						? container.getGLInputMap() : inputMap;
+				if (GLHistoryManager.isHistoryShortcut(event, resolvedInputMap)
 						&& focusedTarget instanceof GLTextEditor editor
 						&& editor.hasUncommittedChanges()
 						&& !editor.commit())
 					return;
 				GLHistoryManager history = focusedTarget instanceof GLContainer container
 						? container.getGLHistoryManager() : historyManager;
-				if (history != null && history.handleKeyPressed(event)) {
+				if (history != null && history.handleKeyPressed(event, resolvedInputMap)) {
 					repaintColorOnly();
 					return;
 				}
-				if (event.getKeyCode() == KeyEvent.VK_TAB) {
-					focusNext((event.getModifiersEx() & InputEvent.SHIFT_DOWN_MASK) != 0);
+				if (resolvedInputMap.matches(GLInputActions.FOCUS_NEXT, event)
+						|| resolvedInputMap.matches(GLInputActions.FOCUS_PREVIOUS, event)) {
+					focusNext(resolvedInputMap.matches(
+							GLInputActions.FOCUS_PREVIOUS, event));
 					event.consume();
 					return;
 				}

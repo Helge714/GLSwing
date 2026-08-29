@@ -5,6 +5,8 @@ import java.util.List;
 
 import com.vingame.glswing.input.GLMouseTarget;
 import com.vingame.glswing.input.GLKeyTarget;
+import com.vingame.glswing.input.GLInputMap;
+import com.vingame.glswing.input.GLInputMaps;
 import com.vingame.glswing.layout.GLConstraints;
 import com.vingame.glswing.layout.GLInsets;
 import com.vingame.glswing.layout.GLLayout;
@@ -47,6 +49,7 @@ public abstract class GLContainer implements GLParent, GLMouseTarget {
 	private volatile GLTheme localTheme;
 	private volatile GLLocalizer localLocalizer;
 	private volatile GLHistoryManager localHistoryManager;
+	private volatile GLInputMap localInputMap;
 	private volatile GLInsets visualOverflow = GLInsets.ZERO;
 	private volatile float[] lastVisualBounds;
 	private volatile float lastRenderedRootX;
@@ -502,6 +505,31 @@ public abstract class GLContainer implements GLParent, GLMouseTarget {
 	/** Whether this container starts an explicit history scope. */
 	public final boolean hasExplicitGLHistoryManager() {
 		return localHistoryManager != null;
+	}
+
+	@Override
+	public final GLInputMap getGLInputMap() {
+		GLInputMap inputMap = localInputMap;
+		if (inputMap != null)
+			return inputMap;
+		GLParent parent = glParent;
+		return parent == null ? GLInputMaps.DEFAULT : parent.getGLInputMap();
+	}
+
+	/** Defines the semantic input map for this complete subtree. */
+	public final void setGLInputMap(GLInputMap inputMap) {
+		if (inputMap == null)
+			throw new IllegalArgumentException("Input map must not be null");
+		localInputMap = inputMap;
+	}
+
+	/** Restores input-map inheritance from the nearest parent or host. */
+	public final void clearGLInputMap() {
+		localInputMap = null;
+	}
+
+	public final boolean hasExplicitGLInputMap() {
+		return localInputMap != null;
 	}
 
 	@Override

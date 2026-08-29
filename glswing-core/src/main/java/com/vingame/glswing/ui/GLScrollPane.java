@@ -5,6 +5,7 @@ import java.awt.event.MouseWheelEvent;
 
 import com.vingame.glswing.component.GLContainer;
 import com.vingame.glswing.input.GLMouseWheelEvent;
+import com.vingame.glswing.input.GLInputActions;
 import com.vingame.glswing.layout.GLInsets;
 import com.vingame.glswing.layout.GLSize;
 import com.vingame.glswing.rendering.GLContext2D;
@@ -135,8 +136,8 @@ public final class GLScrollPane extends GLContainer {
 		float rotation = (float) event.getPreciseWheelRotation();
 		if (rotation == 0)
 			return;
-		boolean horizontal = (event.getModifiersEx()
-				& InputEvent.SHIFT_DOWN_MASK) != 0;
+		boolean horizontal = getGLInputMap().hasModifiers(
+				GLInputActions.SCROLL_HORIZONTAL, event.getModifiersEx());
 		GLScrollBar bar = horizontal ? horizontalBar : verticalBar;
 		if (!bar.isVisible() || bar.getMaximumValue() <= 0) {
 			bar = horizontal ? verticalBar : horizontalBar;

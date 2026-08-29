@@ -8,6 +8,7 @@ import java.awt.event.MouseEvent;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import com.vingame.glswing.input.GLKeyEvent;
+import com.vingame.glswing.input.GLInputActions;
 import com.vingame.glswing.input.GLMouseEvent;
 import com.vingame.glswing.layout.GLInsets;
 import com.vingame.glswing.layout.GLSize;
@@ -194,7 +195,8 @@ public class GLCheckBox extends GLControl {
 
 	@Override
 	protected void controlKeyPressed(GLKeyEvent event) {
-		if (event.getKeyCode() == KeyEvent.VK_SPACE && !isKeyboardPressed()) {
+		if (getGLInputMap().matches(GLInputActions.ACTIVATE, event)
+				&& !isKeyboardPressed()) {
 			setKeyboardPressed(true);
 			event.consume();
 		}
@@ -202,7 +204,8 @@ public class GLCheckBox extends GLControl {
 
 	@Override
 	protected void controlKeyReleased(GLKeyEvent event) {
-		if (event.getKeyCode() == KeyEvent.VK_SPACE && isKeyboardPressed()) {
+		if (getGLInputMap().matches(GLInputActions.ACTIVATE, event)
+				&& isKeyboardPressed()) {
 			setKeyboardPressed(false);
 			toggleAndFire();
 			event.consume();

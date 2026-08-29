@@ -18,6 +18,7 @@ import javax.swing.event.ChangeListener;
 
 import com.vingame.glswing.component.GLParent;
 import com.vingame.glswing.input.GLKeyEvent;
+import com.vingame.glswing.input.GLInputActions;
 import com.vingame.glswing.input.GLMouseEvent;
 import com.vingame.glswing.input.GLPointerController;
 import com.vingame.glswing.input.GLPointerCursor;
@@ -468,7 +469,8 @@ public class GLTextEditor extends GLControl {
 				|| !event.hasLocalPosition())
 			return;
 		selecting = true;
-		boolean extend = (event.getModifiersEx() & InputEvent.SHIFT_DOWN_MASK) != 0;
+		boolean extend = getGLInputMap().hasModifiers(
+				GLInputActions.TEXT_EXTEND_SELECTION, event.getModifiersEx());
 		moveCaret(positionAt(event.getLocalX()), extend);
 	}
 
@@ -485,36 +487,35 @@ public class GLTextEditor extends GLControl {
 
 	@Override
 	protected void controlKeyPressed(GLKeyEvent event) {
-		int modifiers = event.getModifiersEx();
-		boolean shift = (modifiers & InputEvent.SHIFT_DOWN_MASK) != 0;
-		boolean shortcut = (modifiers & InputEvent.CTRL_DOWN_MASK) != 0;
-		if (shortcut) {
-			switch (event.getKeyCode()) {
-			case KeyEvent.VK_A -> selectAll();
-			case KeyEvent.VK_C -> copySelection();
-			case KeyEvent.VK_X -> cutSelection();
-			case KeyEvent.VK_V -> pasteClipboard();
-			default -> {
-				return;
-			}
-			}
+		boolean extend = getGLInputMap().hasModifiers(
+				GLInputActions.TEXT_EXTEND_SELECTION, event.getModifiersEx());
+		if (getGLInputMap().matches(GLInputActions.TEXT_SELECT_ALL, event))
+			selectAll();
+		else if (getGLInputMap().matches(GLInputActions.TEXT_COPY, event))
+			copySelection();
+		else if (getGLInputMap().matches(GLInputActions.TEXT_CUT, event))
+			cutSelection();
+		else if (getGLInputMap().matches(GLInputActions.TEXT_PASTE, event))
+			pasteClipboard();
+		else if (getGLInputMap().matches(GLInputActions.TEXT_MOVE_LEFT, event))
+			moveCaret(caret - 1, extend);
+		else if (getGLInputMap().matches(GLInputActions.TEXT_MOVE_RIGHT, event))
+			moveCaret(caret + 1, extend);
+		else if (getGLInputMap().matches(GLInputActions.TEXT_MOVE_HOME, event))
+			moveCaret(0, extend);
+		else if (getGLInputMap().matches(GLInputActions.TEXT_MOVE_END, event))
+			moveCaret(text.length(), extend);
+		else if (getGLInputMap().matches(GLInputActions.TEXT_BACKSPACE, event))
+			backspace();
+		else if (getGLInputMap().matches(GLInputActions.TEXT_DELETE, event))
+			deleteForward();
+		else if (getGLInputMap().matches(GLInputActions.TEXT_COMMIT, event))
+			commit();
+		else if (getGLInputMap().matches(GLInputActions.CANCEL, event))
+			cancel();
+		else
+			return;
 			event.consume();
-			return;
-		}
-		switch (event.getKeyCode()) {
-		case KeyEvent.VK_LEFT -> moveCaret(caret - 1, shift);
-		case KeyEvent.VK_RIGHT -> moveCaret(caret + 1, shift);
-		case KeyEvent.VK_HOME -> moveCaret(0, shift);
-		case KeyEvent.VK_END -> moveCaret(text.length(), shift);
-		case KeyEvent.VK_BACK_SPACE -> backspace();
-		case KeyEvent.VK_DELETE -> deleteForward();
-		case KeyEvent.VK_ENTER -> commit();
-		case KeyEvent.VK_ESCAPE -> cancel();
-		default -> {
-			return;
-		}
-		}
-		event.consume();
 	}
 
 	@Override
@@ -522,8 +523,8 @@ public class GLTextEditor extends GLControl {
 		char character = event.getKeyChar();
 		int modifiers = event.getModifiersEx();
 		if (character == KeyEvent.CHAR_UNDEFINED || Character.isISOControl(character)
-				|| (modifiers & (InputEvent.CTRL_DOWN_MASK
-						| InputEvent.ALT_DOWN_MASK)) != 0)
+				|| getGLInputMap().hasModifiers(GLInputActions.TEXT_COMMAND, modifiers)
+				|| (modifiers & InputEvent.ALT_DOWN_MASK) != 0)
 			return;
 		replaceSelection(Character.toString(character));
 		event.consume();

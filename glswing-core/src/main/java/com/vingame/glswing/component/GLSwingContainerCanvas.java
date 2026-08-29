@@ -7,6 +7,8 @@ import java.util.Map;
 
 import com.jogamp.opengl.GL3;
 import com.vingame.glswing.input.GLKeyTarget;
+import com.vingame.glswing.input.GLInputMap;
+import com.vingame.glswing.input.GLInputMaps;
 import com.vingame.glswing.history.GLHistoryManager;
 import com.vingame.glswing.input.GLMouseTarget;
 import com.vingame.glswing.layout.GLConstraints;
@@ -38,6 +40,7 @@ public abstract class GLSwingContainerCanvas extends GLSwingCanvas
 	private volatile GLTheme theme = GLTheme.DEFAULT;
 	private volatile GLLocalizer localizer = GLLocalizer.DEFAULT;
 	private volatile GLHistoryManager historyManager = new GLHistoryManager();
+	private volatile GLInputMap inputMap = GLInputMaps.DEFAULT;
 	private transient GLKeyTarget focusedTarget;
 
 	protected GLSwingContainerCanvas() {
@@ -211,6 +214,15 @@ public abstract class GLSwingContainerCanvas extends GLSwingCanvas
 		if (historyManager == null)
 			throw new IllegalArgumentException("History manager must not be null");
 		this.historyManager = historyManager;
+	}
+
+	@Override
+	public final GLInputMap getGLInputMap() { return inputMap; }
+
+	public final void setGLInputMap(GLInputMap inputMap) {
+		if (inputMap == null)
+			throw new IllegalArgumentException("Input map must not be null");
+		this.inputMap = inputMap;
 	}
 
 	@Override

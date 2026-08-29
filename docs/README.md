@@ -26,6 +26,7 @@ lifecycle, extension points, and the behavior of the standard controls.
 | Render into an off-screen texture | [Render targets](graphics-pipeline/render-targets.md) |
 | Respond to pointer input on custom geometry | [Picking](graphics-pipeline/picking.md) |
 | Customize appearance or language | [Themes and localization](ui-framework/themes-localization.md) |
+| Configure shortcuts and interaction modifiers | [Input configuration](ui-framework/input-configuration.md) |
 | Create a node-based editor | [Node editor](ui-framework/nodes.md) |
 
 ## Rendering guide
@@ -58,6 +59,7 @@ an index of the retained-mode API.
 | [Layouts and sizing](ui-framework/layout.md) | Preferred sizes, padding, free layout, grid constraints, and custom layouts |
 | [Controls](ui-framework/controls.md) | Labels, buttons, check boxes, sliders, text editors, combo boxes, menus, tabs, and scrolling |
 | [Themes and localization](ui-framework/themes-localization.md) | Theme files, style records, color expressions, locale fallback, and live reload |
+| [Input configuration](ui-framework/input-configuration.md) | Semantic actions, external `.glinput` files, platform shortcuts, modifiers, and scopes |
 | [Undo and redo](ui-framework/history.md) | Edits, transactions, keyboard shortcuts, and save state |
 | [Node editor](ui-framework/nodes.md) | Nodes, rows, ports, connections, selection, view controls, and history |
 

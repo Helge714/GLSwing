@@ -12,6 +12,7 @@ import com.vingame.glswing.ui.GLFontSpec;
 import com.vingame.glswing.ui.GLLocalizer;
 import com.vingame.glswing.ui.GLTheme;
 import com.vingame.glswing.input.GLKeyTarget;
+import com.vingame.glswing.input.GLInputMap;
 
 /** A GLSwing object that can directly own and render {@link GLContainer}s. */
 public interface GLParent {
@@ -87,6 +88,9 @@ public interface GLParent {
 
 	/** Nearest undo/redo history inherited by children without a local scope. */
 	GLHistoryManager getGLHistoryManager();
+
+	/** Nearest semantic input map inherited by children. */
+	GLInputMap getGLInputMap();
 
 	void requestGLFocus(GLKeyTarget target);
 

@@ -22,6 +22,10 @@ may change in subsequent `0.x` releases.
 - Tabs, scroll panes, dialogs, themes, and localization.
 - Node editor with ports, connections, selection, and undo/redo.
 - Inheritable `GLHistoryManager` scopes for independent documents and editing surfaces.
+- Semantic, inheritable input maps and external `.glinput` files for shortcuts,
+  pointer modifiers, and interaction sensitivity.
+- Editable theme and input-map override drafts with previews, reset-to-default,
+  shortcut capture and conflict detection, and atomic persistence.
 
 ### Build and platforms
 

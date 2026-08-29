@@ -1,0 +1,39 @@
+# GLSwing default semantic input map
+key.history.undo=shortcut+Z
+key.history.redo=shortcut+shift+Z, shortcut+Y
+key.focus.next=TAB
+key.focus.previous=shift+TAB
+
+key.control.activate=SPACE, ENTER
+key.control.cancel=ESCAPE
+key.navigation.up=UP
+key.navigation.down=DOWN
+key.navigation.left=LEFT
+key.navigation.right=RIGHT
+key.navigation.home=HOME
+key.navigation.end=END
+
+modifier.slider.precise=SHIFT
+modifier.slider.coarse=CTRL
+value.slider.precise-factor=0.1
+value.slider.coarse-factor=10
+modifier.scroll.horizontal=SHIFT
+
+modifier.text.extend-selection=SHIFT
+modifier.text.command=shortcut
+key.text.select-all=shortcut+A
+key.text.copy=shortcut+C
+key.text.cut=shortcut+X
+key.text.paste=shortcut+V
+key.text.move-left=LEFT, shift+LEFT
+key.text.move-right=RIGHT, shift+RIGHT
+key.text.move-home=HOME, shift+HOME
+key.text.move-end=END, shift+END
+key.text.backspace=BACK_SPACE
+key.text.delete=DELETE
+key.text.commit=ENTER
+
+key.node.delete-selection=DELETE, BACK_SPACE
+modifier.node.toggle-selection=SHIFT
+modifier.node.horizontal-wheel=CTRL
+modifier.node.vertical-wheel=SHIFT

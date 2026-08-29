@@ -18,6 +18,7 @@ import javax.swing.SwingUtilities;
 
 import com.jogamp.opengl.util.FPSAnimator;
 import com.vingame.glswing.input.GLKeyTarget;
+import com.vingame.glswing.input.GLInputMap;
 import com.vingame.glswing.history.GLHistoryManager;
 import com.vingame.glswing.layout.GLConstraints;
 import com.vingame.glswing.layout.GLInsets;
@@ -316,6 +317,8 @@ public class GLFrame extends JFrame implements GLParent, AutoCloseable {
 	public final void setGLHistoryManager(GLHistoryManager historyManager) {
 		glCanvas.setGLHistoryManager(historyManager);
 	}
+	@Override public final GLInputMap getGLInputMap() { return glCanvas.getGLInputMap(); }
+	public final void setGLInputMap(GLInputMap inputMap) { glCanvas.setGLInputMap(inputMap); }
 	@Override public final void requestGLFocus(GLKeyTarget target) {
 		glCanvas.requestGLFocus(target);
 	}

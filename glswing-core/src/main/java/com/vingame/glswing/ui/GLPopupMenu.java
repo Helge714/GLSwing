@@ -17,6 +17,7 @@ import com.vingame.glswing.component.GLContainer;
 import com.vingame.glswing.component.GLParent;
 import com.vingame.glswing.input.GLMouseEvent;
 import com.vingame.glswing.input.GLMouseWheelEvent;
+import com.vingame.glswing.input.GLInputActions;
 import com.vingame.glswing.input.GLPickResult;
 import com.vingame.glswing.input.GLImmediateHoverRegistry;
 import com.vingame.glswing.layout.GLInsets;
@@ -656,7 +657,8 @@ public class GLPopupMenu extends GLContainer {
 	}
 
 	private void scrollBy(GLMouseWheelEvent event) {
-		if ((event.getModifiersEx() & InputEvent.SHIFT_DOWN_MASK) != 0
+		if (getGLInputMap().hasModifiers(GLInputActions.SCROLL_HORIZONTAL,
+				event.getModifiersEx())
 				&& maximumHorizontalScrollOffset > 0) {
 			scrollHorizontallyBy(event);
 			return;

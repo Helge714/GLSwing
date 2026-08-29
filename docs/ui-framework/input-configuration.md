@@ -1,0 +1,167 @@
+# Input Configuration
+
+[UI guide](../ui-framework.md) · [Controls](controls.md) · [Node editor](nodes.md)
+
+GLSwing resolves keyboard commands and pointer modifiers through immutable
+`GLInputMap` objects. Applications can use the bundled defaults, load a
+packaged resource, or load an external UTF-8 `.glinput` file. A map set on a
+container applies to its complete subtree; descendants may start a nearer
+input scope.
+
+## Contents
+
+- [Loading and applying a map](#loading-and-applying-a-map)
+- [File format](#file-format)
+- [Key bindings](#key-bindings)
+- [Pointer modifiers and values](#pointer-modifiers-and-values)
+- [Inheritance and scopes](#inheritance-and-scopes)
+- [Live reload](#live-reload)
+- [Editable shortcuts and preferences](#editable-shortcuts-and-preferences)
+- [Standard actions](#standard-actions)
+- [Application actions](#application-actions)
+
+## Loading and applying a map
+
+```java
+GLInputMap input = GLInputMapLoader.load(Path.of("application.glinput"));
+host.setGLInputMap(input);
+```
+
+Use `GLInputMapLoader.loadResource(...)` for class-path resources.
+`loadOrDefault(...)` returns `GLInputMaps.DEFAULT` when an optional external
+file cannot be loaded. Required configuration should use `load(...)` and
+report `GLInputMapLoadException` to the user.
+
+The fallback overloads mirror theme loading:
+
+```java
+GLInputMap optional = GLInputMapLoader.loadOrDefault(
+        path, GLInputMaps.DEFAULT, this::reportInputError);
+```
+
+## File format
+
+Files contain one `key=value` property per line. Blank lines and lines beginning
+with `#` are ignored.
+
+| Prefix | Purpose | Example |
+|---|---|---|
+| `key.` | Alternative key combinations | `key.history.undo=shortcut+Z` |
+| `modifier.` | Modifier held during a pointer gesture | `modifier.slider.precise=SHIFT` |
+| `value.` | Finite positive behavior value | `value.slider.precise-factor=0.1` |
+
+Invalid properties, duplicate entries, invalid values, missing files, and
+inheritance cycles cause `GLInputMapLoadException`.
+
+## Key bindings
+
+Separate modifiers and the key with `+`; separate alternatives with commas.
+Names correspond to `KeyEvent.VK_*` names without the `VK_` prefix. Supported
+modifiers are `SHIFT`, `CTRL`, `ALT`, `META`, and `ALT_GRAPH`. `shortcut`
+resolves to Control on Windows and Linux and Command/Meta on macOS.
+
+```properties
+key.history.undo=shortcut+Z
+key.history.redo=shortcut+shift+Z, shortcut+Y
+key.application.save=shortcut+S
+```
+
+A binding matches its exact keyboard modifiers. `CTRL+S` therefore does not
+also match `CTRL+SHIFT+S`.
+
+## Pointer modifiers and values
+
+```properties
+modifier.slider.precise=SHIFT
+modifier.slider.coarse=CTRL
+value.slider.precise-factor=0.1
+value.slider.coarse-factor=10
+
+modifier.node.horizontal-wheel=CTRL
+modifier.node.vertical-wheel=SHIFT
+modifier.node.toggle-selection=SHIFT
+```
+
+An individual slider may override configured factors with
+`setPreciseDragFactor(...)` and `setCoarseDragFactor(...)`.
+
+## Inheritance and scopes
+
+An external file can inherit the bundled defaults or a sibling file:
+
+```properties
+input.extends=default
+key.history.redo=shortcut+shift+Z
+```
+
+Hosts expose `setGLInputMap(...)`. Every `GLContainer` resolves the nearest map
+from itself, an ancestor, or its host. Use `setGLInputMap(...)` to start a local
+scope and `clearGLInputMap()` to resume inheritance. Independent editor
+surfaces in one canvas can therefore use different interaction conventions.
+
+## Live reload
+
+`GLInputMapWatcher` follows the same lifecycle as `GLThemeWatcher`. It performs
+an initial load, debounces filesystem changes, dispatches callbacks on the AWT
+event thread, and keeps the last valid map active after an incomplete write.
+
+```java
+GLInputMapWatcher watcher = GLInputMapWatcher.watch(
+        path,
+        host::setGLInputMap,
+        this::reportInputError);
+```
+
+Call `reloadNow()` for an explicit refresh and close the watcher when its host
+is disposed.
+
+## Editable shortcuts and preferences
+
+`GLInputMapEditor` keeps a base map and user overrides separate. It supports
+shortcut dialogs, accessibility profiles, and game control menus.
+
+```java
+GLInputMapEditor editor = GLInputMapEditor.loadOrCreate(
+        userInputFile, GLInputMaps.DEFAULT);
+editor.bind("application.save", "shortcut+S");
+editor.setModifier(GLInputActions.SLIDER_PRECISE, "SHIFT");
+editor.setValue(GLInputActions.SLIDER_PRECISE_FACTOR, 0.05);
+
+host.setGLInputMap(editor.build()); // preview
+editor.save(userInputFile);         // persist
+```
+
+Capture a binding from an AWT event and inspect conflicts before assigning it:
+
+```java
+GLKeyBinding captured = GLKeyBinding.from(keyEvent);
+List<String> conflicts = editor.findActions(captured);
+editor.bind("application.save", captured);
+```
+
+Captured platform shortcut modifiers are saved using the portable `shortcut`
+alias. `unsetBinding(...)`, `unsetModifier(...)`, and `unsetValue(...)` restore
+inheritance. `unbind(...)` explicitly disables an inherited key action, and
+`reset()` removes the complete user override layer. Saving atomically replaces
+the file and writes only explicit overrides.
+
+## Standard actions
+
+`GLInputActions` defines identifiers for history, focus traversal, activation,
+directional navigation, slider drag modes, and node-editor interaction. When
+replacing standard bindings, preserve accessible alternatives such as Enter or
+Space for activation and directional keys for navigation.
+
+## Application actions
+
+Applications may define arbitrary action names and query them directly:
+
+```java
+if (container.getGLInputMap().matches("application.save", event)) {
+    saveDocument();
+    event.consume();
+}
+```
+
+Menu shortcut labels are presentation text; dispatch remains driven by the
+input map.

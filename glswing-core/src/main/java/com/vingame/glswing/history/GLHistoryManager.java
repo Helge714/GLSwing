@@ -1,12 +1,15 @@
 package com.vingame.glswing.history;
 
-import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+
+import com.vingame.glswing.input.GLInputActions;
+import com.vingame.glswing.input.GLInputMap;
+import com.vingame.glswing.input.GLInputMaps;
 
 /**
  * Bounded undo/redo history with compound transactions and a persisted-state
@@ -172,15 +175,16 @@ public final class GLHistoryManager {
 
 	/** Handles Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z and Ctrl/Cmd+Y. */
 	public boolean handleKeyPressed(KeyEvent event) {
-		if (!isHistoryShortcut(event))
+		return handleKeyPressed(event, GLInputMaps.DEFAULT);
+	}
+
+	/** Handles the undo or redo action assigned by the supplied input map. */
+	public boolean handleKeyPressed(KeyEvent event, GLInputMap inputMap) {
+		if (event == null || inputMap == null)
 			return false;
-		int modifiers = event.getModifiersEx();
-		if (event.getKeyCode() == KeyEvent.VK_Z)
-			if ((modifiers & InputEvent.SHIFT_DOWN_MASK) != 0)
-				redo();
-			else
-				undo();
-		else if (event.getKeyCode() == KeyEvent.VK_Y)
+		if (inputMap.matches(GLInputActions.HISTORY_UNDO, event))
+			undo();
+		else if (inputMap.matches(GLInputActions.HISTORY_REDO, event))
 			redo();
 		else
 			return false;
@@ -189,14 +193,14 @@ public final class GLHistoryManager {
 	}
 
 	public static boolean isHistoryShortcut(KeyEvent event) {
-		if (event == null || event.getID() != KeyEvent.KEY_PRESSED)
-			return false;
-		int modifiers = event.getModifiersEx();
-		boolean shortcut = (modifiers & (InputEvent.CTRL_DOWN_MASK
-				| InputEvent.META_DOWN_MASK)) != 0;
-		return shortcut && (modifiers & InputEvent.ALT_DOWN_MASK) == 0
-				&& (event.getKeyCode() == KeyEvent.VK_Z
-						|| event.getKeyCode() == KeyEvent.VK_Y);
+		return isHistoryShortcut(event, GLInputMaps.DEFAULT);
+	}
+
+	public static boolean isHistoryShortcut(KeyEvent event, GLInputMap inputMap) {
+		return event != null && event.getID() == KeyEvent.KEY_PRESSED
+				&& inputMap != null
+				&& (inputMap.matches(GLInputActions.HISTORY_UNDO, event)
+						|| inputMap.matches(GLInputActions.HISTORY_REDO, event));
 	}
 
 	public void addListener(GLHistoryManagerListener listener) {

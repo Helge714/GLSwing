@@ -85,5 +85,6 @@ render methods manually.
 2. [Layouts and sizing](ui-framework/layout.md)
 3. [Standard controls](ui-framework/controls.md)
 4. [Themes and localization](ui-framework/themes-localization.md)
-5. [Undo and redo](ui-framework/history.md)
-6. [Node editor](ui-framework/nodes.md)
+5. [Input configuration](ui-framework/input-configuration.md)
+6. [Undo and redo](ui-framework/history.md)
+7. [Node editor](ui-framework/nodes.md)

@@ -49,9 +49,10 @@ sibling surfaces continue using their own scope or the host default. Nested
 scopes are supported. `clearGLHistoryManager()` restores inheritance and
 `hasExplicitGLHistoryManager()` reports whether a container starts a scope.
 
-Keyboard undo and redo resolve the manager from the focused component, so
-`Ctrl/Cmd+Z` affects the active surface rather than an unrelated host-level
-history.
+Keyboard undo and redo resolve both the history manager and the semantic
+[input map](input-configuration.md) from the focused component. The bundled
+`Ctrl/Cmd+Z` binding therefore affects the active surface rather than an
+unrelated host-level history, and applications may replace the binding.
 
 ## Recording completed changes
 

@@ -49,4 +49,14 @@ final class MavenSmokeTest {
 	void historyManager() {
 		GLHistoryManagerSelfTest.main(NO_ARGS);
 	}
+
+	@Test
+	void inputMaps() throws Exception {
+		GLInputMapSelfTest.main(NO_ARGS);
+	}
+
+	@Test
+	void configurationEditors() throws Exception {
+		GLConfigurationEditorSelfTest.main(NO_ARGS);
+	}
 }

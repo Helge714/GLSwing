@@ -11,6 +11,7 @@ fallback chain.
 - [Theme inheritance](#theme-inheritance)
 - [Built-in and external themes](#built-in-and-external-themes)
 - [Loading and live reload](#loading-and-live-reload)
+- [Editable user overrides](#editable-user-overrides)
 - [Color values](#color-values)
 - [Typed styles](#typed-styles)
 - [Localization](#localization)
@@ -42,9 +43,9 @@ through `theme.values()` so application controls can share the same theme file.
 ## Loading and live reload
 
 ```java
-GLTheme theme = GLThemes.load(path);
-GLTheme optional = GLThemes.loadOrDefault(path, GLThemes.DEFAULT);
-GLTheme packaged = GLThemes.loadResource("/themes/application.gltheme");
+GLTheme theme = GLThemeLoader.load(path);
+GLTheme optional = GLThemeLoader.loadOrDefault(path, GLThemes.DEFAULT, null);
+GLTheme packaged = GLThemeLoader.loadResource("/themes/application.gltheme");
 ```
 
 `load(Path)` reports missing files, cycles, unknown base themes, and invalid
@@ -55,6 +56,30 @@ The file watcher performs an initial load, debounces filesystem events, and
 invokes success/failure callbacks on the AWT event thread. An incomplete write
 does not replace the last valid theme. `reloadNow()` requests an immediate
 reload. Close the watcher when its host is disposed.
+
+## Editable user overrides
+
+`GLThemeEditor` supports preference dialogs without making `GLTheme` mutable.
+It keeps a base theme and explicit overrides separate, rebuilds all typed styles
+for previews, and writes only changed properties.
+
+```java
+GLThemeEditor editor = GLThemeEditor.loadOrCreate(
+        userThemeFile, GLThemes.DARK);
+editor.setColor("palette.accent", selectedColor);
+editor.set("button.cornerRadius", 6);
+
+host.setGLTheme(editor.build()); // preview
+editor.save(userThemeFile);      // persist
+```
+
+`getEffective(...)` reads a resolved value. `getOverride(...)` and
+`isOverridden(...)` distinguish user choices from inherited values.
+`unset(key)` restores inheritance for one property, while `reset()` removes all
+overrides. Saving uses atomic replacement and creates missing parent
+directories. For a custom base, use
+`GLThemeEditor.from(base, "base.gltheme")` so the saved `theme.extends`
+reference remains portable.
 
 ## Color values
 

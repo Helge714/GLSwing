@@ -17,6 +17,7 @@ import com.vingame.glswing.component.GLContainer;
 import com.vingame.glswing.component.GLParent;
 import com.vingame.glswing.input.GLMouseEvent;
 import com.vingame.glswing.input.GLKeyEvent;
+import com.vingame.glswing.input.GLInputActions;
 import com.vingame.glswing.input.GLKeyTarget;
 import com.vingame.glswing.input.GLMouseWheelEvent;
 import com.vingame.glswing.input.GLMouseWheelCaptureTarget;
@@ -765,9 +766,11 @@ public class GLNodeEditor extends GLContainer
 		double rotation = event.getPreciseWheelRotation();
 		if (rotation == 0)
 			return;
-		if ((event.getModifiersEx() & InputEvent.CTRL_DOWN_MASK) != 0) {
+		if (getGLInputMap().hasModifiers(GLInputActions.NODE_HORIZONTAL_WHEEL,
+				event.getModifiersEx())) {
 			panBy((float) -rotation * wheelPanDistance, 0);
-		} else if ((event.getModifiersEx() & InputEvent.SHIFT_DOWN_MASK) != 0) {
+		} else if (getGLInputMap().hasModifiers(GLInputActions.NODE_VERTICAL_WHEEL,
+				event.getModifiersEx())) {
 			panBy(0, (float) -rotation * wheelPanDistance);
 		} else {
 			zoomByAtScreenPosition((float) Math.pow(1.12, -rotation),
@@ -778,7 +781,7 @@ public class GLNodeEditor extends GLContainer
 
 	@Override
 	public void keyPressed(GLKeyEvent event) {
-		if (event.getKeyCode() != KeyEvent.VK_DELETE
+		if (!getGLInputMap().matches(GLInputActions.NODE_DELETE, event)
 				|| selectedConnection == null && selectedNodes.isEmpty())
 			return;
 		deleteSelection();
@@ -810,7 +813,8 @@ public class GLNodeEditor extends GLContainer
 		if (!nodes.contains(node))
 			return;
 		requestGLFocus(this);
-		boolean shift = (modifiersEx & InputEvent.SHIFT_DOWN_MASK) != 0;
+		boolean shift = getGLInputMap().hasModifiers(
+				GLInputActions.NODE_TOGGLE_SELECTION, modifiersEx);
 		if (contextClick) {
 			if (!selectedNodes.contains(node))
 				setSelectedNode(node);
@@ -833,7 +837,8 @@ public class GLNodeEditor extends GLContainer
 
 	void completeNodeClick(GLNode node, int modifiersEx) {
 		if (!nodes.contains(node)
-				|| (modifiersEx & InputEvent.SHIFT_DOWN_MASK) != 0)
+				|| getGLInputMap().hasModifiers(
+						GLInputActions.NODE_TOGGLE_SELECTION, modifiersEx))
 			return;
 		setSelectedNode(node);
 		bringSelectedNodesToFront();
@@ -844,8 +849,8 @@ public class GLNodeEditor extends GLContainer
 		if (!connections.contains(connection))
 			return;
 		requestGLFocus(this);
-		boolean toggle = !contextClick
-				&& (modifiersEx & InputEvent.SHIFT_DOWN_MASK) != 0;
+		boolean toggle = !contextClick && getGLInputMap().hasModifiers(
+				GLInputActions.NODE_TOGGLE_SELECTION, modifiersEx);
 		if (toggle && selectedConnection == connection)
 			clearSelection();
 		else
@@ -1114,7 +1119,8 @@ public class GLNodeEditor extends GLContainer
 		marqueeVisible = false;
 		marqueeBaseSelection = new LinkedHashSet<>(selectedNodes);
 		marqueeModifiers = event.getModifiersEx();
-		if ((marqueeModifiers & InputEvent.SHIFT_DOWN_MASK) == 0)
+		if (!getGLInputMap().hasModifiers(GLInputActions.NODE_TOGGLE_SELECTION,
+				marqueeModifiers))
 			clearSelection();
 		float[] viewport = screenToViewport(event.getScreenX(), event.getScreenY());
 		workspacePressViewportX = viewport[0];
@@ -1136,7 +1142,8 @@ public class GLNodeEditor extends GLContainer
 		marqueeCurrentY = world[1];
 		LinkedHashSet<GLNode> hits = marqueeHits();
 		LinkedHashSet<GLNode> next = new LinkedHashSet<>();
-		boolean toggle = (marqueeModifiers & InputEvent.SHIFT_DOWN_MASK) != 0;
+		boolean toggle = getGLInputMap().hasModifiers(
+				GLInputActions.NODE_TOGGLE_SELECTION, marqueeModifiers);
 		if (toggle)
 			next.addAll(marqueeBaseSelection);
 		GLNode primary = selectedNode;
