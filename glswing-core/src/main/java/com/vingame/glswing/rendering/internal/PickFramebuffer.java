@@ -261,6 +261,7 @@ public final class PickFramebuffer {
 		clearPendingFrameIfRequired(gl);
 		uiProgram.use(gl);
 		uiProgram.setMatrix4(gl, "uProjection", projection);
+		uiProgram.setVector2(gl, "uLogicalSize", activeWidth(), activeHeight());
 		setTextureSamplers(gl, uiProgram);
 		uiProgram.setFloat(gl, "uTextAlphaThreshold", textAlphaThreshold);
 		uiProgram.setFloat(gl, "uTextureAlphaThreshold", textureAlphaThreshold);

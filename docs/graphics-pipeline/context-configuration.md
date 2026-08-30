@@ -164,9 +164,13 @@ try {
 }
 ```
 
-Clips are nested, recordable scissor rectangles using transformed axis-aligned
-screen bounds. Use layer effects for curved boundaries. `getClipDepth()` helps
-detect unbalanced calls.
+Clips are nested and recordable. GLSwing resolves every rectangle to transformed,
+axis-aligned logical screen bounds and intersects it with its parent. Built-in
+UI instances retain that effective rectangle, allowing differently clipped
+controls to remain in one batch for both color and picking. Other rendering
+pipelines and custom UI shaders use the OpenGL scissor state and therefore
+flush when the clip changes. Use layer effects for curved boundaries.
+`getClipDepth()` helps detect unbalanced calls.
 
 ## Shader state
 

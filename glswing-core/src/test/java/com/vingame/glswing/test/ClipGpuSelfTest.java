@@ -58,6 +58,29 @@ public final class ClipGpuSelfTest {
 			context = renderer.beginFrame(gl, WIDTH, HEIGHT,
 					Projection2D.TOP_LEFT_PIXELS.create(WIDTH, HEIGHT));
 			context.clear(Color.BLACK);
+			context.beginClip(20, 15, 55, 45);
+			context.setPickId(44);
+			context.fillUIRoundRect(0, 0, 100, 80, 0, Color.RED);
+			context.beginClip(35, 25, 15, 12);
+			context.setPickId(55);
+			context.fillUIRoundRect(0, 0, 100, 80, 0, Color.BLUE);
+			context.endClip();
+			context.endClip();
+			renderer.endFrame();
+			if (renderer.drawCallCount() != 2)
+				throw new AssertionError("Nested built-in UI clips split the batch into "
+						+ renderer.drawCallCount()
+						+ " calls instead of one color and one picking call");
+			checkColor(gl, 10, 10, Color.BLACK, "outside UI clip");
+			checkId(renderer, gl, 10, 10, 0, "outside UI pick clip");
+			checkColor(gl, 25, 20, Color.RED, "outer UI clip");
+			checkId(renderer, gl, 25, 20, 44, "outer UI pick clip");
+			checkColor(gl, 40, 30, Color.BLUE, "nested UI clip");
+			checkId(renderer, gl, 40, 30, 55, "nested UI pick clip");
+
+			context = renderer.beginFrame(gl, WIDTH, HEIGHT,
+					Projection2D.TOP_LEFT_PIXELS.create(WIDTH, HEIGHT));
+			context.clear(Color.BLACK);
 			context.beginRecording();
 			context.beginClip(0, 0, 20, 20);
 			context.fillRect(0, 0, 40, 40, Color.GREEN, 33);

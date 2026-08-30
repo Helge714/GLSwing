@@ -10,6 +10,8 @@ flat in vec4 vSecondaryColor;
 flat in int vTextureSlot;
 flat in vec4 vAux;
 flat in vec4 vTertiaryColor;
+flat in vec4 vClipRect;
+in vec2 vScreenPosition;
 
 uniform sampler2D uTextures[16];
 uniform float uTextAlphaThreshold;
@@ -183,6 +185,10 @@ float chevronCoverage() {
 }
 
 void main() {
+	if (vScreenPosition.x < vClipRect.x || vScreenPosition.y < vClipRect.y
+			|| vScreenPosition.x > vClipRect.z
+			|| vScreenPosition.y > vClipRect.w)
+		discard;
     if (vPickId == uint(0))
         discard;
 	int mode = int(vParameters.x + 0.5);

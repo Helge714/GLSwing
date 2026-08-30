@@ -103,6 +103,9 @@ public final class GLRenderer2D {
 	private float texturePickAlphaThreshold;
 	private float[] redrawBounds;
 	private final List<ScissorState> clipStack = new ArrayList<>();
+	private final List<float[]> uiClipStack = new ArrayList<>();
+	private boolean ambientScissorEnabled;
+	private final int[] ambientScissor = new int[4];
 	private final List<LayerPathState> layerPathStates = new ArrayList<>();
 	private float layerMinimumX;
 	private float layerMinimumY;
@@ -229,6 +232,9 @@ public final class GLRenderer2D {
 		redrawBounds = null;
 		adaptiveIconUploads = 0;
 		clipStack.clear();
+		uiClipStack.clear();
+		ambientScissorEnabled = gl.glIsEnabled(GL.GL_SCISSOR_TEST);
+		gl.glGetIntegerv(GL.GL_SCISSOR_BOX, ambientScissor, 0);
 		layerPathStates.clear();
 		context.reset(logicalWidth, logicalHeight);
 
@@ -440,13 +446,26 @@ public final class GLRenderer2D {
 				|| width < 0 || height < 0)
 			throw new IllegalArgumentException(
 					"Clip bounds must be finite and non-negative");
-		flush();
+		flushBeforeClipChange();
 		boolean enabled = gl.glIsEnabled(GL.GL_SCISSOR_TEST);
 		int[] previous = new int[4];
 		gl.glGetIntegerv(GL.GL_SCISSOR_BOX, previous, 0);
 		clipStack.add(new ScissorState(enabled, previous));
 
 		float[] bounds = screenBounds(x, y, width, height);
+		float left = bounds[0];
+		float top = bounds[1];
+		float right = left + bounds[2];
+		float bottom = top + bounds[3];
+		if (!uiClipStack.isEmpty()) {
+			float[] parent = uiClipStack.get(uiClipStack.size() - 1);
+			left = Math.max(left, parent[0]);
+			top = Math.max(top, parent[1]);
+			right = Math.min(right, parent[2]);
+			bottom = Math.min(bottom, parent[3]);
+		}
+		uiClipStack.add(new float[] { left, top,
+				Math.max(left, right), Math.max(top, bottom) });
 		int[] viewport = new int[4];
 		gl.glGetIntegerv(GL.GL_VIEWPORT, viewport, 0);
 		int minimumX = viewport[0] + (int) Math.floor(bounds[0] * colorDeviceScaleX);
@@ -477,8 +496,15 @@ public final class GLRenderer2D {
 		if (clipStack.isEmpty())
 			throw new IllegalStateException(
 					"endClip() requires a matching beginClip()");
-		flush();
+		flushBeforeClipChange();
+		uiClipStack.remove(uiClipStack.size() - 1);
 		restoreScissor(clipStack.remove(clipStack.size() - 1));
+	}
+
+	private void flushBeforeClipChange() {
+		if (activeBatch != BatchType.NONE
+				&& (activeBatch != BatchType.UI || uiShaderOverride != null))
+			flush();
 	}
 
 	int clipDepth() {
@@ -791,6 +817,10 @@ public final class GLRenderer2D {
 			gl.glBindFramebuffer(GL.GL_FRAMEBUFFER, framebuffer);
 			gl.glViewport(0, 0, target.getWidth(), target.getHeight());
 			gl.glDisable(GL.GL_SCISSOR_TEST);
+			ambientScissorEnabled = false;
+			ambientScissor[0] = ambientScissor[1] = 0;
+			ambientScissor[2] = target.getWidth();
+			ambientScissor[3] = target.getHeight();
 			logicalWidth = target.getWidth();
 			logicalHeight = target.getHeight();
 			colorDeviceScaleX = 1;
@@ -913,6 +943,8 @@ public final class GLRenderer2D {
 		} else {
 			gl.glDisable(GL.GL_SCISSOR_TEST);
 		}
+		ambientScissorEnabled = state.scissorEnabled;
+		System.arraycopy(state.scissor, 0, ambientScissor, 0, 4);
 		logicalWidth = state.logicalWidth;
 		logicalHeight = state.logicalHeight;
 		colorDeviceScaleX = state.colorDeviceScaleX;
@@ -1396,7 +1428,7 @@ public final class GLRenderer2D {
 				continue;
 			}
 			uiQuadBatch.add(texture, instances, offset, chunk,
-					pickRecord, modifier);
+					pickRecord, modifier, currentUIClip());
 			offset += chunk * UIQuadInstanceFormat.FLOATS_PER_INSTANCE;
 			remaining -= chunk;
 		}
@@ -2024,14 +2056,53 @@ public final class GLRenderer2D {
 		case TEXT -> textBatch.flush(
 				gl, projectionMatrix, textShaderOverride, textUniforms, picking,
 				colorRenderingEnabled, pickingRenderingEnabled);
-		case UI -> uiQuadBatch.flush(gl, projectionMatrix,
-				uiShaderOverride, uiUniforms, picking,
-				colorRenderingEnabled, pickingRenderingEnabled,
-				texturePickAlphaThreshold, colorDeviceScaleX, colorDeviceScaleY,
-				logicalWidth, logicalHeight);
+		case UI -> flushUIBatch();
 		case SPRITE -> flushSpriteBatch();
 		case NONE -> 0;
 		};
+	}
+
+	private float[] currentUIClip() {
+		return uiClipStack.isEmpty()
+				? new float[] { 0, 0, logicalWidth, logicalHeight }
+				: uiClipStack.get(uiClipStack.size() - 1);
+	}
+
+	private int flushUIBatch() {
+		if (uiShaderOverride != null)
+			return uiQuadBatch.flush(gl, projectionMatrix,
+					uiShaderOverride, uiUniforms, picking,
+					colorRenderingEnabled, pickingRenderingEnabled,
+					texturePickAlphaThreshold, colorDeviceScaleX, colorDeviceScaleY,
+					logicalWidth, logicalHeight);
+		boolean scissorEnabled = gl.glIsEnabled(GL.GL_SCISSOR_TEST);
+		int[] scissor = new int[4];
+		gl.glGetIntegerv(GL.GL_SCISSOR_BOX, scissor, 0);
+		applyAmbientScissor();
+		try {
+			return uiQuadBatch.flush(gl, projectionMatrix,
+					null, uiUniforms, picking,
+					colorRenderingEnabled, pickingRenderingEnabled,
+					texturePickAlphaThreshold, colorDeviceScaleX, colorDeviceScaleY,
+					logicalWidth, logicalHeight);
+		} finally {
+			if (scissorEnabled) {
+				gl.glEnable(GL.GL_SCISSOR_TEST);
+				gl.glScissor(scissor[0], scissor[1], scissor[2], scissor[3]);
+			} else {
+				gl.glDisable(GL.GL_SCISSOR_TEST);
+			}
+		}
+	}
+
+	private void applyAmbientScissor() {
+		if (ambientScissorEnabled) {
+			gl.glEnable(GL.GL_SCISSOR_TEST);
+			gl.glScissor(ambientScissor[0], ambientScissor[1],
+					ambientScissor[2], ambientScissor[3]);
+		} else {
+			gl.glDisable(GL.GL_SCISSOR_TEST);
+		}
 	}
 
 	private int flushSpriteBatch() {

@@ -12,8 +12,10 @@ layout(location = 8) in uint aPickId;
 layout(location = 9) in vec4 aSecondaryColor;
 layout(location = 10) in int aTextureSlot;
 layout(location = 11) in vec4 aTertiaryColor;
+layout(location = 12) in vec4 aClipRect;
 
 uniform mat4 uProjection;
+uniform vec2 uLogicalSize;
 
 out vec2 vLocal;
 out vec2 vTexCoord;
@@ -25,6 +27,8 @@ flat out vec4 vSecondaryColor;
 flat out int vTextureSlot;
 flat out vec4 vAux;
 flat out vec4 vTertiaryColor;
+flat out vec4 vClipRect;
+out vec2 vScreenPosition;
 
 void main() {
     vec2 position = aP00
@@ -40,5 +44,9 @@ void main() {
     vTextureSlot = aTextureSlot;
     vAux = aUvRect;
     vTertiaryColor = aTertiaryColor;
+	vClipRect = aClipRect;
     gl_Position = uProjection * vec4(position, 0.0, 1.0);
+	vec2 ndc = gl_Position.xy / gl_Position.w;
+	vScreenPosition = vec2((ndc.x + 1.0) * 0.5 * uLogicalSize.x,
+			(1.0 - ndc.y) * 0.5 * uLogicalSize.y);
 }

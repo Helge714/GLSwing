@@ -88,6 +88,7 @@ public final class UIQuadBatch {
 			attribute(gl, 7, 2, byteStride, 18);
 			attribute(gl, 9, 4, byteStride, 20);
 			attribute(gl, 11, 4, byteStride, 24);
+			attribute(gl, 12, 4, byteStride, UIQuadInstanceFormat.CLIP_OFFSET);
 
 			gl.glGenBuffers(1, ids, 0);
 			pickVbo = ids[0];
@@ -158,12 +159,14 @@ public final class UIQuadBatch {
 	}
 
 	public void add(GLTexture candidate, float[] values, int offset,
-			int count, int pickId, VertexModifier modifier) {
+			int count, int pickId, VertexModifier modifier, float[] clip) {
 		if (candidate != null && candidate.isDisposed())
 			throw new IllegalArgumentException("UI texture must be live");
 		if (values == null || values.length % STRIDE != 0 || offset < 0 || count < 0
 				|| offset + count * STRIDE > values.length)
 			throw new IllegalArgumentException("UI instance range is invalid");
+		if (clip == null || clip.length < 4)
+			throw new IllegalArgumentException("UI clip rectangle is invalid");
 		if (!accepts(candidate))
 			throw new IllegalStateException("UI batch requires a flush before changing texture");
 		if (!canAdd(count))
@@ -171,7 +174,7 @@ public final class UIQuadBatch {
 		int slot = textures.slot(candidate, TextureSlotSet.MAX_SLOTS);
 		for (int instance = 0; instance < count; instance++) {
 			int source = offset + instance * STRIDE;
-			putInstance(values, source, modifier);
+			putInstance(values, source, modifier, clip);
 			pickIds.put(pickId);
 			textureSlots.put(slot);
 		}
@@ -179,9 +182,11 @@ public final class UIQuadBatch {
 		instanceCount += count;
 	}
 
-	private void putInstance(float[] values, int source, VertexModifier modifier) {
+	private void putInstance(float[] values, int source, VertexModifier modifier,
+			float[] clip) {
 		if (modifier == null || modifier.isIdentity()) {
-			instances.put(values, source, STRIDE);
+			instances.put(values, source, UIQuadInstanceFormat.CLIP_OFFSET);
+			instances.put(clip, 0, 4);
 			return;
 		}
 		for (int corner = 0; corner < 3; corner++) {
@@ -214,6 +219,7 @@ public final class UIQuadBatch {
 			instances.put(modifier.secondaryAlpha(values[source + 23]));
 		}
 		instances.put(values, source + 24, 4);
+		instances.put(clip, 0, 4);
 	}
 
 	public int flush(GL3 gl, float[] projection, ShaderProgram shaderOverride,
