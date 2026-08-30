@@ -23,6 +23,13 @@ behavior from `GLControl`. Geometry and text measurements use logical pixels.
 available through `GLControlState` (`NORMAL`, `HOVERED`, `PRESSED`, and disabled
 or focus-related state where supported).
 
+Interactive controls participate in focus traversal by default. `Tab` advances
+in component-tree order and `Shift+Tab` moves backwards, wrapping at either end.
+Hidden, disabled, detached, or explicitly non-focusable controls are skipped;
+hiding or removing a subtree safely releases focus. Set `focusable` to `false`
+for controls that must be omitted from keyboard navigation. Focus appearance is
+resolved from the active control style and therefore follows the current theme.
+
 Every standard control has an immutable typed style. `setGLStyle(...)` sets a
 local override; `clearGLStyle()` returns to inherited theme values. Subclasses
 implement protected `control...` hooks without bypassing `GLControl`'s final
@@ -53,8 +60,7 @@ valid click; `doClick()` invokes the same action programmatically. Checkboxes
 combine a selected boolean with button-like activation. Use `get/setText` and
 `get/setSelected` for their models.
 
-Buttons and checkboxes are not focusable by default in 0.1.0; enable focus
-explicitly when the application supplies keyboard operation.
+Buttons and checkboxes activate with `Space` or `Enter` while focused.
 
 `GLLine` draws horizontal, vertical, or diagonal separators. Orientations are
 `HORIZONTAL`, `VERTICAL`, `DIAGONAL_DOWN`, and `DIAGONAL_UP`.
@@ -130,6 +136,10 @@ Popups choose upward or downward placement from available host space and clamp
 to the visible area. `setPopupMatchesComboWidth(true)` aligns widths;
 `setPopupTitle(...)` adds a fixed heading. `GLPopupTextOverflow.EXPAND` may widen
 the popup, while `ELLIPSIS` truncates labels.
+
+The pressed gradient remains visible while the ComboBox popup is open. Its
+light and dark colors come from `comboBox.pressedLight` and
+`comboBox.pressedDark`; the gradient respects the attachment-side contour.
 
 `GLMenuItem` supports text, mnemonic keys, accelerator display text, action
 commands, listeners, `doClick()`, and an optional submenu. Accelerator text is
@@ -207,6 +217,10 @@ Clearing the presentation provider restores `setItemTextProvider(...)`.
 overlays. `setImmediateCpuPickingEnabled(true)` is available when menu hover
 must update without waiting for the normal GPU-picking snapshot.
 
+Hovered and pressed menu items use the theme's `menu.itemCornerRadius` on all
+four corners. This small inner radius is independent of the popup's outer
+`menu.cornerRadius`.
+
 ## Tabs
 
 `GLTabbedPane` shows only selected content. Applications can change titles,
@@ -229,3 +243,13 @@ offsets use logical pixels.
 `setValues(value,extent,maximum)` updates these atomically. Unit and block
 increments control arrow/wheel and track actions. The scroll pane synchronizes
 bars, wheel input, viewport size, content bounds, and nested clipping.
+
+The wheel scrolls vertically by default. The semantic
+`scroll.horizontal` modifier (mapped to `Shift` by the bundled input map)
+selects the horizontal axis, so applications may remap it without changing the
+control. `setScrollUnit(...)` controls the wheel distance. Use
+`setHorizontalPolicy(...)` and `setVerticalPolicy(...)` to override automatic
+bar visibility, and `setHorizontalOffset(...)` / `setVerticalOffset(...)` for
+direct positioning. `scrollRectToVisible(x,y,width,height)` performs the
+minimal scroll required to reveal a content rectangle and clamps the result to
+the available range.

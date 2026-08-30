@@ -31,6 +31,15 @@ may change in subsequent `0.x` releases.
 - Containers, layouts, damage tracking, and Z-order control.
 - Buttons, checkboxes, sliders, text editors, combo boxes, and menus.
 - Tabs, scroll panes, dialogs, themes, and localization.
+- Conventional focus traversal for interactive controls, including safe focus
+  release when a control subtree is hidden or removed.
+- Typed color and metrics theme fragments with conflict-free bundle slots,
+  validation, duplicate-key detection, and deterministic override order.
+- Theme-configurable ComboBox press gradients that remain active while the
+  popup is open and follow its attachment-side contour.
+- External TrueType, OpenType, and Type 1 font resources in filesystem and
+  classpath themes, including separate regular, bold, italic, and bold-italic
+  faces.
 - Node editor with ports, connections, selection, and undo/redo.
 - Inheritable `GLHistoryManager` scopes for independent documents and editing surfaces.
 - Semantic, inheritable input maps and external `.glinput` files for shortcuts,

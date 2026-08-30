@@ -61,6 +61,8 @@ public class GLComboBox<T> extends GLControl
 	private final GLPopupMenu popupMenu = new GLPopupMenu();
 	private final GLRenderParameters backgroundParameters =
 			new GLRenderParameters();
+	private final GLRenderParameters pressedGradientParameters =
+			new GLRenderParameters();
 	private final GLRenderParameters textParameters = new GLRenderParameters();
 	private final GLRenderParameters arrowParameters = new GLRenderParameters();
 	private Function<? super T, String> itemTextProvider =
@@ -399,6 +401,17 @@ public class GLComboBox<T> extends GLControl
 			else
 				context.fillUIRoundRect(0, 0, width, height, radii, Color.WHITE);
 		});
+		float gradientInset = style.borderWidth() > 0
+				? Math.min(style.borderWidth() + 1,
+						Math.min(width, height) * 0.5f) : 0;
+		context.withParameters(pressedGradientParameters, () ->
+				context.fillUIVerticalGradientRoundRect(
+						gradientInset, gradientInset,
+						Math.max(0.0001f, width - gradientInset * 2),
+						Math.max(0.0001f, height - gradientInset * 2),
+						Math.max(0, topRadius - gradientInset),
+						Math.max(0, bottomRadius - gradientInset),
+						style.pressedLightColor(), style.pressedDarkColor()));
 
 		GLItemPresentation selectedPresentation = selectedEntry == null
 				? GLItemPresentation.text("") : presentation(selectedEntry.value);
@@ -562,6 +575,8 @@ public class GLComboBox<T> extends GLControl
 		GLControlState state = getControlState();
 		backgroundParameters.setColor(popupMenu.isShowing()
 				? style.pressedBackground() : style.background(state));
+		pressedGradientParameters.setOpacity(popupMenu.isShowing()
+				|| state == GLControlState.PRESSED ? 1 : 0);
 		textParameters.setColor(style.text(state));
 		arrowParameters.setColor(state == GLControlState.DISABLED
 				? style.disabledTextColor() : style.arrowColor());

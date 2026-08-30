@@ -1,14 +1,19 @@
 package com.vingame.glswing.test;
 
+import java.awt.Canvas;
+import java.awt.event.MouseEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import com.vingame.glswing.component.GLSwingPanel;
 import com.vingame.glswing.input.GLInputMaps;
+import com.vingame.glswing.input.GLMouseEvent;
+import com.vingame.glswing.input.GLPickResult;
 import com.vingame.glswing.rendering.GLContext2D;
 import com.vingame.glswing.rendering.GLIcon;
 import com.vingame.glswing.ui.GLComboBox;
+import com.vingame.glswing.ui.GLControlState;
 import com.vingame.glswing.ui.GLItemPresentation;
 import com.vingame.glswing.ui.GLMenuBar;
 import com.vingame.glswing.ui.GLMenuBarItem;
@@ -25,6 +30,8 @@ public final class GLMenuSelfTest {
 	}
 
 	public static void main(String[] args) {
+		if (com.vingame.glswing.ui.GLMenuStyle.DEFAULT.itemCornerRadius() != 2)
+			throw new AssertionError("Default menu-item corner radius is not 2");
 		testEllipsisNormalization();
 		testMnemonics();
 		testIconsAndPresentations();
@@ -108,6 +115,18 @@ public final class GLMenuSelfTest {
 		if (Math.abs(widthModes.getWidth() - 100) > 0.01f)
 			throw new AssertionError("Ellipsis mode did not retain root width");
 		widthModes.close();
+
+		GLPopupMenu transientState = new GLPopupMenu();
+		GLMenuItem formerlyHovered = transientState.addItem("Hovered");
+		transientState.addItem("Next");
+		transientState.show(host, 20, 20);
+		formerlyHovered.mouseEntered(mouseEvent());
+		if (formerlyHovered.getControlState() != GLControlState.HOVERED)
+			throw new AssertionError("Menu item did not enter hover state");
+		transientState.close();
+		if (formerlyHovered.getControlState() != GLControlState.NORMAL)
+			throw new AssertionError(
+					"Closed popup retained a transient item highlight");
 		widthModes.setTextOverflow(GLPopupTextOverflow.HORIZONTAL_SCROLL);
 		widthModes.show(host, 20, 20);
 		if (Math.abs(widthModes.getWidth() - 100) > 0.01f)
@@ -140,6 +159,12 @@ public final class GLMenuSelfTest {
 		}
 
 		System.out.println("GL menu self-test passed.");
+	}
+
+	private static GLMouseEvent mouseEvent() {
+		MouseEvent event = new MouseEvent(new Canvas(), MouseEvent.MOUSE_ENTERED,
+				System.currentTimeMillis(), 0, 0, 0, 0, false);
+		return new GLMouseEvent(event, GLPickResult.none(), 0, 0);
 	}
 
 	private static void testEllipsisNormalization() {

@@ -73,6 +73,7 @@ menu.border=${palette.border}
 menu.separator=${palette.border}
 menu.arrow=${palette.text}
 menu.cornerRadius=${metrics.cornerRadius}
+menu.itemCornerRadius=2
 menu.itemHeight=27
 menu.separatorHeight=9
 menu.minimumWidth=170
@@ -94,6 +95,8 @@ menuBar.cornerRadius=${metrics.cornerRadius}
 
 comboBox.text=${palette.text}
 comboBox.arrow=${palette.text}
+comboBox.pressedLight=${button.pressedLight}
+comboBox.pressedDark=${button.pressedDark}
 comboBox.cornerRadius=4
 comboBox.minimumWidth=120
 comboBox.arrowAreaWidth=22

@@ -146,6 +146,7 @@ public final class GLLocalizationThemeSelfTest {
 	private static void testFileThemeAndReferences() throws Exception {
 		Path file = Files.createTempFile("glswing-theme-", ".gltheme");
 		Path cycle = Files.createTempFile("glswing-theme-cycle-", ".gltheme");
+		Path directory = Files.createTempDirectory("glswing-theme-bundle-");
 		try {
 			Files.writeString(file, """
 					theme.extends=light
@@ -204,9 +205,95 @@ public final class GLLocalizationThemeSelfTest {
 				check(expected.getMessage().contains("Cyclic theme reference"),
 						"Cycle error did not identify its cause");
 			}
+
+			Path colors = directory.resolve("dark-colors.gltheme");
+			Path metrics = directory.resolve("rounded-metrics.gltheme");
+			Path bundle = directory.resolve("bundle.gltheme");
+			Files.writeString(colors, """
+					theme.type=colors
+					palette.accent=#336699
+					button.background=#102030
+					""", StandardCharsets.UTF_8);
+			Files.writeString(metrics, """
+					theme.type=metrics
+					metrics.cornerRadius=9
+					menu.itemCornerRadius=3
+					""", StandardCharsets.UTF_8);
+			Files.writeString(bundle, """
+					theme.type=bundle
+					theme.colors=dark-colors.gltheme
+					theme.metrics=rounded-metrics.gltheme
+					button.cornerRadius=7
+					""", StandardCharsets.UTF_8);
+			GLTheme combined = GLThemeLoader.load(bundle);
+			check(combined.values().getColor("palette.accent", Color.BLACK)
+					.equals(new Color(0x33, 0x66, 0x99))
+					&& combined.buttonStyle().background()
+							.equals(new Color(0x10, 0x20, 0x30)),
+					"Bundle did not import its color theme");
+			check(combined.menuStyle().itemCornerRadius() == 3
+					&& combined.buttonStyle().cornerRadius() == 7,
+					"Bundle metric import or local override order is wrong");
+			GLTheme selectedFragments = GLThemeLoader.loadBundle(GLThemes.DEFAULT,
+					colors, metrics);
+			check(selectedFragments.values()
+					.getColor("palette.accent", Color.BLACK)
+					.equals(new Color(0x33, 0x66, 0x99))
+					&& selectedFragments.menuStyle().itemCornerRadius() == 3
+					&& selectedFragments.buttonStyle().cornerRadius() == 9,
+					"Independently selected color and metrics fragments were not composed");
+
+			Path invalidColors = directory.resolve("invalid-colors.gltheme");
+			Files.writeString(invalidColors, """
+					theme.type=colors
+					metrics.cornerRadius=4
+					""", StandardCharsets.UTF_8);
+			Files.writeString(bundle, """
+					theme.type=bundle
+					theme.colors=invalid-colors.gltheme
+					""", StandardCharsets.UTF_8);
+			try {
+				GLThemeLoader.load(bundle);
+				throw new AssertionError("Color fragment accepted a metrics key");
+			} catch (GLThemeLoadException expected) {
+				check(expected.getMessage().contains("not permitted in a color theme"),
+						"Fragment type error did not identify the invalid key");
+			}
+
+			Path duplicate = directory.resolve("duplicate.gltheme");
+			Files.writeString(duplicate, """
+					theme.type=bundle
+					theme.colors=first.gltheme
+					theme.colors=second.gltheme
+					""", StandardCharsets.UTF_8);
+			try {
+				GLThemeLoader.load(duplicate);
+				throw new AssertionError("Duplicate theme slot was accepted");
+			} catch (GLThemeLoadException expected) {
+				check(expected.getMessage().contains("Duplicate theme key"),
+						"Duplicate slot error did not identify its cause");
+			}
+
+			Path missingFont = directory.resolve("missing-font.gltheme");
+			Files.writeString(missingFont, "font.source=fonts/missing.ttf\n",
+					StandardCharsets.UTF_8);
+			try {
+				GLThemeLoader.load(missingFont);
+				throw new AssertionError("Missing external font was accepted");
+			} catch (GLThemeLoadException expected) {
+				check(expected.getMessage().contains("cannot read font"),
+						"External-font error did not include useful context");
+			}
 		} finally {
 			Files.deleteIfExists(file);
 			Files.deleteIfExists(cycle);
+			if (Files.exists(directory)) {
+				try (var files = Files.list(directory)) {
+					for (Path child : files.toList())
+						Files.deleteIfExists(child);
+				}
+				Files.deleteIfExists(directory);
+			}
 		}
 	}
 

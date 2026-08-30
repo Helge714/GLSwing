@@ -39,7 +39,7 @@ public class GLCheckBox extends GLControl {
 	}
 
 	public GLCheckBox(String text, boolean selected) {
-		super(false);
+		super(true);
 		this.text = requireText(text);
 		actionCommand = text;
 		this.selected = selected;

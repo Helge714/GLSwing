@@ -53,6 +53,10 @@ public final class UIQuadBatchGpuSelfTest {
 			renderer = GLRenderer2D.create(gl);
 			font = new GLFont(GLFont.SANS_SERIF, GLFont.BOLD, 24);
 			try {
+				testRoundedControlMatrix(gl, renderer);
+				testSliderValueMatrix(gl, renderer);
+				testHiDpiAndTransparency(gl, renderer);
+				testGroupedContours(gl, renderer);
 				testMixedRecordedInstances(gl, renderer, font);
 				testAsymmetricRoundedFill(gl, renderer);
 				testScreenSpaceBorderUnderZoom(gl, renderer);
@@ -78,6 +82,94 @@ public final class UIQuadBatchGpuSelfTest {
 			nativeContext.release();
 			drawable.destroy();
 		}
+	}
+
+	private static void testRoundedControlMatrix(GL3 gl,
+			GLRenderer2D renderer) {
+		float[] radii = { 0, 0.5f, 1, 2, 4, 10 };
+		float[] borders = { 1, 2, 4 };
+		for (float radius : radii) {
+			for (float border : borders) {
+				GLContext2D context = renderer.beginFrame(gl, WIDTH, HEIGHT,
+						Projection2D.TOP_LEFT_PIXELS.create(WIDTH, HEIGHT));
+				context.clear(Color.BLACK);
+				context.fillAndDrawUIRoundRect(20, 20, 80, 40, radius, border,
+						Color.RED, Color.BLUE, GLStroke.WidthSpace.SCREEN);
+				renderer.endFrame();
+
+				String caseName = "radius=" + radius + ", border=" + border;
+				if (radius <= 1) {
+					checkRegionsEqual(gl, 20, 20, 97, 20, 3, 3, 3,
+							caseName + " top-corner symmetry");
+					checkRegionsEqual(gl, 20, 57, 97, 57, 3, 3, 3,
+							caseName + " bottom-corner symmetry");
+					checkRegionsEqual(gl, 20, 20, 20, 57, 3, 3, 3,
+							caseName + " left-corner symmetry");
+				}
+				checkDominantColor(gl, 20, 40, Color.BLUE,
+						caseName + " left border");
+				checkDominantColor(gl, 60, 40, Color.RED,
+						caseName + " fill");
+			}
+		}
+	}
+
+	private static void testSliderValueMatrix(GL3 gl,
+			GLRenderer2D renderer) {
+		float[] values = { 0, 0.03f, 0.5f, 0.97f, 1 };
+		for (float value : values) {
+			GLContext2D context = renderer.beginFrame(gl, WIDTH, HEIGHT,
+					Projection2D.TOP_LEFT_PIXELS.create(WIDTH, HEIGHT));
+			context.clear(Color.BLACK);
+			context.fillUISlider(20, 20, 120, 32, 4, value, 2,
+					new Color(40, 40, 40), Color.RED, new Color(120, 0, 0),
+					Color.BLUE, GLStroke.WidthSpace.SCREEN);
+			renderer.endFrame();
+
+			checkDominantColor(gl, 20, 36, Color.BLUE,
+					"slider " + value + " left border");
+			checkDominantColor(gl, 139, 36, Color.BLUE,
+					"slider " + value + " right border");
+			if (value >= 0.5f)
+				checkDominantColor(gl, 50, 36, Color.RED,
+						"slider " + value + " progress interior");
+			else
+				checkColor(gl, 50, 36, new Color(40, 40, 40),
+						"slider " + value + " background interior");
+		}
+	}
+
+	private static void testHiDpiAndTransparency(GL3 gl,
+			GLRenderer2D renderer) {
+		GLContext2D context = renderer.beginFrame(gl, WIDTH / 2f, HEIGHT / 2f,
+				Projection2D.TOP_LEFT_PIXELS.create(WIDTH / 2f, HEIGHT / 2f));
+		context.clear(new Color(20, 80, 20));
+		context.fillAndDrawUIRoundRect(10, 8, 60, 28, 6, 1,
+				new Color(255, 0, 0, 128), Color.BLUE,
+				GLStroke.WidthSpace.SCREEN);
+		renderer.endFrame();
+
+		checkDominantColor(gl, 20, 44, Color.BLUE,
+				"2x screen-space border");
+	}
+
+	private static void testGroupedContours(GL3 gl,
+			GLRenderer2D renderer) {
+		GLContext2D context = renderer.beginFrame(gl, WIDTH, HEIGHT,
+				Projection2D.TOP_LEFT_PIXELS.create(WIDTH, HEIGHT));
+		context.clear(Color.BLACK);
+		context.fillUIRoundRect(20, 20, 60, 32,
+				new GLCornerRadii(6, 0, 0, 6), Color.RED);
+		context.fillUIRoundRect(80, 20, 60, 32,
+				new GLCornerRadii(0, 6, 6, 0), Color.RED);
+		context.drawUIRoundRect(20, 20, 120, 32, 6, 2, Color.BLUE,
+				GLStroke.WidthSpace.SCREEN);
+		renderer.endFrame();
+
+		checkDominantColor(gl, 79, 36, Color.RED, "grouped left seam");
+		checkDominantColor(gl, 80, 36, Color.RED, "grouped right seam");
+		checkDominantColor(gl, 20, 36, Color.BLUE, "grouped outer border");
+		checkDominantColor(gl, 139, 36, Color.BLUE, "grouped outer border");
 	}
 
 	private static void testCustomUIShader(GL3 gl,
@@ -153,6 +245,8 @@ public final class UIQuadBatchGpuSelfTest {
 				"combined asymmetric rounded border");
 		checkDominantColor(gl, 148, 11, Color.BLUE,
 				"combined asymmetric square border");
+		checkDominantColor(gl, 91, 48, Color.BLUE,
+				"combined asymmetric square bottom-left border");
 		checkDominantColor(gl, 120, 30, Color.RED,
 				"combined asymmetric fill");
 		if (renderer.readPickResult(gl, 10, 10).isHit())
@@ -371,6 +465,32 @@ public final class UIQuadBatchGpuSelfTest {
 		gl.glReadPixels(x, HEIGHT - 1 - y, 1, 1,
 				GL.GL_RGBA, GL.GL_UNSIGNED_BYTE, pixel);
 		return pixel;
+	}
+
+	private static void checkRegionsEqual(GL3 gl, int firstX, int firstY,
+			int secondX, int secondY, int width, int height, int tolerance,
+			String description) {
+		long[] first = regionSums(gl, firstX, firstY, width, height);
+		long[] second = regionSums(gl, secondX, secondY, width, height);
+		int samples = width * height;
+		for (int channel = 0; channel < 4; channel++) {
+			long difference = Math.abs(first[channel] - second[channel]);
+			if (difference > (long) tolerance * samples)
+				throw new AssertionError(description + ": channel " + channel
+						+ " average differs by " + difference / (float) samples);
+		}
+	}
+
+	private static long[] regionSums(GL3 gl, int x, int y,
+			int width, int height) {
+		ByteBuffer pixels = ByteBuffer.allocateDirect(width * height * 4);
+		gl.glReadPixels(x, HEIGHT - y - height, width, height,
+				GL.GL_RGBA, GL.GL_UNSIGNED_BYTE, pixels);
+		long[] sums = new long[4];
+		for (int sample = 0; sample < width * height; sample++)
+			for (int channel = 0; channel < 4; channel++)
+				sums[channel] += pixels.get(sample * 4 + channel) & 0xff;
+		return sums;
 	}
 
 	private static void checkColor(GL3 gl, int x, int y,

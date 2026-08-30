@@ -497,12 +497,13 @@ public class GLPopupMenu extends GLContainer {
 				? 0 : style.cornerRadius();
 		GLCornerRadii radii = new GLCornerRadii(topRadius, topRadius,
 				bottomRadius, bottomRadius);
-		context.fillRoundRect(0, 0, width, height, radii, style.background());
-		if (style.borderWidth() > 0) {
-			context.setStroke(new GLStroke(style.borderWidth())
-					.withWidthSpace(GLStroke.WidthSpace.SCREEN));
-			context.drawRoundRect(0, 0, width, height, radii, style.borderColor());
-		}
+		if (style.borderWidth() > 0)
+			context.fillAndDrawUIRoundRect(0, 0, width, height, radii,
+					style.borderWidth(), style.background(), style.borderColor(),
+					GLStroke.WidthSpace.SCREEN);
+		else
+			context.fillUIRoundRect(0, 0, width, height, radii,
+					style.background());
 	}
 
 	@Override
@@ -684,7 +685,7 @@ public class GLPopupMenu extends GLContainer {
 		float inset = Math.min(Math.min(padding.left(), padding.right()),
 				Math.min(padding.top(), padding.bottom()));
 		float edgeRadius = Math.max(0, style.cornerRadius() - inset);
-		float standardItemRadius = Math.min(3, style.itemHeight() * 0.25f);
+		float standardItemRadius = style.itemCornerRadius();
 		viewportClipRequired = scrollable || horizontalScrollable
 				|| edgeRadius > standardItemRadius;
 		viewportComposite = GLComposite.DEFAULT.withEffect(
@@ -1519,6 +1520,9 @@ public class GLPopupMenu extends GLContainer {
 		private void closeFrom(int index) {
 			for (int current = openMenus.size() - 1; current >= index; current--) {
 				GLPopupMenu menu = openMenus.remove(current);
+				for (GLContainer row : menu.rows)
+					if (row instanceof GLControl control)
+						control.resetTransientInteractionState();
 				menuOverlay.removeGL(menu);
 				menu.session = null;
 			}

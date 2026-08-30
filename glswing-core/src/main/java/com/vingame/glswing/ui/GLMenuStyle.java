@@ -17,6 +17,7 @@ public record GLMenuStyle(
 		Color separatorColor,
 		Color arrowColor,
 		float cornerRadius,
+		float itemCornerRadius,
 		float borderWidth,
 		float itemHeight,
 		float separatorHeight,
@@ -34,7 +35,8 @@ public record GLMenuStyle(
 				|| borderColor == null || separatorColor == null
 				|| arrowColor == null || padding == null)
 			throw new IllegalArgumentException("Menu style values must not be null");
-		if (!nonNegative(cornerRadius) || !nonNegative(borderWidth)
+		if (!nonNegative(cornerRadius) || !nonNegative(itemCornerRadius)
+				|| !nonNegative(borderWidth)
 				|| !positive(itemHeight) || !nonNegative(separatorHeight)
 				|| !positive(minimumWidth) || !nonNegative(itemHorizontalPadding)
 				|| !nonNegative(columnGap))
@@ -45,7 +47,8 @@ public record GLMenuStyle(
 	public GLMenuStyle withFont(GLFontSpec value) {
 		return copy(value, background, hoverBackground, pressedBackground,
 				textColor, disabledTextColor, acceleratorColor, borderColor,
-				separatorColor, arrowColor, cornerRadius, borderWidth, itemHeight,
+				separatorColor, arrowColor, cornerRadius, itemCornerRadius,
+				borderWidth, itemHeight,
 				separatorHeight, minimumWidth, itemHorizontalPadding, columnGap,
 				padding);
 	}
@@ -53,7 +56,8 @@ public record GLMenuStyle(
 	public GLMenuStyle withBackground(Color value) {
 		return copy(font, value, hoverBackground, pressedBackground,
 				textColor, disabledTextColor, acceleratorColor, borderColor,
-				separatorColor, arrowColor, cornerRadius, borderWidth, itemHeight,
+				separatorColor, arrowColor, cornerRadius, itemCornerRadius,
+				borderWidth, itemHeight,
 				separatorHeight, minimumWidth, itemHorizontalPadding, columnGap,
 				padding);
 	}
@@ -61,7 +65,8 @@ public record GLMenuStyle(
 	public GLMenuStyle withSelectionColors(Color hover, Color pressed) {
 		return copy(font, background, hover, pressed, textColor,
 				disabledTextColor, acceleratorColor, borderColor, separatorColor,
-				arrowColor, cornerRadius, borderWidth, itemHeight, separatorHeight,
+				arrowColor, cornerRadius, itemCornerRadius, borderWidth, itemHeight,
+				separatorHeight,
 				minimumWidth, itemHorizontalPadding, columnGap, padding);
 	}
 
@@ -69,14 +74,16 @@ public record GLMenuStyle(
 			Color accelerator, Color arrow) {
 		return copy(font, background, hoverBackground, pressedBackground,
 				text, disabled, accelerator, borderColor, separatorColor, arrow,
-				cornerRadius, borderWidth, itemHeight, separatorHeight, minimumWidth,
+				cornerRadius, itemCornerRadius, borderWidth, itemHeight,
+				separatorHeight, minimumWidth,
 				itemHorizontalPadding, columnGap, padding);
 	}
 
 	public GLMenuStyle withBorder(float width, Color color) {
 		return copy(font, background, hoverBackground, pressedBackground,
 				textColor, disabledTextColor, acceleratorColor, color,
-				separatorColor, arrowColor, cornerRadius, width, itemHeight,
+				separatorColor, arrowColor, cornerRadius, itemCornerRadius, width,
+				itemHeight,
 				separatorHeight, minimumWidth, itemHorizontalPadding, columnGap,
 				padding);
 	}
@@ -85,15 +92,25 @@ public record GLMenuStyle(
 			float minimumWidth) {
 		return copy(font, background, hoverBackground, pressedBackground,
 				textColor, disabledTextColor, acceleratorColor, borderColor,
-				separatorColor, arrowColor, radius, borderWidth, itemHeight,
+				separatorColor, arrowColor, radius, itemCornerRadius, borderWidth,
+				itemHeight,
 				separatorHeight, minimumWidth, itemHorizontalPadding, columnGap,
 				padding);
+	}
+
+	public GLMenuStyle withItemCornerRadius(float value) {
+		return copy(font, background, hoverBackground, pressedBackground,
+				textColor, disabledTextColor, acceleratorColor, borderColor,
+				separatorColor, arrowColor, cornerRadius, value, borderWidth,
+				itemHeight, separatorHeight, minimumWidth, itemHorizontalPadding,
+				columnGap, padding);
 	}
 
 	public GLMenuStyle withPadding(GLInsets value) {
 		return copy(font, background, hoverBackground, pressedBackground,
 				textColor, disabledTextColor, acceleratorColor, borderColor,
-				separatorColor, arrowColor, cornerRadius, borderWidth, itemHeight,
+				separatorColor, arrowColor, cornerRadius, itemCornerRadius,
+				borderWidth, itemHeight,
 				separatorHeight, minimumWidth, itemHorizontalPadding, columnGap,
 				value);
 	}
@@ -102,13 +119,15 @@ public record GLMenuStyle(
 			Color hoverBackground, Color pressedBackground, Color textColor,
 			Color disabledTextColor, Color acceleratorColor, Color borderColor,
 			Color separatorColor, Color arrowColor, float cornerRadius,
-			float borderWidth, float itemHeight, float separatorHeight,
+			float itemCornerRadius, float borderWidth, float itemHeight,
+			float separatorHeight,
 			float minimumWidth, float itemHorizontalPadding, float columnGap,
 			GLInsets padding) {
 		return new GLMenuStyle(font, background, hoverBackground,
 				pressedBackground, textColor, disabledTextColor, acceleratorColor,
-				borderColor, separatorColor, arrowColor, cornerRadius, borderWidth,
-				itemHeight, separatorHeight, minimumWidth, itemHorizontalPadding,
+				borderColor, separatorColor, arrowColor, cornerRadius,
+				itemCornerRadius, borderWidth, itemHeight, separatorHeight,
+				minimumWidth, itemHorizontalPadding,
 				columnGap, padding);
 	}
 

@@ -1,6 +1,8 @@
 package com.vingame.glswing.test;
 
 import java.awt.Color;
+import java.awt.event.InputEvent;
+import java.awt.event.KeyEvent;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import com.vingame.glswing.component.GLContainer;
@@ -42,7 +44,7 @@ public final class GLControlsSelfTest {
 		check(style.cornerRadius() >= 0 && style.borderWidth() >= 0,
 				"Default button radius or border width is invalid");
 		GLButton button = new GLButton("Default");
-		check(!button.isFocusable(), "Buttons are focusable by default");
+		check(button.isFocusable(), "Buttons are not focusable by default");
 		check(button.getPreferredGLSize().height() == GLButton.DEFAULT_HEIGHT,
 				"Default button height is not 14 pixels");
 		check(GLTheme.DEFAULT.checkBoxStyle().boxSize()
@@ -93,7 +95,7 @@ public final class GLControlsSelfTest {
 		GLCheckBox checkBox = new GLCheckBox("Enabled");
 		AtomicInteger checkBoxActions = new AtomicInteger();
 		checkBox.addActionListener(event -> checkBoxActions.incrementAndGet());
-		check(!checkBox.isFocusable(), "Check box is focusable by default");
+		check(checkBox.isFocusable(), "Check box is not focusable by default");
 		checkBox.doClick();
 		check(checkBox.isSelected() && checkBoxActions.get() == 1,
 				"Check box click did not toggle and fire an action");
@@ -117,6 +119,30 @@ public final class GLControlsSelfTest {
 		check(button.isFocused(), "Button did not receive GL focus");
 		panel.removeGL(button);
 		check(!button.isFocused(), "Removed button retained GL focus");
+
+		GLContainer subtree = new GLContainer() {
+			@Override protected void record(GLContext2D context) { }
+		};
+		GLButton first = new GLButton("First");
+		GLCheckBox second = new GLCheckBox("Second");
+		subtree.addGL(first);
+		subtree.addGL(second);
+		panel.addGL(subtree);
+		pressTab(panel, 0);
+		check(first.isFocused(), "Tab did not focus the first control");
+		pressTab(panel, 0);
+		check(second.isFocused(), "Tab did not follow component-tree order");
+		pressTab(panel, InputEvent.SHIFT_DOWN_MASK);
+		check(first.isFocused(), "Shift+Tab did not traverse backwards");
+		subtree.setVisible(false);
+		check(!first.isFocused(), "Hidden subtree retained keyboard focus");
+	}
+
+	private static void pressTab(TestPanel panel, int modifiers) {
+		KeyEvent event = new KeyEvent(panel, KeyEvent.KEY_PRESSED,
+				System.currentTimeMillis(), modifiers, KeyEvent.VK_TAB, '\t');
+		for (var listener : panel.getKeyListeners())
+			listener.keyPressed(event);
 	}
 
 	private static void testDetachedSubtreeFontResolution() {

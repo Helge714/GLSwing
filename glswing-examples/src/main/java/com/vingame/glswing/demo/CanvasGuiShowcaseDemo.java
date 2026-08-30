@@ -23,10 +23,12 @@ import com.jogamp.opengl.util.FPSAnimator;
 import com.vingame.glswing.component.GLParent;
 import com.vingame.glswing.component.GLSwingCanvas;
 import com.vingame.glswing.component.GLSwingContainerCanvas;
+import com.vingame.glswing.history.GLHistoryManager;
 import com.vingame.glswing.rendering.GLContext2D;
 import com.vingame.glswing.ui.GLLocalizer;
 import com.vingame.glswing.ui.GLTheme;
 import com.vingame.glswing.ui.GLThemeLoadException;
+import com.vingame.glswing.ui.GLThemeLoader;
 import com.vingame.glswing.ui.GLThemeWatcher;
 import com.vingame.glswing.ui.GLThemes;
 
@@ -93,8 +95,8 @@ public final class CanvasGuiShowcaseDemo {
 		private static final float MAX_ZOOM = 2.5f;
 		private static final String SHOWCASE_BUNDLE =
 				"com.vingame.glswing.demo.languages.Showcase";
-		private static final Path THEME_DIRECTORY = Path.of("resources", "com",
-				"vingame", "glswing", "themes").toAbsolutePath().normalize();
+		private static final Path THEME_DIRECTORY =
+				GuiShowcaseDemo.showcaseThemeDirectory();
 
 		private final GuiShowcaseDemo.ShowcaseSurface surface =
 				new GuiShowcaseDemo.ShowcaseSurface(this);
@@ -104,6 +106,10 @@ public final class CanvasGuiShowcaseDemo {
 		private volatile String lastAction =
 				"Strg + Mausrad: Zoom | Strg + 0: 100 %";
 		private GLThemeWatcher themeWatcher;
+		private String colorsFile = "showcase-dark-colors.gltheme";
+		private String colorsNameKey = "showcase.theme.colors.dark";
+		private String metricsFile = "showcase-default-metrics.gltheme";
+		private String metricsNameKey = "showcase.theme.metrics.default";
 
 		ShowcaseCanvas() {
 			this(DEFAULT_ANTIALIASING_SAMPLES);
@@ -119,7 +125,7 @@ public final class CanvasGuiShowcaseDemo {
 			addGL(zoomLayer);
 			addGL(surface.menuBar());
 			watchShowcaseTheme("dark.gltheme", GLThemes.DARK,
-					"showcase.theme.dark");
+					"showcase.theme.dark", false);
 			setLanguage(Locale.GERMAN);
 			addMouseWheelListener(event -> {
 				if (!event.isControlDown())
@@ -183,6 +189,11 @@ public final class CanvasGuiShowcaseDemo {
 		}
 
 		@Override
+		public GLHistoryManager historyManager() {
+			return getGLHistoryManager();
+		}
+
+		@Override
 		public void setThemeCornerRadius(float radius) {
 			setGLTheme(getGLTheme().withCornerRadius(radius));
 			lastAction = String.format("Theme-Rundung auf %.1f px gesetzt", radius);
@@ -200,20 +211,56 @@ public final class CanvasGuiShowcaseDemo {
 
 		@Override
 		public void watchShowcaseTheme(String fileName, GLTheme fallback,
-				String nameKey) {
+				String nameKey, boolean preserveExternalMetrics) {
 			closeThemeWatcher();
 			Path file = THEME_DIRECTORY.resolve(fileName);
 			if (!Files.isRegularFile(file)) {
-				applyShowcaseTheme(fallback, nameKey, false);
+				applyShowcaseTheme(fallback, nameKey, false,
+						preserveExternalMetrics);
+				if (preserveExternalMetrics)
+					lastAction = "Externe Theme-Datei nicht gefunden: " + file;
 				return;
 			}
 			try {
 				themeWatcher = GLThemeWatcher.watch(file,
-						theme -> applyShowcaseTheme(theme, nameKey, true),
+						theme -> applyShowcaseTheme(theme, nameKey, true,
+								preserveExternalMetrics),
 						error -> lastAction = "Theme-Fehler: " + error.getMessage());
 			} catch (GLThemeLoadException error) {
-				applyShowcaseTheme(fallback, nameKey, false);
+				applyShowcaseTheme(fallback, nameKey, false,
+						preserveExternalMetrics);
 				lastAction = "Theme-Watcher nicht aktiv: " + error.getMessage();
+			}
+		}
+
+		@Override
+		public void selectShowcaseColors(String fileName, String nameKey) {
+			colorsFile = fileName;
+			colorsNameKey = nameKey;
+			applyThemeFragments();
+		}
+
+		@Override
+		public void selectShowcaseMetrics(String fileName, String nameKey) {
+			metricsFile = fileName;
+			metricsNameKey = nameKey;
+			applyThemeFragments();
+		}
+
+		private void applyThemeFragments() {
+			closeThemeWatcher();
+			try {
+				GLTheme theme = GLThemeLoader.loadBundle(GLThemes.DEFAULT,
+						THEME_DIRECTORY.resolve(colorsFile),
+						THEME_DIRECTORY.resolve(metricsFile));
+				setGLTheme(theme);
+				surface.syncThemeRadius(theme.buttonStyle().cornerRadius());
+				lastAction = getGLLocalizer().text(
+						"showcase.status.themeCombination",
+						getGLLocalizer().text(colorsNameKey),
+						getGLLocalizer().text(metricsNameKey));
+			} catch (GLThemeLoadException error) {
+				lastAction = "Theme-Fehler: " + error.getMessage();
 			}
 		}
 
@@ -223,8 +270,12 @@ public final class CanvasGuiShowcaseDemo {
 		}
 
 		private void applyShowcaseTheme(GLTheme theme, String nameKey,
-				boolean hotReloaded) {
-			setGLTheme(theme.withCornerRadius(surface.themeRadius()));
+				boolean hotReloaded, boolean preserveExternalMetrics) {
+			GLTheme applied = preserveExternalMetrics ? theme
+					: theme.withCornerRadius(surface.themeRadius());
+			setGLTheme(applied);
+			if (preserveExternalMetrics)
+				surface.syncThemeRadius(applied.buttonStyle().cornerRadius());
 			lastAction = getGLLocalizer().text("showcase.status.theme",
 					getGLLocalizer().text(nameKey))
 					+ (hotReloaded ? " | Hot-Reload" : "");

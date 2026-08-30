@@ -36,7 +36,7 @@ public class GLButton extends GLControl {
 	private GLButtonStyle appliedStyle;
 
 	public GLButton(String text) {
-		super(false);
+		super(true);
 		this.text = requireText(text);
 		actionCommand = text;
 		updatePresentation(true);

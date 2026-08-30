@@ -71,7 +71,17 @@ final class MavenSmokeTest {
 	}
 
 	@Test
+	void controlsAndFocus() {
+		GLControlsSelfTest.main(NO_ARGS);
+	}
+
+	@Test
 	void menus() {
 		GLMenuSelfTest.main(NO_ARGS);
+	}
+
+	@Test
+	void scrollingAndTabs() {
+		GLScrollTabsSelfTest.main(NO_ARGS);
 	}
 }

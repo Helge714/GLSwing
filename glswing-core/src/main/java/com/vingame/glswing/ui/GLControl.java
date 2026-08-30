@@ -183,6 +183,16 @@ public abstract class GLControl extends GLContainer implements GLKeyTarget {
 		updateState();
 	}
 
+	/** Clears pointer and keyboard gesture state when an overlay is detached. */
+	final void resetTransientInteractionState() {
+		if (!hovered && !mousePressed && !keyboardPressed)
+			return;
+		hovered = false;
+		mousePressed = false;
+		keyboardPressed = false;
+		updateState();
+	}
+
 	protected void controlStateChanged(GLControlState oldState,
 			GLControlState newState) {
 	}

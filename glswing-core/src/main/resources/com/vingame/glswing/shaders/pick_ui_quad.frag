@@ -79,6 +79,13 @@ float asymmetricRoundedDistance(vec2 local, vec2 size, vec4 radii) {
     return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - radius;
 }
 
+float asymmetricCornerRadius(vec2 local, vec2 size, vec4 radii) {
+	bool right = local.x > size.x * 0.5;
+	bool bottom = local.y > size.y * 0.5;
+	return bottom ? (right ? radii.z : radii.w)
+			: (right ? radii.y : radii.x);
+}
+
 float insetRoundedDistance(vec2 local, vec2 size, float radius, float inset) {
 	vec2 innerSize = max(size - vec2(inset * 2.0), vec2(0.0001));
 	return roundedDistance(local - vec2(inset), innerSize,
@@ -90,10 +97,6 @@ float insetAsymmetricRoundedDistance(vec2 local, vec2 size, vec4 radii,
 	vec2 innerSize = max(size - vec2(inset * 2.0), vec2(0.0001));
 	return asymmetricRoundedDistance(local - vec2(inset), innerSize,
 			max(radii - vec4(inset), vec4(0.0)));
-}
-
-bool squareRadii(vec4 radii) {
-	return all(lessThanEqual(radii, vec4(1.0)));
 }
 
 float edgeCoverage(float distance) {
@@ -245,7 +248,7 @@ void main() {
 		coverage = outer * progressCoverage;
 		alpha = max(vAlpha, vSecondaryColor.a);
 	} else if (mode == 13) {
-		coverage = squareRadii(vAux) ? 1.0
+		coverage = asymmetricCornerRadius(vLocal, vSize, vAux) <= 1.0 ? 1.0
 				: edgeCoverage(asymmetricRoundedDistance(vLocal, vSize, vAux));
 		alpha = max(vAlpha, vSecondaryColor.a);
 	} else if (mode == 14) {

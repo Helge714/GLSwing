@@ -1,9 +1,15 @@
 package com.vingame.glswing.test;
 
+import java.awt.Canvas;
+import java.awt.event.InputEvent;
+import java.awt.event.MouseEvent;
+import java.awt.event.MouseWheelEvent;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import com.vingame.glswing.component.GLContainer;
 import com.vingame.glswing.rendering.GLContext2D;
+import com.vingame.glswing.input.GLPickResult;
+import com.vingame.glswing.input.GLMouseWheelEvent;
 import com.vingame.glswing.ui.GLScrollBar;
 import com.vingame.glswing.ui.GLScrollPane;
 import com.vingame.glswing.ui.GLScrollPaneStyle;
@@ -18,9 +24,83 @@ public final class GLScrollTabsSelfTest {
 	public static void main(String[] args) {
 		testScrollBarModel();
 		testScrollPaneContent();
+		testScrollPaneLayoutAndOffsets();
+		testScrollPaneWheelAxes();
+		testScrollPanePolicies();
 		testTabs();
 		testThemeValues();
 		System.out.println("GL scroll/tabs self-test passed.");
+	}
+
+	private static void testScrollPaneLayoutAndOffsets() {
+		GLContainer content = empty();
+		content.setPreferredGLSize(800, 600);
+		GLScrollPane pane = new GLScrollPane(content);
+		pane.setBounds(0, 0, 300, 200);
+		check(pane.getVerticalScrollBar().isVisible(),
+				"Tall content did not show the vertical scrollbar");
+		check(pane.getHorizontalScrollBar().isVisible(),
+				"Wide content did not show the horizontal scrollbar");
+		check(pane.getVerticalScrollBar().getMaximumValue() > 300,
+				"Vertical scroll range was not derived from content size");
+		check(pane.getHorizontalScrollBar().getMaximumValue() > 400,
+				"Horizontal scroll range was not derived from content size");
+
+		pane.setScrollOffset(120, 90);
+		check(content.getX() == -120 && content.getY() == -90,
+				"Content position did not follow scroll offsets");
+		pane.scrollRectToVisible(700, 500, 40, 30);
+		check(pane.getHorizontalScrollOffset() > 400
+				&& pane.getVerticalScrollOffset() > 300,
+				"scrollRectToVisible did not reveal a distant rectangle");
+		pane.setScrollOffset(Float.MAX_VALUE, Float.MAX_VALUE);
+		check(pane.getHorizontalScrollOffset()
+				== pane.getHorizontalScrollBar().getMaximumValue(),
+				"Horizontal offset was not clamped");
+		check(pane.getVerticalScrollOffset()
+				== pane.getVerticalScrollBar().getMaximumValue(),
+				"Vertical offset was not clamped");
+	}
+
+	private static void testScrollPaneWheelAxes() {
+		GLContainer content = empty();
+		content.setPreferredGLSize(800, 600);
+		GLScrollPane pane = new GLScrollPane(content);
+		pane.setBounds(0, 0, 300, 200);
+		pane.setScrollUnit(10);
+		GLMouseWheelEvent vertical = wheel(0, 1);
+		pane.mouseWheelMoved(vertical);
+		check(pane.getVerticalScrollOffset() == 30 && vertical.isConsumed(),
+				"Unit wheel input did not scroll and consume vertically");
+		GLMouseWheelEvent horizontal = wheel(InputEvent.SHIFT_DOWN_MASK, 1);
+		pane.mouseWheelMoved(horizontal);
+		check(pane.getHorizontalScrollOffset() == 30 && horizontal.isConsumed(),
+				"Configured horizontal modifier did not select the horizontal axis");
+	}
+
+	private static void testScrollPanePolicies() {
+		GLContainer content = empty();
+		content.setPreferredGLSize(20, 20);
+		GLScrollPane pane = new GLScrollPane(content);
+		pane.setBounds(0, 0, 300, 200);
+		check(!pane.getVerticalScrollBar().isVisible()
+				&& !pane.getHorizontalScrollBar().isVisible(),
+				"AS_NEEDED showed bars for fitting content");
+		pane.setVerticalScrollBarPolicy(GLScrollPane.ScrollBarPolicy.ALWAYS);
+		check(pane.getVerticalScrollBar().isVisible(),
+				"ALWAYS did not show the vertical bar");
+		pane.setHorizontalScrollBarPolicy(GLScrollPane.ScrollBarPolicy.NEVER);
+		content.setPreferredGLSize(900, 20);
+		pane.setBounds(0, 0, 301, 200);
+		check(!pane.getHorizontalScrollBar().isVisible(),
+				"NEVER allowed the horizontal bar to appear");
+	}
+
+	private static GLMouseWheelEvent wheel(int modifiers, int rotation) {
+		MouseWheelEvent event = new MouseWheelEvent(new Canvas(),
+				MouseEvent.MOUSE_WHEEL, System.currentTimeMillis(), modifiers,
+				0, 0, 0, false, MouseWheelEvent.WHEEL_UNIT_SCROLL, 3, rotation);
+		return new GLMouseWheelEvent(event, GLPickResult.none());
 	}
 
 	private static void testScrollBarModel() {

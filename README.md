@@ -158,7 +158,7 @@ Useful starting points include:
 |---|---|
 | `GLFrameDemo` | Managed standalone window |
 | `DrawingApiDemo` | Shapes, strokes, and per-vertex colors |
-| `GuiShowcaseDemo` | Controls, layouts, themes, and dialogs |
+| `GuiShowcaseDemo` | Controls, layouts, dialogs, and a selectable external color/metrics/font bundle |
 | `CustomShaderDemo` | Custom rendering programs and uniforms |
 | `RecordingParameterDemo` | Reusable recorded drawing commands |
 | `LayerDemo` | Group compositing and effects |

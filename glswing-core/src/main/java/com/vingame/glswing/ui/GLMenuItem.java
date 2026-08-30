@@ -426,7 +426,7 @@ public class GLMenuItem extends GLControl {
 
 	private void drawBackground(GLContext2D context, float width, float height) {
 		context.fillUIRoundRect(0, 0, width, height,
-				Math.min(3, height * 0.25f), Color.WHITE);
+				menuStyle().itemCornerRadius(), Color.WHITE);
 	}
 
 	private GLMenuStyle menuStyle() {

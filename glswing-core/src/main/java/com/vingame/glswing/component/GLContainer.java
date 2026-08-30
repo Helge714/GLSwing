@@ -672,6 +672,8 @@ public abstract class GLContainer implements GLParent, GLMouseTarget {
 		if (this.visible == visible)
 			return;
 		this.visible = visible;
+		if (!visible)
+			clearGLFocus(this);
 		invalidateParentLayout();
 	}
 

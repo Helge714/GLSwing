@@ -10,6 +10,8 @@ public record GLComboBoxStyle(
 		Color background,
 		Color hoverBackground,
 		Color pressedBackground,
+		Color pressedLightColor,
+		Color pressedDarkColor,
 		Color disabledBackground,
 		Color textColor,
 		Color disabledTextColor,
@@ -27,6 +29,7 @@ public record GLComboBoxStyle(
 	public GLComboBoxStyle {
 		if (font == null || background == null || hoverBackground == null
 				|| pressedBackground == null || disabledBackground == null
+				|| pressedLightColor == null || pressedDarkColor == null
 				|| textColor == null || disabledTextColor == null
 				|| borderColor == null || arrowColor == null || padding == null)
 			throw new IllegalArgumentException(
@@ -53,7 +56,8 @@ public record GLComboBoxStyle(
 
 	public GLComboBoxStyle withFont(GLFontSpec value) {
 		return copy(value, background, hoverBackground, pressedBackground,
-				disabledBackground, textColor, disabledTextColor, borderColor,
+				pressedLightColor, pressedDarkColor, disabledBackground, textColor,
+				disabledTextColor, borderColor,
 				arrowColor, cornerRadius, borderWidth, height, minimumWidth,
 				arrowAreaWidth, padding);
 	}
@@ -61,7 +65,8 @@ public record GLComboBoxStyle(
 	public GLComboBoxStyle withGeometry(float radius, float height,
 			float minimumWidth, float arrowAreaWidth) {
 		return copy(font, background, hoverBackground, pressedBackground,
-				disabledBackground, textColor, disabledTextColor, borderColor,
+				pressedLightColor, pressedDarkColor, disabledBackground, textColor,
+				disabledTextColor, borderColor,
 				arrowColor, radius, borderWidth, height, minimumWidth,
 				arrowAreaWidth, padding);
 	}
@@ -69,32 +74,44 @@ public record GLComboBoxStyle(
 	public GLComboBoxStyle withColors(Color background, Color hover,
 			Color pressed, Color disabled, Color text, Color disabledText,
 			Color arrow) {
-		return copy(font, background, hover, pressed, disabled, text,
-				disabledText, borderColor, arrow, cornerRadius, borderWidth,
+		return copy(font, background, hover, pressed, pressedLightColor,
+				pressedDarkColor, disabled, text, disabledText, borderColor,
+				arrow, cornerRadius, borderWidth,
 				height, minimumWidth, arrowAreaWidth, padding);
+	}
+
+	public GLComboBoxStyle withPressedGradient(Color light, Color dark) {
+		return copy(font, background, hoverBackground, pressedBackground,
+				light, dark, disabledBackground, textColor, disabledTextColor,
+				borderColor, arrowColor, cornerRadius, borderWidth, height,
+				minimumWidth, arrowAreaWidth, padding);
 	}
 
 	public GLComboBoxStyle withBorder(float width, Color color) {
 		return copy(font, background, hoverBackground, pressedBackground,
-				disabledBackground, textColor, disabledTextColor, color,
+				pressedLightColor, pressedDarkColor, disabledBackground, textColor,
+				disabledTextColor, color,
 				arrowColor, cornerRadius, width, height, minimumWidth,
 				arrowAreaWidth, padding);
 	}
 
 	public GLComboBoxStyle withPadding(GLInsets value) {
 		return copy(font, background, hoverBackground, pressedBackground,
-				disabledBackground, textColor, disabledTextColor, borderColor,
+				pressedLightColor, pressedDarkColor, disabledBackground, textColor,
+				disabledTextColor, borderColor,
 				arrowColor, cornerRadius, borderWidth, height, minimumWidth,
 				arrowAreaWidth, value);
 	}
 
 	private static GLComboBoxStyle copy(GLFontSpec font, Color background,
-			Color hover, Color pressed, Color disabled, Color text,
+			Color hover, Color pressed, Color pressedLight, Color pressedDark,
+			Color disabled, Color text,
 			Color disabledText, Color border, Color arrow, float radius,
 			float borderWidth, float height, float minimumWidth,
 			float arrowAreaWidth, GLInsets padding) {
-		return new GLComboBoxStyle(font, background, hover, pressed, disabled,
-				text, disabledText, border, arrow, radius, borderWidth, height,
+		return new GLComboBoxStyle(font, background, hover, pressed, pressedLight,
+				pressedDark, disabled, text, disabledText, border, arrow, radius,
+				borderWidth, height,
 				minimumWidth, arrowAreaWidth, padding);
 	}
 

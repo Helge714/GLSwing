@@ -2,6 +2,8 @@ package com.vingame.glswing.ui;
 
 import java.awt.Color;
 import java.awt.Font;
+import java.awt.FontFormatException;
+import java.awt.GraphicsEnvironment;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -23,6 +25,10 @@ import com.vingame.glswing.layout.GLInsets;
 /** Loads UTF-8 .gltheme resources or files with inheritance and ${key} references. */
 public final class GLThemeLoader {
 	private static final Pattern REFERENCE = Pattern.compile("\\$\\{([^}]+)}");
+	private static final String TYPE = "theme.type";
+	private static final String COLORS = "theme.colors";
+	private static final String METRICS = "theme.metrics";
+	private enum ThemeType { LEGACY, COLORS, METRICS, BUNDLE }
 
 	private GLThemeLoader() {
 	}
@@ -49,6 +55,25 @@ public final class GLThemeLoader {
 		} catch (RuntimeException error) {
 			throw failure("Cannot load theme file " + normalized, error);
 		}
+	}
+
+	/**
+	 * Composes independently selected color and metrics fragments over a base
+	 * theme. Either fragment may be {@code null}; supplied files must declare the
+	 * matching {@code theme.type}.
+	 */
+	public static GLTheme loadBundle(GLTheme base, Path colors, Path metrics) {
+		if (base == null)
+			throw new IllegalArgumentException("Bundle base theme must not be null");
+		Deque<String> stack = new ArrayDeque<>();
+		Map<String, String> overrides = new LinkedHashMap<>();
+		if (colors != null)
+			overrides.putAll(loadPathFragment(colors.toAbsolutePath().normalize(),
+					ThemeType.COLORS, stack));
+		if (metrics != null)
+			overrides.putAll(loadPathFragment(metrics.toAbsolutePath().normalize(),
+					ThemeType.METRICS, stack));
+		return build(base, overrides);
 	}
 
 	/** Loads a file or returns the supplied fallback after reporting the error. */
@@ -86,6 +111,7 @@ public final class GLThemeLoader {
 						"Required theme resource not found: " + normalized);
 			Map<String, String> raw = read(new InputStreamReader(stream,
 					StandardCharsets.UTF_8), identity);
+			registerResourceFonts(raw, resource, identity);
 			String inherited = raw.remove("theme.extends");
 			if (inherited != null && !inherited.isBlank()
 					&& !"none".equalsIgnoreCase(inherited.trim()))
@@ -111,9 +137,23 @@ public final class GLThemeLoader {
 				throw new GLThemeLoadException("Theme resource not found: " + resource);
 			Map<String, String> raw = read(new InputStreamReader(stream,
 					StandardCharsets.UTF_8), identity);
+			registerResourceFonts(raw, resource, identity);
 			String inherited = raw.remove("theme.extends");
+			ThemeType type = removeType(raw, identity);
+			String colors = raw.remove(COLORS);
+			String metrics = raw.remove(METRICS);
+			validateRoot(type, colors, metrics, identity);
 			GLTheme base = resolveResourceBase(inherited, resource, stack);
-			return build(base, raw);
+			Map<String, String> overrides = new LinkedHashMap<>();
+			if (colors != null)
+				overrides.putAll(loadResourceFragment(resolveResource(resource, colors),
+						ThemeType.COLORS, stack));
+			if (metrics != null)
+				overrides.putAll(loadResourceFragment(resolveResource(resource, metrics),
+						ThemeType.METRICS, stack));
+			validateFragmentKeys(type, raw, identity);
+			overrides.putAll(raw);
+			return build(base, overrides);
 		} catch (IOException error) {
 			throw new GLThemeLoadException("Cannot read theme " + identity, error);
 		} finally {
@@ -126,14 +166,225 @@ public final class GLThemeLoader {
 		enter(identity, stack);
 		try (Reader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
 			Map<String, String> raw = read(reader, identity);
+			registerPathFonts(raw, path, identity);
 			String inherited = raw.remove("theme.extends");
+			ThemeType type = removeType(raw, identity);
+			String colors = raw.remove(COLORS);
+			String metrics = raw.remove(METRICS);
+			validateRoot(type, colors, metrics, identity);
 			GLTheme base = resolvePathBase(inherited, path, stack);
-			return build(base, raw);
+			Map<String, String> overrides = new LinkedHashMap<>();
+			if (colors != null)
+				overrides.putAll(loadPathFragment(resolvePath(path, colors),
+						ThemeType.COLORS, stack));
+			if (metrics != null)
+				overrides.putAll(loadPathFragment(resolvePath(path, metrics),
+						ThemeType.METRICS, stack));
+			validateFragmentKeys(type, raw, identity);
+			overrides.putAll(raw);
+			return build(base, overrides);
 		} catch (IOException error) {
 			throw new GLThemeLoadException("Cannot read theme " + path, error);
 		} finally {
 			stack.removeLast();
 		}
+	}
+
+	private static Map<String, String> loadPathFragment(Path path,
+			ThemeType expected, Deque<String> stack) {
+		String identity = "file:" + path;
+		enter(identity, stack);
+		try (Reader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
+			Map<String, String> raw = read(reader, identity);
+			registerPathFonts(raw, path, identity);
+			validateFragmentHeader(raw, expected, identity);
+			validateFragmentKeys(expected, raw, identity);
+			return raw;
+		} catch (IOException error) {
+			throw new GLThemeLoadException("Cannot read theme fragment " + path, error);
+		} finally {
+			stack.removeLast();
+		}
+	}
+
+	private static Map<String, String> loadResourceFragment(String resource,
+			ThemeType expected, Deque<String> stack) {
+		String identity = "resource:" + resource;
+		enter(identity, stack);
+		try (InputStream stream = GLThemeLoader.class.getResourceAsStream(resource)) {
+			if (stream == null)
+				throw new GLThemeLoadException(
+						"Theme fragment resource not found: " + resource);
+			Map<String, String> raw = read(new InputStreamReader(stream,
+					StandardCharsets.UTF_8), identity);
+			registerResourceFonts(raw, resource, identity);
+			validateFragmentHeader(raw, expected, identity);
+			validateFragmentKeys(expected, raw, identity);
+			return raw;
+		} catch (IOException error) {
+			throw new GLThemeLoadException("Cannot read theme fragment " + identity,
+					error);
+		} finally {
+			stack.removeLast();
+		}
+	}
+
+	private static void registerPathFonts(Map<String, String> raw, Path owner,
+			String identity) {
+		for (Map.Entry<String, String> entry : fontSources(raw).entrySet()) {
+			String reference = entry.getValue();
+			Path referenced = Path.of(reference);
+			Path fontPath = (referenced.isAbsolute() ? referenced
+					: owner.resolveSibling(referenced)).toAbsolutePath().normalize();
+			try (InputStream stream = Files.newInputStream(fontPath)) {
+				registerFont(raw, entry.getKey(), reference, stream, identity);
+			} catch (IOException error) {
+				throw new GLThemeLoadException(identity + ": cannot read font "
+						+ fontPath, error);
+			}
+		}
+	}
+
+	private static void registerResourceFonts(Map<String, String> raw,
+			String owner, String identity) {
+		for (Map.Entry<String, String> entry : fontSources(raw).entrySet()) {
+			String reference = entry.getValue();
+			String resource = resolveResource(owner, reference);
+			try (InputStream stream = GLThemeLoader.class
+					.getResourceAsStream(resource)) {
+				if (stream == null)
+					throw new GLThemeLoadException(identity
+							+ ": font resource not found: " + resource);
+				registerFont(raw, entry.getKey(), reference, stream, identity);
+			} catch (IOException error) {
+				throw new GLThemeLoadException(identity + ": cannot read font resource "
+						+ resource, error);
+			}
+		}
+	}
+
+	private static Map<String, String> fontSources(Map<String, String> raw) {
+		Map<String, String> sources = new LinkedHashMap<>();
+		for (Map.Entry<String, String> entry : raw.entrySet())
+			if (isFontSourceKey(entry.getKey()))
+				sources.put(entry.getKey(), entry.getValue());
+		return sources;
+	}
+
+	private static boolean isFontSourceKey(String key) {
+		String lower = key.toLowerCase();
+		int separator = lower.lastIndexOf('.');
+		if (separator < 0 || !lower.substring(0, separator).endsWith("font"))
+			return false;
+		return switch (lower.substring(separator + 1)) {
+		case "source", "regular", "bold", "italic", "bolditalic" -> true;
+		default -> false;
+		};
+	}
+
+	private static void registerFont(Map<String, String> raw, String sourceKey,
+			String reference, InputStream stream, String identity) {
+		try {
+			Font font = Font.createFont(fontType(reference), stream);
+			GraphicsEnvironment.getLocalGraphicsEnvironment().registerFont(font);
+			String familyKey = sourceKey.substring(0,
+					sourceKey.lastIndexOf('.') + 1) + "family";
+			raw.putIfAbsent(familyKey, font.getFamily());
+		} catch (FontFormatException | IOException error) {
+			throw new GLThemeLoadException(identity + ": invalid font " + reference,
+					error);
+		}
+	}
+
+	private static int fontType(String reference) {
+		String lower = reference.toLowerCase();
+		if (lower.endsWith(".ttf") || lower.endsWith(".otf"))
+			return Font.TRUETYPE_FONT;
+		if (lower.endsWith(".pfa") || lower.endsWith(".pfb"))
+			return Font.TYPE1_FONT;
+		throw new GLThemeLoadException("Unsupported font format: " + reference);
+	}
+
+	private static void validateFragmentHeader(Map<String, String> raw,
+			ThemeType expected, String identity) {
+		String inherited = raw.remove("theme.extends");
+		String colors = raw.remove(COLORS);
+		String metrics = raw.remove(METRICS);
+		ThemeType actual = removeType(raw, identity);
+		if (actual != expected)
+			throw new GLThemeLoadException(identity + " must declare theme.type="
+					+ expected.name().toLowerCase());
+		if (inherited != null || colors != null || metrics != null)
+			throw new GLThemeLoadException(identity
+					+ " is a fragment and must not inherit or import themes");
+	}
+
+	private static ThemeType removeType(Map<String, String> raw, String identity) {
+		String value = raw.remove(TYPE);
+		if (value == null || value.isBlank())
+			return ThemeType.LEGACY;
+		try {
+			return ThemeType.valueOf(value.trim().toUpperCase());
+		} catch (IllegalArgumentException error) {
+			throw new GLThemeLoadException(identity + ": unknown theme.type " + value,
+					error);
+		}
+	}
+
+	private static void validateRoot(ThemeType type, String colors,
+			String metrics, String identity) {
+		if ((colors != null || metrics != null) && type != ThemeType.BUNDLE)
+			throw new GLThemeLoadException(identity
+					+ ": theme.colors and theme.metrics require theme.type=bundle");
+		if (type == ThemeType.COLORS || type == ThemeType.METRICS)
+			if (colors != null || metrics != null)
+				throw new GLThemeLoadException(identity
+						+ ": theme fragments cannot import other fragments");
+	}
+
+	private static void validateFragmentKeys(ThemeType type,
+			Map<String, String> raw, String identity) {
+		if (type != ThemeType.COLORS && type != ThemeType.METRICS)
+			return;
+		for (String key : raw.keySet()) {
+			boolean color = isColorOrFontKey(key);
+			if (type == ThemeType.COLORS && !color)
+				throw new GLThemeLoadException(identity + ": " + key
+						+ " is not permitted in a color theme");
+			if (type == ThemeType.METRICS && color)
+				throw new GLThemeLoadException(identity + ": " + key
+						+ " is not permitted in a metrics theme");
+		}
+	}
+
+	private static boolean isColorOrFontKey(String key) {
+		String lower = key.toLowerCase();
+		if (lower.startsWith("palette.") || lower.startsWith("state.")
+				|| lower.startsWith("font.") || lower.contains(".font."))
+			return true;
+		String leaf = lower.substring(lower.lastIndexOf('.') + 1);
+		if (leaf.matches(".*(width|height|radius|padding|gap|size|length|distance|"
+				+ "tolerance|factor|inset|offset|softness|thickness)$"))
+			return false;
+		return leaf.matches(".*(background|foreground|text|border|focus|selection|"
+				+ "caret|invalid|separator|arrow|progress|track|thumb|shadow|"
+				+ "accent|color|disabled|hover|pressed|normal|surface|active|"
+				+ "port|fill|tab).*" );
+	}
+
+	private static Path resolvePath(Path owner, String reference) {
+		if (reference == null || reference.isBlank())
+			throw new GLThemeLoadException("Blank theme fragment reference in " + owner);
+		return owner.resolveSibling(reference.trim()).toAbsolutePath().normalize();
+	}
+
+	private static String resolveResource(String owner, String reference) {
+		if (reference == null || reference.isBlank())
+			throw new GLThemeLoadException(
+					"Blank theme fragment reference in " + owner);
+		String name = reference.trim();
+		return normalizeResource(name.startsWith("/") ? name
+				: owner.substring(0, owner.lastIndexOf('/') + 1) + name);
 	}
 
 	private static GLTheme resolveResourceBase(String inherited,
@@ -293,6 +544,7 @@ public final class GLThemeLoader {
 				color(v, b.separatorColor(), "menu.separator", "palette.border"),
 				color(v, b.arrowColor(), "menu.arrow", "palette.text"),
 				number(v, b.cornerRadius(), "menu.cornerRadius", "metrics.cornerRadius"),
+				number(v, b.itemCornerRadius(), "menu.itemCornerRadius"),
 				number(v, b.borderWidth(), "menu.borderWidth", "metrics.borderWidth"),
 				number(v, b.itemHeight(), "menu.itemHeight", "metrics.controlHeight"),
 				number(v, b.separatorHeight(), "menu.separatorHeight"),
@@ -323,6 +575,10 @@ public final class GLThemeLoader {
 				color(v, b.background(), "comboBox.background", "state.normal"),
 				color(v, b.hoverBackground(), "comboBox.hover", "state.hover"),
 				color(v, b.pressedBackground(), "comboBox.pressed", "state.pressed"),
+				color(v, b.pressedLightColor(), "comboBox.pressedLight",
+						"button.pressedLight"),
+				color(v, b.pressedDarkColor(), "comboBox.pressedDark",
+						"button.pressedDark"),
 				color(v, b.disabledBackground(), "comboBox.disabled", "state.disabled"),
 				color(v, b.textColor(), "comboBox.text", "palette.text"),
 				color(v, b.disabledTextColor(), "comboBox.textDisabled", "palette.textDisabled"),
@@ -382,7 +638,17 @@ public final class GLThemeLoader {
 
 	private static Map<String, String> read(Reader reader, String source)
 			throws IOException {
-		Properties properties = new Properties();
+		Properties properties = new Properties() {
+			private static final long serialVersionUID = 1L;
+
+			@Override
+			public synchronized Object put(Object key, Object value) {
+				if (containsKey(key))
+					throw new IllegalArgumentException(
+							"Duplicate theme key " + key + " in " + source);
+				return super.put(key, value);
+			}
+		};
 		properties.load(reader);
 		Map<String, String> values = new LinkedHashMap<>();
 		for (String key : properties.stringPropertyNames()) {

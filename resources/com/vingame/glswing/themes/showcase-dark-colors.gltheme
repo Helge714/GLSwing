@@ -1,0 +1,16 @@
+theme.type=colors
+
+palette.surface=rgba(54, 54, 60, 255)
+palette.text=rgba(224, 224, 224, 255)
+palette.textDisabled=rgba(136, 136, 136, 255)
+palette.textSecondary=rgba(170, 170, 170, 255)
+palette.border=rgba(39, 39, 43, 255)
+palette.accent=rgba(84, 120, 181, 255)
+palette.selection=rgba(69, 105, 166, 191)
+palette.invalid=rgba(190, 70, 70, 255)
+state.normal=rgba(86, 86, 94, 255)
+state.hover=rgba(105, 105, 116, 255)
+state.disabled=rgba(46, 46, 50, 255)
+slider.pressed=rgba(119, 119, 131, 255)
+textEditor.background=rgba(40, 40, 44, 255)
+menuBar.background=rgba(43, 43, 47, 255)
