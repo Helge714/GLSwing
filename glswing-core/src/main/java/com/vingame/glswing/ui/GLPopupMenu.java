@@ -998,6 +998,8 @@ public class GLPopupMenu extends GLContainer {
 					+ font.getAscent();
 			String renderedTitle = GLTextFitter.ellipsize(font, menu.title,
 					Math.max(0, width - left - style.itemHorizontalPadding()));
+			context.drawUITextShadow(font, renderedTitle, left, baseline,
+					menu.getGLTheme().textShadow("menu"));
 			context.drawUIText(font, renderedTitle,
 					left, baseline, style.textColor());
 			float separatorY = menu.titlePosition == GLPopupTitlePosition.TOP

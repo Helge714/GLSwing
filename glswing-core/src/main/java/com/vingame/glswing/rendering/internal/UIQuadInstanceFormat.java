@@ -299,6 +299,12 @@ public final class UIQuadInstanceFormat {
 
 	/** Converts normalized six-vertex glyph quads into one instance per glyph. */
 	public static float[] msdfGlyphs(float[] vertices, float pixelRange) {
+		return msdfGlyphs(vertices, pixelRange, 0, 0, false);
+	}
+
+	/** Converts glyph quads and optionally retains a replay-safe screen offset. */
+	public static float[] msdfGlyphs(float[] vertices, float pixelRange,
+			float screenOffsetX, float screenOffsetY, boolean screenOffset) {
 		if (vertices == null
 				|| vertices.length % (6 * TexturedVertexFormat.FLOATS_PER_VERTEX) != 0)
 			throw new IllegalArgumentException("MSDF glyph vertices are invalid");
@@ -332,6 +338,9 @@ public final class UIQuadInstanceFormat {
 					vertices[source + vertexStride] - vertices[source]);
 			result[target + 19] = Math.abs(
 					vertices[source + 5 * vertexStride + 1] - vertices[source + 1]);
+			result[target + 20] = screenOffsetX;
+			result[target + 21] = screenOffsetY;
+			result[target + 22] = screenOffset ? 1 : 0;
 		}
 		return result;
 	}

@@ -13,6 +13,7 @@ layout(location = 10) in int aTextureSlot;
 layout(location = 11) in vec4 aTertiaryColor;
 
 uniform mat4 uProjection;
+uniform vec2 uLogicalSize;
 
 out vec2 vLocal;
 out vec2 vTexCoord;
@@ -38,4 +39,9 @@ void main() {
     vAux = aUvRect;
     vTertiaryColor = aTertiaryColor;
     gl_Position = uProjection * vec4(position, 0.0, 1.0);
+    if (int(aParameters.x + 0.5) == 2 && aSecondaryColor.z > 0.5) {
+        vec2 clipOffset = vec2(aSecondaryColor.x, -aSecondaryColor.y)
+                * 2.0 / max(uLogicalSize, vec2(1.0));
+        gl_Position.xy += clipOffset * gl_Position.w;
+    }
 }

@@ -154,6 +154,8 @@ public class GLButton extends GLControl {
 					Math.max(0, width - padding.horizontal()));
 			float textX = (width - font.measureText(renderedText)) * 0.5f;
 			float baselineY = (height - font.getLineHeight()) * 0.5f + font.getAscent();
+			context.drawUITextShadow(font, renderedText, textX, baselineY,
+					getGLTheme().textShadow("button"));
 			context.withParameters(textParameters, () ->
 					context.drawUIText(font, renderedText, textX, baselineY, Color.WHITE));
 		}

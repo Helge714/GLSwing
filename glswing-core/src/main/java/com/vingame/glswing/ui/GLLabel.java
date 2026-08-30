@@ -60,6 +60,8 @@ public class GLLabel extends com.vingame.glswing.component.GLContainer {
 		GLInsets padding = style.padding();
 		String renderedText = GLTextFitter.ellipsize(font, text,
 				Math.max(0, getWidth() - padding.horizontal()));
+		context.drawUITextShadow(font, renderedText, padding.left(),
+				padding.top() + font.getAscent(), getGLTheme().textShadow("label"));
 		context.withParameters(textParameters, () -> context.drawUIText(font,
 				renderedText,
 				padding.left(), padding.top() + font.getAscent(), Color.WHITE));

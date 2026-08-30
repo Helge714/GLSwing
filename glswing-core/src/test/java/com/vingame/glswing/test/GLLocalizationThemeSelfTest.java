@@ -159,6 +159,13 @@ public final class GLLocalizationThemeSelfTest {
 					button.pressedLight=${custom.brand}
 					button.pressedDark=${custom.brand}
 					button.cornerRadius=11
+					textShadow.color=rgba(0, 0, 0, 160)
+					textShadow.offsetX=1.5
+					textShadow.offsetY=2
+					textShadow.softness=1.25
+					textShadow.offsetSpace=screen
+					button.textShadow.offsetY=3
+					button.textShadow.offsetSpace=local
 					slider.pressed=${palette.accent}
 					nodeEditor.connectionCurveTolerance=0.08
 					nodeEditor.connectionHandleFactor=0.8
@@ -187,6 +194,16 @@ public final class GLLocalizationThemeSelfTest {
 							+ loaded.sliderStyle().pressedBackground());
 			check(loaded.buttonStyle().cornerRadius() == 11,
 					"Component-specific corner radius was not applied");
+			check(loaded.textShadow("label").color().getAlpha() == 160
+					&& loaded.textShadow("label").offsetX() == 1.5f
+					&& loaded.textShadow("label").offsetY() == 2
+					&& loaded.textShadow("label").softness() == 1.25f
+					&& loaded.textShadow("label").offsetSpace()
+							== com.vingame.glswing.rendering.GLTextShadow.OffsetSpace.SCREEN
+					&& loaded.textShadow("button").offsetY() == 3
+					&& loaded.textShadow("button").offsetSpace()
+							== com.vingame.glswing.rendering.GLTextShadow.OffsetSpace.LOCAL,
+					"Global or control-specific text shadow was not resolved");
 			GLNodeEditorStyle nodeEditor = GLNodeEditorStyle.fromTheme(loaded);
 			check(nodeEditor.connectionCurveTolerance() == 0.08f
 					&& nodeEditor.connectionHandleFactor() == 0.8f

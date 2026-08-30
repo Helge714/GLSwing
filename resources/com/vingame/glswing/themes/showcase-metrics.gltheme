@@ -1,5 +1,7 @@
 theme.type=metrics
 
+textShadow.softness=2
+
 metrics.cornerRadius=13
 metrics.borderWidth=3
 metrics.controlHeight=34

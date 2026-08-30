@@ -13,6 +13,12 @@ palette.accent=rgba(84, 120, 181, 255)
 palette.selection=rgba(69, 105, 166, 191)
 palette.invalid=rgba(190, 70, 70, 255)
 
+textShadow.color=rgba(0, 0, 0, 0)
+textShadow.offsetX=1
+textShadow.offsetY=1
+textShadow.softness=0
+textShadow.offsetSpace=screen
+
 state.normal=rgba(90, 90, 90, 255)
 state.hover=rgba(110, 110, 110, 255)
 state.pressed=${palette.accent}

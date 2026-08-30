@@ -12,6 +12,8 @@ palette.accent=rgba(255, 174, 66, 255)
 palette.selection=rgba(181, 100, 30, 220)
 palette.invalid=rgba(235, 105, 120, 255)
 
+textShadow.color=rgba(0, 0, 0, 180)
+
 state.normal=rgba(45, 52, 68, 255)
 state.hover=rgba(72, 67, 86, 255)
 state.pressed=rgba(34, 40, 54, 255)

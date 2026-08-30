@@ -1773,6 +1773,30 @@ public final class GLContext2D {
 				pickId, mouseTarget, x, baselineY);
 	}
 
+	/** Draws an unpickable, optionally softened MSDF shadow in the UI batch. */
+	public void drawUITextShadow(GLFont font, String text, float x,
+			float baselineY, GLTextShadow shadow) {
+		if (shadow == null)
+			throw new IllegalArgumentException("Text shadow must not be null");
+		if (!shadow.isVisible() || text.isEmpty())
+			return;
+		renderer.prepareFont(font);
+		boolean localOffset = shadow.offsetSpace()
+				== GLTextShadow.OffsetSpace.LOCAL;
+		float shadowX = x + (localOffset ? shadow.offsetX() : 0);
+		float shadowY = baselineY + (localOffset ? shadow.offsetY() : 0);
+		float[] vertices = font.createTextVertices(text, shadowX, shadowY,
+				shadow.color());
+		if (vertices.length == 0)
+			return;
+		renderer.currentTransform().transformVertices(vertices,
+				TexturedVertexFormat.FLOATS_PER_VERTEX);
+		float[] instances = UIQuadInstanceFormat.msdfGlyphs(vertices,
+				shadowPixelRange(font, shadow), shadow.offsetX(), shadow.offsetY(),
+				!localOffset);
+		submitUI(font.atlasTexture(), instances, NO_PICK_ID, null, shadowX, shadowY);
+	}
+
 	/** Adds an antialiased check mark to the shared standard-control batch. */
 	public void drawUICheckMark(float x, float y, float width, float height,
 			float strokeWidth, Color color) {
@@ -2318,6 +2342,50 @@ public final class GLContext2D {
 				vertices, TexturedVertexFormat.FLOATS_PER_VERTEX);
 		submitText(font.atlasTexture(), font.msdfPixelRange(), vertices,
 				pickId, mouseTarget, x, baselineY);
+	}
+
+	/** Draws an unpickable, optionally softened shadow through the text batch. */
+	public void drawTextShadow(GLFont font, String text, float x,
+			float baselineY, GLTextShadow shadow) {
+		if (shadow == null)
+			throw new IllegalArgumentException("Text shadow must not be null");
+		if (!shadow.isVisible() || text.isEmpty())
+			return;
+		renderer.prepareFont(font);
+		boolean localOffset = shadow.offsetSpace()
+				== GLTextShadow.OffsetSpace.LOCAL;
+		float shadowX = x + (localOffset ? shadow.offsetX() : 0);
+		float shadowY = baselineY + (localOffset ? shadow.offsetY() : 0);
+		float[] vertices = font.createTextVertices(text, shadowX, shadowY,
+				shadow.color());
+		if (vertices.length == 0)
+			return;
+		renderer.currentTransform().transformVertices(vertices,
+				TexturedVertexFormat.FLOATS_PER_VERTEX);
+		if (!localOffset)
+			translateTextVerticesInScreenSpace(vertices, shadow.offsetX(),
+					shadow.offsetY());
+		submitText(font.atlasTexture(), shadowPixelRange(font, shadow), vertices,
+				NO_PICK_ID, null, shadowX, shadowY);
+	}
+
+	private static float shadowPixelRange(GLFont font, GLTextShadow shadow) {
+		return font.msdfPixelRange() / (1 + shadow.softness());
+	}
+
+	private void translateTextVerticesInScreenSpace(float[] vertices,
+			float x, float y) {
+		GLTransform worldToScreen = renderer.currentWorldToScreen();
+		GLTransform screenToWorld = renderer.currentScreenToWorld();
+		worldToScreen.transformVertices(vertices,
+				TexturedVertexFormat.FLOATS_PER_VERTEX);
+		for (int offset = 0; offset < vertices.length;
+				offset += TexturedVertexFormat.FLOATS_PER_VERTEX) {
+			vertices[offset] += x;
+			vertices[offset + 1] += y;
+		}
+		screenToWorld.transformVertices(vertices,
+				TexturedVertexFormat.FLOATS_PER_VERTEX);
 	}
 
 	public void fillRect(float x, float y, float width, float height) {

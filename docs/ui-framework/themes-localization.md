@@ -211,6 +211,50 @@ with keys such as `comboBox.font.family`, `comboBox.font.style`, and
 source must already be available to Java; normal Java fallback applies
 otherwise.
 
+## Text shadows
+
+Built-in controls can draw an offset shadow behind their text. Shadows are
+disabled by default through a transparent color. Configure the global shadow
+with three theme values:
+
+```properties
+textShadow.color=rgba(0, 0, 0, 140)
+textShadow.offsetX=1
+textShadow.offsetY=1
+textShadow.softness=1.25
+textShadow.offsetSpace=screen
+```
+
+Any control family can override individual values by prefixing them, for
+example `button.textShadow.color`, `menu.textShadow.offsetX`, or
+`node.textShadow.offsetY`. Supported prefixes include `label`, `button`,
+`checkBox`, `slider`, `textEditor`, `menu`, `menuBar`, `comboBox`,
+`tabbedPane`, and `node`. Missing control-specific values inherit the global
+shadow. Offsets use logical surface pixels in the default screen-space mode.
+Softness is a non-negative MSDF spread factor: `0` retains the normal crisp
+MSDF edge, and larger values progressively widen the transition. It does not
+draw multiple offset copies or require an offscreen blur pass.
+
+`textShadow.offsetSpace` accepts `screen` or `local`. The default `screen`
+applies the offset after the current transform, so zooming, scaling, or rotating
+content does not change the shadow's direction or distance on the surface.
+`local` applies the offset before transformation for effects that should follow
+the text's object space. Control-specific overrides such as
+`node.textShadow.offsetSpace=local` are supported.
+
+Custom controls can obtain the resolved immutable value through
+`theme.textShadow(prefix)`. `GLTextShadow.NONE` represents a disabled shadow.
+Draw shadows before their corresponding text:
+
+```java
+GLTextShadow shadow = theme.textShadow("customControl");
+context.drawUITextShadow(font, text, x, baseline, shadow);
+context.drawUIText(font, text, x, baseline, textColor);
+
+context.drawTextShadow(font, caption, x, baseline, shadow);
+context.drawText(font, caption, x, baseline, textColor);
+```
+
 Popup geometry distinguishes the outer menu radius from the highlight drawn
 behind an active item. Configure the latter with
 `menu.itemCornerRadius` in a `.gltheme` file (the bundled default is `2` logical

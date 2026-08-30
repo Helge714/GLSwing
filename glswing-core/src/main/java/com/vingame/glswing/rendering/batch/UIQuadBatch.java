@@ -203,7 +203,8 @@ public final class UIQuadBatch {
 		int mode = (int) values[source + 14];
 		if (mode == (int) UIQuadInstanceFormat.MODE_ASYMMETRIC_ROUNDED_FILL
 				|| mode == (int) UIQuadInstanceFormat.MODE_ASYMMETRIC_ROUNDED_STROKE
-				|| mode == (int) UIQuadInstanceFormat.MODE_ROUNDED_SHADOW) {
+				|| mode == (int) UIQuadInstanceFormat.MODE_ROUNDED_SHADOW
+				|| mode == (int) UIQuadInstanceFormat.MODE_MSDF_TEXT) {
 			// These four slots carry geometry rather than a secondary color.
 			instances.put(values, source + 20, 4);
 		} else {
@@ -218,7 +219,8 @@ public final class UIQuadBatch {
 	public int flush(GL3 gl, float[] projection, ShaderProgram shaderOverride,
 			Map<String, ShaderUniformValue> userUniforms, PickFramebuffer picking,
 			boolean renderColor, boolean renderPicking, float textureAlphaThreshold,
-			float deviceScaleX, float deviceScaleY) {
+			float deviceScaleX, float deviceScaleY,
+			float logicalWidth, float logicalHeight) {
 		if (instanceCount == 0)
 			return 0;
 		boolean drawPicking = renderPicking && hasPickableInstances;
@@ -250,6 +252,8 @@ public final class UIQuadBatch {
 			ShaderProgram activeProgram = shaderOverride == null ? program : shaderOverride;
 			activeProgram.use(gl);
 			activeProgram.setMatrix4(gl, "uProjection", projection);
+			activeProgram.setVector2(gl, "uLogicalSize",
+					Math.max(1, logicalWidth), Math.max(1, logicalHeight));
 			textures.setSamplerUniforms(gl, activeProgram, "uTextures");
 			activeProgram.setVector2(gl, "uDeviceScale", deviceScaleX, deviceScaleY);
 			for (Map.Entry<String, ShaderUniformValue> uniform : userUniforms.entrySet())

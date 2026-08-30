@@ -278,6 +278,8 @@ public class GLMenuItem extends GLControl {
 						Math.max(0, right - left - reservedWidth))
 				: text;
 		float textLeft = left;
+		context.drawUITextShadow(font, renderedText, textLeft, baseline,
+				getGLTheme().textShadow("menu"));
 		context.withParameters(textParameters, () -> {
 			context.drawUIText(font, renderedText, textLeft, baseline, Color.WHITE);
 			GLMnemonicSupport.drawUnderline(context, font, renderedText,
@@ -292,6 +294,9 @@ public class GLMenuItem extends GLControl {
 							true, 1.5f, Color.WHITE, GLStroke.WidthSpace.SCREEN));
 		} else if (!acceleratorText.isEmpty()) {
 			float acceleratorWidth = font.measureText(acceleratorText);
+			context.drawUITextShadow(font, acceleratorText,
+					right - acceleratorWidth, baseline,
+					getGLTheme().textShadow("menu"));
 			context.withParameters(secondaryParameters, () ->
 					context.drawUIText(font, acceleratorText,
 							right - acceleratorWidth, baseline, Color.WHITE));

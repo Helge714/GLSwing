@@ -706,6 +706,10 @@ public abstract class GLContainer implements GLParent, GLMouseTarget {
 	}
 
 	private void notifyThemeChanged() {
+		// Theme values may affect custom rendering without changing a control's
+		// typed style record (for example text-shadow softness). Every node must
+		// therefore rebuild its recording, including currently hidden subtrees.
+		invalidateRecording();
 		themeChanged();
 		for (GLContainer child : glChildren.snapshot())
 			child.inheritedThemeChanged();

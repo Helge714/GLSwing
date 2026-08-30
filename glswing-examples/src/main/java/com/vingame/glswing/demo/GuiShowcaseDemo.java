@@ -300,18 +300,29 @@ public final class GuiShowcaseDemo {
 		public void selectShowcaseColors(String fileName, String nameKey) {
 			colorsFile = fileName;
 			colorsNameKey = nameKey;
-			applyThemeFragments();
+			watchThemeFragments();
 		}
 
 		@Override
 		public void selectShowcaseMetrics(String fileName, String nameKey) {
 			metricsFile = fileName;
 			metricsNameKey = nameKey;
-			applyThemeFragments();
+			watchThemeFragments();
 		}
 
-		private void applyThemeFragments() {
+		private void watchThemeFragments() {
 			closeThemeWatcher();
+			Path watchedFile = THEME_DIRECTORY.resolve(metricsFile);
+			try {
+				themeWatcher = GLThemeWatcher.watch(watchedFile,
+						unused -> applyThemeFragments(true),
+						error -> lastAction = "Theme-Fehler: " + error.getMessage());
+			} catch (GLThemeLoadException error) {
+				lastAction = "Theme-Watcher nicht aktiv: " + error.getMessage();
+			}
+		}
+
+		private void applyThemeFragments(boolean hotReloaded) {
 			try {
 				GLTheme theme = GLThemeLoader.loadBundle(GLThemes.DEFAULT,
 						THEME_DIRECTORY.resolve(colorsFile),
@@ -321,7 +332,8 @@ public final class GuiShowcaseDemo {
 				lastAction = getGLLocalizer().text(
 						"showcase.status.themeCombination",
 						getGLLocalizer().text(colorsNameKey),
-						getGLLocalizer().text(metricsNameKey));
+						getGLLocalizer().text(metricsNameKey))
+						+ (hotReloaded ? " | Hot-Reload" : "");
 			} catch (GLThemeLoadException error) {
 				lastAction = "Theme-Fehler: " + error.getMessage();
 			}

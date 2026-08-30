@@ -1,5 +1,10 @@
 package com.vingame.glswing.ui;
 
+import java.awt.Color;
+
+import com.vingame.glswing.rendering.GLTextShadow;
+import com.vingame.glswing.rendering.GLTextShadow.OffsetSpace;
+
 /** Immutable collection of styles inherited through a GLSwing hierarchy. */
 public record GLTheme(GLLabelStyle labelStyle, GLButtonStyle buttonStyle,
 		GLCheckBoxStyle checkBoxStyle, GLSliderStyle sliderStyle,
@@ -65,6 +70,30 @@ public record GLTheme(GLLabelStyle labelStyle, GLButtonStyle buttonStyle,
 	public GLTheme withValues(GLThemeValues themeValues) {
 		return new GLTheme(labelStyle, buttonStyle, checkBoxStyle, sliderStyle,
 				textEditorStyle, menuStyle, menuBarStyle, comboBoxStyle, themeValues);
+	}
+
+	/** Resolves the global text shadow with optional control-specific overrides. */
+	public GLTextShadow textShadow(String controlPrefix) {
+		String prefix = controlPrefix == null || controlPrefix.isBlank()
+				? "" : controlPrefix + ".";
+		Color color = values.getColor(prefix + "textShadow.color",
+				values.getColor("textShadow.color", GLTextShadow.NONE.color()));
+		float offsetX = values.getFloat(prefix + "textShadow.offsetX",
+				values.getFloat("textShadow.offsetX", 0));
+		float offsetY = values.getFloat(prefix + "textShadow.offsetY",
+				values.getFloat("textShadow.offsetY", 0));
+		float softness = values.getFloat(prefix + "textShadow.softness",
+				values.getFloat("textShadow.softness", 0));
+		String space = values.get(prefix + "textShadow.offsetSpace",
+				values.get("textShadow.offsetSpace", "screen"));
+		OffsetSpace offsetSpace;
+		try {
+			offsetSpace = OffsetSpace.valueOf(space.trim().toUpperCase());
+		} catch (IllegalArgumentException error) {
+			throw new IllegalArgumentException(
+					"Unsupported text-shadow offset space: " + space, error);
+		}
+		return new GLTextShadow(color, offsetX, offsetY, softness, offsetSpace);
 	}
 
 	/**

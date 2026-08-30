@@ -27,6 +27,7 @@ import com.vingame.glswing.rendering.GLCornerRadii;
 import com.vingame.glswing.rendering.GLFont;
 import com.vingame.glswing.rendering.GLRenderParameters;
 import com.vingame.glswing.rendering.GLStroke;
+import com.vingame.glswing.rendering.GLTextShadow;
 
 /** A numeric slider with either a bounded progress fill or unbounded arrows. */
 public class GLSlider extends GLControl {
@@ -500,6 +501,10 @@ public class GLSlider extends GLControl {
 		String renderedLabel = GLTextFitter.ellipsize(font, text,
 				Math.max(0, valueX - labelGap - labelX));
 		String finalValue = renderedValue;
+		GLTextShadow shadow = getGLTheme().textShadow("slider");
+		if (!renderedLabel.isEmpty())
+			context.drawUITextShadow(font, renderedLabel, labelX, baseline, shadow);
+		context.drawUITextShadow(font, finalValue, valueX, baseline, shadow);
 		context.withParameters(textParameters, () -> {
 			if (!renderedLabel.isEmpty())
 				context.drawUIText(font, renderedLabel, labelX, baseline, Color.WHITE);

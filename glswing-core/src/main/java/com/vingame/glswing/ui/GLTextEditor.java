@@ -458,6 +458,8 @@ public class GLTextEditor extends GLControl {
 								1, Color.WHITE));
 		}
 
+		context.drawUITextShadow(font, text, textOrigin, baseline,
+				getGLTheme().textShadow("textEditor"));
 		context.withParameters(textParameters, () ->
 				context.drawUIText(font, text, textOrigin, baseline, Color.WHITE));
 		float caretX = textOrigin

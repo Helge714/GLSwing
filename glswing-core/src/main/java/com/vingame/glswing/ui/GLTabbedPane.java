@@ -413,6 +413,8 @@ public final class GLTabbedPane extends GLContainer {
 			float textX = (width - font.measureText(title)) * 0.5f;
 			float baseline = (height - font.getLineHeight()) * 0.5f
 					+ font.getAscent();
+			context.drawUITextShadow(font, title, textX, baseline,
+					getGLTheme().textShadow("tabbedPane"));
 			context.drawUIText(font, title, textX, baseline,
 					isEnabled() ? style.text() : style.textDisabled());
 		}

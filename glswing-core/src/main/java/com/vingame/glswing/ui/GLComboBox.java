@@ -438,6 +438,8 @@ public class GLComboBox<T> extends GLControl
 					availableTextWidth);
 			float baseline = (height - font.getLineHeight()) * 0.5f + font.getAscent();
 			float renderedTextX = textX;
+			context.drawUITextShadow(font, renderedText, textX, baseline,
+					getGLTheme().textShadow("comboBox"));
 			context.withParameters(textParameters, () ->
 					context.drawUIText(font, renderedText,
 							renderedTextX, baseline, Color.WHITE));

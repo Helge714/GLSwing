@@ -2027,7 +2027,8 @@ public final class GLRenderer2D {
 		case UI -> uiQuadBatch.flush(gl, projectionMatrix,
 				uiShaderOverride, uiUniforms, picking,
 				colorRenderingEnabled, pickingRenderingEnabled,
-				texturePickAlphaThreshold, colorDeviceScaleX, colorDeviceScaleY);
+				texturePickAlphaThreshold, colorDeviceScaleX, colorDeviceScaleY,
+				logicalWidth, logicalHeight);
 		case SPRITE -> flushSpriteBatch();
 		case NONE -> 0;
 		};

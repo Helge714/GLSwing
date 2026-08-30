@@ -170,6 +170,8 @@ public class GLCheckBox extends GLControl {
 			String renderedText = GLTextFitter.ellipsize(font, text,
 					Math.max(0, width - padding.right() - textX));
 			float baselineY = padding.top() + (contentHeight - font.getLineHeight()) * 0.5f + font.getAscent();
+			context.drawUITextShadow(font, renderedText, textX, baselineY,
+					getGLTheme().textShadow("checkBox"));
 			context.withParameters(textParameters, () -> context.drawUIText(font, renderedText, textX, baselineY, Color.WHITE));
 		}
 

@@ -18,6 +18,7 @@ import com.vingame.glswing.rendering.GLStroke;
 import com.vingame.glswing.ui.GLTextEditor;
 import com.vingame.glswing.ui.GLTextEditorStyle;
 import com.vingame.glswing.ui.GLTextFitter;
+import com.vingame.glswing.rendering.GLTextShadow;
 import com.vingame.glswing.ui.GLLabel;
 import com.vingame.glswing.ui.GLMenuItem;
 import com.vingame.glswing.ui.GLPopupMenu;
@@ -300,6 +301,8 @@ public class GLNode extends GLContainer {
 			float baseline = Math.max(font.getAscent(),
 					(style.titleHeight() - font.getLineHeight()) * 0.5f
 							+ font.getAscent());
+			GLTextShadow shadow = getGLTheme().textShadow("node");
+			context.drawUITextShadow(font, visibleTitle, textX, baseline, shadow);
 			context.drawUIText(font, visibleTitle, textX, baseline,
 					style.titleText());
 		}
