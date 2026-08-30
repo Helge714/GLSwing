@@ -3,6 +3,7 @@ package com.vingame.glswing.demo;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Dimension;
+import java.awt.Font;
 import java.awt.event.ActionEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
@@ -38,6 +39,7 @@ import com.vingame.glswing.node.GLNodePorts;
 import com.vingame.glswing.node.GLNodeResizeMode;
 import com.vingame.glswing.rendering.GLColorInterpolation;
 import com.vingame.glswing.rendering.GLContext2D;
+import com.vingame.glswing.rendering.GLDrawCallProfile;
 import com.vingame.glswing.rendering.GLIcon;
 import com.vingame.glswing.rendering.GLStroke;
 import com.vingame.glswing.ui.GLButton;
@@ -120,8 +122,7 @@ public final class GuiShowcaseDemo {
 	private static void showWindow() {
 		ShowcasePanel panel = new ShowcasePanel();
 		panel.setPreferredSize(new Dimension(1260, 800));
-		JLabel status = new JLabel("GUI-Showcase startet ...",
-				SwingConstants.CENTER);
+		JLabel status = createStatusLabel("GUI-Showcase startet ...");
 		FPSAnimator animator = new FPSAnimator(panel, TARGET_FPS, true);
 		GLDemoErrorReporter.attach(animator);
 		Timer statistics = new Timer(250,
@@ -373,7 +374,7 @@ public final class GuiShowcaseDemo {
 
 		private String performanceText() {
 			return formatPerformance("GLJPanel", lastAction, zoom,
-					getFramesPerSecond(), getFrameProfile(), getLastDrawCallCount(),
+					getFramesPerSecond(), getFrameProfile(), getLastDrawCallProfile(),
 					getActualAntialiasingSamples(), -1,
 					getRenderResolutionScale(), getRenderPixelWidth(),
 					getRenderPixelHeight(), getSurfacePixelWidth(),
@@ -1073,26 +1074,56 @@ public final class GuiShowcaseDemo {
 	}
 
 	static String formatPerformance(String backend, String action, float zoom,
-			double fps, GLFrameProfile profile, int drawCalls, int samples,
+			double fps, GLFrameProfile profile, GLDrawCallProfile drawCalls, int samples,
 			int swapInterval, float renderScale, int renderWidth, int renderHeight,
 			int surfaceWidth, int surfaceHeight) {
 		String swap = swapInterval < 0 ? "" : " | Swap " + swapInterval;
 		double framePeriod = fps > 0 ? 1000.0 / fps : 0;
 		double scheduleWait = Math.max(0,
 				framePeriod - profile.endToEndMillis());
-		return String.format("<html><center>"
+		return String.format("<html><div style='font-family:monospace'>"
 				+ "%s | %s | Zoom %.0f %% | Render %.0f %% (%dx%d -> %dx%d) | %.0f FPS | Periode %.2f ms | Call E2E %.2f ms | Wait %.2f ms<br>"
 				+ "Callback %.2f | Backend-Rest %.2f ms &nbsp; "
 				+ "CPU: House %.3f | Scene %.3f | Present %.3f ms &nbsp; "
-				+ "GPU: Scene %.3f | Present %.3f ms | %d Drawcalls | MSAA %dx%s"
-				+ "</center></html>", backend, action, zoom * 100,
+				+ "GPU: Scene %.3f | Present %.3f ms | %d Drawcalls "
+				+ "(UI %d, Filled %d, Texture %d, Text %d, Sprite %d, Layer %d, Target %d, Other %d) | MSAA %dx%s"
+				+ "<br>%s"
+				+ "</div></html>", backend, action, zoom * 100,
 				renderScale * 100, renderWidth, renderHeight,
 				surfaceWidth, surfaceHeight, fps,
 				framePeriod, profile.endToEndMillis(), scheduleWait,
 				profile.callbackCpuMillis(), profile.backendRemainderMillis(),
 				profile.housekeepingCpuMillis(),
 				profile.sceneCpuMillis(), profile.presentCpuMillis(),
-				profile.sceneGpuMillis(), profile.presentGpuMillis(), drawCalls,
-				samples, swap);
+				profile.sceneGpuMillis(), profile.presentGpuMillis(), drawCalls.total(),
+				drawCalls.ui(), drawCalls.filled(), drawCalls.texture(), drawCalls.text(),
+				drawCalls.sprite(), drawCalls.layers(), drawCalls.renderTargets(),
+				drawCalls.other(),
+				samples, swap, formatDrawCallEvents(drawCalls));
+	}
+
+	private static String formatDrawCallEvents(GLDrawCallProfile profile) {
+		if (profile.events().isEmpty())
+			return "Flushes: none";
+		StringBuilder result = new StringBuilder("Flushes ")
+				.append(profile.events().size()).append(": ");
+		for (int index = 0; index < profile.events().size(); index++) {
+			if (index > 0)
+				result.append(index % 4 == 0 ? "<br>" : " &rarr; ");
+			var event = profile.events().get(index);
+			result.append(event.pipeline()).append('[').append(event.calls())
+					.append("]: ").append(event.reason());
+		}
+		return result.toString();
+	}
+
+	static JLabel createStatusLabel(String text) {
+		JLabel status = new JLabel(text, SwingConstants.LEFT);
+		status.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+		Dimension fixedSize = new Dimension(1, 132);
+		status.setPreferredSize(fixedSize);
+		status.setMinimumSize(fixedSize);
+		status.setMaximumSize(new Dimension(Integer.MAX_VALUE, fixedSize.height));
+		return status;
 	}
 }

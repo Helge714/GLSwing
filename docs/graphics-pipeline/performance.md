@@ -90,11 +90,22 @@ Measure representative scenes after warm-up. Host metrics include:
 
 - `getFramesPerSecond()` and `getAverageFrameTimeMillis()`;
 - `getLastDrawCallCount()`;
+- `getLastDrawCallProfile()` for the `UI`, `Filled`, `Texture`, `Text`,
+  `Sprite`, layer, render-target, and uncategorized contributions;
 - `getFrameProfile()`;
 - `getActualAntialiasingSamples()` and `getActualSwapInterval()`.
 
 GPU timers such as `GL_TIME_ELAPSED` distinguish GPU work from CPU submission.
 Use the supplied benchmark demos for reproducible comparisons.
+
+`GLDrawCallProfile.events()` returns the non-empty batch flushes in submission
+order. Each `GLDrawCallEvent` identifies the pipeline, the physical call count,
+and the reason that ended the batch, such as a pipeline switch, clip change,
+recorded-state change, capacity limit, or frame end. A pickable batch normally
+reports two physical calls because color and picking are rendered separately.
+Use this trace to find unnecessary pipeline alternation; it is diagnostic data,
+not a guarantee that a particular scene will always use the same number of
+batches across renderer versions.
 
 ## Resource lifetime
 

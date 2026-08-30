@@ -52,8 +52,8 @@ public final class CanvasGuiShowcaseDemo {
 	private static void showWindow() {
 		ShowcaseCanvas canvas = new ShowcaseCanvas();
 		canvas.setPreferredSize(new Dimension(1260, 800));
-		JLabel status = new JLabel("Canvas-Showcase startet ...",
-				SwingConstants.CENTER);
+		JLabel status = GuiShowcaseDemo.createStatusLabel(
+				"Canvas-Showcase startet ...");
 		FPSAnimator animator = new FPSAnimator(canvas, TARGET_FPS, true);
 		GLDemoErrorReporter.attach(animator);
 		Timer statistics = new Timer(250,
@@ -302,7 +302,7 @@ public final class CanvasGuiShowcaseDemo {
 
 		private String performanceText() {
 			return GuiShowcaseDemo.formatPerformance("GLCanvas", lastAction, zoom,
-					getFramesPerSecond(), getFrameProfile(), getLastDrawCallCount(),
+					getFramesPerSecond(), getFrameProfile(), getLastDrawCallProfile(),
 					getActualAntialiasingSamples(), getActualSwapInterval(),
 					getRenderResolutionScale(), getRenderPixelWidth(),
 					getRenderPixelHeight(), getSurfacePixelWidth(),

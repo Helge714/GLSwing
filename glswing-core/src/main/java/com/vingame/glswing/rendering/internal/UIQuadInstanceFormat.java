@@ -26,6 +26,7 @@ public final class UIQuadInstanceFormat {
 	public static final float MODE_ASYMMETRIC_ROUNDED_FILL_BORDER = 13;
 	public static final float MODE_INNER_PROGRESS_GRADIENT = 14;
 	public static final float MODE_SLIDER_FILL_PROGRESS_BORDER = 15;
+	public static final float MODE_LINE = 16;
 
 	private UIQuadInstanceFormat() {
 	}
@@ -274,6 +275,47 @@ public final class UIQuadInstanceFormat {
 		result[15] = pointsRight ? 1 : -1;
 		result[16] = strokeWidth;
 		result[17] = screenSpaceStroke ? 1 : 0;
+		return result;
+	}
+
+	/** Builds one analytic line segment with world- or screen-space thickness. */
+	public static float[] line(float x1, float y1, float x2, float y2,
+			float strokeWidth, boolean screenSpaceStroke, int cap,
+			Color color, GLTransform transform) {
+		if (!Float.isFinite(x1) || !Float.isFinite(y1)
+				|| !Float.isFinite(x2) || !Float.isFinite(y2)
+				|| !Float.isFinite(strokeWidth) || strokeWidth <= 0)
+			throw new IllegalArgumentException(
+					"UI line geometry must be finite and positive");
+		if (x1 == x2 && y1 == y2)
+			throw new IllegalArgumentException("UI line endpoints must differ");
+		if (cap < 0 || cap > 2)
+			throw new IllegalArgumentException("UI line cap is invalid");
+		if (color == null || transform == null)
+			throw new IllegalArgumentException(
+					"UI line color and transform must not be null");
+		float padding = strokeWidth * 0.5f + 1;
+		if (screenSpaceStroke) {
+			float maximumScale = Math.max(transform.getMaximumScale(), 0.0001f);
+			float minimumScale = Math.max(
+					Math.abs(transform.determinant()) / maximumScale, 0.0001f);
+			padding /= minimumScale;
+		}
+		float outerX = Math.min(x1, x2) - padding;
+		float outerY = Math.min(y1, y2) - padding;
+		float outerWidth = Math.abs(x2 - x1) + padding * 2;
+		float outerHeight = Math.abs(y2 - y1) + padding * 2;
+		float[] result = roundedRectangle(outerX, outerY,
+				outerWidth, outerHeight, 0, strokeWidth, false, true,
+				color, transform);
+		result[14] = MODE_LINE;
+		result[15] = cap;
+		result[16] = strokeWidth;
+		result[17] = screenSpaceStroke ? 1 : 0;
+		result[20] = x1 - outerX;
+		result[21] = y1 - outerY;
+		result[22] = x2 - outerX;
+		result[23] = y2 - outerY;
 		return result;
 	}
 

@@ -176,7 +176,7 @@ Strokes are tessellated into triangles and therefore share the filled batch.
 | `fillAndDrawUIRoundRect` | Combined fill and border without AA bleeding |
 | `drawUIRoundRectShadow` | Analytic, non-pickable shadow |
 | `drawUIText` | MSDF UI text |
-| `drawUICheckMark`, `drawUIChevron` | Standard symbols |
+| `drawUICheckMark`, `drawUIChevron`, `drawUILine` | Standard symbols and analytic line segments |
 | `fillUIProgressRoundRect` | Rounded progress gradient |
 | `fillUIVerticalGradientRoundRect` | Full rounded vertical gradient |
 | `addUIHitArea` | Picking-only rectangle with no color output |

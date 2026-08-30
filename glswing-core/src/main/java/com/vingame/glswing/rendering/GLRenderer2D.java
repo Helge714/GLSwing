@@ -60,6 +60,10 @@ public final class GLRenderer2D {
 	private float colorDeviceScaleY = 1;
 	private boolean frameActive;
 	private int drawCallCount;
+	private final int[] batchDrawCallCounts = new int[BatchType.values().length];
+	private final List<GLDrawCallEvent> drawCallEvents = new ArrayList<>();
+	private int layerDrawCallCount;
+	private int renderTargetDrawCallCount;
 	private BatchType activeBatch = BatchType.NONE;
 	private ShaderProgram filledShaderOverride;
 	private ShaderProgram textureShaderOverride;
@@ -201,6 +205,10 @@ public final class GLRenderer2D {
 		layers.beginFrame(Math.max(1, colorViewport[2]), Math.max(1, colorViewport[3]),
 				logicalWidth, logicalHeight);
 		drawCallCount = 0;
+		java.util.Arrays.fill(batchDrawCallCounts, 0);
+		drawCallEvents.clear();
+		layerDrawCallCount = 0;
+		renderTargetDrawCallCount = 0;
 		frameActive = true;
 		filledBatch.begin();
 		textureBatch.begin();
@@ -297,7 +305,7 @@ public final class GLRenderer2D {
 	public void endFrame() {
 		requireFrame();
 		context.requireRecordingEnded();
-		flush();
+		flush("frame end");
 		int openLayers = layers.depth();
 		int openClips = clipStack.size();
 		int openRenderTargets = renderTargetStack.size();
@@ -335,8 +343,12 @@ public final class GLRenderer2D {
 	}
 
 	public void flush() {
+		flush("explicit flush");
+	}
+
+	private void flush(String reason) {
 		requireFrame();
-		flushActiveBatch();
+		flushActiveBatch(reason);
 		activeBatch = BatchType.NONE;
 	}
 
@@ -344,7 +356,7 @@ public final class GLRenderer2D {
 		requireFrame();
 		if (color == null)
 			throw new IllegalArgumentException("Clear color must not be null");
-		flush();
+		flush("clear");
 		if (colorRenderingEnabled) {
 			layers.includeCurrentLimit();
 			float alpha = color.getAlpha() / 255f;
@@ -367,7 +379,7 @@ public final class GLRenderer2D {
 		if (activeRenderTarget() != null && !activeRenderTarget().isDepthEnabled())
 			throw new IllegalStateException(
 					"The active render target was created without depth support");
-		flush();
+		flush("depth clear");
 		gl.glDepthMask(true);
 		try {
 			if (colorRenderingEnabled)
@@ -389,7 +401,7 @@ public final class GLRenderer2D {
 				&& !activeRenderTarget().isDepthEnabled())
 			throw new IllegalStateException(
 					"The active render target was created without depth support");
-		flush();
+		flush("depth state change");
 		depthState = state;
 		applyDepthState(state);
 	}
@@ -405,7 +417,7 @@ public final class GLRenderer2D {
 			throw new IllegalArgumentException("Depth must be between 0 and 1");
 		if (depth == value)
 			return;
-		flush();
+		flush("depth value change");
 		depth = value;
 		gl.glDepthRange(value, value);
 	}
@@ -434,7 +446,7 @@ public final class GLRenderer2D {
 	void beginLayer() {
 		requireFrame();
 		requireNoRenderTargetForLayer();
-		flush();
+		flush("layer begin");
 		layers.beginAutoLayer(gl);
 		layerPathStates.add(captureLayerPathState());
 	}
@@ -504,7 +516,7 @@ public final class GLRenderer2D {
 	private void flushBeforeClipChange() {
 		if (activeBatch != BatchType.NONE
 				&& (activeBatch != BatchType.UI || uiShaderOverride != null))
-			flush();
+			flush("clip change");
 	}
 
 	int clipDepth() {
@@ -530,7 +542,7 @@ public final class GLRenderer2D {
 				|| width <= 0 || height <= 0)
 			throw new IllegalArgumentException(
 					"Layer bounds must be finite and have a positive size");
-		flush();
+		flush("bounded layer begin");
 		float[] corners = {
 				x, y,
 				x + width, y,
@@ -564,7 +576,7 @@ public final class GLRenderer2D {
 				|| !Float.isFinite(screenInset) || screenInset < 0)
 			throw new IllegalArgumentException(
 					"Layer bounds and screen inset must be finite and valid");
-		flush();
+		flush("path layer begin");
 		float[] corners = {
 				x, y,
 				x + width, y,
@@ -630,11 +642,13 @@ public final class GLRenderer2D {
 				effects.add(new LayerEffectCommand(effect, uniforms));
 			}
 		}
-		flush();
+		flush("layer end");
 		applyDepthState(GLDepthState.DISABLED);
 		try {
-			drawCallCount += layers.endLayer(gl, composite.getOpacity(),
+			int calls = layers.endLayer(gl, composite.getOpacity(),
 					composite.getBlendMode(), effects);
+			drawCallCount += calls;
+			layerDrawCallCount += calls;
 		} finally {
 			applyDepthState(depthState);
 			gl.glDepthRange(depth, depth);
@@ -661,7 +675,7 @@ public final class GLRenderer2D {
 		if (colorRenderingEnabled == renderColor
 				&& pickingRenderingEnabled == renderPicking)
 			return;
-		flush();
+		flush("output mask change");
 		colorRenderingEnabled = renderColor;
 		pickingRenderingEnabled = renderPicking;
 	}
@@ -737,7 +751,7 @@ public final class GLRenderer2D {
 			throw new IllegalStateException("Sprite buffer is closed");
 		if (buffer.isEmpty())
 			return;
-		flush();
+		flush("sprite buffer draw");
 		GLTransform current = currentTransform();
 		float minX = buffer.getMinX(), minY = buffer.getMinY();
 		float maxX = buffer.getMaxX(), maxY = buffer.getMaxY();
@@ -753,9 +767,11 @@ public final class GLRenderer2D {
 		}
 		textureManager.prepareForSampling(gl);
 		try {
-			drawCallCount += resource.draw(gl, this, projectionMatrix,
+			int calls = resource.draw(gl, this, projectionMatrix,
 					current.toMatrix4(), lighting, picking,
 					colorRenderingEnabled, pickingRenderingEnabled);
+			drawCallCount += calls;
+			batchDrawCallCounts[BatchType.SPRITE.ordinal()] += calls;
 		} finally {
 			applyDepthState(depthState);
 			gl.glDepthRange(depth, depth);
@@ -802,7 +818,7 @@ public final class GLRenderer2D {
 		if (!clipStack.isEmpty())
 			throw new IllegalStateException(
 					"Render targets cannot begin inside a clip");
-		flush();
+		flush("render target begin");
 		renderTargets.add(target);
 		int framebuffer = target.framebuffer(this, gl);
 		RenderTargetState parent = RenderTargetState.capture(this, gl, target);
@@ -860,7 +876,7 @@ public final class GLRenderer2D {
 		RenderTargetState state = renderTargetStack.remove(
 				renderTargetStack.size() - 1);
 		try {
-			flush();
+			flush("render target end");
 		} finally {
 			if (state.target.isPickingEnabled())
 				picking.popExternalSurface();
@@ -905,7 +921,7 @@ public final class GLRenderer2D {
 		// specialized pass below rather than by the ordinary texture shader.
 		pickingRenderingEnabled = false;
 		try {
-			flush();
+			flush("render target presentation");
 		} finally {
 			pickingRenderingEnabled = true;
 		}
@@ -929,6 +945,7 @@ public final class GLRenderer2D {
 				colorTexture, target.pickingTexture(this, gl), recordBase,
 				fallbackRecord, tintAlpha, texturePickAlphaThreshold);
 		drawCallCount++;
+		renderTargetDrawCallCount++;
 	}
 
 	private void restoreRenderTarget(RenderTargetState state) {
@@ -1273,7 +1290,7 @@ public final class GLRenderer2D {
 		};
 		if (projectionChanged || outputsChanged || activeStateChanged
 				|| depthChanged || lightingChanged)
-			flush();
+			flush("recording/state change");
 
 		if (projectionChanged) {
 			projection.setTransform(targetProjection);
@@ -1609,10 +1626,13 @@ public final class GLRenderer2D {
 			return;
 		if (shader != null)
 			shader.validateForFilledBatch(gl);
-		if (activeBatch == BatchType.FILLED)
-			drawCallCount += filledBatch.flush(
+		if (activeBatch == BatchType.FILLED) {
+			int calls = filledBatch.flush(
 					gl, projectionMatrix, filledShaderOverride, filledUniforms, picking,
 					colorRenderingEnabled, pickingRenderingEnabled);
+			drawCallCount += calls;
+			batchDrawCallCounts[BatchType.FILLED.ordinal()] += calls;
+		}
 		filledShaderOverride = shader;
 		filledUniforms.clear();
 	}
@@ -1639,10 +1659,13 @@ public final class GLRenderer2D {
 			return;
 		if (shader != null)
 			shader.validateForTextBatch(gl);
-		if (activeBatch == BatchType.TEXT)
-			drawCallCount += textBatch.flush(
+		if (activeBatch == BatchType.TEXT) {
+			int calls = textBatch.flush(
 					gl, projectionMatrix, textShaderOverride, textUniforms, picking,
 					colorRenderingEnabled, pickingRenderingEnabled);
+			drawCallCount += calls;
+			batchDrawCallCounts[BatchType.TEXT.ordinal()] += calls;
+		}
 		textShaderOverride = shader;
 		textUniforms.clear();
 	}
@@ -1753,7 +1776,7 @@ public final class GLRenderer2D {
 			throw new IllegalArgumentException("Projection must not be null");
 		if (projection.equals(newProjection))
 			return;
-		flush();
+		flush("projection change");
 		projection.setTransform(newProjection);
 		projectionMatrix = projection.toMatrix4();
 		updateScreenTransforms();
@@ -1999,10 +2022,13 @@ public final class GLRenderer2D {
 	}
 
 	private void ensureFilledCapacity(int vertices) {
-		if (!filledBatch.canAdd(vertices))
-			drawCallCount += filledBatch.flush(
+		if (!filledBatch.canAdd(vertices)) {
+			int calls = filledBatch.flush(
 					gl, projectionMatrix, filledShaderOverride, filledUniforms, picking,
 					colorRenderingEnabled, pickingRenderingEnabled);
+			drawCallCount += calls;
+			batchDrawCallCounts[BatchType.FILLED.ordinal()] += calls;
+		}
 		if (!filledBatch.canAdd(vertices))
 			throw new IllegalArgumentException(
 					"Filled geometry exceeds the batch vertex capacity");
@@ -2011,12 +2037,16 @@ public final class GLRenderer2D {
 	private void activateBatch(BatchType batch) {
 		if (activeBatch == batch)
 			return;
-		flushActiveBatch();
+		flushActiveBatch("switch to " + batch.displayName);
 		activeBatch = batch;
 	}
 
 	private void flushActiveBatch() {
-		drawCallCount += flushBatch(activeBatch);
+		flushActiveBatch("state change");
+	}
+
+	private void flushActiveBatch(String reason) {
+		drawCallCount += flushBatch(activeBatch, reason);
 	}
 
 	private void setUserUniform(BatchType batch, String name, ShaderUniformValue value,
@@ -2042,10 +2072,14 @@ public final class GLRenderer2D {
 	}
 
 	private int flushBatch(BatchType batch) {
+		return flushBatch(batch, "capacity or resource change");
+	}
+
+	private int flushBatch(BatchType batch, String reason) {
 		if (batch == BatchType.TEXTURE || batch == BatchType.UI
 				|| batch == BatchType.SPRITE)
 			textureManager.prepareForSampling(gl);
-		return switch (batch) {
+		int calls = switch (batch) {
 		case FILLED -> filledBatch.flush(
 				gl, projectionMatrix, filledShaderOverride, filledUniforms, picking,
 				colorRenderingEnabled, pickingRenderingEnabled);
@@ -2060,6 +2094,25 @@ public final class GLRenderer2D {
 		case SPRITE -> flushSpriteBatch();
 		case NONE -> 0;
 		};
+		batchDrawCallCounts[batch.ordinal()] += calls;
+		if (calls > 0)
+			drawCallEvents.add(new GLDrawCallEvent(
+					batch.displayName, calls, reason));
+		return calls;
+	}
+
+	/** Returns a pipeline breakdown for the current or most recently ended frame. */
+	public GLDrawCallProfile drawCallProfile() {
+		int filled = batchDrawCallCounts[BatchType.FILLED.ordinal()];
+		int texture = batchDrawCallCounts[BatchType.TEXTURE.ordinal()];
+		int text = batchDrawCallCounts[BatchType.TEXT.ordinal()];
+		int ui = batchDrawCallCounts[BatchType.UI.ordinal()];
+		int sprite = batchDrawCallCounts[BatchType.SPRITE.ordinal()];
+		int categorized = filled + texture + text + ui + sprite
+				+ layerDrawCallCount + renderTargetDrawCallCount;
+		return new GLDrawCallProfile(drawCallCount, filled, texture, text, ui,
+				sprite, layerDrawCallCount, renderTargetDrawCallCount,
+				Math.max(0, drawCallCount - categorized), drawCallEvents);
 	}
 
 	private float[] currentUIClip() {

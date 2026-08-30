@@ -91,12 +91,21 @@ images, icons, and hit areas:
 - `fillUIRoundRect` and `drawUIRoundRect`;
 - `fillAndDrawUIRoundRect`;
 - `fillUIVerticalGradientRoundRect` and `fillUIProgressRoundRect`;
-- `drawUICheckMark`, `drawUIChevron`, and `drawUIRoundRectShadow`;
+- `drawUICheckMark`, `drawUIChevron`, `drawUILine`, and
+  `drawUIRoundRectShadow`;
 - `drawUIText`, `drawUIImage`, `drawUIIcon`, and `addUIHitArea`.
 
 Radii use `GLCornerRadii` or a uniform radius. Border and symbol stroke widths
 accept `GLStroke.WidthSpace` where provided. `progress` uses `0..1`.
 `addUIHitArea` writes picking coverage without visible color.
+
+`drawUILine(x1, y1, x2, y2, color)` draws an arbitrary straight segment in
+the shared UI batch. It uses the current `GLStroke` width, width space, and
+`BUTT`, `SQUARE`, or `ROUND` cap. Join, miter-limit, and curve-tolerance values
+do not affect a single segment. Dashed strokes and non-zero stroke offsets are
+rejected with `UnsupportedOperationException`; use `drawLine`, `drawPolyline`,
+or the path API when those features are required. The method never performs a
+hidden fallback to the general filled pipeline.
 
 ## Paths and paints
 

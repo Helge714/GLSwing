@@ -13,6 +13,7 @@ import com.jogamp.opengl.GLProfile;
 import com.vingame.glswing.rendering.GLContext2D;
 import com.vingame.glswing.rendering.GLRecording;
 import com.vingame.glswing.rendering.GLRenderer2D;
+import com.vingame.glswing.rendering.GLStroke;
 import com.vingame.glswing.rendering.GLTransform;
 import com.vingame.glswing.rendering.Projection2D;
 
@@ -71,12 +72,39 @@ public final class ClipGpuSelfTest {
 				throw new AssertionError("Nested built-in UI clips split the batch into "
 						+ renderer.drawCallCount()
 						+ " calls instead of one color and one picking call");
+			if (renderer.drawCallProfile().ui() != 2
+					|| renderer.drawCallProfile().other() != 0)
+				throw new AssertionError("Nested UI clip calls were assigned to the wrong pipeline: "
+						+ renderer.drawCallProfile());
+			if (renderer.drawCallProfile().events().size() != 1
+					|| !"UI".equals(renderer.drawCallProfile().events().get(0).pipeline())
+					|| !"frame end".equals(
+							renderer.drawCallProfile().events().get(0).reason()))
+				throw new AssertionError("Nested UI clip trace is incomplete: "
+						+ renderer.drawCallProfile().events());
 			checkColor(gl, 10, 10, Color.BLACK, "outside UI clip");
 			checkId(renderer, gl, 10, 10, 0, "outside UI pick clip");
 			checkColor(gl, 25, 20, Color.RED, "outer UI clip");
 			checkId(renderer, gl, 25, 20, 44, "outer UI pick clip");
 			checkColor(gl, 40, 30, Color.BLUE, "nested UI clip");
 			checkId(renderer, gl, 40, 30, 55, "nested UI pick clip");
+
+			context = renderer.beginFrame(gl, WIDTH, HEIGHT,
+					Projection2D.TOP_LEFT_PIXELS.create(WIDTH, HEIGHT));
+			context.clear(Color.BLACK);
+			context.setPickId(66);
+			context.setStroke(new GLStroke(5)
+					.withCap(GLStroke.Cap.ROUND)
+					.withWidthSpace(GLStroke.WidthSpace.SCREEN));
+			context.drawUILine(15, 70, 105, 20, Color.YELLOW);
+			renderer.endFrame();
+			if (renderer.drawCallProfile().ui() != 2
+					|| renderer.drawCallProfile().filled() != 0)
+				throw new AssertionError("Analytic UI line left the UI batch: "
+						+ renderer.drawCallProfile());
+			checkColor(gl, 60, 45, Color.YELLOW, "diagonal UI line");
+			checkId(renderer, gl, 60, 45, 66, "diagonal UI line picking");
+			checkColor(gl, 60, 60, Color.BLACK, "outside diagonal UI line");
 
 			context = renderer.beginFrame(gl, WIDTH, HEIGHT,
 					Projection2D.TOP_LEFT_PIXELS.create(WIDTH, HEIGHT));

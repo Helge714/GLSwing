@@ -140,6 +140,11 @@ public class GLFrame extends JFrame implements GLParent, AutoCloseable {
 		return glCanvas.getLastDrawCallCount();
 	}
 
+	public final com.vingame.glswing.rendering.GLDrawCallProfile
+			getLastDrawCallProfile() {
+		return glCanvas.getLastDrawCallProfile();
+	}
+
 	public final double getFramesPerSecond() {
 		return glCanvas.getFramesPerSecond();
 	}

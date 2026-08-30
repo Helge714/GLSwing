@@ -184,7 +184,7 @@ public final class GLTabbedPane extends GLContainer {
 		context.fillAndDrawUIRoundRect(0, 0, width, height,
 				style.cornerRadius(), style.borderWidth(), style.background(),
 				style.border(), GLStroke.WidthSpace.SCREEN);
-		context.fillRoundRect(style.borderWidth(), style.borderWidth(),
+		context.fillUIRoundRect(style.borderWidth(), style.borderWidth(),
 				Math.max(0, width - style.borderWidth() * 2), style.tabHeight(),
 				new GLCornerRadii(style.cornerRadius(), style.cornerRadius(), 0, 0),
 				style.tabBarBackground());
@@ -405,7 +405,7 @@ public final class GLTabbedPane extends GLContainer {
 			// looking like unrelated standalone buttons.
 			GLCornerRadii radii = new GLCornerRadii(style.cornerRadius(),
 					style.cornerRadius(), 0, 0);
-			context.fillRoundRect(0, 0, width, height, radii, background);
+			context.fillUIRoundRect(0, 0, width, height, radii, background);
 			context.addUIHitArea(0, 0, width, height);
 			GLFont font = getGLFont(style.font());
 			String title = GLTextFitter.ellipsize(font, tab.title,

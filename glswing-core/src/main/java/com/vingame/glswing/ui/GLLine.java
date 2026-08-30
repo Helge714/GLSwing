@@ -115,8 +115,16 @@ public final class GLLine extends GLContainer {
 	@Override
 	protected void record(GLContext2D context) {
 		context.setStroke(stroke);
-		context.drawLine(startX * getWidth(), startY * getHeight(),
-				endX * getWidth(), endY * getHeight(), color);
+		float x1 = startX * getWidth();
+		float y1 = startY * getHeight();
+		float x2 = endX * getWidth();
+		float y2 = endY * getHeight();
+		if (x1 == x2 && y1 == y2)
+			return;
+		if (stroke.isDashed() || stroke.getOffset() != 0)
+			context.drawLine(x1, y1, x2, y2, color);
+		else
+			context.drawUILine(x1, y1, x2, y2, color);
 	}
 
 	@Override

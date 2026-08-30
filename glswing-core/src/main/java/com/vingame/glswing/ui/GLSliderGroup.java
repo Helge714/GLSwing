@@ -408,7 +408,8 @@ public final class GLSliderGroup extends GLContainer {
 				.withWidthSpace(GLStroke.WidthSpace.SCREEN));
 		for (int index = 1; index < sliders.size(); index++) {
 			GLSlider slider = sliders.get(index);
-			context.drawLine(0, slider.getY(), getWidth(), slider.getY(), borderColor);
+			context.drawUILine(0, slider.getY(), getWidth(), slider.getY(),
+					borderColor);
 		}
 		float radius = sharedCornerRadius();
 		GLCornerRadii radii = GLCornerRadii.all(radius);

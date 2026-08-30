@@ -492,7 +492,7 @@ public class GLTextEditor extends GLControl {
 		if (leftEdge) {
 			// The framebuffer scissor rounds its left edge outward. Cover that
 			// possible physical-pixel sliver before starting the soft gradient.
-			context.fillRect(x0 - 2, 0, 2.5f, height, opaque);
+			context.fillUIRoundRect(x0 - 2, 0, 2.5f, height, 0, opaque);
 		}
 		Color inner = leftEdge ? transparent : opaque;
 		Color outer = leftEdge ? opaque : transparent;

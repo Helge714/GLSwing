@@ -48,6 +48,7 @@ import com.vingame.glswing.layout.GLInsets;
 import com.vingame.glswing.layout.GLLayout;
 import com.vingame.glswing.layout.GLSize;
 import com.vingame.glswing.rendering.GLContext2D;
+import com.vingame.glswing.rendering.GLDrawCallProfile;
 import com.vingame.glswing.rendering.GLFont;
 import com.vingame.glswing.rendering.GLRenderer2D;
 import com.vingame.glswing.rendering.GLRecording;
@@ -93,6 +94,7 @@ public abstract class GLSwingPanel extends GLJPanel
 	private transient GLRenderer2D renderer;
 	private transient SceneFramebuffer sceneFramebuffer;
 	private volatile int lastDrawCallCount;
+	private volatile GLDrawCallProfile lastDrawCallProfile = GLDrawCallProfile.EMPTY;
 	private volatile double framesPerSecond;
 	private volatile double averageFrameTimeMillis;
 	private volatile GLFrameProfile frameProfile = GLFrameProfile.EMPTY;
@@ -185,6 +187,10 @@ public abstract class GLSwingPanel extends GLJPanel
 
 	public final int getLastDrawCallCount() {
 		return lastDrawCallCount;
+	}
+
+	public final GLDrawCallProfile getLastDrawCallProfile() {
+		return lastDrawCallProfile;
 	}
 
 	/** Recent rate at which {@link #display(GLAutoDrawable)} completed. */
@@ -1231,11 +1237,13 @@ public abstract class GLSwingPanel extends GLJPanel
 				renderer.endFrame();
 				frameBegan = false;
 				lastDrawCallCount = renderer.drawCallCount();
+				lastDrawCallProfile = renderer.drawCallProfile();
 				scene.endUpdate(gl);
 				gpuTimers.end(gl);
 				sceneNanos = System.nanoTime() - sceneStartNanos;
 			} else {
 				lastDrawCallCount = 0;
+				lastDrawCallProfile = GLDrawCallProfile.EMPTY;
 			}
 			long presentStartNanos = System.nanoTime();
 			gpuTimers.begin(gl, GLGpuTimerQueries.PRESENT);

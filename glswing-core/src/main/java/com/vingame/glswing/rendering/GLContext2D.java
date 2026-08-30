@@ -1884,6 +1884,31 @@ public final class GLContext2D {
 	}
 
 	/**
+	 * Draws one analytic line through the shared UI batch. Width, width space and
+	 * cap come from the current {@link GLStroke}. Joins, the miter limit and curve
+	 * tolerance have no effect on a single segment. Dashed strokes and non-zero
+	 * offsets are not supported by this UI primitive.
+	 */
+	public void drawUILine(float x1, float y1, float x2, float y2, Color color) {
+		if (stroke.isDashed())
+			throw new UnsupportedOperationException(
+					"drawUILine does not support dashed GLStroke values");
+		if (stroke.getOffset() != 0)
+			throw new UnsupportedOperationException(
+					"drawUILine does not support GLStroke offsets");
+		int cap = switch (stroke.getCap()) {
+		case BUTT -> 0;
+		case SQUARE -> 1;
+		case ROUND -> 2;
+		};
+		float[] instances = UIQuadInstanceFormat.line(
+				x1, y1, x2, y2, stroke.getWidth(),
+				stroke.getWidthSpace() == GLStroke.WidthSpace.SCREEN, cap,
+				requireColor(color), renderer.currentTransform());
+		submitUI(null, instances, pickId, mouseTarget, x1, y1);
+	}
+
+	/**
 	 * Makes a complete rectangular control region pickable without changing its
 	 * color output. Useful when a label and the gap beside a control should react.
 	 */

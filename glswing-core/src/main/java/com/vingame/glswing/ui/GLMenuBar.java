@@ -98,10 +98,11 @@ public final class GLMenuBar extends GLContainer implements GLPopupMenuListener 
 		float height = getHeight();
 		if (width <= 0 || height <= 0)
 			return;
-		context.fillRect(0, 0, width, height, style.background());
+		context.fillUIRoundRect(0, 0, width, height, 0, style.background());
 		if (style.borderWidth() > 0)
-			context.fillRect(0, Math.max(0, height - style.borderWidth()),
-					width, style.borderWidth(), style.borderColor());
+			context.fillUIRoundRect(0,
+					Math.max(0, height - style.borderWidth()), width,
+					style.borderWidth(), 0, style.borderColor());
 	}
 
 	@Override

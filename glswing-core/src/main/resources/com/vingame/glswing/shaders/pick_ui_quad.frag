@@ -184,6 +184,42 @@ float chevronCoverage() {
 			chevronSegmentCoverage(middle, last));
 }
 
+float lineCoverage() {
+	vec2 point = vLocal;
+	vec2 start = vSecondaryColor.xy;
+	vec2 end = vSecondaryColor.zw;
+	vec2 safeDeviceScale = max(uDeviceScale, vec2(0.0001));
+	if (vParameters.w > 0.5) {
+		mat2 physicalToLocal = mat2(dFdx(vLocal), dFdy(vLocal));
+		mat2 localToPhysical = inverse(physicalToLocal);
+		point = (localToPhysical * point) / safeDeviceScale;
+		start = (localToPhysical * start) / safeDeviceScale;
+		end = (localToPhysical * end) / safeDeviceScale;
+	}
+	vec2 segment = end - start;
+	float segmentLength = max(length(segment), 0.0001);
+	vec2 tangent = segment / segmentLength;
+	vec2 relative = point - start;
+	float along = dot(relative, tangent);
+	float perpendicular = dot(relative, vec2(-tangent.y, tangent.x));
+	float halfWidth = vParameters.z * 0.5;
+	float distance;
+	if (vParameters.y > 1.5) {
+		distance = segmentDistance(point, start, end) - halfWidth;
+	} else {
+		float extension = vParameters.y > 0.5 ? halfWidth : 0.0;
+		vec2 q = abs(vec2(along - segmentLength * 0.5, perpendicular))
+				- vec2(segmentLength * 0.5 + extension, halfWidth);
+		distance = length(max(q, vec2(0.0)))
+				+ min(max(q.x, q.y), 0.0);
+	}
+	if (vParameters.w < 0.5)
+		return edgeCoverage(distance);
+	float antialias = 1.0 / max(
+			(safeDeviceScale.x + safeDeviceScale.y) * 0.5, 0.0001);
+	return 1.0 - smoothstep(-antialias, antialias, distance);
+}
+
 void main() {
 	if (vScreenPosition.x < vClipRect.x || vScreenPosition.y < vClipRect.y
 			|| vScreenPosition.x > vClipRect.z
@@ -272,6 +308,8 @@ void main() {
 				: edgeCoverage(roundedDistance(vLocal, vSize, vParameters.y));
 		alpha = max(max(vAlpha, vSecondaryColor.a),
 				max(vAux.a, vTertiaryColor.a));
+	} else if (mode == 16) {
+		coverage = lineCoverage();
 	} else {
 		coverage = edgeCoverage(roundedDistance(vLocal, vSize, vParameters.y));
 		alpha = max(vAlpha, vSecondaryColor.a);

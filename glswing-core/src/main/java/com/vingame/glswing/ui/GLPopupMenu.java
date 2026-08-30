@@ -958,9 +958,9 @@ public class GLPopupMenu extends GLContainer {
 		protected void record(GLContext2D context) {
 			GLMenuStyle style = menu.getGLStyle();
 			float y = getHeight() * 0.5f;
-			context.fillRect(style.itemHorizontalPadding(), y,
+			context.fillUIRoundRect(style.itemHorizontalPadding(), y,
 					Math.max(0, getWidth() - style.itemHorizontalPadding() * 2),
-					1, style.separatorColor());
+					1, 0, style.separatorColor());
 		}
 
 		@Override
@@ -983,7 +983,7 @@ public class GLPopupMenu extends GLContainer {
 			if (width <= 0 || height <= 0 || menu.title.isEmpty())
 				return;
 			GLMenuStyle style = menu.getGLStyle();
-			context.fillRect(0, 0, width, height, style.background());
+			context.fillUIRoundRect(0, 0, width, height, 0, style.background());
 			context.addUIHitArea(0, 0, width, height);
 			GLFont font = menu.getGLFont(style.font());
 			float left = style.itemHorizontalPadding();
@@ -1004,9 +1004,9 @@ public class GLPopupMenu extends GLContainer {
 					left, baseline, style.textColor());
 			float separatorY = menu.titlePosition == GLPopupTitlePosition.TOP
 					? height - 1 : 0;
-			context.fillRect(style.itemHorizontalPadding(), separatorY,
+			context.fillUIRoundRect(style.itemHorizontalPadding(), separatorY,
 					Math.max(0, width - style.itemHorizontalPadding() * 2),
-					1, style.separatorColor());
+					1, 0, style.separatorColor());
 		}
 
 		@Override
@@ -1041,15 +1041,10 @@ public class GLPopupMenu extends GLContainer {
 			Color background = menu.getGLStyle().background();
 			Color transparent = new Color(background.getRed(),
 					background.getGreen(), background.getBlue(), 0);
-			Color[] colors = top
-					? new Color[] { background, background,
-							transparent, transparent }
-					: new Color[] { transparent, transparent,
-							background, background };
 			context.addUIHitArea(0, 0, width, height);
-			context.fillPolygon(new float[] {
-					0, 0, width, 0, width, height, 0, height
-			}, colors);
+			context.fillUIVerticalGradientRoundRect(0, 0, width, height, 0,
+					top ? background : transparent,
+					top ? transparent : background);
 		}
 
 		@Override
@@ -1127,7 +1122,8 @@ public class GLPopupMenu extends GLContainer {
 			float height = getHeight();
 			if (width <= 0 || height <= 0)
 				return;
-			context.fillRect(0, 0, width, height, menu.getGLStyle().background());
+			context.fillUIRoundRect(0, 0, width, height, 0,
+					menu.getGLStyle().background());
 			context.addUIHitArea(0, 0, width, height);
 			float trackX = Math.min(SCROLL_BAR_GAP, width);
 			float trackWidth = Math.max(0, width - trackX);
@@ -1245,7 +1241,8 @@ public class GLPopupMenu extends GLContainer {
 			float height = getHeight();
 			if (width <= 0 || height <= 0)
 				return;
-			context.fillRect(0, 0, width, height, menu.getGLStyle().background());
+			context.fillUIRoundRect(0, 0, width, height, 0,
+					menu.getGLStyle().background());
 			context.addUIHitArea(0, 0, width, height);
 			float trackY = Math.min(SCROLL_BAR_GAP, height);
 			float trackHeight = Math.max(0, height - trackY);

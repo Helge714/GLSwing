@@ -74,7 +74,9 @@ final class GLMnemonicSupport {
 		float width = font.measureText(text.substring(index, index + 1));
 		if (width <= 0)
 			return;
-		context.setStroke(new GLStroke(1).withWidthSpace(GLStroke.WidthSpace.SCREEN));
-		context.drawLine(start, baseline + 2, start + width, baseline + 2, color);
+		context.setStroke(new GLStroke(1)
+				.withWidthSpace(GLStroke.WidthSpace.SCREEN));
+		context.drawUILine(start, baseline + 2,
+				start + width, baseline + 2, color);
 	}
 }

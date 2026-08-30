@@ -10,6 +10,7 @@ import com.jogamp.opengl.GLProfile;
 import com.jogamp.opengl.awt.GLCanvas;
 import com.vingame.glswing.input.GLPickResult;
 import com.vingame.glswing.rendering.GLContext2D;
+import com.vingame.glswing.rendering.GLDrawCallProfile;
 import com.vingame.glswing.rendering.GLRenderer2D;
 import com.vingame.glswing.rendering.Projection2D;
 import com.vingame.glswing.rendering.internal.SceneFramebuffer;
@@ -50,6 +51,7 @@ public abstract class GLSwingCanvas extends GLCanvas implements GLEventListener 
 	private transient GLRenderer2D renderer;
 	private transient SceneFramebuffer sceneFramebuffer;
 	private volatile int lastDrawCallCount;
+	private volatile GLDrawCallProfile lastDrawCallProfile = GLDrawCallProfile.EMPTY;
 	private volatile double framesPerSecond;
 	private volatile double averageFrameTimeMillis;
 	private volatile GLFrameProfile frameProfile = GLFrameProfile.EMPTY;
@@ -127,6 +129,10 @@ public abstract class GLSwingCanvas extends GLCanvas implements GLEventListener 
 
 	public final int getLastDrawCallCount() {
 		return lastDrawCallCount;
+	}
+
+	public final GLDrawCallProfile getLastDrawCallProfile() {
+		return lastDrawCallProfile;
 	}
 
 	public final double getFramesPerSecond() {
@@ -295,6 +301,7 @@ public abstract class GLSwingCanvas extends GLCanvas implements GLEventListener 
 				renderer.endFrame();
 				frameBegan = false;
 				lastDrawCallCount = renderer.drawCallCount();
+				lastDrawCallProfile = renderer.drawCallProfile();
 				if (scene != null) {
 					scene.endUpdate(gl);
 					sceneUpdateCompleted();
@@ -303,6 +310,7 @@ public abstract class GLSwingCanvas extends GLCanvas implements GLEventListener 
 				}
 			} else {
 				lastDrawCallCount = 0;
+				lastDrawCallProfile = GLDrawCallProfile.EMPTY;
 			}
 			if (scene != null) {
 				long presentStartNanos = System.nanoTime();
