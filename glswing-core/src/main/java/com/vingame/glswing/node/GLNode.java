@@ -473,6 +473,10 @@ public class GLNode extends GLContainer {
 		invalidateRecording();
 	}
 
+	boolean setDragLocation(float x, float y) {
+		return setLocationDuringPointerCapture(x, y);
+	}
+
 	void inputPresentationChanged(GLNodePort input) {
 		Entry entry = entryFor(input);
 		if (entry == null)

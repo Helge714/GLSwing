@@ -13,6 +13,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+import javax.swing.Timer;
+
 import com.vingame.glswing.component.GLContainer;
 import com.vingame.glswing.component.GLParent;
 import com.vingame.glswing.input.GLMouseEvent;
@@ -40,6 +42,7 @@ public class GLNodeEditor extends GLContainer
 		implements GLMouseWheelCaptureTarget, GLKeyTarget {
 	private static final float CONNECTION_DRAG_THRESHOLD = 4;
 	private static final float MARQUEE_DRAG_THRESHOLD = 3;
+	private static final int VIEWPORT_PICKING_SETTLE_MILLIS = 75;
 	private final List<GLNode> nodes = new ArrayList<>();
 	private final List<GLNodeConnection> connections = new ArrayList<>();
 	private final LinkedHashSet<GLNode> selectedNodes = new LinkedHashSet<>();
@@ -91,8 +94,15 @@ public class GLNodeEditor extends GLContainer
 	private boolean marqueeVisible;
 	private Set<GLNode> marqueeBaseSelection = Set.of();
 	private int marqueeModifiers;
+	private final Timer viewportPickingTimer = new Timer(
+			VIEWPORT_PICKING_SETTLE_MILLIS,
+			event -> repaintAndRebuildPicking(this));
 	private GLPopupMenu connectionContextMenu;
 	private GLMenuItem deleteConnectionMenuItem;
+
+	public GLNodeEditor() {
+		viewportPickingTimer.setRepeats(false);
+	}
 	private GLNodeConnection contextConnection;
 
 	public void addNode(GLNode node, float x, float y) {
@@ -522,7 +532,7 @@ public class GLNodeEditor extends GLContainer
 		if (Float.compare(this.zoom, clamped) == 0)
 			return;
 		this.zoom = clamped;
-		repaintAndRebuildPicking(this);
+		repaintViewport(true);
 	}
 
 	public void zoomBy(float factor) {
@@ -542,6 +552,11 @@ public class GLNodeEditor extends GLContainer
 	/** Sets zoom around a point expressed in host screen coordinates. */
 	public void setZoomAtScreenPosition(float requestedZoom, float screenX,
 			float screenY) {
+		setZoomAtScreenPosition(requestedZoom, screenX, screenY, true);
+	}
+
+	private void setZoomAtScreenPosition(float requestedZoom, float screenX,
+			float screenY, boolean rebuildPicking) {
 		if (!Float.isFinite(requestedZoom) || requestedZoom <= 0
 				|| !Float.isFinite(screenX) || !Float.isFinite(screenY))
 			throw new IllegalArgumentException(
@@ -560,7 +575,7 @@ public class GLNodeEditor extends GLContainer
 		zoom = clamped;
 		panX = viewport[0] - centerX - zoom * (worldX - centerX);
 		panY = viewport[1] - centerY - zoom * (worldY - centerY);
-		repaintAndRebuildPicking(this);
+		repaintViewport(rebuildPicking);
 	}
 
 	public float getPanX() { return panX; }
@@ -568,17 +583,31 @@ public class GLNodeEditor extends GLContainer
 
 	/** Sets the viewport displacement in logical screen pixels. */
 	public void setPan(float x, float y) {
+		setPan(x, y, true);
+	}
+
+	private void setPan(float x, float y, boolean rebuildPicking) {
 		if (!Float.isFinite(x) || !Float.isFinite(y))
 			throw new IllegalArgumentException("Viewport pan must be finite");
 		if (Float.compare(panX, x) == 0 && Float.compare(panY, y) == 0)
 			return;
 		panX = x;
 		panY = y;
-		repaintAndRebuildPicking(this);
+		repaintViewport(rebuildPicking);
 	}
 
 	public void panBy(float deltaX, float deltaY) {
 		setPan(panX + deltaX, panY + deltaY);
+	}
+
+	private void repaintViewport(boolean rebuildPicking) {
+		if (rebuildPicking) {
+			viewportPickingTimer.stop();
+			repaintAndRebuildPicking(this);
+		} else {
+			repaintGL();
+			viewportPickingTimer.restart();
+		}
 	}
 
 	public float getWheelPanDistance() { return wheelPanDistance; }
@@ -597,7 +626,7 @@ public class GLNodeEditor extends GLContainer
 		panX = 0;
 		panY = 0;
 		if (changed)
-			repaintAndRebuildPicking(this);
+			repaintViewport(true);
 	}
 
 	public void setZoomRange(float minimum, float maximum) {
@@ -768,15 +797,21 @@ public class GLNodeEditor extends GLContainer
 			return;
 		if (getGLInputMap().hasModifiers(GLInputActions.NODE_HORIZONTAL_WHEEL,
 				event.getModifiersEx())) {
-			panBy((float) -rotation * wheelPanDistance, 0);
+			setPan(panX + (float) -rotation * wheelPanDistance, panY, false);
 		} else if (getGLInputMap().hasModifiers(GLInputActions.NODE_VERTICAL_WHEEL,
 				event.getModifiersEx())) {
-			panBy(0, (float) -rotation * wheelPanDistance);
+			setPan(panX, panY + (float) -rotation * wheelPanDistance, false);
 		} else {
-			zoomByAtScreenPosition((float) Math.pow(1.12, -rotation),
-					event.getScreenX(), event.getScreenY());
+			setZoomAtScreenPosition(zoom * (float) Math.pow(1.12, -rotation),
+					event.getScreenX(), event.getScreenY(), false);
 		}
 		event.consume();
+	}
+
+	@Override
+	protected void detached(GLParent formerParent) {
+		super.detached(formerParent);
+		viewportPickingTimer.stop();
 	}
 
 	@Override
@@ -901,10 +936,14 @@ public class GLNodeEditor extends GLContainer
 	void dragNodeMove(GLNode source, float deltaX, float deltaY) {
 		if (!moveStartLocations.containsKey(source))
 			return;
+		boolean changed = false;
 		for (Map.Entry<GLNode, float[]> entry : moveStartLocations.entrySet()) {
 			float[] start = entry.getValue();
-			entry.getKey().setLocation(start[0] + deltaX, start[1] + deltaY);
+			changed |= entry.getKey().setDragLocation(
+					start[0] + deltaX, start[1] + deltaY);
 		}
+		if (changed)
+			repaintGL();
 	}
 
 	void endNodeMove(GLNode source) {
@@ -915,6 +954,7 @@ public class GLNodeEditor extends GLContainer
 				after.put(node, new float[] { node.getX(), node.getY() });
 			moveStartLocations.clear();
 			recordLocations(before, after);
+			repaintAndRebuildPicking(this);
 		}
 	}
 

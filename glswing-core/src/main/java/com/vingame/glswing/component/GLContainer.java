@@ -597,6 +597,23 @@ public abstract class GLContainer implements GLParent, GLMouseTarget {
 		setBounds(x, y, width, height);
 	}
 
+	/**
+	 * Updates only the presentation position during an active captured-pointer
+	 * gesture. The gesture owner must request color repainting and rebuild picking
+	 * once the gesture ends. This keeps the captured target and its local origin
+	 * stable while it moves.
+	 *
+	 * @return whether the position changed
+	 */
+	protected final boolean setLocationDuringPointerCapture(float x, float y) {
+		requireFinite(x, y);
+		if (this.x == x && this.y == y)
+			return false;
+		this.x = x;
+		this.y = y;
+		return true;
+	}
+
 	public final void setSize(float width, float height) {
 		setBounds(x, y, width, height);
 	}

@@ -96,6 +96,12 @@ Connection curves use `connectionHandleFactor` and
 `minimumConnectionHandleLength`; setting both to zero produces the shortest
 direct handle behavior.
 
+Wheel zooming and wheel panning repaint the visible editor continuously while
+the input is active. The picking buffer is rebuilt after a short idle period,
+which avoids repeated off-screen picking passes during a wheel gesture. Direct
+calls to the zoom and pan API rebuild picking immediately, so programmatic view
+changes are ready for pointer input when the call returns.
+
 ## Styles
 
 `GLNodeStyle` controls individual node appearance. `GLNodeEditorStyle` controls

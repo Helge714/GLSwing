@@ -168,6 +168,8 @@ public final class GuiShowcaseDemo {
 
 		private final ShowcaseSurface surface = new ShowcaseSurface(this);
 		private final ZoomLayer zoomLayer = new ZoomLayer(this, surface);
+		private final Timer zoomPickingTimer = new Timer(75,
+				event -> repaintAndRebuildPicking(zoomLayer));
 		private volatile float zoom = 1;
 		private volatile String lastAction =
 				"Strg + Mausrad: Zoom | Strg + 0: 100 %";
@@ -183,6 +185,7 @@ public final class GuiShowcaseDemo {
 
 		ShowcasePanel(int antialiasingSamples) {
 			super(antialiasingSamples);
+			zoomPickingTimer.setRepeats(false);
 			surface.setBounds(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT);
 			zoomLayer.setBounds(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT);
 			zoomLayer.addGL(surface);
@@ -197,7 +200,7 @@ public final class GuiShowcaseDemo {
 				event.consume();
 				double factor = Math.pow(1.15,
 						-event.getPreciseWheelRotation());
-				setZoom((float) (zoom * factor));
+				setZoomFromWheel((float) (zoom * factor));
 			});
 			getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(
 					KeyStroke.getKeyStroke(KeyEvent.VK_0,
@@ -226,13 +229,27 @@ public final class GuiShowcaseDemo {
 
 		@Override
 		public void setZoom(float zoom) {
+			applyZoom(zoom, true);
+		}
+
+		private void setZoomFromWheel(float zoom) {
+			applyZoom(zoom, false);
+		}
+
+		private void applyZoom(float zoom, boolean rebuildPicking) {
 			float resolved = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom));
 			if (Float.compare(this.zoom, resolved) == 0)
 				return;
 			surface.closeTransientPopups();
 			this.zoom = resolved;
 			lastAction = String.format("Zoom auf %.0f %% gesetzt", resolved * 100);
-			repaint();
+			if (rebuildPicking) {
+				zoomPickingTimer.stop();
+				repaintAndRebuildPicking(zoomLayer);
+			} else {
+				repaintGL(zoomLayer);
+				zoomPickingTimer.restart();
+			}
 		}
 
 		@Override
@@ -341,6 +358,7 @@ public final class GuiShowcaseDemo {
 		}
 
 		void closeThemeWatcher() {
+			zoomPickingTimer.stop();
 			if (themeWatcher == null)
 				return;
 			themeWatcher.close();
