@@ -13,7 +13,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Locale;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import javax.swing.AbstractAction;
@@ -25,7 +24,6 @@ import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 
-import com.jogamp.opengl.util.FPSAnimator;
 import com.vingame.glswing.component.GLContainer;
 import com.vingame.glswing.component.GLDialog;
 import com.vingame.glswing.component.GLFrameProfile;
@@ -71,7 +69,6 @@ import com.vingame.glswing.ui.GLThemes;
 /** Extensible fixed-layout showcase for every public GLSwing GUI control. */
 public final class GuiShowcaseDemo {
 
-	private static final int TARGET_FPS = 144;
 	static final float DESIGN_WIDTH = 1180;
 	static final float DESIGN_HEIGHT = 760;
 	private static final Path THEME_RELATIVE_DIRECTORY = Path.of("resources",
@@ -124,12 +121,9 @@ public final class GuiShowcaseDemo {
 		ShowcasePanel panel = new ShowcasePanel();
 		panel.setPreferredSize(new Dimension(1260, 800));
 		JLabel status = createStatusLabel("GUI-Showcase startet ...");
-		FPSAnimator animator = new FPSAnimator(panel, TARGET_FPS, true);
-		GLDemoErrorReporter.attach(animator);
-		Timer statistics = new Timer(250,
+		Timer statistics = new Timer(1000,
 				event -> status.setText(panel.performanceText()));
 
-		AtomicBoolean closing = new AtomicBoolean();
 		JFrame frame = new JFrame("GLSwingNext - GUI Showcase");
 		frame.setLayout(new BorderLayout());
 		frame.add(panel, BorderLayout.CENTER);
@@ -138,16 +132,9 @@ public final class GuiShowcaseDemo {
 		frame.addWindowListener(new WindowAdapter() {
 			@Override
 			public void windowClosing(WindowEvent event) {
-				if (!closing.compareAndSet(false, true))
-					return;
 				panel.closeThemeWatcher();
 				statistics.stop();
-				Thread shutdown = new Thread(() -> {
-					animator.stop();
-					SwingUtilities.invokeLater(frame::dispose);
-				}, "GL-gui-showcase-stop");
-				shutdown.setDaemon(true);
-				shutdown.start();
+				frame.dispose();
 			}
 		});
 		frame.pack();
@@ -155,7 +142,7 @@ public final class GuiShowcaseDemo {
 		frame.setLocationRelativeTo(null);
 		frame.setVisible(true);
 		statistics.start();
-		animator.start();
+		panel.repaintGL();
 	}
 
 	static final class ShowcasePanel extends GLSwingPanel
@@ -387,7 +374,7 @@ public final class GuiShowcaseDemo {
 		}
 
 		private String performanceText() {
-			return formatPerformance("GLJPanel", lastAction, zoom,
+			return formatPerformance("GLJPanel / Event-driven", lastAction, zoom,
 					getFramesPerSecond(), getFrameProfile(), getLastDrawCallProfile(),
 					getActualAntialiasingSamples(), -1,
 					getRenderResolutionScale(), getRenderPixelWidth(),

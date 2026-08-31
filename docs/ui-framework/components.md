@@ -101,6 +101,15 @@ AWT/Swing window. The application owns the surrounding window and animator.
 additional transfer compared with the direct canvas but integrates with
 lightweight Swing containers.
 
+Custom hosts do not require an animator for a static interface. Calls to
+`repaintGL()` schedule individual AWT render passes, so input, caret blinking,
+resource updates, and control state changes remain responsive without
+continuously presenting an unchanged framebuffer. Attach an animator only for
+content that changes independently of input events, such as simulations or
+time-based animation, and stop it when that activity ends. The GUI showcase
+uses this event-driven mode for both `GLSwingPanel` and
+`GLSwingContainerCanvas`.
+
 All hosts expose frame metrics, font access, theme/localizer configuration,
 focus, history, render resolution, and GL resource callbacks. Call `close()` to
 stop animation and release host resources.

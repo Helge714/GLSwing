@@ -11,7 +11,6 @@ import java.awt.event.WindowEvent;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Locale;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -19,7 +18,6 @@ import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 
-import com.jogamp.opengl.util.FPSAnimator;
 import com.vingame.glswing.component.GLParent;
 import com.vingame.glswing.component.GLSwingCanvas;
 import com.vingame.glswing.component.GLSwingContainerCanvas;
@@ -34,8 +32,6 @@ import com.vingame.glswing.ui.GLThemes;
 
 /** Direct-GLCanvas host for exactly the same scene as {@link GuiShowcaseDemo}. */
 public final class CanvasGuiShowcaseDemo {
-	private static final int TARGET_FPS = 144;
-
 	private CanvasGuiShowcaseDemo() {
 	}
 
@@ -54,12 +50,9 @@ public final class CanvasGuiShowcaseDemo {
 		canvas.setPreferredSize(new Dimension(1260, 800));
 		JLabel status = GuiShowcaseDemo.createStatusLabel(
 				"Canvas-Showcase startet ...");
-		FPSAnimator animator = new FPSAnimator(canvas, TARGET_FPS, true);
-		GLDemoErrorReporter.attach(animator);
-		Timer statistics = new Timer(250,
+		Timer statistics = new Timer(1000,
 				event -> status.setText(canvas.performanceText()));
 
-		AtomicBoolean closing = new AtomicBoolean();
 		JFrame frame = new JFrame("GLSwingNext - GUI Showcase (Direct Canvas)");
 		frame.setLayout(new BorderLayout());
 		frame.add(canvas, BorderLayout.CENTER);
@@ -68,16 +61,9 @@ public final class CanvasGuiShowcaseDemo {
 		frame.addWindowListener(new WindowAdapter() {
 			@Override
 			public void windowClosing(WindowEvent event) {
-				if (!closing.compareAndSet(false, true))
-					return;
 				canvas.closeThemeWatcher();
 				statistics.stop();
-				Thread shutdown = new Thread(() -> {
-					animator.stop();
-					SwingUtilities.invokeLater(frame::dispose);
-				}, "GL-canvas-showcase-stop");
-				shutdown.setDaemon(true);
-				shutdown.start();
+				frame.dispose();
 			}
 		});
 		frame.pack();
@@ -85,7 +71,7 @@ public final class CanvasGuiShowcaseDemo {
 		frame.setLocationRelativeTo(null);
 		frame.setVisible(true);
 		statistics.start();
-		animator.start();
+		canvas.repaintGL();
 	}
 
 	static final class ShowcaseCanvas extends GLSwingContainerCanvas
@@ -314,7 +300,8 @@ public final class CanvasGuiShowcaseDemo {
 		}
 
 		private String performanceText() {
-			return GuiShowcaseDemo.formatPerformance("GLCanvas", lastAction, zoom,
+			return GuiShowcaseDemo.formatPerformance("GLCanvas / Event-driven",
+					lastAction, zoom,
 					getFramesPerSecond(), getFrameProfile(), getLastDrawCallProfile(),
 					getActualAntialiasingSamples(), getActualSwapInterval(),
 					getRenderResolutionScale(), getRenderPixelWidth(),
