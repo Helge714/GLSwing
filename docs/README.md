@@ -60,6 +60,7 @@ an index of the retained-mode API.
 | [Controls](ui-framework/controls.md) | Labels, buttons, check boxes, sliders, text editors, combo boxes, menus, tabs, and scrolling |
 | [Themes and localization](ui-framework/themes-localization.md) | Theme files, style records, color expressions, locale fallback, and live reload |
 | [Input configuration](ui-framework/input-configuration.md) | Semantic actions, external `.glinput` files, platform shortcuts, modifiers, and scopes |
+| [Text editing](ui-framework/text-editing.md) | Single-line fields, multiline documents, selection, wrapping, scrolling, and editing history |
 | [Undo and redo](ui-framework/history.md) | Edits, transactions, keyboard shortcuts, and save state |
 | [Node editor](ui-framework/nodes.md) | Nodes, rows, ports, connections, selection, view controls, and history |
 

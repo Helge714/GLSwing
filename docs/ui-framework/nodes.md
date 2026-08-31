@@ -102,6 +102,25 @@ which avoids repeated off-screen picking passes during a wheel gesture. Direct
 calls to the zoom and pan API rebuild picking immediately, so programmatic view
 changes are ready for pointer input when the call returns.
 
+During interactive viewport updates, node dragging, and connection dragging,
+connection curves use the
+`node.interactive-curve-tolerance-factor` input preference. The normal curve
+tolerance is restored for the settled frame. A pointer press during the idle
+period first completes picking, preventing dispatch against stale geometry.
+
+Retained connection polylines are cached per connection. Moving a node
+invalidates only curves connected to that node; unchanged curves reuse their
+sampled points for both border and gradient drawing. Zoom, tolerance, handle,
+or outer transform-scale changes invalidate affected cache entries
+automatically. `getLastCurveTessellationCount()`,
+`getLastCurveCacheHitCount()`, and `getLastCurveSegmentCount()` expose the most
+recent frame's curve workload for diagnostics and benchmarks.
+
+`NodeEditorBenchmarkDemo` creates a deterministic 80-node graph and alternates
+between automated node movement and zoom phases. Its overlay reports CPU/GPU
+scene time, frame rate, draw calls, tessellations, cache hits, and submitted
+curve segments.
+
 ## Styles
 
 `GLNodeStyle` controls individual node appearance. `GLNodeEditorStyle` controls

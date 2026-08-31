@@ -2746,6 +2746,27 @@ public final class GLContext2D {
 				control2Y, x1, y1, 1);
 	}
 
+	/**
+	 * Tessellates a cubic Bezier using the current transform and curve tolerance.
+	 * The returned alternating x/y coordinates can be retained and passed to a
+	 * polyline drawing method while those inputs remain unchanged.
+	 */
+	public float[] tessellateCubicBezier(float x0, float y0, float control1X,
+			float control1Y, float control2X, float control2Y,
+			float x1, float y1) {
+		return cubicBezierPoints(x0, y0, control1X, control1Y,
+				control2X, control2Y, x1, y1);
+	}
+
+	public float[] tessellateCubicBezier(float x0, float y0, float control1X,
+			float control1Y, float control2X, float control2Y,
+			float x1, float y1, int minimumSegments) {
+		if (minimumSegments < 1)
+			throw new IllegalArgumentException("Minimum segment count must be positive");
+		return cubicBezierPoints(x0, y0, control1X, control1Y,
+				control2X, control2Y, x1, y1, minimumSegments);
+	}
+
 	private float[] cubicBezierPoints(float x0, float y0, float control1X,
 			float control1Y, float control2X, float control2Y,
 			float x1, float y1, int minimumSegments) {

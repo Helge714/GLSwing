@@ -102,8 +102,6 @@ public final class CanvasGuiShowcaseDemo {
 				new GuiShowcaseDemo.ShowcaseSurface(this);
 		private final GuiShowcaseDemo.ZoomLayer zoomLayer =
 				new GuiShowcaseDemo.ZoomLayer(this, surface);
-		private final Timer zoomPickingTimer = new Timer(75,
-				event -> repaintAndRebuildPicking(zoomLayer));
 		private volatile float zoom = 1;
 		private volatile String lastAction =
 				"Strg + Mausrad: Zoom | Strg + 0: 100 %";
@@ -119,7 +117,6 @@ public final class CanvasGuiShowcaseDemo {
 
 		ShowcaseCanvas(int antialiasingSamples) {
 			super(antialiasingSamples, 0);
-			zoomPickingTimer.setRepeats(false);
 			surface.setBounds(0, 0, GuiShowcaseDemo.DESIGN_WIDTH,
 					GuiShowcaseDemo.DESIGN_HEIGHT);
 			zoomLayer.setBounds(0, 0, GuiShowcaseDemo.DESIGN_WIDTH,
@@ -192,11 +189,9 @@ public final class CanvasGuiShowcaseDemo {
 			this.zoom = resolved;
 			lastAction = String.format("Zoom auf %.0f %% gesetzt", resolved * 100);
 			if (rebuildPicking) {
-				zoomPickingTimer.stop();
 				repaintAndRebuildPicking(zoomLayer);
 			} else {
-				repaintGL(zoomLayer);
-				zoomPickingTimer.restart();
+				repaintInteractively(zoomLayer);
 			}
 		}
 
@@ -311,7 +306,7 @@ public final class CanvasGuiShowcaseDemo {
 		}
 
 		void closeThemeWatcher() {
-			zoomPickingTimer.stop();
+			finishInteractiveRepaint();
 			if (themeWatcher == null)
 				return;
 			themeWatcher.close();

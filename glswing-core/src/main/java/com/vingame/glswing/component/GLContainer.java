@@ -567,6 +567,20 @@ public abstract class GLContainer implements GLParent, GLMouseTarget {
 			parent.repaintAndRebuildPicking(source);
 	}
 
+	@Override
+	public final void repaintInteractively(GLContainer source,
+			Runnable settledCallback) {
+		GLParent parent = glParent;
+		if (parent != null)
+			parent.repaintInteractively(source, settledCallback);
+	}
+
+	@Override
+	public final boolean finishInteractiveRepaint() {
+		GLParent parent = glParent;
+		return parent != null && parent.finishInteractiveRepaint();
+	}
+
 	final void setGLParent(GLParent parent) {
 		glParent = parent;
 	}

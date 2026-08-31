@@ -7,13 +7,12 @@ import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
-
-import javax.swing.Timer;
 
 import com.vingame.glswing.component.GLContainer;
 import com.vingame.glswing.component.GLParent;
@@ -26,6 +25,7 @@ import com.vingame.glswing.input.GLMouseWheelCaptureTarget;
 import com.vingame.glswing.input.GLPointerController;
 import com.vingame.glswing.input.GLPointerCursor;
 import com.vingame.glswing.rendering.GLColorInterpolator;
+import com.vingame.glswing.rendering.GLColorInterpolation;
 import com.vingame.glswing.rendering.GLContext2D;
 import com.vingame.glswing.rendering.GLStroke;
 import com.vingame.glswing.rendering.GLTransform;
@@ -42,9 +42,13 @@ public class GLNodeEditor extends GLContainer
 		implements GLMouseWheelCaptureTarget, GLKeyTarget {
 	private static final float CONNECTION_DRAG_THRESHOLD = 4;
 	private static final float MARQUEE_DRAG_THRESHOLD = 3;
-	private static final int VIEWPORT_PICKING_SETTLE_MILLIS = 75;
 	private final List<GLNode> nodes = new ArrayList<>();
 	private final List<GLNodeConnection> connections = new ArrayList<>();
+	private final Map<GLNodeConnection, CachedConnectionCurve> connectionCurveCache =
+			new IdentityHashMap<>();
+	private volatile int lastCurveTessellations;
+	private volatile int lastCurveCacheHits;
+	private volatile int lastCurveSegments;
 	private final LinkedHashSet<GLNode> selectedNodes = new LinkedHashSet<>();
 	private final CopyOnWriteArrayList<GLNodeEditorListener> listeners =
 			new CopyOnWriteArrayList<>();
@@ -94,15 +98,11 @@ public class GLNodeEditor extends GLContainer
 	private boolean marqueeVisible;
 	private Set<GLNode> marqueeBaseSelection = Set.of();
 	private int marqueeModifiers;
-	private final Timer viewportPickingTimer = new Timer(
-			VIEWPORT_PICKING_SETTLE_MILLIS,
-			event -> repaintAndRebuildPicking(this));
+	private boolean interactiveCurveRendering;
 	private GLPopupMenu connectionContextMenu;
 	private GLMenuItem deleteConnectionMenuItem;
 
-	public GLNodeEditor() {
-		viewportPickingTimer.setRepeats(false);
-	}
+	public GLNodeEditor() { }
 	private GLNodeConnection contextConnection;
 
 	public void addNode(GLNode node, float x, float y) {
@@ -245,6 +245,7 @@ public class GLNodeEditor extends GLContainer
 		if (selectedConnection == connection)
 			setSelectedConnection(null);
 		connections.remove(connection);
+		connectionCurveCache.remove(connection);
 		connection.detachFrom(this);
 		connection.getInput().connectionStateChanged();
 		repaintGL();
@@ -256,6 +257,15 @@ public class GLNodeEditor extends GLContainer
 	public List<GLNodeConnection> getConnections() {
 		return List.copyOf(connections);
 	}
+
+	/** Number of retained connection curves tessellated in the latest frame. */
+	public int getLastCurveTessellationCount() { return lastCurveTessellations; }
+
+	/** Number of retained connection curves reused in the latest frame. */
+	public int getLastCurveCacheHitCount() { return lastCurveCacheHits; }
+
+	/** Total cached line segments submitted for retained curves in the latest frame. */
+	public int getLastCurveSegmentCount() { return lastCurveSegments; }
 
 	public GLNodeConnection getSelectedConnection() {
 		return selectedConnection;
@@ -602,12 +612,21 @@ public class GLNodeEditor extends GLContainer
 
 	private void repaintViewport(boolean rebuildPicking) {
 		if (rebuildPicking) {
-			viewportPickingTimer.stop();
+			interactiveCurveRendering = false;
 			repaintAndRebuildPicking(this);
 		} else {
-			repaintGL();
-			viewportPickingTimer.restart();
+			repaintInteractiveCurves();
 		}
+	}
+
+	private void repaintInteractiveCurves() {
+		interactiveCurveRendering = true;
+		repaintInteractively(this, () -> interactiveCurveRendering = false);
+	}
+
+	private void finishInteractiveCurves() {
+		interactiveCurveRendering = false;
+		repaintAndRebuildPicking(this);
 	}
 
 	public float getWheelPanDistance() { return wheelPanDistance; }
@@ -769,7 +788,7 @@ public class GLNodeEditor extends GLContainer
 			setPan(workspaceStartPanX
 					+ viewport[0] - workspacePressViewportX,
 					workspaceStartPanY
-					+ viewport[1] - workspacePressViewportY);
+					+ viewport[1] - workspacePressViewportY, false);
 			event.consume();
 		} else if (workspaceGesture == WorkspaceGesture.MARQUEE) {
 			updateMarquee(event);
@@ -810,8 +829,8 @@ public class GLNodeEditor extends GLContainer
 
 	@Override
 	protected void detached(GLParent formerParent) {
+		formerParent.finishInteractiveRepaint();
 		super.detached(formerParent);
-		viewportPickingTimer.stop();
 	}
 
 	@Override
@@ -943,7 +962,7 @@ public class GLNodeEditor extends GLContainer
 					start[0] + deltaX, start[1] + deltaY);
 		}
 		if (changed)
-			repaintGL();
+			repaintInteractiveCurves();
 	}
 
 	void endNodeMove(GLNode source) {
@@ -954,7 +973,7 @@ public class GLNodeEditor extends GLContainer
 				after.put(node, new float[] { node.getX(), node.getY() });
 			moveStartLocations.clear();
 			recordLocations(before, after);
-			repaintAndRebuildPicking(this);
+			finishInteractiveCurves();
 		}
 	}
 
@@ -997,7 +1016,7 @@ public class GLNodeEditor extends GLContainer
 		}
 		updateConnectionPointer(source, event);
 		updateCandidate(candidateAt(event.getScreenX(), event.getScreenY()));
-		repaintGL();
+		repaintInteractiveCurves();
 		event.consume();
 	}
 
@@ -1028,7 +1047,7 @@ public class GLNodeEditor extends GLContainer
 		recordConnectionChange(connectionGestureBefore,
 				List.copyOf(connections));
 		connectionGestureBefore = List.of();
-		repaintGL();
+		finishInteractiveCurves();
 		if (event != null)
 			event.consume();
 	}
@@ -1237,13 +1256,16 @@ public class GLNodeEditor extends GLContainer
 	}
 
 	private void finishWorkspaceGesture(GLMouseEvent event) {
+		boolean panning = workspaceGesture == WorkspaceGesture.PAN;
 		boolean repaint = marqueeVisible;
 		workspaceGesture = WorkspaceGesture.NONE;
 		marqueeVisible = false;
 		marqueeBaseSelection = Set.of();
 		workspacePointerController.clearCursor(this);
 		workspacePointerController = GLPointerController.NONE;
-		if (repaint)
+		if (panning)
+			finishInteractiveCurves();
+		else if (repaint)
 			repaintGL();
 		if (event != null)
 			event.consume();
@@ -1385,10 +1407,17 @@ public class GLNodeEditor extends GLContainer
 	private enum WorkspaceGesture { NONE, PAN, MARQUEE }
 
 	private void drawConnections(GLContext2D context) {
+		lastCurveTessellations = 0;
+		lastCurveCacheHits = 0;
+		lastCurveSegments = 0;
 		GLStroke previous = context.getStroke();
 		float previousCurveTolerance = context.getCurveTolerance();
 		try {
-			context.setCurveTolerance(getConnectionCurveTolerance());
+			float tolerance = getConnectionCurveTolerance();
+			if (interactiveCurveRendering)
+				tolerance *= (float) getGLInputMap().getValue(
+						GLInputActions.NODE_INTERACTIVE_CURVE_TOLERANCE_FACTOR, 3);
+			context.setCurveTolerance(tolerance);
 			for (GLNodeConnection connection : connections)
 				if (connection != selectedConnection)
 					drawConnection(context, connection);
@@ -1470,17 +1499,75 @@ public class GLNodeEditor extends GLContainer
 					secondThirdX, secondThirdY, x1, y1, start, end,
 					getConnectionColorInterpolator(), GLContext2D.NO_PICK_ID);
 		} else {
+			int minimumSegments = getConnectionColorInterpolator()
+					== GLColorInterpolation.SRGB ? 1 : 8;
+			float[] points = connectionCurvePoints(context, mouseTarget,
+					x0, y0, x0 + handle, y0, x1 - handle, y1, x1, y1,
+					minimumSegments);
 			if (mouseTarget == null)
 				context.drawCubicBezier(x0, y0, x0 + handle, y0,
 						x1 - handle, y1, x1, y1, border,
 						GLContext2D.NO_PICK_ID);
 			else
-				context.drawCubicBezier(x0, y0, x0 + handle, y0,
-						x1 - handle, y1, x1, y1, border, mouseTarget);
+				context.drawPolyline(points, border, mouseTarget);
 			context.setStroke(connectionStroke(width));
-			context.drawCubicBezier(x0, y0, x0 + handle, y0,
-					x1 - handle, y1, x1, y1, start, end,
-					getConnectionColorInterpolator(), GLContext2D.NO_PICK_ID);
+			if (mouseTarget == null) {
+				context.drawCubicBezier(x0, y0, x0 + handle, y0,
+						x1 - handle, y1, x1, y1, start, end,
+						getConnectionColorInterpolator(), GLContext2D.NO_PICK_ID);
+			} else {
+				Color[] colors = connectionCurveColors(points.length / 2,
+						start, end, getConnectionColorInterpolator());
+				context.drawPolyline(points, colors, GLContext2D.NO_PICK_ID);
+			}
+		}
+	}
+
+	private float[] connectionCurvePoints(GLContext2D context,
+			GLNodeConnection connection, float x0, float y0, float c1x, float c1y,
+			float c2x, float c2y, float x1, float y1, int minimumSegments) {
+		if (connection == null)
+			return context.tessellateCubicBezier(x0, y0, c1x, c1y,
+					c2x, c2y, x1, y1, minimumSegments);
+		float tolerance = context.getCurveTolerance();
+		float scale = context.getTransform().getMaximumScale();
+		CachedConnectionCurve cached = connectionCurveCache.get(connection);
+		if (cached != null && cached.matches(x0, y0, c1x, c1y,
+				c2x, c2y, x1, y1, tolerance, scale, minimumSegments)) {
+			lastCurveCacheHits++;
+			lastCurveSegments += cached.points().length / 2 - 1;
+			return cached.points();
+		}
+		float[] points = context.tessellateCubicBezier(x0, y0, c1x, c1y,
+				c2x, c2y, x1, y1, minimumSegments);
+		connectionCurveCache.put(connection, new CachedConnectionCurve(
+				x0, y0, c1x, c1y, c2x, c2y, x1, y1,
+				tolerance, scale, minimumSegments, points));
+		lastCurveTessellations++;
+		lastCurveSegments += points.length / 2 - 1;
+		return points;
+	}
+
+	private static Color[] connectionCurveColors(int count, Color start,
+			Color end, GLColorInterpolator interpolation) {
+		Color[] colors = new Color[count];
+		for (int index = 0; index < count; index++)
+			colors[index] = interpolation.interpolate(start, end,
+					index / (float) (count - 1));
+		return colors;
+	}
+
+	private record CachedConnectionCurve(float x0, float y0, float c1x,
+			float c1y, float c2x, float c2y, float x1, float y1,
+			float tolerance, float scale, int minimumSegments, float[] points) {
+		boolean matches(float nextX0, float nextY0, float nextC1x, float nextC1y,
+				float nextC2x, float nextC2y, float nextX1, float nextY1,
+				float nextTolerance, float nextScale, int nextMinimumSegments) {
+			return x0 == nextX0 && y0 == nextY0 && c1x == nextC1x
+					&& c1y == nextC1y && c2x == nextC2x && c2y == nextC2y
+					&& x1 == nextX1 && y1 == nextY1
+					&& tolerance == nextTolerance && scale == nextScale
+					&& minimumSegments == nextMinimumSegments;
 		}
 	}
 

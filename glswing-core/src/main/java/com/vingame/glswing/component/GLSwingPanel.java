@@ -33,6 +33,7 @@ import com.jogamp.opengl.awt.GLJPanel;
 import com.vingame.glswing.input.GLMouseEvent;
 import com.vingame.glswing.history.GLHistoryManager;
 import com.vingame.glswing.input.GLKeyTarget;
+import com.vingame.glswing.input.GLEditingHistoryTarget;
 import com.vingame.glswing.input.GLInputActions;
 import com.vingame.glswing.input.GLInputMap;
 import com.vingame.glswing.input.GLInputMaps;
@@ -57,7 +58,6 @@ import com.vingame.glswing.rendering.internal.SceneFramebuffer;
 import com.vingame.glswing.ui.GLFontSpec;
 import com.vingame.glswing.ui.GLLocalizer;
 import com.vingame.glswing.ui.GLTheme;
-import com.vingame.glswing.ui.GLTextEditor;
 import com.vingame.glswing.ui.GLMenuMnemonics;
 
 /**
@@ -80,6 +80,11 @@ public abstract class GLSwingPanel extends GLJPanel
 	private final GLRecordingCache recordingCache = new GLRecordingCache();
 	private final GLLayoutSupport layoutSupport = new GLLayoutSupport(this);
 	private final GLDamageTracker damageTracker = new GLDamageTracker();
+	private final GLInteractiveRepaintController interactiveRepaint =
+			new GLInteractiveRepaintController(() -> {
+				damageTracker.repaintAll(true);
+				super.repaint();
+			});
 	private final Map<GLFontSpec, GLFont> themedFonts = new LinkedHashMap<>();
 	private volatile GLTheme theme = GLTheme.DEFAULT;
 	private volatile GLLocalizer localizer = GLLocalizer.DEFAULT;
@@ -454,6 +459,7 @@ public abstract class GLSwingPanel extends GLJPanel
 
 	@Override
 	public final void repaintGL() {
+		interactiveRepaint.cancel();
 		damageTracker.repaintAll(true);
 		super.repaint();
 	}
@@ -466,12 +472,30 @@ public abstract class GLSwingPanel extends GLJPanel
 
 	@Override
 	public final void repaintAndRebuildPicking(GLContainer source) {
+		interactiveRepaint.cancel();
 		damageTracker.repaint(source, true);
 		super.repaint();
 	}
 
 	@Override
+	public final void repaintInteractively(GLContainer source,
+			Runnable settledCallback) {
+		damageTracker.repaint(source, false);
+		super.repaint();
+		int delay = (int) Math.round(inputMap.getValue(
+				GLInputActions.RENDER_INTERACTION_SETTLE_MILLIS, 75));
+		interactiveRepaint.request(source, delay, settledCallback);
+	}
+
+	@Override
+	public final boolean finishInteractiveRepaint() {
+		return interactiveRepaint.settle();
+	}
+
+	@Override
 	public void repaint() {
+		if (interactiveRepaint != null)
+			interactiveRepaint.cancel();
 		if (damageTracker != null)
 			damageTracker.repaintAll(true);
 		super.repaint();
@@ -543,6 +567,7 @@ public abstract class GLSwingPanel extends GLJPanel
 
 			@Override
 			public void mousePressed(MouseEvent event) {
+				finishInteractiveRepaint();
 				pointerWarpEventPending = false;
 				cancelHoverRead();
 				clickCandidate = GLPickResult.none();
@@ -1009,7 +1034,7 @@ public abstract class GLSwingPanel extends GLJPanel
 					repaintColorOnly();
 					return;
 				}
-				if (focusedTarget instanceof GLTextEditor editor
+				if (focusedTarget instanceof GLEditingHistoryTarget editor
 						&& editor.handleEditingHistoryKeyPressed(event,
 								resolvedInputMap)) {
 					repaintColorOnly();
@@ -1284,6 +1309,7 @@ public abstract class GLSwingPanel extends GLJPanel
 
 	@Override
 	public final void dispose(GLAutoDrawable drawable) {
+		interactiveRepaint.cancel();
 		GL3 gl = drawable.getGL().getGL3();
 		disposeResources(gl);
 		synchronized (this) {

@@ -78,6 +78,8 @@ modifier.slider.coarse=CTRL
 value.slider.precise-factor=0.1
 value.slider.coarse-factor=10
 value.text.history-coalesce-millis=750
+value.render.interaction-settle-millis=75
+value.node.interactive-curve-tolerance-factor=3
 
 modifier.node.horizontal-wheel=CTRL
 modifier.node.vertical-wheel=SHIFT
@@ -90,6 +92,13 @@ An individual slider may override configured factors with
 or deletion operations remain one text-editor undo step. Each editor may
 override the inherited value with `setHistoryCoalesceMillis(...)`; zero disables
 coalescing for that editor.
+
+`render.interaction-settle-millis` is the idle period before GLSwing rebuilds
+GPU picking after continuous color-only updates such as wheel zooming. A
+pointer press ends the period immediately and waits for current picking before
+dispatch. `node.interactive-curve-tolerance-factor` multiplies the node
+editor's normal Bezier tolerance during those updates; values above one reduce
+tessellation work, while the settled frame always restores full quality.
 
 ## Inheritance and scopes
 

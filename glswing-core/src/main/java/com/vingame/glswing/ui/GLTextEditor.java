@@ -19,6 +19,7 @@ import javax.swing.event.ChangeListener;
 
 import com.vingame.glswing.component.GLParent;
 import com.vingame.glswing.input.GLKeyEvent;
+import com.vingame.glswing.input.GLEditingHistoryTarget;
 import com.vingame.glswing.input.GLInputActions;
 import com.vingame.glswing.input.GLInputMap;
 import com.vingame.glswing.history.GLHistoryManager;
@@ -34,7 +35,7 @@ import com.vingame.glswing.rendering.GLRenderParameters;
 import com.vingame.glswing.rendering.GLStroke;
 
 /** Reusable single-line GPU text editor with selection and validation. */
-public class GLTextEditor extends GLControl {
+public class GLTextEditor extends GLControl implements GLEditingHistoryTarget {
 	public static final long DEFAULT_HISTORY_COALESCE_MILLIS = 750;
 
 	public enum ValidationFailureMode {
@@ -265,6 +266,7 @@ public class GLTextEditor extends GLControl {
 	}
 
 	/** Handles undo/redo inside the active editing session. */
+	@Override
 	public final boolean handleEditingHistoryKeyPressed(KeyEvent event,
 			GLInputMap inputMap) {
 		if (!isFocused() || !GLHistoryManager.isHistoryShortcut(event, inputMap))

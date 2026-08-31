@@ -7,6 +7,7 @@ import java.util.Map;
 
 import com.jogamp.opengl.GL3;
 import com.vingame.glswing.input.GLKeyTarget;
+import com.vingame.glswing.input.GLInputActions;
 import com.vingame.glswing.input.GLInputMap;
 import com.vingame.glswing.input.GLInputMaps;
 import com.vingame.glswing.history.GLHistoryManager;
@@ -37,6 +38,11 @@ public abstract class GLSwingContainerCanvas extends GLSwingCanvas
 	private final Map<GLFontSpec, GLFont> themedFonts = new LinkedHashMap<>();
 	private final GLContainerInputDispatcher inputDispatcher;
 	private final GLDamageTracker damageTracker = new GLDamageTracker();
+	private final GLInteractiveRepaintController interactiveRepaint =
+			new GLInteractiveRepaintController(() -> {
+				damageTracker.repaintAll(true);
+				super.repaint();
+			});
 	private volatile GLTheme theme = GLTheme.DEFAULT;
 	private volatile GLLocalizer localizer = GLLocalizer.DEFAULT;
 	private volatile GLHistoryManager historyManager = new GLHistoryManager();
@@ -258,6 +264,7 @@ public abstract class GLSwingContainerCanvas extends GLSwingCanvas
 
 	@Override
 	public final void repaintGL() {
+		interactiveRepaint.cancel();
 		damageTracker.repaintAll(true);
 		super.repaint();
 	}
@@ -270,12 +277,30 @@ public abstract class GLSwingContainerCanvas extends GLSwingCanvas
 
 	@Override
 	public final void repaintAndRebuildPicking(GLContainer source) {
+		interactiveRepaint.cancel();
 		damageTracker.repaint(source, true);
 		super.repaint();
 	}
 
 	@Override
+	public final void repaintInteractively(GLContainer source,
+			Runnable settledCallback) {
+		damageTracker.repaint(source, false);
+		super.repaint();
+		int delay = (int) Math.round(inputMap.getValue(
+				GLInputActions.RENDER_INTERACTION_SETTLE_MILLIS, 75));
+		interactiveRepaint.request(source, delay, settledCallback);
+	}
+
+	@Override
+	public final boolean finishInteractiveRepaint() {
+		return interactiveRepaint.settle();
+	}
+
+	@Override
 	public void repaint() {
+		if (interactiveRepaint != null)
+			interactiveRepaint.cancel();
 		if (damageTracker != null)
 			damageTracker.repaintAll(true);
 		super.repaint();
@@ -347,6 +372,7 @@ public abstract class GLSwingContainerCanvas extends GLSwingCanvas
 
 	@Override
 	protected final void disposeResources(GL3 gl) {
+		interactiveRepaint.cancel();
 		inputDispatcher.reset();
 		disposeContainerResources(gl);
 		requestGLFocus(null);

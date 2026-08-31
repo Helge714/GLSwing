@@ -54,12 +54,13 @@ import com.vingame.glswing.ui.GLMenuBar;
 import com.vingame.glswing.ui.GLMenuBarItem;
 import com.vingame.glswing.ui.GLMenuItem;
 import com.vingame.glswing.ui.GLPopupMenu;
-import com.vingame.glswing.ui.GLPopupTextOverflow;
 import com.vingame.glswing.ui.GLScrollPane;
 import com.vingame.glswing.ui.GLSlider;
 import com.vingame.glswing.ui.GLSliderGroup;
 import com.vingame.glswing.ui.GLTabbedPane;
 import com.vingame.glswing.ui.GLTextEditor;
+import com.vingame.glswing.ui.GLTextArea;
+import com.vingame.glswing.ui.GLTextStyle;
 import com.vingame.glswing.ui.GLTextInputFormats;
 import com.vingame.glswing.ui.GLTheme;
 import com.vingame.glswing.ui.GLThemeLoadException;
@@ -168,8 +169,6 @@ public final class GuiShowcaseDemo {
 
 		private final ShowcaseSurface surface = new ShowcaseSurface(this);
 		private final ZoomLayer zoomLayer = new ZoomLayer(this, surface);
-		private final Timer zoomPickingTimer = new Timer(75,
-				event -> repaintAndRebuildPicking(zoomLayer));
 		private volatile float zoom = 1;
 		private volatile String lastAction =
 				"Strg + Mausrad: Zoom | Strg + 0: 100 %";
@@ -185,7 +184,6 @@ public final class GuiShowcaseDemo {
 
 		ShowcasePanel(int antialiasingSamples) {
 			super(antialiasingSamples);
-			zoomPickingTimer.setRepeats(false);
 			surface.setBounds(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT);
 			zoomLayer.setBounds(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT);
 			zoomLayer.addGL(surface);
@@ -244,11 +242,9 @@ public final class GuiShowcaseDemo {
 			this.zoom = resolved;
 			lastAction = String.format("Zoom auf %.0f %% gesetzt", resolved * 100);
 			if (rebuildPicking) {
-				zoomPickingTimer.stop();
 				repaintAndRebuildPicking(zoomLayer);
 			} else {
-				repaintGL(zoomLayer);
-				zoomPickingTimer.restart();
+				repaintInteractively(zoomLayer);
 			}
 		}
 
@@ -358,7 +354,7 @@ public final class GuiShowcaseDemo {
 		}
 
 		void closeThemeWatcher() {
-			zoomPickingTimer.stop();
+			finishInteractiveRepaint();
 			if (themeWatcher == null)
 				return;
 			themeWatcher.close();
@@ -474,7 +470,6 @@ public final class GuiShowcaseDemo {
 		private final GLPopupMenu standalonePopup = new GLPopupMenu();
 		private final GLComboBox<String> normalCombo =
 				new GLComboBox<>(List.of("Rot", "Gruen", "Blau", "Orange"));
-		private final GLComboBox<String> nestedCombo = new GLComboBox<>();
 		private final GLSlider fixedSlider = GLSlider.fixed("Deckkraft", 0, 100, 35);
 		private final GLSlider freeSlider = GLSlider.free("Offset", 12);
 		private final GLSlider themeRadiusSlider =
@@ -793,23 +788,24 @@ public final class GuiShowcaseDemo {
 			disabled.setEnabled(false);
 			addControl(section, disabled, 18, 350, 314, 26);
 
-			caption(section, "LANGER TEXT MIT ELLIPSIS", 18, 394);
-			GLComboBox<String> longText = new GLComboBox<>(List.of(
-					"Ein extrem langer Eintrag, der nicht in die ComboBox passt",
-					"Kurz"));
-			longText.setPopupMatchesComboWidth(true);
-			longText.setPopupTextOverflow(GLPopupTextOverflow.ELLIPSIS);
-			addControl(section, longText, 18, 416, 235, 26);
-
-			caption(section, "VERSCHACHTELTE AUSWAHL", 18, 460);
-			nestedCombo.addItem("Direkter Eintrag");
-			GLComboBox<String>.SubMenu regionen =
-					nestedCombo.addSubMenu("Regionen");
-			regionen.addItem("Europa").addItem("Asien");
-			regionen.addSubMenu("Staedte")
-					.addItem("Berlin").addItem("Hamburg");
-			nestedCombo.setPopupTitle("Hierarchische Auswahl");
-			addControl(section, nestedCombo, 18, 482, 314, 26);
+			caption(section, "MEHRZEILIG / SOFT-WRAP / LOKALES UNDO", 18, 394);
+			GLTextArea textArea = new GLTextArea(
+					"GLTextArea bearbeitet mehrere Zeilen.\n"
+					+ "Enter erzeugt Umbrueche; Tab fuegt Einrueckungen ein.\n"
+					+ "Fett und kursiv gelten fuer die aktuelle Auswahl.\n"
+					+ "Ein Rechtsklick oeffnet Ausrichtung und Formatierung.\n"
+					+ "Der Scrollbalken erscheint automatisch bei Ueberlauf.\n"
+					+ "Mausrad, Auswahl sowie Undo und Redo bleiben im Editor.");
+			textArea.setLineWrap(true);
+			textArea.setTabSize(4);
+			String sample = textArea.getText();
+			int bold = sample.indexOf("Fett");
+			textArea.getDocument().setStyle(bold, bold + 4,
+					GLTextStyle.PLAIN.withBold(true));
+			int italic = sample.indexOf("kursiv");
+			textArea.getDocument().setStyle(italic, italic + 6,
+					GLTextStyle.PLAIN.withItalic(true));
+			addControl(section, textArea, 18, 416, 314, 142);
 		}
 
 		private void buildContainersPage() {
@@ -976,7 +972,6 @@ public final class GuiShowcaseDemo {
 			menuBar.closeMenu();
 			standalonePopup.close();
 			normalCombo.getPopupMenu().close();
-			nestedCombo.getPopupMenu().close();
 			fixedSlider.getContextMenu().close();
 			freeSlider.getContextMenu().close();
 		}

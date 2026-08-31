@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.function.Consumer;
 
 import com.vingame.glswing.input.GLKeyEvent;
+import com.vingame.glswing.input.GLEditingHistoryTarget;
 import com.vingame.glswing.input.GLInputActions;
 import com.vingame.glswing.input.GLInputMap;
 import com.vingame.glswing.input.GLKeyTarget;
@@ -29,7 +30,6 @@ import com.vingame.glswing.input.GLImmediateHoverRegistry;
 import com.vingame.glswing.input.GLPointerController;
 import com.vingame.glswing.input.GLPointerControllers;
 import com.vingame.glswing.history.GLHistoryManager;
-import com.vingame.glswing.ui.GLTextEditor;
 import com.vingame.glswing.ui.GLMenuMnemonics;
 
 /** Input bridge shared by retained controls hosted on a direct GL canvas. */
@@ -49,6 +49,7 @@ final class GLContainerInputDispatcher {
 	private int pointerTasksPending;
 	private int pressPicksPending;
 	private MouseEvent pendingDragEvent;
+	private MouseEvent pendingSettledPressEvent;
 	private int lastDragX;
 	private int lastDragY;
 	private boolean pointerWarpRequested;
@@ -70,6 +71,7 @@ final class GLContainerInputDispatcher {
 		hoverReadGeneration++;
 		pendingHoverEvent = null;
 		pendingDragEvent = null;
+		pendingSettledPressEvent = null;
 		hoverReadScheduled = false;
 		hoverPick = GLPickResult.none();
 		capturedPick = GLPickResult.none();
@@ -100,21 +102,11 @@ final class GLContainerInputDispatcher {
 
 			@Override
 			public void mousePressed(MouseEvent event) {
-				pointerWarpEventPending = false;
-				cancelHoverRead();
-				clickCandidate = GLPickResult.none();
-				host.requestFocusInWindow();
-				pressPicksPending++;
-				readPointerPick(event, result -> {
-					pressPicksPending--;
-					dispatchMousePressed(event, result);
-					if (pressPicksPending == 0) {
-						MouseEvent drag = pendingDragEvent;
-						pendingDragEvent = null;
-						if (drag != null)
-							dispatchMouseDragged(drag);
-					}
-				});
+				if (host.finishInteractiveRepaint()) {
+					pendingSettledPressEvent = event;
+					return;
+				}
+				dispatchSettledMousePressed(event);
 			}
 
 			@Override
@@ -160,6 +152,24 @@ final class GLContainerInputDispatcher {
 		host.addMouseListener(dispatcher);
 		host.addMouseMotionListener(dispatcher);
 		host.addMouseWheelListener(dispatcher);
+	}
+
+	private void dispatchSettledMousePressed(MouseEvent event) {
+		pointerWarpEventPending = false;
+		cancelHoverRead();
+		clickCandidate = GLPickResult.none();
+		host.requestFocusInWindow();
+		pressPicksPending++;
+		readPointerPick(event, result -> {
+			pressPicksPending--;
+			dispatchMousePressed(event, result);
+			if (pressPicksPending == 0) {
+				MouseEvent drag = pendingDragEvent;
+				pendingDragEvent = null;
+				if (drag != null)
+					dispatchMouseDragged(drag);
+			}
+		});
 	}
 
 	private static boolean hasPressedMouseButton(MouseEvent event) {
@@ -442,6 +452,15 @@ final class GLContainerInputDispatcher {
 	}
 
 	void pickSnapshotsUpdated() {
+		MouseEvent press = pendingSettledPressEvent;
+		if (press != null && !host.isPickingDirty()
+				&& host.isLatestPickSnapshotReady()) {
+			pendingSettledPressEvent = null;
+			javax.swing.SwingUtilities.invokeLater(() -> {
+				if (host.isDisplayable())
+					dispatchSettledMousePressed(press);
+			});
+		}
 		MouseEvent event = postWheelHoverEvent;
 		if (event == null)
 			return;
@@ -475,7 +494,7 @@ final class GLContainerInputDispatcher {
 					host.repaintColorOnly();
 					return;
 				}
-				if (host.focusedGLTarget() instanceof GLTextEditor editor
+				if (host.focusedGLTarget() instanceof GLEditingHistoryTarget editor
 						&& editor.handleEditingHistoryKeyPressed(event, inputMap)) {
 					host.repaintColorOnly();
 					return;

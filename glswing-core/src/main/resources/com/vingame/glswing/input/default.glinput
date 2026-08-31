@@ -4,6 +4,8 @@ key.history.redo=shortcut+shift+Z, shortcut+Y
 key.focus.next=TAB
 key.focus.previous=shift+TAB
 modifier.menu.mnemonic=ALT
+value.render.interaction-settle-millis=75
+value.node.interactive-curve-tolerance-factor=3
 
 key.control.activate=SPACE, ENTER
 key.control.cancel=ESCAPE

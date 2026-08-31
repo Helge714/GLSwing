@@ -108,4 +108,21 @@ public interface GLParent {
 	default void repaintAndRebuildPicking(GLContainer source) {
 		repaintGL(source);
 	}
+
+	/**
+	 * Repaints color immediately and defers picking until continuous interaction
+	 * settles. The optional callback runs immediately before the settled frame.
+	 */
+	default void repaintInteractively(GLContainer source, Runnable settledCallback) {
+		if (settledCallback != null)
+			settledCallback.run();
+		repaintAndRebuildPicking(source);
+	}
+
+	default void repaintInteractively(GLContainer source) {
+		repaintInteractively(source, null);
+	}
+
+	/** Finishes a pending interactive repaint and requests current picking data. */
+	default boolean finishInteractiveRepaint() { return false; }
 }

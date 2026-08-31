@@ -8,6 +8,10 @@ public final class GLInputActions {
 	public static final String FOCUS_NEXT = "focus.next";
 	public static final String FOCUS_PREVIOUS = "focus.previous";
 	public static final String MENU_MNEMONIC = "menu.mnemonic";
+	public static final String RENDER_INTERACTION_SETTLE_MILLIS =
+			"render.interaction-settle-millis";
+	public static final String NODE_INTERACTIVE_CURVE_TOLERANCE_FACTOR =
+			"node.interactive-curve-tolerance-factor";
 
 	public static final String ACTIVATE = "control.activate";
 	public static final String CANCEL = "control.cancel";

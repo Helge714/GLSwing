@@ -66,6 +66,11 @@ final class MavenSmokeTest {
 	}
 
 	@Test
+	void textArea() {
+		GLTextAreaSelfTest.main(NO_ARGS);
+	}
+
+	@Test
 	void sliderGroup() {
 		GLSliderGroupSelfTest.main(NO_ARGS);
 	}
@@ -83,5 +88,10 @@ final class MavenSmokeTest {
 	@Test
 	void scrollingAndTabs() {
 		GLScrollTabsSelfTest.main(NO_ARGS);
+	}
+
+	@Test
+	void nodes() {
+		GLNodeSelfTest.main(NO_ARGS);
 	}
 }
