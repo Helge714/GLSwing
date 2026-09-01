@@ -11,13 +11,18 @@ import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.net.URI;
 import java.util.concurrent.atomic.AtomicReference;
 
 import javax.swing.AbstractAction;
 import javax.swing.JComponent;
 import javax.swing.JFrame;
+import javax.swing.JFileChooser;
 import javax.swing.JLabel;
 import javax.swing.KeyStroke;
 import javax.swing.SwingConstants;
@@ -35,6 +40,9 @@ import com.vingame.glswing.node.GLNodeEditor;
 import com.vingame.glswing.node.GLNodePort;
 import com.vingame.glswing.node.GLNodePorts;
 import com.vingame.glswing.node.GLNodeResizeMode;
+import com.vingame.glswing.lsp.GLLanguageServer;
+import com.vingame.glswing.lsp.GLLanguageServerProfile;
+import com.vingame.glswing.lsp.GLLanguageServerRegistry;
 import com.vingame.glswing.rendering.GLColorInterpolation;
 import com.vingame.glswing.rendering.GLContext2D;
 import com.vingame.glswing.rendering.GLDrawCallProfile;
@@ -59,6 +67,8 @@ import com.vingame.glswing.ui.GLTabbedPane;
 import com.vingame.glswing.ui.GLTextEditor;
 import com.vingame.glswing.ui.GLTextArea;
 import com.vingame.glswing.ui.GLTextStyle;
+import com.vingame.glswing.ui.GLCodeEditor;
+import com.vingame.glswing.ui.GLCodeLanguages;
 import com.vingame.glswing.ui.GLTextInputFormats;
 import com.vingame.glswing.ui.GLTheme;
 import com.vingame.glswing.ui.GLThemeLoadException;
@@ -73,6 +83,7 @@ public final class GuiShowcaseDemo {
 	static final float DESIGN_HEIGHT = 760;
 	private static final Path THEME_RELATIVE_DIRECTORY = Path.of("resources",
 			"com", "vingame", "glswing", "themes");
+	private static List<String> lspCommand = List.of();
 
 	private GuiShowcaseDemo() {
 	}
@@ -114,7 +125,15 @@ public final class GuiShowcaseDemo {
 
 	public static void main(String[] args) {
 		GLDemoErrorReporter.install("GUI Showcase / GLJPanel");
+		lspCommand = languageServerCommand(args);
 		SwingUtilities.invokeLater(GuiShowcaseDemo::showWindow);
+	}
+	private static List<String> languageServerCommand(String[] args) {
+		for (int index = 0; index < args.length; index++)
+			if (args[index].equals("--lsp") && index + 1 < args.length)
+				return List.copyOf(Arrays.asList(args).subList(index + 1, args.length));
+		String executable = System.getProperty("glswing.demo.lsp.command", "").strip();
+		return executable.isEmpty() ? List.of() : List.of(executable);
 	}
 
 	private static void showWindow() {
@@ -132,9 +151,12 @@ public final class GuiShowcaseDemo {
 		frame.addWindowListener(new WindowAdapter() {
 			@Override
 			public void windowClosing(WindowEvent event) {
-				panel.closeThemeWatcher();
 				statistics.stop();
+				panel.closeThemeWatcher();
+				panel.closeLanguageServer();
+				panel.destroy();
 				frame.dispose();
+				System.exit(0);
 			}
 		});
 		frame.pack();
@@ -347,6 +369,7 @@ public final class GuiShowcaseDemo {
 			themeWatcher.close();
 			themeWatcher = null;
 		}
+		void closeLanguageServer() { surface.closeLanguageServer(); }
 
 		@Override
 		public GLParent parent() {
@@ -445,6 +468,7 @@ public final class GuiShowcaseDemo {
 		private final GLMenuBar menuBar = new GLMenuBar();
 		private final PassiveLayer headerLayer = new PassiveLayer();
 		private final PassiveLayer controlsPage = new PassiveLayer();
+		private final PassiveLayer codePage = new PassiveLayer();
 		private final PassiveLayer containersPage = new PassiveLayer();
 		private final PassiveLayer nodeEditorPage = new PassiveLayer();
 		private final GLTabbedPane workspaceTabs = new GLTabbedPane();
@@ -477,6 +501,18 @@ public final class GuiShowcaseDemo {
 		private GLMenuItem undoItem;
 		private GLMenuItem redoItem;
 		private boolean syncingThemeRadius;
+		private GLCodeEditor codeEditor;
+		private final GLTabbedPane codeTabs = new GLTabbedPane();
+		private final Map<URI, GLCodeEditor> editorsByUri = new HashMap<>();
+		private GLLabel lspStatus;
+		private GLButton installLspButton;
+		private GLButton selectLspButton;
+		private final GLLanguageServerRegistry languageServerRegistry =
+				GLLanguageServerRegistry.standard();
+		private final GLLanguageServerProfile languageServerProfile = languageServerRegistry
+				.forLanguage("java").orElseThrow();
+		private volatile GLLanguageServer languageServer;
+		private volatile boolean languageServerClosing;
 
 		ShowcaseSurface(ShowcaseHost host) {
 			this.host = host;
@@ -489,9 +525,11 @@ public final class GuiShowcaseDemo {
 			buildSelectionLayer();
 			buildContainersPage();
 			buildNodeEditorPage();
+			buildCodePage();
 			workspaceTabs.addTab("Controls", controlsPage);
 			workspaceTabs.addTab("Menus & Containers", containersPage);
 			workspaceTabs.addTab("Node Editor", nodeEditorPage);
+			workspaceTabs.addTab("Code Editor", codePage);
 			workspaceTabs.addSelectionListener((source, oldIndex, newIndex) -> {
 				closeTransientPopups();
 				host.report("Showcase: " + source.getTitleAt(newIndex));
@@ -501,6 +539,247 @@ public final class GuiShowcaseDemo {
 			addGL(workspaceTabs);
 			host.historyManager().addListener(manager -> updateHistoryActions());
 			updateHistoryActions();
+		}
+
+		private void buildCodePage() {
+			lspStatus = new GLLabel("Core diagnostics active · Looking for Java LSP …");
+			lspStatus.setBounds(18, 14, 690, 30);
+			codePage.addGL(lspStatus);
+			installLspButton = new GLButton("Install Java LSP");
+			installLspButton.setBounds(720, 14, 190, 30);
+			installLspButton.addActionListener(event -> installLanguageServer());
+			codePage.addGL(installLspButton);
+			selectLspButton = new GLButton("Select installation …");
+			selectLspButton.setBounds(920, 14, 208, 30);
+			selectLspButton.addActionListener(event -> selectLanguageServer());
+			codePage.addGL(selectLspButton);
+			Path initialPath = showcaseWorkspace().resolve("glswing-examples/src/main/java/"
+					+ "com/vingame/glswing/demo/HelloGLSwing.java");
+			String initialSource;
+			try { initialSource = Files.readString(initialPath); }
+			catch (java.io.IOException failure) {
+				throw new IllegalStateException("Cannot load showcase source", failure);
+			}
+			codeEditor = new GLCodeEditor(initialSource);
+			configureCodeEditor(codeEditor);
+			URI initialUri = initialPath.toUri();
+			codeTabs.addTab("HelloGLSwing.java", codeEditor);
+			editorsByUri.put(initialUri, codeEditor);
+			codeTabs.setBounds(18, 50, 1110, 513);
+			codeTabs.setTabsClosable(true);
+			codeTabs.setClosedTabHistoryEnabled(true);
+			codePage.addGL(codeTabs);
+			if (!lspCommand.isEmpty()) startLanguageServer(lspCommand);
+			else languageServerProfile.findInstallation().ifPresentOrElse(installation -> {
+				try { startLanguageServer(languageServerProfile.command(
+						installation, showcaseWorkspace())); }
+				catch (java.io.IOException failure) { showLanguageServerFailure(failure); }
+			}, () -> {
+				lspStatus.setText("Core diagnostics active · Java LSP is not installed");
+				showLanguageServerActions(true);
+			});
+		}
+
+		private void configureCodeEditor(GLCodeEditor editor) {
+			editor.setLanguage(GLCodeLanguages.JAVA);
+			editor.setNavigationHandler(this::openDefinition);
+			editor.setNavigationStatusListener(status -> {
+				switch (status.state()) {
+				case REQUESTING -> lspStatus.setText("Java LSP · Looking up definition …");
+				case AVAILABLE -> lspStatus.setText("Java LSP · " + status.targetCount()
+						+ (status.targetCount() == 1 ? " definition found" : " definitions found"));
+				case EMPTY -> lspStatus.setText("Java LSP · No definition at this position");
+				case FAILED -> lspStatus.setText("Java LSP · Definition lookup failed: "
+						+ status.failure().getMessage());
+				}
+			});
+			editor.setCompletionStatusListener(status -> {
+				switch (status.state()) {
+				case REQUESTING -> lspStatus.setText("Java LSP · Requesting completion …");
+				case AVAILABLE -> lspStatus.setText("Java LSP · " + status.proposalCount()
+						+ " completion proposals");
+				case EMPTY -> lspStatus.setText("Java LSP · No completion proposals at the caret");
+				case FAILED -> lspStatus.setText("Java LSP · Completion failed: "
+						+ status.failure().getMessage());
+				}
+			});
+		}
+
+		private void openDefinition(com.vingame.glswing.ui.GLCodeLocation location) {
+			GLCodeEditor existing = editorsByUri.get(location.uri());
+			int existingTab = existing == null ? -1 : codeTabs.indexOfComponent(existing);
+			if (existing != null && existingTab < 0) {
+				if (codeTabs.reopenTab(existing))
+					existingTab = codeTabs.indexOfComponent(existing);
+				else {
+					editorsByUri.remove(location.uri());
+					existing = null;
+				}
+			}
+			if (existing != null) {
+				codeTabs.setSelectedIndex(existingTab);
+				moveTo(existing, location.line(), location.character());
+				lspStatus.setText("Java LSP · Definition is in "
+						+ tabName(location.uri()));
+				return;
+			}
+			openProfileSource(location);
+		}
+
+		private void openProfileSource(com.vingame.glswing.ui.GLCodeLocation location) {
+			GLLanguageServer current = languageServer;
+			if (current == null) {
+				lspStatus.setText("Java LSP · Language server is not connected");
+				return;
+			}
+			lspStatus.setText("Java LSP · Loading source …");
+			languageServerProfile.loadSource(current, location.uri()).whenComplete((source, failure) ->
+					openSourceViewer(location, source, failure));
+		}
+
+		private void openSourceViewer(com.vingame.glswing.ui.GLCodeLocation location,
+				String source, Throwable failure) {
+			if (failure != null || source == null || source.isBlank()) {
+				SwingUtilities.invokeLater(() -> lspStatus.setText("Java LSP · Cannot load source"
+						+ (failure == null ? "" : ": " + failure.getMessage())));
+				return;
+			}
+			java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+				GLCodeEditor editor = new GLCodeEditor(source, false);
+				editor.setEditable(false);
+				editor.setNavigationHandler(this::openDefinition);
+				return editor;
+			}).whenComplete((editor, constructionFailure) ->
+					SwingUtilities.invokeLater(() -> {
+						if (constructionFailure != null) {
+							lspStatus.setText("Java LSP · Cannot create source viewer: "
+									+ constructionFailure.getMessage());
+							return;
+						}
+						GLLanguageServer current = languageServer;
+						if (current != null)
+							editor.setDiagnosticProvider(
+									(document, listener) -> current.view(document, listener),
+									location.uri());
+						int tab = codeTabs.addTab(tabName(location.uri()), editor);
+						editorsByUri.put(location.uri(), editor);
+						codeTabs.setSelectedIndex(tab);
+						moveTo(editor, location.line(), location.character());
+						lspStatus.setText("Java LSP · Source opened");
+					}));
+		}
+
+		private static String tabName(URI uri) {
+			String value = uri.getPath();
+			if (value == null || value.isBlank()) value = uri.getSchemeSpecificPart();
+			int slash = Math.max(value.lastIndexOf('/'), value.lastIndexOf('\\'));
+			String name = slash >= 0 ? value.substring(slash + 1) : value;
+			int query = name.indexOf('?');
+			if (query >= 0) name = name.substring(0, query);
+			return name.isBlank() ? "Library source" : name;
+		}
+
+		private static void moveTo(GLCodeEditor editor, int line, int character) {
+			if (line < 0 || line >= editor.getDocument().getLineCount()) return;
+			int start = editor.getDocument().getLineStart(line);
+			int end = editor.getDocument().getLineEnd(line);
+			editor.setCaretPosition(Math.min(end, start + Math.max(0, character)));
+		}
+
+		private void startLanguageServer(List<String> command) {
+			if (!SwingUtilities.isEventDispatchThread()) {
+				SwingUtilities.invokeLater(() -> startLanguageServer(command));
+				return;
+			}
+			showLanguageServerActions(false);
+			lspStatus.setText("Core diagnostics active · Starting Java LSP …");
+			Thread starter = new Thread(() -> {
+				try {
+					Path workspace = showcaseWorkspace();
+					GLLanguageServer started = new GLLanguageServer(command, workspace,
+							languageServerProfile.initializationOptions());
+					if (languageServerClosing) { started.close(); return; }
+					languageServer = started;
+					SwingUtilities.invokeLater(() -> {
+						if (languageServerClosing) return;
+						Path document = workspace.resolve("glswing-examples/src/main/java/"
+								+ "com/vingame/glswing/demo/HelloGLSwing.java");
+						codeEditor.setDiagnosticProvider(started, document.toUri());
+						lspStatus.setText("Core diagnostics active · LSP connected: "
+								+ Path.of(command.get(0)).getFileName());
+						host.report("Language server connected");
+					});
+				} catch (RuntimeException | java.io.IOException failure) { showLanguageServerFailure(failure); }
+			}, "glswing-showcase-lsp");
+			starter.setDaemon(true);
+			starter.start();
+		}
+
+		private void installLanguageServer() {
+			showLanguageServerActions(false);
+			Thread installer = new Thread(() -> {
+				try {
+					Path installation = languageServerProfile.install(message ->
+							SwingUtilities.invokeLater(() -> lspStatus.setText(message)));
+					startLanguageServer(languageServerProfile.command(
+							installation, showcaseWorkspace()));
+				} catch (RuntimeException | java.io.IOException | InterruptedException failure) {
+					if (failure instanceof InterruptedException) Thread.currentThread().interrupt();
+					showLanguageServerFailure(failure);
+				}
+			}, "glswing-showcase-lsp-install");
+			installer.setDaemon(true);
+			installer.start();
+		}
+
+		private void selectLanguageServer() {
+			JFileChooser chooser = new JFileChooser();
+			chooser.setDialogTitle("Select extracted Eclipse JDT Language Server");
+			chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+			if (chooser.showOpenDialog(null) != JFileChooser.APPROVE_OPTION) return;
+			try {
+				Path installation = chooser.getSelectedFile().toPath();
+				languageServerProfile.selectInstallation(installation);
+				startLanguageServer(languageServerProfile.command(
+						installation, showcaseWorkspace()));
+			} catch (RuntimeException | java.io.IOException failure) { showLanguageServerFailure(failure); }
+		}
+
+		private void showLanguageServerFailure(Throwable failure) {
+			SwingUtilities.invokeLater(() -> {
+				lspStatus.setText("Core diagnostics active · LSP failed: " + failure.getMessage());
+				showLanguageServerActions(true);
+			});
+		}
+
+		private void showLanguageServerActions(boolean visible) {
+			installLspButton.setVisible(visible
+					&& languageServerProfile.supportsManagedInstallation());
+			selectLspButton.setVisible(visible
+					&& languageServerProfile.supportsInstallationSelection());
+		}
+
+		private static Path showcaseWorkspace() {
+			Path directory = Path.of("").toAbsolutePath().normalize();
+			for (int depth = 0; directory != null && depth < 8;
+					depth++, directory = directory.getParent()) {
+				if (Files.isRegularFile(directory.resolve("pom.xml"))
+						&& Files.isRegularFile(directory.resolve("glswing-examples/pom.xml")))
+					return directory;
+			}
+			return Path.of("").toAbsolutePath().normalize();
+		}
+
+		void closeLanguageServer() {
+			languageServerClosing = true;
+			for (GLCodeEditor editor : editorsByUri.values())
+				editor.clearDiagnosticProvider();
+			GLLanguageServer current = languageServer;
+			if (current == null) return;
+			languageServer = null;
+			Thread closer = new Thread(current::close, "glswing-showcase-lsp-close");
+			closer.setDaemon(true);
+			closer.start();
 		}
 
 		private void buildHeaderLayer() {

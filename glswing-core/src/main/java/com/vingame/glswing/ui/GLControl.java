@@ -20,6 +20,7 @@ public abstract class GLControl extends GLContainer implements GLKeyTarget {
 	private boolean mousePressed;
 	private boolean keyboardPressed;
 	private boolean focused;
+	private String toolTipText;
 	private GLControlState state = GLControlState.NORMAL;
 
 	protected GLControl() {
@@ -67,6 +68,15 @@ public abstract class GLControl extends GLContainer implements GLKeyTarget {
 		return state;
 	}
 
+	public final String getToolTipText() { return toolTipText; }
+	public final void setToolTipText(String text) {
+		toolTipText = text == null || text.isBlank() ? null : text;
+	}
+	/** Returns the tooltip at the current pointer position, or {@code null}. */
+	protected String toolTipTextAt(GLMouseEvent event) { return toolTipText; }
+	/** Optional tooltip text color; {@code null} uses the active theme. */
+	protected java.awt.Color toolTipTextColorAt(GLMouseEvent event) { return null; }
+
 	@Override
 	public final boolean isFocusTraversable() {
 		return enabled && focusable && isVisible();
@@ -77,6 +87,8 @@ public abstract class GLControl extends GLContainer implements GLKeyTarget {
 		hovered = true;
 		updateState();
 		controlMouseEntered(event);
+		GLToolTipManager.hover(this, event, toolTipTextAt(event),
+				toolTipTextColorAt(event));
 	}
 
 	@Override
@@ -84,18 +96,22 @@ public abstract class GLControl extends GLContainer implements GLKeyTarget {
 		hovered = false;
 		updateState();
 		controlMouseExited(event);
+		GLToolTipManager.leave(this);
 	}
 
 	@Override
 	public final void mouseMoved(GLMouseEvent event) {
 		controlMouseMoved(event);
+		GLToolTipManager.hover(this, event, toolTipTextAt(event),
+				toolTipTextColorAt(event));
 	}
 
 	@Override
 	public final void mousePressed(GLMouseEvent event) {
 		if (enabled && event.getButton() == MouseEvent.BUTTON1) {
 			mousePressed = true;
-			requestGLFocus(this);
+			if (isFocusTraversable())
+				requestGLFocus(this);
 			updateState();
 		}
 		controlMousePressed(event);

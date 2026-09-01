@@ -56,7 +56,7 @@ public record GLTabbedPaneStyle(GLFontSpec font, Color background,
 				values.getFloat("tabbedPane.tabGap", 2),
 				values.getFloat("tabbedPane.tabHorizontalPadding", 12),
 				values.getInsets("tabbedPane.contentPadding",
-						new GLInsets(8, 8, 8, 8)));
+						new GLInsets(0, 0, 0, 0)));
 	}
 
 	private static boolean nonNegative(float value) {

@@ -71,6 +71,11 @@ final class MavenSmokeTest {
 	}
 
 	@Test
+	void codeEditor() {
+		GLCodeEditorSelfTest.main(NO_ARGS);
+	}
+
+	@Test
 	void sliderGroup() {
 		GLSliderGroupSelfTest.main(NO_ARGS);
 	}

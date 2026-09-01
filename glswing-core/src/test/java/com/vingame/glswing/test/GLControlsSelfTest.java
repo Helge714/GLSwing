@@ -128,12 +128,12 @@ public final class GLControlsSelfTest {
 		subtree.addGL(first);
 		subtree.addGL(second);
 		panel.addGL(subtree);
-		pressTab(panel, 0);
-		check(first.isFocused(), "Tab did not focus the first control");
-		pressTab(panel, 0);
-		check(second.isFocused(), "Tab did not follow component-tree order");
-		pressTab(panel, InputEvent.SHIFT_DOWN_MASK);
-		check(first.isFocused(), "Shift+Tab did not traverse backwards");
+		pressTab(panel, InputEvent.CTRL_DOWN_MASK);
+		check(first.isFocused(), "Ctrl+Tab did not focus the first control");
+		pressTab(panel, InputEvent.CTRL_DOWN_MASK);
+		check(second.isFocused(), "Ctrl+Tab did not follow component-tree order");
+		pressTab(panel, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK);
+		check(first.isFocused(), "Ctrl+Shift+Tab did not traverse backwards");
 		subtree.setVisible(false);
 		check(!first.isFocused(), "Hidden subtree retained keyboard focus");
 	}

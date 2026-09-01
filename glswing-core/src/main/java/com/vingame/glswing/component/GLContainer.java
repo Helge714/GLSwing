@@ -540,6 +540,12 @@ public abstract class GLContainer implements GLParent, GLMouseTarget {
 	}
 
 	@Override
+	public final GLKeyTarget getGLFocusOwner() {
+		GLParent parent = glParent;
+		return parent == null ? null : parent.getGLFocusOwner();
+	}
+
+	@Override
 	public final void clearGLFocus(GLContainer subtree) {
 		GLParent parent = glParent;
 		if (parent != null)

@@ -1,6 +1,7 @@
 package com.vingame.glswing.ui;
 
 import java.awt.Color;
+import java.awt.EventQueue;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.MouseEvent;
@@ -18,6 +19,7 @@ import com.vingame.glswing.rendering.GLStroke;
 
 /** One selectable popup-menu row, optionally owning a nested submenu. */
 public class GLMenuItem extends GLControl {
+	@Override public boolean preservesKeyboardFocusOnPress() { return true; }
 
 	private final CopyOnWriteArrayList<ActionListener> actionListeners =
 			new CopyOnWriteArrayList<>();
@@ -37,6 +39,7 @@ public class GLMenuItem extends GLControl {
 	private GLPopupMenu subMenu;
 	private GLIcon icon;
 	private GLIcon disabledIcon;
+	private boolean keyboardSelected;
 
 	public GLMenuItem(String text) {
 		super(false);
@@ -391,12 +394,17 @@ public class GLMenuItem extends GLControl {
 	}
 
 	private void activate() {
+		boolean popupAction = ownerMenu != null && ownerMenu.isShowing();
 		if (ownerMenu != null)
-			ownerMenu.closeSession();
+			ownerMenu.closeSessionAfterAction();
 		ActionEvent event = new ActionEvent(this, ActionEvent.ACTION_PERFORMED,
 				actionCommand, System.currentTimeMillis(), 0);
-		for (ActionListener listener : actionListeners)
-			listener.actionPerformed(event);
+		Runnable notify = () -> {
+			for (ActionListener listener : actionListeners)
+				listener.actionPerformed(event);
+		};
+		if (popupAction) EventQueue.invokeLater(notify);
+		else notify.run();
 	}
 
 	private void updatePresentation() {
@@ -419,14 +427,20 @@ public class GLMenuItem extends GLControl {
 		case NORMAL, DISABLED -> style.hoverBackground();
 		};
 		backgroundParameters.setColor(background)
-				.setOpacity(state == GLControlState.NORMAL
-						|| state == GLControlState.DISABLED ? 0 : 1);
+				.setOpacity(!keyboardSelected && (state == GLControlState.NORMAL
+						|| state == GLControlState.DISABLED) ? 0 : 1);
 		textParameters.setColor(state == GLControlState.DISABLED
 				? style.disabledTextColor() : style.textColor());
 		secondaryParameters.setColor(state == GLControlState.DISABLED
 				? style.disabledTextColor()
 				: subMenu == null ? style.acceleratorColor() : style.arrowColor());
 		repaintGL();
+	}
+
+	final void setKeyboardSelected(boolean selected) {
+		if (keyboardSelected == selected) return;
+		keyboardSelected = selected;
+		updateColors();
 	}
 
 	private void drawBackground(GLContext2D context, float width, float height) {

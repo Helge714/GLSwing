@@ -6,6 +6,7 @@
 - [Wrapping, tabs, and scrolling](#wrapping-tabs-and-scrolling)
 - [Alignment](#alignment)
 - [Character formatting](#character-formatting)
+- [Code editing](#code-editing)
 - [Editing history](#editing-history)
 
 ## Choosing a control
@@ -122,10 +123,262 @@ and italic attributes. `snapshot()` and `restore(...)` preserve text and
 formatting together; completed focus sessions therefore also restore both
 through the enclosing history.
 
+The default input map assigns `Ctrl/Cmd+B` and `Ctrl/Cmd+I` to bold and italic.
+Override `text.toggle-bold` and `text.toggle-italic` in an external `.glinput`
+file to change them.
+
 All built-in context-menu labels use `GLUiKeys` and GLSwing's resource bundles.
 Changing the host `GLLocalizer` refreshes existing menus. Applications can
 override individual labels or supply their own localized bundle without
 rebuilding the editor menu.
+
+## Code editing
+
+`GLCodeEditor` specializes the multiline editor for source text. It uses a
+monospaced font, disables soft wrapping, displays line numbers, continues the
+current indentation on Enter, adds one indentation level after an opening
+brace, and inserts matching brackets and quotes around the caret.
+Typing a closing bracket or quote when the same automatically generated
+character is already at the caret advances over it instead of inserting a
+duplicate. Pressing Enter between a generated `{}` pair expands it into a
+three-line block: the caret is placed on the indented inner line and the closing
+brace is aligned with the line containing the opening brace.
+
+Syntax highlighting is transient presentation data: lexer tokens never modify
+the text or the persistent rich-text runs in `GLTextDocument`. Select a built-in
+lexer with `GLCodeLanguages.JAVA` or `GLCodeLanguages.GLSL`, or implement
+`GLCodeLanguage` for an application language.
+
+```java
+GLCodeEditor editor = new GLCodeEditor(source);
+editor.setLanguage(GLCodeLanguages.GLSL);
+editor.setIndentationSize(4);
+```
+
+The code editor replaces the rich-text context menu with code-specific
+**Format code**, **Comment**, and **Uncomment** commands. A selection expands to
+all touched logical lines. Without a selection, formatting processes the
+complete document, while commenting and uncommenting affect the caret's logical
+line. The corresponding API methods are `formatCode()`,
+`commentSelection()`, and `uncommentSelection()`. Each command is recorded as
+one document-level undo/redo operation. All ordinary selection, scrolling,
+Unicode navigation, focus-session history, and document APIs remain available.
+
+A double-click selects the Unicode word below the pointer in both `GLTextArea`
+and `GLCodeEditor`.
+
+Formatting normalizes indentation and common lexical spacing such as control
+statement parentheses, commas, and the space before an opening block brace.
+Quoted strings and trailing line comments are preserved. Syntax colors are
+read from the active theme's `codeEditor.keyword`, `codeEditor.string`,
+`codeEditor.number`, `codeEditor.comment`, and `codeEditor.type` values; the
+built-in light and dark themes provide separate palettes.
+
+`GLCodeLanguage.diagnose(String)` supplies optional language-specific
+diagnostics. `GLCodeEditor` runs this check 300 milliseconds after the most
+recent document change, exposes the immutable result through `getDiagnostics()`,
+and draws error or warning ranges with a wavy underline. Hovering an underlined
+range displays its message through the standard tooltip overlay. The built-in
+Java and GLSL implementations perform inexpensive structural checks for
+unbalanced delimiters and unclosed literals or block comments; compiler-level
+name and type analysis remains the responsibility of an external language
+implementation or tooling adapter.
+
+The built-in Java language also reports conservative, unambiguous cases:
+missing semicolons on recognizable statements, a value returned from a
+clearly declared `void` method, an empty return in a clearly declared non-void
+method, a simple branch-free non-void method without a value return,
+`continue` when no loop exists, `break` when no loop or switch exists, and an
+`if` statement without a parenthesized condition. It deliberately does not
+attempt type resolution or complete control-flow analysis. Applications that
+need compiler-equivalent results should use the optional language-server
+integration.
+
+Built-in profiles are available as `GLCodeLanguages.JAVA`, `C`, `CPP`,
+`CSHARP`, `GLSL`, `JAVASCRIPT`, `TYPESCRIPT`, `PYTHON`, `RUBY`, `JSON`,
+`HTML`, `XML`, and `CSS`.
+Each profile supplies its common keywords, comment and literal conventions,
+structural delimiter checks, and only those additional lightweight rules that
+are unambiguous for that language. For example, JavaScript and TypeScript do
+not report omitted semicolons because automatic semicolon insertion is part of
+those languages; Python checks block colons and mixed indentation; Ruby checks
+`end`-delimited blocks; and JSON rejects single-quoted strings and trailing
+commas. These profiles are editing aids rather than replacements for their
+respective compilers or interpreters.
+
+HTML and XML validate nested, closing, self-closing, and unclosed tags while
+ignoring markup comments; HTML additionally recognizes standard void elements.
+CSS validates declaration colons and definite missing separators between
+consecutive declarations. Java also rejects a bare identifier such as `test`
+as a standalone line because it is neither a declaration nor a legal statement.
+Repeated semicolons outside parentheses are diagnosed as redundant empty
+statements in Java, C, C++, C#, GLSL, JavaScript, and TypeScript. They are
+warnings because these languages permit empty statements. CSS reports the same
+pattern as an error. Semicolons in constructs such as `for (;;)` and semicolons
+inside comments or string literals are ignored.
+Determining whether otherwise valid statements occur in a legal class, method,
+initializer, lambda, or nested-type scope requires a real grammar and remains a
+language-server responsibility.
+
+### Language Server Protocol
+
+The optional `glswing-lsp` artifact connects a code editor to language servers
+that use standard input and output. Profiles keep discovery, installation,
+initialization options, language IDs, file extensions, and virtual-source
+handling outside the editor:
+
+```java
+Path workspace = Path.of("/projects/example");
+Path sourceFile = workspace.resolve("src/main/java/example/App.java");
+GLLanguageServerRegistry registry = GLLanguageServerRegistry.standard();
+GLLanguageServerProfile profile = registry.forPath(sourceFile).orElseThrow();
+Path installation = profile.findInstallation().orElseThrow();
+GLLanguageServer server = profile.start(installation, workspace);
+
+GLCodeEditor editor = new GLCodeEditor(source);
+editor.setLanguage(GLCodeLanguages.JAVA);
+editor.setDiagnosticProvider(server, sourceFile.toUri());
+
+// When the editor no longer represents this document:
+editor.clearDiagnosticProvider();
+
+// When the application no longer needs the shared server:
+server.close();
+```
+
+The standard registry includes `GLJdtLanguageServerProfile` for Java. An
+application can implement `GLLanguageServerProfile` and call `register(...)` to
+add clangd, Roslyn, Pyright, TypeScript Language Server, or another LSP
+implementation. `forLanguage(...)` and `forPath(...)` perform ordered profile
+selection. Completion, hover, signatures, diagnostics, definitions, and editor
+tabs remain independent of the selected server.
+
+A profile may override `loadSource(...)` for non-file definition URIs. The JDT
+profile uses this hook for `jdt:` class-file sources; ordinary profiles inherit
+the default `file:` loader. Managed installation is optional and advertised by
+`supportsManagedInstallation()`.
+
+`GLLanguageServer` starts the process, performs the LSP initialize handshake,
+and sends `textDocument/didOpen`, full-document `didChange`, and `didClose`
+notifications. Published UTF-16 LSP ranges are converted to editor offsets.
+Server diagnostics are merged with the built-in lightweight diagnostics, and
+responses carrying an obsolete document version are discarded. One server may
+be shared by multiple editors, but each document URI may be open only once on
+that server. Clearing an editor connection closes only its document session;
+closing the server sends the LSP shutdown and exit sequence and releases the
+process.
+
+The code editor displays errors and warnings in an overview ruler beside the
+vertical scrollbar. Marker positions represent source lines across the complete
+document rather than only the visible viewport. Hovering a marker shows the
+normal diagnostic tooltip; clicking the ruler moves the caret to the nearest
+diagnostic and scrolls it into view. Themes can customize
+`codeEditor.overviewRulerWidth`, `codeEditor.overviewRulerGap`,
+`codeEditor.overviewMarkerHeight`, and `codeEditor.overviewRulerBackground`.
+
+When the pointer rests over source text, `GLCodeEditor` requests
+`textDocument/hover` after a short debounce. Plain-text and Markdown hover
+responses are normalized and displayed through the standard tooltip overlay;
+multiline signatures and documentation are supported. Diagnostic messages take
+precedence when the pointer is over an error range. Moving the pointer, editing
+the document, disconnecting the provider, or leaving the editor cancels or
+invalidates the pending request, so a stale response cannot replace current
+information. Providers that implement only diagnostics inherit an empty hover
+implementation and remain source-compatible.
+
+The same document session provides asynchronous code completion through
+`textDocument/completion`. Press `Ctrl/Cmd+Space` to request proposals at the
+caret, or type `.` to invoke member completion automatically. The result opens
+as a theme-aware GLSwing popup: use Up and Down to select an entry, Enter or Tab
+to insert it, and Escape to dismiss the popup. Mouse selection is also
+supported. Responses are discarded if the document version or caret position
+has changed while the request was running.
+
+When an explicit `Ctrl/Cmd+Space` request produces exactly one proposal, the
+editor inserts it immediately. Automatic completion after `.` never inserts a
+proposal without confirmation. Call `setInsertSingleCompletion(false)` when an
+application should display the popup even for one manually requested result.
+
+Applications that provide their own tooling can implement
+`GLCodeDiagnosticProvider.Session.complete(...)` and return
+`GLCodeCompletion` values. Each value carries its visible label, optional
+detail text, primary replacement, caret offset, and optional additional
+`GLCodeTextEdit` operations. Primary and additional edits are applied as one
+transaction, so an inserted symbol and its automatically added import are
+reverted by one Undo command. Providers that implement only diagnostics retain
+the default empty completion implementation.
+
+The LSP adapter honors `TextEdit` and `InsertReplaceEdit` ranges as well as
+`additionalTextEdits`. LSP snippets are converted into ordinary document text;
+the caret is placed at the first numbered tab stop, or at `$0`/the insertion
+end when no numbered stop exists. GLSwing does not expose an interactive
+multi-tab-stop snippet session yet, so subsequent placeholders are inserted
+using their default text without Tab navigation.
+
+When a provider implements `Session.signatureHelp(...)`, the code editor
+requests callable signatures after `(` and refreshes them after `,`. The popup
+lists available overloads, visibly delimits the active parameter, and includes
+the provider's concise signature documentation. Typing `)` closes the popup.
+The LSP adapter uses `textDocument/signatureHelp` for this feature.
+
+The code editor resolves definitions through
+`GLCodeDiagnosticProvider.Session.definitions(...)`. Press `F3`, choose **Go
+to definition** from the context menu, or Ctrl-click a symbol. Locations in
+the current document move the caret directly. For another URI, configure a
+`GLCodeNavigationHandler` with `setNavigationHandler(...)`; the application
+can then activate an existing editor, open a tab, or delegate navigation to an
+external tool. Multiple targets are presented in a selection popup. The LSP
+adapter maps both `Location` and `LocationLink` definition responses.
+
+The code-editor context menu also provides **Organize imports**. It requests
+the standard `source.organizeImports` code action from the active provider;
+JDT LS can add resolvable missing imports, remove unused imports, and sort the
+result according to its project settings. The API equivalent is
+`organizeImports()` or the default `Ctrl+Shift+O` shortcut. All returned edits
+form one undoable transaction. With no
+connected provider, or when the provider offers no such source action, the
+command leaves the document unchanged.
+
+The language-server executable is not bundled. Install and configure the
+server appropriate for the selected language, and pass its command-line
+arguments as separate list entries. A real file URI should be used whenever a
+server resolves imports, project settings, or related files from the workspace.
+
+The Code Editor tab in `GuiShowcaseDemo` displays the Core and LSP connection
+status. It runs without an external server by default. If JDT LS is missing,
+the tab offers **Install Java LSP** and **Select installation** actions. The
+installer downloads the pinned Eclipse JDT LS milestone, obtains and verifies
+its published SHA-256 checksum, extracts it into the user's application-data
+directory, and stores the selected installation in user preferences. Later
+showcase runs find and start it automatically.
+
+The separate `GUI Showcase Demo with Java LSP` Eclipse launch configuration
+uses this managed path and therefore needs no manually edited server path. A
+custom server command can still be supplied after `--lsp` as program arguments:
+
+```bash
+java com.vingame.glswing.demo.GuiShowcaseDemo --lsp jdtls
+```
+
+For a server executable that needs no additional arguments, the JVM property
+`-Dglswing.demo.lsp.command=/path/to/server` is also supported. Explicit
+commands take precedence over managed discovery. The sample contains unresolved
+Java symbols intentionally: the built-in profile accepts their syntax, while a
+connected Java language server can report their semantic errors.
+
+All controls inherit the general `setToolTipText(String)` API. Tooltips appear
+after a short hover delay, use the active theme's popup typography and colors,
+remain inside the host surface, and do not participate in mouse picking.
+
+The default code commands are `Ctrl/Cmd+Shift+F` for formatting,
+`Ctrl/Cmd+Shift+C` for commenting, and `Ctrl/Cmd+Alt+C` for uncommenting. Their
+semantic input-map names are `code.format`, `code.comment`,
+`code.uncomment`, and `code.organizeImports`; completion uses `code.complete`. Menu accelerator labels
+reflect these bindings. Override any of them in the active `.glinput` file.
+
+Inside a text area, `Tab` inserts a tab character. Focus traversal uses
+`Ctrl/Cmd+Tab` and `Ctrl/Cmd+Shift+Tab` by default; these semantic bindings are
+configured as `focus.next` and `focus.previous` in the input map.
 
 ## Editing history
 

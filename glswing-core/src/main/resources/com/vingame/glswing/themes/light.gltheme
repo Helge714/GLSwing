@@ -10,6 +10,12 @@ palette.accent=rgba(66, 120, 199, 255)
 palette.selection=rgba(66, 120, 199, 77)
 palette.invalid=rgba(198, 69, 69, 255)
 
+codeEditor.keyword=rgba(128, 35, 145, 255)
+codeEditor.string=rgba(38, 112, 55, 255)
+codeEditor.number=rgba(154, 86, 24, 255)
+codeEditor.comment=rgba(82, 112, 72, 255)
+codeEditor.type=rgba(20, 112, 128, 255)
+
 state.normal=rgba(225, 228, 233, 255)
 state.hover=rgba(210, 216, 226, 255)
 state.disabled=rgba(236, 238, 241, 255)

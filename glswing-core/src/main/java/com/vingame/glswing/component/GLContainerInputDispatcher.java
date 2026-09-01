@@ -159,6 +159,11 @@ final class GLContainerInputDispatcher {
 		cancelHoverRead();
 		clickCandidate = GLPickResult.none();
 		host.requestFocusInWindow();
+		if (host.isPickingDirty() || !host.isLatestPickSnapshotReady()) {
+			pendingSettledPressEvent = event;
+			host.repaintColorOnly();
+			return;
+		}
 		pressPicksPending++;
 		readPointerPick(event, result -> {
 			pressPicksPending--;
@@ -213,8 +218,9 @@ final class GLContainerInputDispatcher {
 	private void dispatchMousePressed(MouseEvent event, GLPickResult result) {
 		result = attached(result);
 		GLMouseTarget hitTarget = result.getTarget();
-		host.requestGLFocus(hitTarget instanceof GLKeyTarget keyTarget
-				&& keyTarget.isFocusTraversable() ? keyTarget : null);
+		if (!preservesKeyboardFocus(hitTarget))
+			host.requestGLFocus(hitTarget instanceof GLKeyTarget keyTarget
+					&& keyTarget.isFocusTraversable() ? keyTarget : null);
 		updateHover(event, result, false);
 		lastDragX = event.getX();
 		lastDragY = event.getY();
@@ -222,6 +228,16 @@ final class GLContainerInputDispatcher {
 				: GLPickResult.none();
 		if (capturedPick.hasTarget())
 			host.repaintColorOnly();
+	}
+
+	private static boolean preservesKeyboardFocus(GLMouseTarget target) {
+		for (GLMouseTarget current = target; current != null;) {
+			if (current.preservesKeyboardFocusOnPress()) return true;
+			if (!(current instanceof GLContainer child)) return false;
+			GLParent parent = child.getGLParent();
+			current = parent instanceof GLMouseTarget mouseTarget ? mouseTarget : null;
+		}
+		return false;
 	}
 
 	private GLPickResult dispatchPress(MouseEvent event, GLPickResult initial) {
@@ -416,8 +432,13 @@ final class GLContainerInputDispatcher {
 			hoverReadScheduled = false;
 			return;
 		}
-		pendingHoverEvent = null;
 		boolean sendMoved = pendingHoverMoved;
+		if (host.isPickingDirty() || !host.isLatestPickSnapshotReady()) {
+			hoverReadScheduled = false;
+			host.repaintColorOnly();
+			return;
+		}
+		pendingHoverEvent = null;
 		pendingHoverMoved = false;
 		hoverReadScheduled = true;
 		long generation = hoverReadGeneration;
@@ -459,6 +480,15 @@ final class GLContainerInputDispatcher {
 			javax.swing.SwingUtilities.invokeLater(() -> {
 				if (host.isDisplayable())
 					dispatchSettledMousePressed(press);
+			});
+		}
+		if (pendingHoverEvent != null && !hoverReadScheduled
+				&& !host.isPickingDirty() && host.isLatestPickSnapshotReady()) {
+			hoverReadScheduled = true;
+			javax.swing.SwingUtilities.invokeLater(() -> {
+				hoverReadScheduled = false;
+				if (pendingHoverEvent != null && host.isDisplayable())
+					startHoverRead();
 			});
 		}
 		MouseEvent event = postWheelHoverEvent;

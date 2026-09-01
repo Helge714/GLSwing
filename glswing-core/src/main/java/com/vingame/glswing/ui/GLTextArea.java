@@ -27,6 +27,7 @@ import com.vingame.glswing.input.GLPointerCursor;
 import com.vingame.glswing.layout.GLInsets;
 import com.vingame.glswing.layout.GLSize;
 import com.vingame.glswing.rendering.GLContext2D;
+import com.vingame.glswing.rendering.GLCornerRadii;
 import com.vingame.glswing.rendering.GLFont;
 import com.vingame.glswing.rendering.GLStroke;
 
@@ -63,14 +64,22 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 	private Float verticalNavigationX;
 	private GLPointerController pointerController = GLPointerController.NONE;
 	private GLTextEditorStyle localStyle;
+	private GLTextColorProvider textColorProvider;
+	private List<Row> cachedRows;
+	private float cachedRowsWidth = Float.NaN;
+	private float cachedMaximumRowWidth;
+	private GLCornerRadii containerRadii;
+	private boolean containerBorderVisible = true;
 
 	public GLTextArea() { this(""); }
 	public GLTextArea(String text) { this(new GLTextDocument(text)); }
 	public GLTextArea(GLTextDocument document) {
 		super(true);
+		if (document == null) throw new IllegalArgumentException("Document must not be null");
 		caretTimer = new Timer(500, event -> { caretVisible = !caretVisible; invalidateRecording(); });
 		caretTimer.setRepeats(true);
-		setDocument(document);
+		this.document = document;
+		document.addDocumentListener(documentListener);
 		editBaseline = document.snapshot();
 		leftItem = alignmentSubMenu.addItem("", event -> changeTextAlignment(GLTextAlignment.LEFT));
 		centerItem = alignmentSubMenu.addItem("", event -> changeTextAlignment(GLTextAlignment.CENTER));
@@ -91,6 +100,7 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 		if (document != null) document.removeDocumentListener(documentListener);
 		document = value;
 		document.addDocumentListener(documentListener);
+		invalidateRowLayout();
 		caret = anchor = Math.min(caret, document.length());
 		editingHistory.reset();
 		contentChanged();
@@ -101,14 +111,24 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 	public final void setCaretPosition(int value) { moveCaret(value, false); }
 	public final int getSelectionStart() { return Math.min(anchor, caret); }
 	public final int getSelectionEnd() { return Math.max(anchor, caret); }
+	public final void select(int start, int end) {
+		if (start < 0 || end < start || end > document.length())
+			throw new IndexOutOfBoundsException("Text selection: " + start + ".." + end);
+		anchor = start; caret = end; contentChanged();
+	}
 	public final void selectAll() { anchor = 0; caret = document.length(); contentChanged(); }
 	public final boolean isLineWrap() { return lineWrap; }
-	public final void setLineWrap(boolean value) { if (lineWrap != value) { lineWrap = value; scrollX = 0; contentChanged(); } }
+	public final void setLineWrap(boolean value) { if (lineWrap != value) { lineWrap = value; scrollX = 0; invalidateRowLayout(); contentChanged(); } }
 	public final int getTabSize() { return tabSize; }
-	public final void setTabSize(int value) { if (value < 1) throw new IllegalArgumentException("Tab size must be positive"); tabSize = value; contentChanged(); }
+	public final void setTabSize(int value) { if (value < 1) throw new IllegalArgumentException("Tab size must be positive"); tabSize = value; invalidateRowLayout(); contentChanged(); }
 	public final boolean isEditable() { return editable; }
 	public final void setEditable(boolean value) { editable = value; }
 	public final GLTextAlignment getTextAlignment() { return textAlignment; }
+	public final GLTextColorProvider getTextColorProvider() { return textColorProvider; }
+	public final void setTextColorProvider(GLTextColorProvider value) {
+		textColorProvider = value;
+		invalidateRecording();
+	}
 	public final void setTextAlignment(GLTextAlignment value) {
 		if (value == null) throw new IllegalArgumentException("Text alignment must not be null");
 		if (textAlignment != value) { textAlignment = value; contentChanged(); }
@@ -123,7 +143,7 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 					() -> setTextAlignment(before), () -> setTextAlignment(value));
 	}
 	/** The menu opened by a secondary-button press. Applications may customize it. */
-	public final GLPopupMenu getContextMenu() { return alignmentMenu; }
+	public GLPopupMenu getContextMenu() { updateContextMenuText(); return alignmentMenu; }
 	/** Whether a completed focus session is recorded in the enclosing history. */
 	public final boolean isHistoryEnabled() { return historyEnabled; }
 	public final void setHistoryEnabled(boolean value) { historyEnabled = value; }
@@ -148,19 +168,39 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 				&& !editingHistory.canRedo()) return false;
 		return editingHistory.handleKeyPressed(event, inputMap);
 	}
-	public final void setGLStyle(GLTextEditorStyle style) { if (style == null) throw new IllegalArgumentException("Style must not be null"); localStyle = style; contentChanged(); }
-	public final void clearGLStyle() { localStyle = null; contentChanged(); }
+	public final void setGLStyle(GLTextEditorStyle style) { if (style == null) throw new IllegalArgumentException("Style must not be null"); localStyle = style; invalidateRowLayout(); contentChanged(); }
+	public final void clearGLStyle() { localStyle = null; invalidateRowLayout(); contentChanged(); }
 	public final GLTextEditorStyle getGLStyle() { return localStyle != null ? localStyle : getGLTheme().textEditorStyle(); }
+	/** Overrides the outer editor shape when it is visually attached to a container. */
+	public final void setContainerShape(GLCornerRadii radii, boolean borderVisible) {
+		if (radii == null)
+			throw new IllegalArgumentException("Editor corner radii must not be null");
+		if (radii.equals(containerRadii) && containerBorderVisible == borderVisible) return;
+		containerRadii = radii;
+		containerBorderVisible = borderVisible;
+		invalidateRecording();
+	}
+	protected final GLCornerRadii containerRadii() {
+		return containerRadii == null ? GLCornerRadii.all(getGLStyle().cornerRadius())
+				: containerRadii;
+	}
 
 	@Override protected void record(GLContext2D context) {
 		GLTextEditorStyle style = getGLStyle();
 		float width = getWidth(), height = getHeight();
 		if (width <= 0 || height <= 0) return;
 		Color border = isFocused() ? style.focusedBorderColor() : style.borderColor();
-		context.fillAndDrawUIRoundRect(0, 0, width, height, style.cornerRadius(),
-				style.borderWidth(), style.backgroundColor(), border, GLStroke.WidthSpace.SCREEN);
+		GLCornerRadii radii = containerRadii();
+		if (containerBorderVisible && style.borderWidth() > 0)
+			context.fillAndDrawUIRoundRect(0, 0, width, height, radii,
+					style.borderWidth(), style.backgroundColor(), border,
+					GLStroke.WidthSpace.SCREEN);
+		else context.fillUIRoundRect(0, 0, width, height, radii,
+				style.backgroundColor());
 		GLInsets padding = style.padding();
-		context.beginClip(padding.left(), padding.top(),
+		drawLeadingDecoration(context, font(), padding);
+		float leading = leadingTextInset();
+		context.beginClip(padding.left() + leading, padding.top(),
 				textViewportWidth(), textViewportHeight());
 		GLFont font = font();
 		List<Row> rows = rows(font);
@@ -171,21 +211,28 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 		for (int index = first; index < last; index++) {
 			Row row = rows.get(index);
 			float available = textViewportWidth();
-			float x = padding.left() - scrollX + rowOffset(font, row, available);
+			float x = padding.left() + leading - scrollX + rowOffset(font, row, available);
 			float top = padding.top() + index * lineHeight - scrollY;
 			float baseline = top + font.getAscent();
 			if (isFocused())
 				drawSelection(context, font, row, x, top, lineHeight,
 						style.selectionColor());
 			drawRow(context, font, row, x, baseline, available, style);
+			drawTextDecorations(context, font, row.start, row.end, x, baseline,
+					available);
 			if (isFocused() && caretVisible && index == caretRow) {
 				float caretX = x + rowAdvance(font, row, caret, available);
 				context.fillRect(caretX, top, 1, lineHeight, style.caretColor());
 			}
 		}
 		context.endClip();
+		drawTrailingDecoration(context, trailingDecorationX(),
+				getGLStyle().padding().top(), trailingDecorationWidth(),
+				textViewportHeight());
 		drawVerticalScrollBar(context, rows.size(), lineHeight);
 	}
+	protected void drawTextDecorations(GLContext2D context, GLFont font,
+			int rowStart, int rowEnd, float x, float baseline, float available) { }
 
 	private void drawSelection(GLContext2D context, GLFont font, Row row,
 			float x, float top, float height, Color color) {
@@ -201,11 +248,19 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 	@Override protected void controlMousePressed(GLMouseEvent event) {
 		if (event.getButton() == MouseEvent.BUTTON3) {
 			GLParent host = popupHost();
-			if (host != null) alignmentMenu.show(host, event.getScreenX(), event.getScreenY());
+			if (host != null) getContextMenu().show(host,
+					event.getScreenX(), event.getScreenY());
 			event.consume();
 			return;
 		}
 		if (event.getButton() != MouseEvent.BUTTON1 || !event.hasLocalPosition()) return;
+		if (trailingDecorationWidth() > 0
+				&& event.getLocalX() >= trailingDecorationX()
+				&& event.getLocalX() < scrollBarX()
+				&& trailingDecorationPressed(event.getLocalY())) {
+			event.consume();
+			return;
+		}
 		if (isVerticalScrollBarVisible() && event.getLocalX() >= scrollBarX()) {
 			beginScrollBarDrag(event.getLocalY());
 			event.consume();
@@ -224,11 +279,15 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 	}
 	@Override protected void controlMouseMoved(GLMouseEvent event) {
 		if (!event.hasLocalPosition()) return;
-		pointerController.setCursor(this, isVerticalScrollBarVisible()
-				&& event.getLocalX() >= scrollBarX()
+		pointerController.setCursor(this, event.getLocalX() >= trailingDecorationX()
 						? GLPointerCursor.DEFAULT : GLPointerCursor.TEXT);
 	}
 	@Override protected void controlMouseReleased(GLMouseEvent event) { selecting = false; draggingScrollBar = false; }
+	@Override protected void controlMouseClicked(GLMouseEvent event) {
+		if (event.getButton() == MouseEvent.BUTTON1 && event.getClickCount() >= 2
+				&& event.hasLocalPosition())
+			selectWordAt(positionAt(event.getLocalX(), event.getLocalY()));
+	}
 	@Override protected void controlMouseEntered(GLMouseEvent event) {
 		pointerController = event.getPointerController();
 		controlMouseMoved(event);
@@ -250,6 +309,8 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 		boolean extend = getGLInputMap().hasModifiers(GLInputActions.TEXT_EXTEND_SELECTION, event.getModifiersEx());
 		boolean command = getGLInputMap().hasModifiers(GLInputActions.TEXT_COMMAND, event.getModifiersEx());
 		if (GLHistoryManager.isHistoryShortcut(event.getOriginalEvent(), getGLInputMap())) editingHistory.handleKeyPressed(event.getOriginalEvent(), getGLInputMap());
+		else if (getGLInputMap().matches(GLInputActions.TEXT_TOGGLE_BOLD, event)) toggleCharacterStyle(true);
+		else if (getGLInputMap().matches(GLInputActions.TEXT_TOGGLE_ITALIC, event)) toggleCharacterStyle(false);
 		else if (getGLInputMap().matches(GLInputActions.TEXT_SELECT_ALL, event)) selectAll();
 		else if (getGLInputMap().matches(GLInputActions.TEXT_COPY, event)) copy();
 		else if (getGLInputMap().matches(GLInputActions.TEXT_CUT, event)) { if (editable) { copy(); replaceSelection(""); } }
@@ -293,11 +354,11 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 		invalidateRecording();
 	}
 	@Override protected void detached(GLParent formerParent) { caretTimer.stop(); clearCursor(); super.detached(formerParent); }
-	@Override protected void resized(float width, float height) { clampScroll(); contentChanged(); }
-	@Override protected void themeChanged() { if (localStyle == null) contentChanged(); }
+	@Override protected void resized(float width, float height) { invalidateRowLayout(); clampScroll(); contentChanged(); }
+	@Override protected void themeChanged() { if (localStyle == null) { invalidateRowLayout(); contentChanged(); } }
 	@Override protected void localizerChanged() { updateContextMenuText(); }
 
-	private void replaceSelection(String inserted) {
+	protected final void replaceSelection(String inserted) {
 		int start = getSelectionStart(), end = getSelectionEnd();
 		String removed = document.getText(start, end);
 		if (removed.equals(inserted)) return;
@@ -312,6 +373,39 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 		int afterCaret = caret;
 		GLTextDocument.Snapshot after = document.snapshot();
 		editingHistory.record(inserted.isEmpty() ? "Delete text" : "Insert text",
+				() -> applyEdit(before, beforeCaret, beforeAnchor),
+				() -> applyEdit(after, afterCaret, afterCaret));
+		contentChanged();
+	}
+	protected record TextReplacement(int start, int end, String text) { }
+	/** Applies non-overlapping replacements as one local undo/redo operation. */
+	protected final void replaceTextAtomically(List<TextReplacement> replacements,
+			int nextCaret) {
+		if (replacements == null || replacements.isEmpty()) return;
+		List<TextReplacement> ordered = replacements.stream()
+				.sorted(java.util.Comparator.comparingInt(TextReplacement::start).reversed())
+				.toList();
+		int previousStart = document.length() + 1;
+		for (TextReplacement edit : ordered) {
+			if (edit.text() == null || edit.start() < 0 || edit.end() < edit.start()
+					|| edit.end() > document.length() || edit.end() > previousStart)
+				throw new IllegalArgumentException("Invalid or overlapping text replacements");
+			previousStart = edit.start();
+		}
+		commitEditingSession();
+		GLTextDocument.Snapshot before = document.snapshot();
+		int beforeCaret = caret, beforeAnchor = anchor;
+		applyingHistory = true;
+		try {
+			for (TextReplacement edit : ordered) {
+				document.replace(edit.start(), edit.end(), edit.text());
+				document.setStyle(edit.start(), edit.start() + edit.text().length(), typingStyle);
+			}
+		} finally { applyingHistory = false; }
+		caret = anchor = Math.max(0, Math.min(nextCaret, document.length()));
+		GLTextDocument.Snapshot after = document.snapshot();
+		int afterCaret = caret;
+		editingHistory.record("Apply completion",
 				() -> applyEdit(before, beforeCaret, beforeAnchor),
 				() -> applyEdit(after, afterCaret, afterCaret));
 		contentChanged();
@@ -353,7 +447,7 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 		editBaseline = after;
 		contentChanged();
 	}
-	private void updateContextMenuText() {
+	protected final void updateContextMenuText() {
 		GLLocalizer localizer = getGLLocalizer();
 		alignmentMenuItem.setText(localizer.text(GLUiKeys.TEXT_MENU_ALIGNMENT));
 		formatMenuItem.setText(localizer.text(GLUiKeys.TEXT_MENU_FORMAT));
@@ -363,8 +457,26 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 		justifiedItem.setText(localizer.text(GLUiKeys.TEXT_ALIGN_JUSTIFIED));
 		boldItem.setText(localizer.text(GLUiKeys.TEXT_FORMAT_BOLD));
 		italicItem.setText(localizer.text(GLUiKeys.TEXT_FORMAT_ITALIC));
+		boldItem.setAcceleratorText(acceleratorText(GLInputActions.TEXT_TOGGLE_BOLD));
+		italicItem.setAcceleratorText(acceleratorText(GLInputActions.TEXT_TOGGLE_ITALIC));
 	}
-	private void commitEditingSession() {
+	protected final String acceleratorText(String action) {
+		var bindings = getGLInputMap().getKeyBindings(action);
+		if (bindings.isEmpty()) return "";
+		String shortcut = System.getProperty("os.name", "")
+				.toLowerCase(java.util.Locale.ROOT).contains("mac") ? "Cmd" : "Ctrl";
+		String text = bindings.get(0).toConfigString().replace("shortcut", shortcut);
+		String[] parts = text.split("\\+");
+		StringBuilder result = new StringBuilder();
+		for (String part : parts) {
+			if (!result.isEmpty()) result.append('+');
+			result.append(part.length() == 1 ? part.toUpperCase(java.util.Locale.ROOT)
+					: part.substring(0, 1).toUpperCase(java.util.Locale.ROOT)
+							+ part.substring(1).toLowerCase(java.util.Locale.ROOT));
+		}
+		return result.toString();
+	}
+	protected final void commitEditingSession() {
 		GLTextDocument.Snapshot before = editBaseline;
 		GLTextDocument.Snapshot after = document.snapshot();
 		editBaseline = after;
@@ -413,6 +525,19 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 		int result = words.preceding(Math.max(0, offset));
 		return result == BreakIterator.DONE ? 0 : result;
 	}
+	protected void selectWordAt(int offset) {
+		String text = document.getText();
+		if (text.isEmpty()) return;
+		int probe = Math.min(offset, text.length() - 1);
+		BreakIterator words = BreakIterator.getWordInstance(Locale.getDefault());
+		words.setText(text);
+		int start = words.preceding(probe + 1);
+		int end = words.following(probe);
+		if (start == BreakIterator.DONE) start = 0;
+		if (end == BreakIterator.DONE) end = text.length();
+		if (start < end && Character.isLetterOrDigit(text.codePointAt(start)))
+			select(start, end);
+	}
 	private int nextWord(int offset) {
 		BreakIterator words = BreakIterator.getWordInstance(Locale.getDefault());
 		words.setText(document.getText());
@@ -431,12 +556,12 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 		int result = characters.following(Math.min(offset, document.length()));
 		return result == BreakIterator.DONE ? document.length() : result;
 	}
-	private int positionAt(float localX, float localY) {
+	protected final int positionAt(float localX, float localY) {
 		GLFont font = font(); List<Row> rows = rows(font); if (rows.isEmpty()) return 0;
 		int rowIndex = Math.max(0, Math.min(rows.size() - 1, (int) ((localY - getGLStyle().padding().top() + scrollY) / font.getLineHeight())));
 			Row row = rows.get(rowIndex);
 		float available = textViewportWidth();
-		float target = localX - getGLStyle().padding().left() + scrollX
+		float target = localX - getGLStyle().padding().left() - leadingTextInset() + scrollX
 				- rowOffset(font, row, available);
 		BreakIterator characters = BreakIterator.getCharacterInstance(Locale.getDefault());
 		characters.setText(document.getText());
@@ -459,8 +584,10 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 		return row.end;
 	}
 	private List<Row> rows(GLFont font) {
-		List<Row> result = new ArrayList<>();
 		float available = textViewportWidth();
+		if (cachedRows != null && Float.compare(cachedRowsWidth, available) == 0)
+			return cachedRows;
+		List<Row> result = new ArrayList<>();
 		for (int line = 0; line < document.getLineCount(); line++) {
 			int start = document.getLineStart(line), end = document.getLineEnd(line);
 			if (!lineWrap || start == end) { result.add(new Row(start, end, false)); continue; }
@@ -500,7 +627,20 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 				if (trailingSeparatorWrap && chosen == end)
 					result.add(new Row(end, end, false));
 			}
-		} return result;
+		}
+		cachedRowsWidth = available;
+		cachedRows = List.copyOf(result);
+		cachedMaximumRowWidth = 0;
+		if (!lineWrap)
+			for (Row row : cachedRows)
+				cachedMaximumRowWidth = Math.max(cachedMaximumRowWidth,
+						measureRange(row.start, row.end));
+		return cachedRows;
+	}
+	private void invalidateRowLayout() {
+		cachedRows = null;
+		cachedRowsWidth = Float.NaN;
+		cachedMaximumRowWidth = 0;
 	}
 	private Row currentRow() { List<Row> value = rows(font()); return value.get(rowIndexForCaret(value)); }
 	private int rowIndexForCaret(List<Row> value) {
@@ -531,14 +671,13 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 				rows.size() * font.getLineHeight() - getHeight() + getGLStyle().padding().vertical())));
 		if (lineWrap) scrollX = 0;
 		else {
-			float widest = 0;
-			for (Row row : rows) widest = Math.max(widest,
-					measureRange(row.start, row.end));
 			scrollX = Math.max(0, Math.min(scrollX, Math.max(0,
-					widest - getWidth() + getGLStyle().padding().horizontal())));
+					cachedMaximumRowWidth - getWidth()
+							+ getGLStyle().padding().horizontal())));
 		}
 	}
 	private void documentChanged(GLTextDocument source, GLTextDocument.Change change) {
+		invalidateRowLayout();
 		if (!applyingHistory) {
 			caret = translatedOffset(caret, change);
 			anchor = translatedOffset(anchor, change);
@@ -595,15 +734,26 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 					end = start;
 					while (end < run.end() && document.getText().charAt(end) != ' ') end++;
 				}
-				String part = expand(document.getText(start, end));
+				int colorEnd = end;
+				Color partColor = presentedColor(start, color);
+				for (int offset = start + 1; offset < end; offset++)
+					if (!presentedColor(offset, color).equals(partColor)) {
+						colorEnd = offset;
+						break;
+					}
+				String part = expand(document.getText(start, colorEnd));
 				float partX = x + rowAdvance(font, row, start, available);
 				GLFont partFont = font(run.style());
 				context.drawUITextShadow(partFont, part, partX, baseline,
 						getGLTheme().textShadow("textEditor"));
-				context.drawUIText(partFont, part, partX, baseline, color);
-				start = end;
+				context.drawUIText(partFont, part, partX, baseline, partColor);
+				start = colorEnd;
 			}
 		}
+	}
+	private Color presentedColor(int offset, Color fallback) {
+		return textColorProvider == null ? fallback
+				: textColorProvider.colorAt(document, offset, fallback);
 	}
 	private static int spaceCount(String value) {
 		int count = 0;
@@ -614,8 +764,19 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 	private float textViewportWidth() {
 		GLInsets padding = getGLStyle().padding();
 		float bar = GLScrollBarStyle.fromTheme(getGLTheme()).thickness();
-		return Math.max(1, getWidth() - padding.horizontal() - bar - 2);
+		return Math.max(1, getWidth() - padding.horizontal()
+				- leadingTextInset() - trailingDecorationWidth() - bar - 2);
 	}
+	protected float leadingTextInset() { return 0; }
+	protected void drawLeadingDecoration(GLContext2D context, GLFont font,
+			GLInsets padding) { }
+	protected float trailingDecorationWidth() { return 0; }
+	protected final float trailingDecorationX() {
+		return scrollBarX() - trailingDecorationWidth();
+	}
+	protected void drawTrailingDecoration(GLContext2D context, float x, float y,
+			float width, float height) { }
+	protected boolean trailingDecorationPressed(float localY) { return false; }
 	private float textViewportHeight() {
 		return Math.max(1, getHeight() - getGLStyle().padding().vertical());
 	}
@@ -683,15 +844,31 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 		invalidateRecording();
 		repaintGL();
 	}
-	private GLParent popupHost() {
+	protected final GLParent popupHost() {
 		GLParent host = getGLParent();
 		while (host instanceof com.vingame.glswing.component.GLContainer container
 				&& container.getGLParent() != null)
 			host = container.getGLParent();
 		return host;
 	}
+	/** Returns the caret's lower edge in root screen coordinates. */
+	protected final float[] caretScreenPosition() {
+		float[] bounds = getLastRenderedScreenBounds();
+		if (bounds == null || getWidth() <= 0 || getHeight() <= 0) return null;
+		GLFont font = font();
+		List<Row> visualRows = rows(font);
+		int rowIndex = rowIndexForCaret(visualRows);
+		Row row = visualRows.get(rowIndex);
+		float available = textViewportWidth();
+		float localX = getGLStyle().padding().left() + leadingTextInset() - scrollX
+				+ rowOffset(font, row, available) + rowAdvance(font, row, caret, available);
+		float localY = getGLStyle().padding().top() + (rowIndex + 1) * font.getLineHeight()
+				- scrollY;
+		return new float[] { bounds[0] + localX * bounds[2] / getWidth(),
+				bounds[1] + localY * bounds[3] / getHeight() };
+	}
 	private String expand(String value) { return value.replace("\t", " ".repeat(tabSize)); }
-	private float measureRange(int start, int end) {
+	protected final float measureRange(int start, int end) {
 		float width = 0;
 		for (GLTextDocument.StyleRun run : document.getStyleRuns(start, end))
 			width += font(run.style()).measureText(expand(document.getText(run.start(), run.end())));

@@ -8,6 +8,9 @@ package com.vingame.glswing.input;
  */
 public interface GLMouseTarget {
 
+	/** Whether pressing this target must retain the current keyboard focus owner. */
+	default boolean preservesKeyboardFocusOnPress() { return false; }
+
 	default void mouseEntered(GLMouseEvent event) {
 	}
 

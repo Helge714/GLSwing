@@ -76,6 +76,17 @@ The optional artifacts improve IDE integration:
 - `glswing-0.1.0-sources.jar` provides navigable source code;
 - `glswing-0.1.0-javadoc.jar` provides offline API documentation.
 
+Language Server Protocol support is kept in a separate optional artifact so
+applications that do not embed a code editor do not carry its dependencies:
+
+```xml
+<dependency>
+    <groupId>com.vingame</groupId>
+    <artifactId>glswing-lsp</artifactId>
+    <version>0.1.0</version>
+</dependency>
+```
+
 The main artifact declares
 `Automatic-Module-Name: com.vingame.glswing` and works on both the classpath and
 the module path as an automatic module.

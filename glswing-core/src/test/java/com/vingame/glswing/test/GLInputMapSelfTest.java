@@ -35,6 +35,14 @@ public final class GLInputMapSelfTest {
 				"Default undo binding must use the platform shortcut modifier");
 		check(GLInputMaps.DEFAULT.hasModifiers(GLInputActions.SLIDER_PRECISE,
 				InputEvent.SHIFT_DOWN_MASK), "Default precise modifier must be Shift");
+		check(GLInputMaps.DEFAULT.matches(GLInputActions.CODE_COMPLETE,
+				key(KeyEvent.VK_SPACE, InputEvent.CTRL_DOWN_MASK)),
+				"Default code completion binding must use Ctrl+Space on Windows");
+		check(GLInputMaps.DEFAULT.matches(GLInputActions.CODE_ORGANIZE_IMPORTS,
+				key(KeyEvent.VK_O, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK)),
+				"Default organize-imports binding must use Ctrl+Shift+O on Windows");
+		check(GLInputMaps.DEFAULT.matches(GLInputActions.CODE_GO_TO_DEFINITION,
+				key(KeyEvent.VK_F3, 0)), "Default go-to-definition binding must use F3");
 	}
 
 	private static void testFileInheritanceAndOverrides() throws Exception {

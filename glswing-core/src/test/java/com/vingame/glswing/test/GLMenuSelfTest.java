@@ -1,6 +1,7 @@
 package com.vingame.glswing.test;
 
 import java.awt.Canvas;
+import java.awt.EventQueue;
 import java.awt.event.MouseEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
@@ -60,6 +61,7 @@ public final class GLMenuSelfTest {
 		if (!nested.isShowing() || host.getGLChildren().size() != 1)
 			throw new AssertionError("Nested submenu was not attached");
 		leaf.doClick();
+		drainEventQueue();
 		if (actions.get() != 1 || root.isShowing() || nested.isShowing()
 				|| !host.getGLChildren().isEmpty())
 			throw new AssertionError("Leaf activation did not close the menu session");
@@ -249,7 +251,10 @@ public final class GLMenuSelfTest {
 			throw new AssertionError("Automatic mnemonic was not restored");
 		file.show(host, 0, bar.getHeight());
 		KeyEvent itemKey = key(host, KeyEvent.VK_S, 0);
-		if (!GLMenuMnemonics.handleKeyPressed(host, itemKey, GLInputMaps.DEFAULT)
+		boolean handled = GLMenuMnemonics.handleKeyPressed(host, itemKey,
+				GLInputMaps.DEFAULT);
+		drainEventQueue();
+		if (!handled
 				|| !itemKey.isConsumed() || actions.get() != 1 || file.isShowing())
 			throw new AssertionError("Open-menu mnemonic did not activate its item");
 
@@ -265,6 +270,11 @@ public final class GLMenuSelfTest {
 	private static KeyEvent key(TestPanel host, int keyCode, int modifiers) {
 		return new KeyEvent(host, KeyEvent.KEY_PRESSED, System.currentTimeMillis(),
 				modifiers, keyCode, KeyEvent.CHAR_UNDEFINED);
+	}
+
+	private static void drainEventQueue() {
+		try { EventQueue.invokeAndWait(() -> { }); }
+		catch (Exception exception) { throw new AssertionError(exception); }
 	}
 
 	private static final class TestPanel extends GLSwingPanel {

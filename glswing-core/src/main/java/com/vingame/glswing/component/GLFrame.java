@@ -327,6 +327,9 @@ public class GLFrame extends JFrame implements GLParent, AutoCloseable {
 	@Override public final void requestGLFocus(GLKeyTarget target) {
 		glCanvas.requestGLFocus(target);
 	}
+	@Override public final GLKeyTarget getGLFocusOwner() {
+		return glCanvas.getGLFocusOwner();
+	}
 	@Override public final void clearGLFocus(GLContainer subtree) {
 		glCanvas.clearGLFocus(subtree);
 	}

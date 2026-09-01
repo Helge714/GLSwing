@@ -21,6 +21,8 @@ public final class GLTabbedPane extends GLContainer {
 	private final List<Tab> tabs = new ArrayList<>();
 	private final CopyOnWriteArrayList<GLTabSelectionListener> listeners =
 			new CopyOnWriteArrayList<>();
+	private final CopyOnWriteArrayList<GLTabCloseListener> closeListeners =
+			new CopyOnWriteArrayList<>();
 	private final Host contentHost = new Host();
 	private final Host tabHost = new Host();
 	private final GLScrollBar tabScrollBar =
@@ -30,6 +32,9 @@ public final class GLTabbedPane extends GLContainer {
 	private boolean layingOut;
 	private float tabStripWidth;
 	private float tabsWidth;
+	private boolean tabsClosable;
+	private boolean closedTabHistoryEnabled;
+	private final java.util.ArrayDeque<ClosedTab> closedTabs = new java.util.ArrayDeque<>();
 
 	public GLTabbedPane() {
 		addGL(contentHost);
@@ -57,6 +62,10 @@ public final class GLTabbedPane extends GLContainer {
 	public void removeTabAt(int index) {
 		checkIndex(index);
 		Tab removed = tabs.remove(index);
+		if (closedTabHistoryEnabled) {
+			closedTabs.addFirst(new ClosedTab(removed.title, removed.content, index));
+			while (closedTabs.size() > 10) closedTabs.removeLast();
+		}
 		contentHost.removeGL(removed.content);
 		tabHost.removeGL(removed.button);
 		int old = selectedIndex;
@@ -71,6 +80,8 @@ public final class GLTabbedPane extends GLContainer {
 		layoutTabs();
 		if (old != selectedIndex)
 			fireSelectionChanged(old);
+		for (GLTabCloseListener listener : closeListeners)
+			listener.tabClosed(this, index, removed.title, removed.content);
 	}
 
 	public void removeAllTabs() {
@@ -88,11 +99,56 @@ public final class GLTabbedPane extends GLContainer {
 	}
 
 	public int getTabCount() { return tabs.size(); }
+	/** Returns whether tabs expose close actions. Disabled by default. */
+	public boolean areTabsClosable() { return tabsClosable; }
+	/** Enables or disables close actions for all tabs. */
+	public void setTabsClosable(boolean value) { tabsClosable = value; }
+	/** Enables a bounded history that can restore closed tabs from their context menu. */
+	public void setClosedTabHistoryEnabled(boolean value) {
+		closedTabHistoryEnabled = value;
+		if (!value) closedTabs.clear();
+	}
+	public boolean isClosedTabHistoryEnabled() { return closedTabHistoryEnabled; }
+	/** Reopens the most recently closed tab, if one is available. */
+	public boolean reopenLastClosedTab() {
+		ClosedTab closed = closedTabs.pollFirst();
+		return closed != null && restore(closed);
+	}
+	/** Reopens a retained tab containing the supplied component. */
+	public boolean reopenTab(GLContainer content) {
+		for (ClosedTab closed : List.copyOf(closedTabs))
+			if (closed.content == content) {
+				closedTabs.remove(closed);
+				return restore(closed);
+			}
+		return false;
+	}
+	private boolean restore(ClosedTab closed) {
+		int index = Math.min(closed.index, tabs.size());
+		Tab tab = new Tab(closed.title, closed.content);
+		tabs.add(index, tab);
+		contentHost.addGL(tab.content);
+		tabHost.addGL(tab.button);
+		int old = selectedIndex;
+		selectedIndex = index;
+		updateVisibility();
+		updatePreferredSize();
+		layoutTabs();
+		ensureSelectedTabVisible();
+		if (old != selectedIndex) fireSelectionChanged(old);
+		return true;
+	}
 	public int getSelectedIndex() { return selectedIndex; }
 	public GLContainer getSelectedComponent() {
 		return selectedIndex < 0 ? null : tabs.get(selectedIndex).content;
 	}
 	public GLContainer getComponentAt(int index) { return tab(index).content; }
+	/** Returns the index of a tab content component, or {@code -1}. */
+	public int indexOfComponent(GLContainer content) {
+		for (int index = 0; index < tabs.size(); index++)
+			if (tabs.get(index).content == content) return index;
+		return -1;
+	}
 	public String getTitleAt(int index) { return tab(index).title; }
 
 	public void setTitleAt(int index, String title) {
@@ -140,6 +196,11 @@ public final class GLTabbedPane extends GLContainer {
 	public void removeSelectionListener(GLTabSelectionListener listener) {
 		listeners.remove(listener);
 	}
+	public void addCloseListener(GLTabCloseListener listener) {
+		if (listener == null) throw new IllegalArgumentException("Listener must not be null");
+		closeListeners.addIfAbsent(listener);
+	}
+	public void removeCloseListener(GLTabCloseListener listener) { closeListeners.remove(listener); }
 
 	public GLTabbedPaneStyle getGLStyle() {
 		return localStyle != null ? localStyle
@@ -264,6 +325,15 @@ public final class GLTabbedPane extends GLContainer {
 				tab.content.setBounds(padding.left(), padding.top(),
 						Math.max(0, contentHost.getWidth() - padding.horizontal()),
 						Math.max(0, contentHost.getHeight() - padding.vertical()));
+			float contentRadius = Math.max(0, style.cornerRadius() - style.borderWidth());
+			GLCornerRadii contentRadii = new GLCornerRadii(0, 0,
+					contentRadius, contentRadius);
+			for (Tab tab : tabs) {
+				if (tab.content instanceof GLTextArea editor)
+					editor.setContainerShape(contentRadii, false);
+				else if (tab.content instanceof GLTextEditor editor)
+					editor.setContainerShape(contentRadii, false);
+			}
 		} finally {
 			layingOut = false;
 		}
@@ -378,10 +448,23 @@ public final class GLTabbedPane extends GLContainer {
 			button = new TabButton(this);
 		}
 	}
+	private record ClosedTab(String title, GLContainer content, int index) { }
 
 	private final class TabButton extends GLControl {
 		private final Tab tab;
-		private TabButton(Tab tab) { super(false); this.tab = tab; }
+		private final GLPopupMenu closeMenu = new GLPopupMenu();
+		private final GLMenuItem closeItem;
+		private final GLMenuItem closeOthersItem;
+		private final GLMenuItem reopenClosedItem;
+		private boolean closeHovered;
+		private TabButton(Tab tab) {
+			super(false);
+			this.tab = tab;
+			closeItem = closeMenu.addItem("", event -> closeTab());
+			closeOthersItem = closeMenu.addItem("", event -> closeOtherTabs());
+			closeMenu.addSeparator();
+			reopenClosedItem = closeMenu.addItem("", event -> reopenLastClosedTab());
+		}
 
 		@Override
 		protected void record(GLContext2D context) {
@@ -409,14 +492,28 @@ public final class GLTabbedPane extends GLContainer {
 			context.addUIHitArea(0, 0, width, height);
 			GLFont font = getGLFont(style.font());
 			String title = GLTextFitter.ellipsize(font, tab.title,
-					Math.max(0, width - style.tabHorizontalPadding() * 2));
-			float textX = (width - font.measureText(title)) * 0.5f;
+					Math.max(0, width - style.tabHorizontalPadding() * 2
+							- (tabsClosable ? 20 : 0)));
+			float contentWidth = width - (tabsClosable ? 20 : 0);
+			float textX = (contentWidth - font.measureText(title)) * 0.5f;
 			float baseline = (height - font.getLineHeight()) * 0.5f
 					+ font.getAscent();
 			context.drawUITextShadow(font, title, textX, baseline,
 					getGLTheme().textShadow("tabbedPane"));
 			context.drawUIText(font, title, textX, baseline,
 					isEnabled() ? style.text() : style.textDisabled());
+			if (tabsClosable) {
+				float centerX = width - 12;
+				float centerY = height * 0.5f;
+				if (closeHovered)
+					context.fillUIRoundRect(centerX - 8, centerY - 8, 16, 16, 4,
+							new Color(255, 255, 255, 34));
+				Color closeColor = isEnabled() ? style.text() : style.textDisabled();
+				context.drawUILine(centerX - 3.5f, centerY - 3.5f,
+						centerX + 3.5f, centerY + 3.5f, closeColor);
+				context.drawUILine(centerX + 3.5f, centerY - 3.5f,
+						centerX - 3.5f, centerY + 3.5f, closeColor);
+			}
 		}
 
 		@Override
@@ -425,8 +522,54 @@ public final class GLTabbedPane extends GLContainer {
 
 		@Override
 		protected void controlMouseClicked(GLMouseEvent event) {
-			if (isEnabled() && event.getButton() == MouseEvent.BUTTON1)
-				setSelectedIndex(tabs.indexOf(tab));
+			if (!isEnabled()) return;
+			if (tabsClosable && event.getButton() == MouseEvent.BUTTON2) {
+				closeTab();
+				event.consume();
+			} else if (event.getButton() == MouseEvent.BUTTON1) {
+				if (tabsClosable && event.hasLocalPosition()
+						&& event.getLocalX() >= getWidth() - 24) closeTab();
+				else setSelectedIndex(tabs.indexOf(tab));
+			}
+		}
+
+		@Override protected void controlMousePressed(GLMouseEvent event) {
+			if (tabsClosable && event.getButton() == MouseEvent.BUTTON2) {
+				closeTab();
+				event.consume();
+				return;
+			}
+			if (!tabsClosable || event.getButton() != MouseEvent.BUTTON3) return;
+			closeItem.setText(getGLLocalizer().text(GLUiKeys.TAB_CLOSE));
+			closeOthersItem.setText(getGLLocalizer().text(GLUiKeys.TAB_CLOSE_OTHERS));
+			reopenClosedItem.setText(getGLLocalizer().text(GLUiKeys.TAB_REOPEN_CLOSED));
+			closeOthersItem.setEnabled(tabs.size() > 1);
+			reopenClosedItem.setVisible(closedTabHistoryEnabled);
+			reopenClosedItem.setEnabled(!closedTabs.isEmpty());
+			com.vingame.glswing.component.GLParent host = getGLParent();
+			while (host instanceof GLContainer container && container.getGLParent() != null)
+				host = container.getGLParent();
+			if (host != null) closeMenu.show(host, event.getScreenX(), event.getScreenY());
+			event.consume();
+		}
+		@Override protected void controlMouseMoved(GLMouseEvent event) {
+			boolean value = tabsClosable && event.hasLocalPosition()
+					&& event.getLocalX() >= getWidth() - 24;
+			if (closeHovered != value) { closeHovered = value; invalidateRecording(); }
+		}
+		@Override protected void controlMouseExited(GLMouseEvent event) {
+			if (closeHovered) { closeHovered = false; invalidateRecording(); }
+		}
+
+		private void closeTab() {
+			int index = tabs.indexOf(tab);
+			if (index >= 0) removeTabAt(index);
+		}
+		private void closeOtherTabs() {
+			for (int index = tabs.size() - 1; index >= 0; index--)
+				if (tabs.get(index) != tab) removeTabAt(index);
+			int remaining = tabs.indexOf(tab);
+			if (remaining >= 0) setSelectedIndex(remaining);
 		}
 	}
 

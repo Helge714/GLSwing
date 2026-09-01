@@ -11,6 +11,14 @@ public final class GLUiKeys {
 	public static final String TEXT_ALIGN_JUSTIFIED = "glswing.text.align.justified";
 	public static final String TEXT_FORMAT_BOLD = "glswing.text.format.bold";
 	public static final String TEXT_FORMAT_ITALIC = "glswing.text.format.italic";
+	public static final String CODE_FORMAT = "glswing.code.format";
+	public static final String CODE_COMMENT = "glswing.code.comment";
+	public static final String CODE_UNCOMMENT = "glswing.code.uncomment";
+	public static final String CODE_ORGANIZE_IMPORTS = "glswing.code.organizeImports";
+	public static final String CODE_GO_TO_DEFINITION = "glswing.code.goToDefinition";
+	public static final String TAB_CLOSE = "glswing.tab.close";
+	public static final String TAB_CLOSE_OTHERS = "glswing.tab.closeOthers";
+	public static final String TAB_REOPEN_CLOSED = "glswing.tab.reopenClosed";
 	public static final String NODE_EDIT_TITLE = "glswing.node.editTitle";
 	public static final String NODE_DELETE = "glswing.node.delete";
 	public static final String NODE_DELETE_MULTIPLE =

@@ -227,6 +227,18 @@ four corners. This small inner radius is independent of the popup's outer
 disable or remove tabs, and select by index or component. An overflowing tab
 strip scrolls with the wheel and ellipsizes long titles.
 
+The selected component fills the content area by default. The tabbed pane owns
+the surrounding border and clips its content; applications that need an inset
+should add a layout container as the tab content or override
+`tabbedPane.contentPadding` in the theme.
+
+Closable tabs are opt-in through `setTabsClosable(true)`. Closing a tab is a
+navigation operation and is deliberately separate from document undo/redo.
+Applications can enable a bounded recently-closed history with
+`setClosedTabHistoryEnabled(true)`. The tab context menu then offers
+**Reopen Closed Tab**; `reopenLastClosedTab()` and `reopenTab(content)` expose
+the same operation programmatically.
+
 ## Scrolling
 
 `GLScrollPane` clips rendering and picking to its viewport. Horizontal and

@@ -131,10 +131,15 @@ public final class GLScrollTabsSelfTest {
 
 	private static void testTabs() {
 		GLTabbedPane tabs = new GLTabbedPane();
+		check(!tabs.areTabsClosable(), "Tabs were closable by default");
+		tabs.setTabsClosable(true);
+		check(tabs.areTabsClosable(), "Closable-tab option was not retained");
 		GLContainer first = empty();
 		GLContainer second = empty();
 		tabs.addTab("First", first);
 		tabs.addTab("Second", second);
+		check(tabs.indexOfComponent(second) == 1,
+				"Tabbed pane did not locate a content component");
 		check(tabs.getSelectedIndex() == 0 && first.isVisible() && !second.isVisible(),
 				"Initial tab visibility is incorrect");
 		AtomicInteger changes = new AtomicInteger();
@@ -145,9 +150,15 @@ public final class GLScrollTabsSelfTest {
 		tabs.setEnabledAt(1, false);
 		check(tabs.getSelectedIndex() == 0,
 				"Disabling the selected tab did not select an enabled replacement");
+		tabs.setClosedTabHistoryEnabled(true);
 		tabs.removeTabAt(0);
 		check(tabs.getTabCount() == 1 && tabs.getComponentAt(0) == second,
 				"Removing a tab corrupted the tab list");
+		check(tabs.reopenLastClosedTab() && tabs.getTabCount() == 2
+				&& tabs.getComponentAt(0) == first && tabs.getSelectedIndex() == 0,
+				"Recently closed tab was not restored at its previous position");
+		check(!tabs.reopenLastClosedTab(),
+				"Closed-tab history retained an already restored tab");
 	}
 
 	private static void testThemeValues() {
@@ -155,6 +166,9 @@ public final class GLScrollTabsSelfTest {
 				"Default theme lacks scrollbar values");
 		check(GLTheme.DEFAULT.values().contains("tabbedPane.tabHeight"),
 				"Default theme lacks tabbed-pane values");
+		check(GLTabbedPaneStyle.fromTheme(GLTheme.DEFAULT).contentPadding().horizontal() == 0
+				&& GLTabbedPaneStyle.fromTheme(GLTheme.DEFAULT).contentPadding().vertical() == 0,
+				"Tabbed content does not fill its content area by default");
 		GLTheme rounded = GLTheme.DEFAULT.withCornerRadius(11);
 		check(GLScrollPaneStyle.fromTheme(rounded).cornerRadius() == 11,
 				"Theme-wide radius did not reach ScrollPane");

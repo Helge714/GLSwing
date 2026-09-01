@@ -253,6 +253,9 @@ public abstract class GLSwingContainerCanvas extends GLSwingCanvas
 	}
 
 	@Override
+	public final GLKeyTarget getGLFocusOwner() { return focusedTarget; }
+
+	@Override
 	public final void clearGLFocus(GLContainer subtree) {
 		if (subtree == null)
 			return;

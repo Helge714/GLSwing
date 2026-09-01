@@ -449,6 +449,9 @@ public abstract class GLSwingPanel extends GLJPanel
 	}
 
 	@Override
+	public final GLKeyTarget getGLFocusOwner() { return focusedTarget; }
+
+	@Override
 	public final void clearGLFocus(GLContainer subtree) {
 		if (subtree == null)
 			return;
@@ -665,8 +668,9 @@ public abstract class GLSwingPanel extends GLJPanel
 
 	private void dispatchMousePressed(MouseEvent event, GLPickResult result) {
 		GLMouseTarget hitTarget = result.getTarget();
-		requestGLFocus(hitTarget instanceof GLKeyTarget keyTarget
-				&& keyTarget.isFocusTraversable() ? keyTarget : null);
+		if (!preservesKeyboardFocus(hitTarget))
+			requestGLFocus(hitTarget instanceof GLKeyTarget keyTarget
+					&& keyTarget.isFocusTraversable() ? keyTarget : null);
 		updateHover(event, result, false);
 		lastDragX = event.getX();
 		lastDragY = event.getY();
@@ -674,6 +678,16 @@ public abstract class GLSwingPanel extends GLJPanel
 				: GLPickResult.none();
 		if (capturedPick.hasTarget())
 			repaintColorOnly();
+	}
+
+	private static boolean preservesKeyboardFocus(GLMouseTarget target) {
+		for (GLMouseTarget current = target; current != null;) {
+			if (current.preservesKeyboardFocusOnPress()) return true;
+			if (!(current instanceof GLContainer child)) return false;
+			GLParent parent = child.getGLParent();
+			current = parent instanceof GLMouseTarget mouseTarget ? mouseTarget : null;
+		}
+		return false;
 	}
 
 	private GLPickResult dispatchPress(MouseEvent event, GLPickResult initial) {
@@ -942,9 +956,7 @@ public abstract class GLSwingPanel extends GLJPanel
 			hoverReadScheduled = false;
 			return;
 		}
-		pendingHoverEvent = null;
 		boolean sendMoved = pendingHoverMoved;
-		pendingHoverMoved = false;
 		GLRenderer2D activeRenderer = renderer;
 		if (activeRenderer == null || event.getX() < 0 || event.getY() < 0
 				|| event.getX() >= getWidth() || event.getY() >= getHeight()) {
@@ -953,6 +965,14 @@ public abstract class GLSwingPanel extends GLJPanel
 				startHoverRead();
 			return;
 		}
+		if (damageTracker.isPickingDirty()
+				|| !activeRenderer.isLatestPickSnapshotReady()) {
+			hoverReadScheduled = false;
+			super.repaint();
+			return;
+		}
+		pendingHoverEvent = null;
+		pendingHoverMoved = false;
 
 		hoverReadScheduled = true;
 		long generation = hoverReadGeneration;
@@ -1013,6 +1033,22 @@ public abstract class GLSwingPanel extends GLJPanel
 			GLMouseTarget target = result.getTarget();
 			updateHover(event, target instanceof GLContainer container
 					&& !belongsToPanel(container) ? GLPickResult.none() : result, false);
+		});
+	}
+
+	private void publishPendingHoverIfReady() {
+		GLRenderer2D activeRenderer = renderer;
+		if (pendingHoverEvent == null || hoverReadScheduled || activeRenderer == null)
+			return;
+		if (damageTracker.isPickingDirty()
+				|| !activeRenderer.isLatestPickSnapshotReady()) {
+			SwingUtilities.invokeLater(this::repaintForSnapshotPoll);
+			return;
+		}
+		hoverReadScheduled = true;
+		SwingUtilities.invokeLater(() -> {
+			hoverReadScheduled = false;
+			if (pendingHoverEvent != null && isDisplayable()) startHoverRead();
 		});
 	}
 
@@ -1216,6 +1252,7 @@ public abstract class GLSwingPanel extends GLJPanel
 		gpuTimers.poll(gl);
 		renderer.pollPickSnapshots(gl);
 		publishPointerTasksIfReady();
+		publishPendingHoverIfReady();
 		publishPostWheelHoverIfReady();
 		// GLJPanel owns an offscreen drawable whose resize can trail the Swing
 		// component resize. Never inherit a viewport from the preceding frame:

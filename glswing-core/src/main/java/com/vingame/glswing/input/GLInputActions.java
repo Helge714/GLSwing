@@ -41,6 +41,14 @@ public final class GLInputActions {
 	public static final String TEXT_BACKSPACE = "text.backspace";
 	public static final String TEXT_DELETE = "text.delete";
 	public static final String TEXT_COMMIT = "text.commit";
+	public static final String TEXT_TOGGLE_BOLD = "text.toggle-bold";
+	public static final String TEXT_TOGGLE_ITALIC = "text.toggle-italic";
+	public static final String CODE_FORMAT = "code.format";
+	public static final String CODE_COMMENT = "code.comment";
+	public static final String CODE_UNCOMMENT = "code.uncomment";
+	public static final String CODE_COMPLETE = "code.complete";
+	public static final String CODE_ORGANIZE_IMPORTS = "code.organizeImports";
+	public static final String CODE_GO_TO_DEFINITION = "code.goToDefinition";
 	public static final String TEXT_HISTORY_COALESCE_MILLIS =
 			"text.history-coalesce-millis";
 

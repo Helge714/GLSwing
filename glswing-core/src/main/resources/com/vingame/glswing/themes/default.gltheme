@@ -13,6 +13,12 @@ palette.accent=rgba(84, 120, 181, 255)
 palette.selection=rgba(69, 105, 166, 191)
 palette.invalid=rgba(190, 70, 70, 255)
 
+codeEditor.keyword=rgba(198, 120, 221, 255)
+codeEditor.string=rgba(152, 195, 121, 255)
+codeEditor.number=rgba(209, 154, 102, 255)
+codeEditor.comment=rgba(92, 130, 82, 255)
+codeEditor.type=rgba(86, 182, 194, 255)
+
 textShadow.color=rgba(0, 0, 0, 0)
 textShadow.offsetX=1
 textShadow.offsetY=1
@@ -142,7 +148,7 @@ tabbedPane.minimumTabWidth=72
 tabbedPane.maximumTabWidth=220
 tabbedPane.tabGap=2
 tabbedPane.tabHorizontalPadding=12
-tabbedPane.contentPadding=8,8,8,8
+tabbedPane.contentPadding=0,0,0,0
 
 nodeEditor.background=rgba(35, 35, 35, 255)
 nodeEditor.connectionSnapDistance=18
@@ -157,6 +163,10 @@ nodeEditor.connectionColorInterpolation=srgb
 nodeEditor.marqueeFill=derive(${palette.selection}, alpha*=0.5)
 nodeEditor.marqueeBorder=${palette.accent}
 nodeEditor.marqueeBorderWidth=1
+codeEditor.overviewRulerWidth=7
+codeEditor.overviewRulerGap=3
+codeEditor.overviewMarkerHeight=3
+codeEditor.overviewRulerBackground=rgba(0, 0, 0, 25)
 node.background=${palette.surface}
 node.titleBackground=${state.normal}
 node.titleGradientLight=rgba(103, 103, 103, 255)

@@ -40,6 +40,7 @@ import com.vingame.glswing.rendering.GLStroke;
  * identically on {@code GLSwingPanel} and {@code GLSwingContainerCanvas}.
  */
 public class GLPopupMenu extends GLContainer {
+	@Override public boolean preservesKeyboardFocusOnPress() { return true; }
 	private enum AttachedEdge { NONE, TOP, BOTTOM }
 
 	private static final float SCROLL_BAR_WIDTH = 8;
@@ -545,8 +546,10 @@ public class GLPopupMenu extends GLContainer {
 			session.openSubMenu(this, item);
 	}
 
-	final void closeSession() {
-		close();
+	final void closeSessionAfterAction() {
+		MenuSession current = session;
+		if (current != null)
+			current.close(true);
 	}
 
 	final void invalidateMenuLayout() {
@@ -1389,6 +1392,7 @@ public class GLPopupMenu extends GLContainer {
 		private final ComboAnchor comboAnchor;
 		private final Component componentHost;
 		private final ComponentAdapter resizeListener;
+		private final com.vingame.glswing.input.GLKeyTarget previousFocusOwner;
 		private GLImmediateHoverRegistry.Registration immediateHoverRegistration;
 		private boolean closed;
 
@@ -1411,6 +1415,7 @@ public class GLPopupMenu extends GLContainer {
 			this.rootMenu = rootMenu;
 			this.anchoredToMenuBar = anchoredToMenuBar;
 			this.comboAnchor = comboAnchor;
+			previousFocusOwner = host.getGLFocusOwner();
 			dismissLayer = new DismissLayer(this);
 			sessionOverlay = new SessionOverlay();
 			menuOverlay = new MenuOverlay(comboAnchor);
@@ -1729,7 +1734,9 @@ public class GLPopupMenu extends GLContainer {
 					scaleX, 0, 0, scaleY, inverseX, inverseY);
 		}
 
-		private void close() {
+		private void close() { close(false); }
+
+		private void close(boolean restoreFocus) {
 			if (closed)
 				return;
 			closed = true;
@@ -1739,6 +1746,11 @@ public class GLPopupMenu extends GLContainer {
 			}
 			closeFrom(0);
 			host.removeGL(sessionOverlay);
+			// Overlay removal changes both the GPU ID surface and the CPU snapshot.
+			// Force their reconstruction before subsequent pointer input is resolved.
+			host.repaintAndRebuildPicking(null);
+			if (restoreFocus && previousFocusOwner != null)
+				host.requestGLFocus(previousFocusOwner);
 			if (componentHost != null)
 				componentHost.removeComponentListener(resizeListener);
 			synchronized (ACTIVE) {

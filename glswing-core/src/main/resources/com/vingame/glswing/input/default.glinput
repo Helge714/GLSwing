@@ -1,8 +1,8 @@
 # GLSwing default semantic input map
 key.history.undo=shortcut+Z
 key.history.redo=shortcut+shift+Z, shortcut+Y
-key.focus.next=TAB
-key.focus.previous=shift+TAB
+key.focus.next=shortcut+TAB
+key.focus.previous=shortcut+shift+TAB
 modifier.menu.mnemonic=ALT
 value.render.interaction-settle-millis=75
 value.node.interactive-curve-tolerance-factor=3
@@ -35,7 +35,16 @@ key.text.move-end=END, shift+END
 key.text.backspace=BACK_SPACE
 key.text.delete=DELETE
 key.text.commit=ENTER
+key.text.toggle-bold=shortcut+B
+key.text.toggle-italic=shortcut+I
 value.text.history-coalesce-millis=750
+
+key.code.format=shortcut+shift+F
+key.code.comment=shortcut+shift+C
+key.code.uncomment=shortcut+alt+C
+key.code.complete=shortcut+SPACE
+key.code.organizeImports=shortcut+shift+O
+key.code.goToDefinition=F3
 
 key.node.delete-selection=DELETE, BACK_SPACE
 modifier.node.toggle-selection=SHIFT

@@ -94,6 +94,9 @@ public interface GLParent {
 
 	void requestGLFocus(GLKeyTarget target);
 
+	/** Returns the lightweight control that currently owns keyboard focus. */
+	default GLKeyTarget getGLFocusOwner() { return null; }
+
 	void clearGLFocus(GLContainer subtree);
 
 	/** Requests a repaint from the Swing render surface owning this subtree. */

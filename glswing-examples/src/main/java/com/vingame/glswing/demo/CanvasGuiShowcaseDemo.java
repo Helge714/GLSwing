@@ -61,9 +61,12 @@ public final class CanvasGuiShowcaseDemo {
 		frame.addWindowListener(new WindowAdapter() {
 			@Override
 			public void windowClosing(WindowEvent event) {
-				canvas.closeThemeWatcher();
 				statistics.stop();
+				canvas.closeThemeWatcher();
+				canvas.closeLanguageServer();
+				canvas.destroy();
 				frame.dispose();
+				System.exit(0);
 			}
 		});
 		frame.pack();
@@ -298,6 +301,8 @@ public final class CanvasGuiShowcaseDemo {
 			themeWatcher.close();
 			themeWatcher = null;
 		}
+
+		void closeLanguageServer() { surface.closeLanguageServer(); }
 
 		private String performanceText() {
 			return GuiShowcaseDemo.formatPerformance("GLCanvas / Event-driven",
