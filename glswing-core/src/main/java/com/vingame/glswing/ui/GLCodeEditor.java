@@ -23,6 +23,7 @@ public class GLCodeEditor extends GLTextArea {
 	private GLCodeLanguage language = GLCodeLanguages.JAVA;
 	private volatile List<GLCodeToken> tokens = List.of();
 	private volatile List<GLCodeSemanticToken> semanticTokens = List.of();
+	private volatile List<GLCodeColor> documentColors = List.of();
 	private volatile List<GLCodeDiagnostic> diagnostics = List.of();
 	private List<GLCodeDiagnostic> coreDiagnostics = List.of();
 	private final boolean coreDiagnosticsEnabled;
@@ -30,9 +31,11 @@ public class GLCodeEditor extends GLTextArea {
 	private GLCodeDiagnosticProvider diagnosticProvider;
 	private GLCodeDiagnosticProvider.Session diagnosticSession;
 	private URI documentUri;
+	private boolean automaticCodeIntelligence;
 	private int documentVersion;
 	private final Timer diagnosticTimer;
 	private final Timer semanticTokenTimer;
+	private final Timer documentColorTimer;
 	private final Timer hoverTimer;
 	private final Timer navigationDismissTimer;
 	private com.vingame.glswing.input.GLMouseEvent hoverEvent;
@@ -60,9 +63,12 @@ public class GLCodeEditor extends GLTextArea {
 	private int navigationRequestStart = -1;
 	private int navigationRequestEnd = -1;
 	private final Object navigationCursorOwner = new Object();
+	private final Object colorPreviewCursorOwner = new Object();
 	private GLPointerController navigationPointerController = GLPointerController.NONE;
 	private long semanticTokenRequest;
 	private java.util.concurrent.CompletableFuture<?> semanticTokenFuture;
+	private long documentColorRequest;
+	private java.util.concurrent.CompletableFuture<?> documentColorFuture;
 	private GLCodeNavigationHandler navigationHandler = location -> { };
 	private java.util.function.Consumer<GLCodeNavigationStatus> navigationStatusListener = value -> { };
 	private java.util.function.Consumer<GLCodeCompletionStatus> completionStatusListener = value -> { };
@@ -81,6 +87,11 @@ public class GLCodeEditor extends GLTextArea {
 
 	public GLCodeEditor() { this("", true); }
 	public GLCodeEditor(String source) { this(source, true); }
+	/** Creates an editor and configures its language from the document URI. */
+	public GLCodeEditor(String source, URI uri) {
+		this(source, true);
+		configureDocument(uri);
+	}
 	/** Creates an editor, optionally disabling lightweight diagnostics for source viewers. */
 	public GLCodeEditor(String source, boolean coreDiagnosticsEnabled) {
 		super(source);
@@ -89,6 +100,8 @@ public class GLCodeEditor extends GLTextArea {
 		diagnosticTimer.setRepeats(false);
 		semanticTokenTimer = new Timer(180, event -> requestSemanticTokens());
 		semanticTokenTimer.setRepeats(false);
+		documentColorTimer = new Timer(180, event -> requestDocumentColors());
+		documentColorTimer.setRepeats(false);
 		hoverTimer = new Timer(250, event -> requestHover());
 		hoverTimer.setRepeats(false);
 		navigationDismissTimer = new Timer(500,
@@ -118,11 +131,13 @@ public class GLCodeEditor extends GLTextArea {
 			coreDiagnostics = List.of();
 			providerDiagnostics = List.of();
 			semanticTokens = List.of();
+			documentColors = List.of();
 			mergeDiagnostics();
 			retokenize();
 			diagnosticTimer.restart();
 			updateDiagnosticProvider();
 			semanticTokenTimer.restart();
+			documentColorTimer.restart();
 		});
 		setTextColorProvider(this::syntaxColor);
 		formatItem = codeMenu.addItem("", event -> formatCode());
@@ -144,13 +159,29 @@ public class GLCodeEditor extends GLTextArea {
 		if (value == null) throw new IllegalArgumentException("Code language must not be null");
 		language = value; retokenize();
 		if (coreDiagnosticsEnabled) validateSource();
-		reopenDiagnosticProvider();
+		if (automaticCodeIntelligence) installAutomaticCodeIntelligence();
+		else reopenDiagnosticProvider();
 	}
 	public final List<GLCodeDiagnostic> getDiagnostics() { return diagnostics; }
 	/** Returns the latest immutable semantic-token snapshot from the provider. */
 	public final List<GLCodeSemanticToken> getSemanticTokens() { return semanticTokens; }
+	/** Returns the latest immutable source-color snapshot from the provider. */
+	public final List<GLCodeColor> getDocumentColors() { return documentColors; }
 	public final GLCodeDiagnosticProvider getDiagnosticProvider() { return diagnosticProvider; }
 	public final URI getDocumentUri() { return documentUri; }
+	/**
+	 * Detects a built-in language from the URI and installs its in-process code
+	 * intelligence. Unknown extensions retain the currently selected language.
+	 */
+	public final void configureDocument(URI uri) {
+		if (uri == null) throw new IllegalArgumentException("Document URI is required");
+		GLCodeLanguages.forUri(uri).ifPresent(value -> language = value);
+		documentUri = uri;
+		automaticCodeIntelligence = true;
+		retokenize();
+		if (coreDiagnosticsEnabled) validateSource();
+		installAutomaticCodeIntelligence();
+	}
 	/** Sets the application callback used for definitions in other documents. */
 	public final void setNavigationHandler(GLCodeNavigationHandler handler) {
 		navigationHandler = handler == null ? location -> { } : handler;
@@ -177,18 +208,19 @@ public class GLCodeEditor extends GLTextArea {
 			java.util.function.Consumer<GLCodeSemanticStatus> listener) {
 		semanticStatusListener = listener == null ? value -> { } : listener;
 	}
-	/** Connects this editor to an external diagnostic provider for one document URI. */
+	/** Replaces automatic code intelligence with an explicit provider for one URI. */
 	public final void setDiagnosticProvider(GLCodeDiagnosticProvider provider, URI uri) {
 		if ((provider == null) != (uri == null))
 			throw new IllegalArgumentException("Provider and document URI must both be set or cleared");
 		closeDiagnosticSession();
+		automaticCodeIntelligence = false;
 		diagnosticProvider = provider;
 		documentUri = uri;
 		providerDiagnostics = List.of();
 		mergeDiagnostics();
 		if (provider != null) openDiagnosticSession();
 	}
-	/** Disconnects the external provider without closing a potentially shared provider. */
+	/** Disconnects the provider without closing a potentially shared provider. */
 	public final void clearDiagnosticProvider() { setDiagnosticProvider(null, null); }
 	public final int getIndentationSize() { return indentationSize; }
 	public final void setIndentationSize(int value) {
@@ -792,6 +824,46 @@ public class GLCodeEditor extends GLTextArea {
 			for (float wave = left; wave < right; wave += 4)
 				context.drawUILine(wave, y, Math.min(wave + 2, right), y + 1.5f, color);
 		}
+		for (GLCodeColor color : documentColors) {
+			if (color.start() < rowStart || color.end() > rowEnd) continue;
+			float previewX = x + measureRange(rowStart, color.end()) + colorPreviewGap();
+			float size = colorPreviewSize(font);
+			float previewY = baseline - font.getAscent()
+					+ (font.getLineHeight() - size) / 2;
+			drawColorPreview(context, previewX, previewY, size, color.color());
+		}
+	}
+	private void drawColorPreview(GLContext2D context, float x, float y,
+			float size, Color color) {
+		GLThemeValues values = getGLTheme().values();
+		Color light = values.getColor("codeEditor.colorPreviewCheckerLight",
+				new Color(225, 225, 225));
+		Color dark = values.getColor("codeEditor.colorPreviewCheckerDark",
+				new Color(145, 145, 145));
+		float inner = Math.max(2, size - 2), half = inner / 2;
+		context.fillUIRoundRect(x + 1, y + 1, half, half, 0, light);
+		context.fillUIRoundRect(x + 1 + half, y + 1, inner - half, half, 0, dark);
+		context.fillUIRoundRect(x + 1, y + 1 + half, half, inner - half, 0, dark);
+		context.fillUIRoundRect(x + 1 + half, y + 1 + half,
+				inner - half, inner - half, 0, light);
+		context.fillUIRoundRect(x + 1, y + 1, inner, inner, 1, color);
+		context.drawUIRoundRect(x, y, size, size, 2, 1,
+				values.getColor("codeEditor.colorPreviewBorder", new Color(35, 35, 35)));
+	}
+	@Override protected float trailingRowDecorationWidth(int rowStart, int rowEnd) {
+		for (GLCodeColor color : documentColors)
+			if (color.start() >= rowStart && color.end() <= rowEnd)
+				return colorPreviewGap()
+						+ colorPreviewSize(getGLStyle().font().measurementFont());
+		return 0;
+	}
+	private float colorPreviewSize(GLFont font) {
+		return Math.max(5, Math.min(font.getLineHeight() - 3,
+				getGLTheme().values().getFloat("codeEditor.colorPreviewSize", 11)));
+	}
+	private float colorPreviewGap() {
+		return Math.max(0, getGLTheme().values()
+				.getFloat("codeEditor.colorPreviewGap", 6));
 	}
 	@Override protected float trailingDecorationWidth() {
 		GLThemeValues values = getGLTheme().values();
@@ -849,6 +921,8 @@ public class GLCodeEditor extends GLTextArea {
 		return closeOnly && distance > Math.max(4, markerHeight) ? null : nearest;
 	}
 	@Override protected String toolTipTextAt(com.vingame.glswing.input.GLMouseEvent event) {
+		GLCodeColor sourceColor = colorPreviewAt(event);
+		if (sourceColor != null) return colorDescription(sourceColor.color());
 		GLCodeDiagnostic diagnostic = diagnosticAt(event);
 		if (diagnostic != null) return diagnostic.message();
 		if (hover != null && event.hasLocalPosition()) {
@@ -858,6 +932,13 @@ public class GLCodeEditor extends GLTextArea {
 		return super.toolTipTextAt(event);
 	}
 	@Override protected void controlMousePressed(com.vingame.glswing.input.GLMouseEvent event) {
+		GLCodeColor sourceColor = colorPreviewAt(event);
+		if (event.getButton() == java.awt.event.MouseEvent.BUTTON1 && sourceColor != null) {
+			super.controlMousePressed(event);
+			select(sourceColor.start(), sourceColor.end());
+			event.consume();
+			return;
+		}
 		if (event.hasLocalPosition() && isOverviewRuler(event.getLocalX())) {
 			super.controlMousePressed(event);
 			return;
@@ -873,6 +954,15 @@ public class GLCodeEditor extends GLTextArea {
 	}
 	@Override protected void controlMouseMoved(com.vingame.glswing.input.GLMouseEvent event) {
 		lastMouseEvent = event;
+		if (colorPreviewAt(event) != null) {
+			clearHover();
+			super.controlMouseMoved(event);
+			navigationPointerController = event.getPointerController();
+			navigationPointerController.setCursor(colorPreviewCursorOwner,
+					GLPointerCursor.HAND);
+			return;
+		}
+		navigationPointerController.clearCursor(colorPreviewCursorOwner);
 		if (diagnosticSession != null && event.hasLocalPosition()
 				&& navigationModifier(event.getModifiersEx())
 				&& !isOverviewRuler(event.getLocalX()) && diagnosticAt(event) == null) {
@@ -903,6 +993,7 @@ public class GLCodeEditor extends GLTextArea {
 		if (navigationPopupVisible)
 			navigationPointerController.setCursor(navigationCursorOwner, GLPointerCursor.HAND);
 		clearHover();
+		navigationPointerController.clearCursor(colorPreviewCursorOwner);
 		lastMouseEvent = null;
 		if (navigationPopupVisible) scheduleNavigationDismiss();
 		else clearNavigationHover(true);
@@ -947,6 +1038,37 @@ public class GLCodeEditor extends GLTextArea {
 	private boolean isOverviewRuler(float localX) {
 		return localX >= trailingDecorationX()
 				&& localX < trailingDecorationX() + trailingDecorationWidth();
+	}
+	private GLCodeColor colorPreviewAt(com.vingame.glswing.input.GLMouseEvent event) {
+		if (!event.hasLocalPosition() || documentColors.isEmpty()) return null;
+		GLInsets padding = getGLStyle().padding();
+		GLFont font = getGLStyle().font().measurementFont();
+		float lineHeight = font.getLineHeight();
+		int line = (int) Math.floor((event.getLocalY() - padding.top()
+				+ getVerticalScrollOffset()) / lineHeight);
+		if (line < 0 || line >= getDocument().getLineCount()) return null;
+		int lineStart = getDocument().getLineStart(line);
+		int lineEnd = getDocument().getLineEnd(line);
+		float size = colorPreviewSize(font);
+		float y = padding.top() + line * lineHeight - getVerticalScrollOffset()
+				+ (lineHeight - size) / 2;
+		float textX = padding.left() + leadingTextInset() - getHorizontalScrollOffset();
+		for (GLCodeColor color : documentColors) {
+			if (color.start() < lineStart || color.end() > lineEnd) continue;
+			float x = textX + measureRange(lineStart, color.end()) + colorPreviewGap();
+			if (event.getLocalX() >= x && event.getLocalX() <= x + size
+					&& event.getLocalY() >= y && event.getLocalY() <= y + size) return color;
+		}
+		return null;
+	}
+	private static String colorDescription(Color color) {
+		String hex = color.getAlpha() == 255
+				? String.format(java.util.Locale.ROOT, "#%02X%02X%02X",
+						color.getRed(), color.getGreen(), color.getBlue())
+				: String.format(java.util.Locale.ROOT, "#%02X%02X%02X%02X",
+						color.getRed(), color.getGreen(), color.getBlue(), color.getAlpha());
+		return "Color preview · " + hex + "\nrgba(" + color.getRed() + ", "
+				+ color.getGreen() + ", " + color.getBlue() + ", " + color.getAlpha() + ")";
 	}
 	private float fontLineHeight() { return getGLStyle().font().measurementFont().getLineHeight(); }
 	private GLCodeDiagnostic diagnosticForLine(int line) {
@@ -1060,10 +1182,18 @@ public class GLCodeEditor extends GLTextArea {
 		mergeDiagnostics();
 		openDiagnosticSession();
 	}
+	private void installAutomaticCodeIntelligence() {
+		closeDiagnosticSession();
+		diagnosticProvider = language.codeIntelligenceProvider();
+		providerDiagnostics = List.of();
+		mergeDiagnostics();
+		if (diagnosticProvider != null && documentUri != null) openDiagnosticSession();
+	}
 	private void openDiagnosticSession() {
 		GLCodeDocument snapshot = diagnosticDocument();
 		diagnosticSession = diagnosticProvider.open(snapshot, this::acceptProviderDiagnostics);
 		requestSemanticTokens();
+		requestDocumentColors();
 	}
 	private void updateDiagnosticProvider() {
 		if (diagnosticSession != null) diagnosticSession.update(diagnosticDocument());
@@ -1095,6 +1225,11 @@ public class GLCodeEditor extends GLTextArea {
 		if (semanticTokenFuture != null) semanticTokenFuture.cancel(false);
 		semanticTokenFuture = null;
 		semanticTokens = List.of();
+		documentColorTimer.stop();
+		documentColorRequest++;
+		if (documentColorFuture != null) documentColorFuture.cancel(false);
+		documentColorFuture = null;
+		documentColors = List.of();
 		definitionRequest++;
 		if (definitionFuture != null) definitionFuture.cancel(false);
 		definitionFuture = null;
@@ -1264,6 +1399,25 @@ public class GLCodeEditor extends GLTextArea {
 					.toList();
 			semanticStatusListener.accept(
 					GLCodeSemanticStatus.completed(semanticTokens.size()));
+			invalidateRecording();
+		}));
+	}
+	private void requestDocumentColors() {
+		if (diagnosticSession == null || documentUri == null) return;
+		long request = ++documentColorRequest;
+		int version = documentVersion;
+		if (documentColorFuture != null) documentColorFuture.cancel(false);
+		var stage = diagnosticSession.documentColors(diagnosticDocument());
+		documentColorFuture = stage.toCompletableFuture();
+		stage.whenComplete((result, failure) -> EventQueue.invokeLater(() -> {
+			if (request != documentColorRequest || version != documentVersion) return;
+			documentColorFuture = null;
+			if (failure != null) return;
+			List<GLCodeColor> received = result == null ? List.of() : result;
+			documentColors = received.stream()
+					.filter(value -> value.end() <= getDocument().length())
+					.sorted(java.util.Comparator.comparingInt(GLCodeColor::start)).toList();
+			invalidateRowLayout();
 			invalidateRecording();
 		}));
 	}

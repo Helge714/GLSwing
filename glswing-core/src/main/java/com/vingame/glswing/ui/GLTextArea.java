@@ -236,6 +236,8 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 	}
 	protected void drawTextDecorations(GLContext2D context, GLFont font,
 			int rowStart, int rowEnd, float x, float baseline, float available) { }
+	/** Additional unwrapped width drawn after a visual row. */
+	protected float trailingRowDecorationWidth(int rowStart, int rowEnd) { return 0; }
 
 	private void drawSelection(GLContext2D context, GLFont font, Row row,
 			float x, float top, float height, Color color) {
@@ -637,10 +639,11 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 		if (!lineWrap)
 			for (Row row : cachedRows)
 				cachedMaximumRowWidth = Math.max(cachedMaximumRowWidth,
-						measureRange(row.start, row.end));
+						measureRange(row.start, row.end)
+								+ trailingRowDecorationWidth(row.start, row.end));
 		return cachedRows;
 	}
-	private void invalidateRowLayout() {
+	protected final void invalidateRowLayout() {
 		cachedRows = null;
 		cachedRowsWidth = Float.NaN;
 		cachedMaximumRowWidth = 0;

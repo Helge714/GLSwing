@@ -54,6 +54,24 @@ may change in subsequent `0.x` releases.
   items, and nested submenus, with configurable activation and explicit overrides.
 - Shared `GLIcon` presentation for menu rows, popup titles, menu bars, and combo
   box values, including aligned icon columns and disabled-state variants.
+- Schema-aware `.gltheme` editing in `GLCodeEditor`, including automatic
+  language detection, semantic highlighting, diagnostics, completion, hover,
+  imported-property resolution, and cross-file definition navigation without
+  an external language server. Resolved colors receive inline swatches with
+  transparency previews and exact hexadecimal/RGBA hover values.
+- Functional RGB and RGBA components now use an unambiguous per-channel rule:
+  unsuffixed integers are `0..255`, decimals and `f`-suffixed values are
+  normalized `0..1`, percentages are `0..100`, and formats may be mixed. The
+  same rule applies to absolute, additive, and subtractive derived unit-channel
+  values; multiplicative overrides remain ratios.
+- Theme colors now accept optional alpha directly in `rgb(...)`, plus `hsv(...)`,
+  `hsl(...)`, `oklab(...)`, and `oklch(...)` forms. The existing `rgba(...)`
+  spelling remains supported as a compatibility alias.
+- Native `GLCodeEditor` support for `.glinput` files adds standard-action
+  completion, binding/modifier/value validation, hover help, inheritance-cycle
+  diagnostics, and parent-file navigation. Native localization `.properties`
+  support adds stable-key completion, `MessageFormat` validation, parent-bundle
+  comparison, and root-key navigation without an external language server.
 
 ### Build and platforms
 

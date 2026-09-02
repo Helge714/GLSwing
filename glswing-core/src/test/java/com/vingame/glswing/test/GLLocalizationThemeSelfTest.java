@@ -57,10 +57,46 @@ public final class GLLocalizationThemeSelfTest {
 				new Color(1f, 0.5f, 0.5f, 0f)), "Normalized rgba parsing failed");
 		check(GLThemeValues.parseColor("rgba(100%, 50%, 0%, 25%)").equals(
 				new Color(1f, 0.5f, 0f, 0.25f)), "Percentage rgba parsing failed");
+		check(GLThemeValues.parseColor("rgba(255, 0.5, 32, 0.25f)").equals(
+				new Color(1f, 0.5f, 32 / 255f, 0.25f)),
+				"Mixed functional color channels failed");
+		check(GLThemeValues.parseColor("rgba(1, 1, 1, 1)").equals(
+				new Color(1, 1, 1, 1)),
+				"Unsuffixed unit channels were not interpreted as 0..255 integers");
+		check(GLThemeValues.parseColor("rgba(1.0, .5, 0.25, 1.0)").equals(
+				new Color(1f, 0.5f, 0.25f, 1f)),
+				"Decimal normalized channels failed");
+		check(GLThemeValues.parseColor("rgb(255, 128, 64, 128)").equals(
+				new Color(255, 128, 64, 128)),
+				"Optional RGB alpha channel failed");
+		check(GLThemeValues.parseColor("hsv(120deg, 100%, 100%, 50%)").equals(
+				new Color(0, 255, 0, 128)), "HSV conversion failed");
+		check(GLThemeValues.parseColor("hsl(240deg, 100%, 50%)").equals(
+				new Color(0, 0, 255)), "HSL conversion failed");
+		check(GLThemeValues.parseColor("oklab(1.0, 0, 0, 128)").equals(
+				new Color(255, 255, 255, 128)), "OKLab conversion failed");
+		checkColorClose(GLThemeValues.parseColor(
+				"oklab(0.627955, 0.224863, 0.125846)"),
+				new Color(255, 0, 0), 1, "OKLab red conversion failed");
+		checkColorClose(GLThemeValues.parseColor(
+				"oklch(0.627955, 0.257683, 29.234deg, 0.5)"),
+				new Color(255, 0, 0, 128), 1, "OKLCH conversion failed");
+		expectColorFailure("rgba(0, 0, 0, 1e-1)");
+		expectColorFailure("rgba(256, 0, 0, 255)");
+		expectColorFailure("hsv(120deg, 1, 100%)");
+		expectColorFailure("oklch(0.5, -0.1, 20deg)");
 		check(GLThemeValues.parseColor(
 				"derive(rgba(100, 150, 200, 128), alpha*=50%)").equals(
 						new Color(100, 150, 200, 64)),
 				"Relative derive alpha failed");
+		check(GLThemeValues.parseColor(
+				"derive(rgb(10, 20, 30), alpha=1)").equals(
+						new Color(10, 20, 30, 1)),
+				"Unsuffixed derive channel was not interpreted as 0..255");
+		check(GLThemeValues.parseColor(
+				"derive(rgb(10, 20, 30), alpha=1.0)").equals(
+						new Color(10, 20, 30, 255)),
+				"Decimal derive channel was not interpreted as normalized");
 		check(GLThemeValues.parseColor(
 				"derive(rgb(255, 0, 0), hue+=120deg)").equals(
 						new Color(0, 255, 0)),
@@ -73,6 +109,22 @@ public final class GLLocalizationThemeSelfTest {
 				"derive(rgb(120, 80, 40), saturation*=0%, brightness+=10%)")
 						.equals(new Color(146, 146, 146)),
 				"Combined derive HSV aliases failed");
+	}
+
+	private static void expectColorFailure(String source) {
+		try {
+			GLThemeValues.parseColor(source);
+			throw new AssertionError("Invalid color was accepted: " + source);
+		} catch (IllegalArgumentException expected) { }
+	}
+
+	private static void checkColorClose(Color actual, Color expected,
+			int tolerance, String message) {
+		check(Math.abs(actual.getRed() - expected.getRed()) <= tolerance
+				&& Math.abs(actual.getGreen() - expected.getGreen()) <= tolerance
+				&& Math.abs(actual.getBlue() - expected.getBlue()) <= tolerance
+				&& Math.abs(actual.getAlpha() - expected.getAlpha()) <= tolerance,
+				message + ": " + actual);
 	}
 
 	private static void testBundledThemes() {

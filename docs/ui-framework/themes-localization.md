@@ -13,10 +13,13 @@ fallback chain.
 - [Modular color and metrics themes](#modular-color-and-metrics-themes)
 - [Loading and live reload](#loading-and-live-reload)
 - [Editable user overrides](#editable-user-overrides)
+- [Editing theme source](#editing-theme-source)
 - [Color values](#color-values)
 - [External fonts](#external-fonts)
 - [Typed styles](#typed-styles)
+- [Text shadows](#text-shadows)
 - [Localization](#localization)
+- [Editing localization bundles](#editing-localization-bundles)
 
 ## Theme inheritance
 
@@ -125,17 +128,77 @@ directories. For a custom base, use
 `GLThemeEditor.from(base, "base.gltheme")` so the saved `theme.extends`
 reference remains portable.
 
+## Editing theme source
+
+`GLCodeEditor` recognizes `.gltheme` document URIs and enables built-in,
+schema-aware assistance without an external language server:
+
+```java
+Path file = Path.of("themes", "application.gltheme");
+GLCodeEditor sourceEditor = new GLCodeEditor(
+        Files.readString(file), file.toUri());
+```
+
+The editor highlights property declarations, references, functions, numbers,
+strings, and directives. `Ctrl/Cmd+Space` completes known theme properties,
+enum and boolean values, built-in base themes, sibling theme fragments, and
+font files. Hovering a known property shows its type, purpose, permitted values,
+and default where available. Ctrl/Cmd-click and **Go to definition** navigate
+to local `${property}` declarations, imported fragment declarations, and theme
+files named by `theme.extends`, `theme.colors`, or `theme.metrics`.
+
+Diagnostics cover malformed or duplicate declarations, invalid typed values,
+unknown references, missing imported files, local reference cycles, import
+cycles, and invalid color/metrics fragment contents. Custom application keys
+are intentionally accepted because `GLThemeValues` is extensible; their local
+declarations and references still receive navigation and completion support.
+Use a real file URI when cross-file features are required.
+
+Every resolvable color expression receives an inline preview swatch. This also
+applies to `${...}` references and `derive(...)` expressions after resolving
+local declarations, imported fragments, and built-in base-theme values. A
+checkerboard makes partial transparency visible. Hovering the swatch reports
+hexadecimal and RGBA representations; clicking it selects the corresponding
+source value. Preview size, spacing, border, and checker colors use the
+`codeEditor.colorPreview*` theme properties.
+
 ## Color values
 
-Theme colors accept hexadecimal, integer RGB/RGBA, normalized float channels,
-percentages, named references, and `derive(...)` expressions. Integer channels
-use `0..255`; values suffixed with `f` use `0..1`.
+Theme colors accept hexadecimal, RGB, HSV, HSL, OKLab, OKLCH, named
+references, and `derive(...)` expressions. Functional forms accept an optional
+final alpha component:
+
+```properties
+palette.rgb=rgb(255, 0.5, 32, 75%)
+palette.hsv=hsv(210deg, 60%, 80%, 192)
+palette.hsl=hsl(210deg, 60%, 50%)
+palette.oklab=oklab(0.65, -0.08, 0.12, 0.75f)
+palette.oklch=oklch(65%, 0.14, 145deg)
+```
+
+`rgba(r, g, b, a)` remains a compatibility alias; new themes can consistently
+use `rgb(r, g, b[, a])`. Every RGB and alpha component is interpreted
+independently: an integer without a suffix uses `0..255`, a value containing a
+decimal point or ending in `f` uses normalized `0..1`, and `%` uses `0..100`.
+Formats may be mixed in one color. Consequently, an unsuffixed `1` means
+`1/255`; write `1.0`, `1f`, or `100%` for full intensity or opacity.
+
+HSV/HSL saturation, value, and lightness require a percentage or normalized
+decimal/`f` value. Hue accepts integer degrees, an explicit `deg` value,
+percentages, or normalized decimal/`f` turns. OKLab lightness uses a percentage
+or normalized value; its `a` and `b` axes are signed decimals. OKLCH uses the
+same lightness, a nonnegative decimal chroma, and a hue. OKLab and OKLCH values
+outside the displayable sRGB gamut are clipped when converted to
+`java.awt.Color`.
 
 `derive(base, ...)` adjusts `alpha`/`a`, `hue`/`h`, `saturation`/`s`, and
 `brightness`/`value`/`v`. Operators include assignment, addition, subtraction,
-and multiplication—for example `saturation-=0.15f`. Hue wraps cyclically;
-alpha, saturation, and brightness clamp to `0..1`. Hue accepts degrees with
-`deg`, percentages, or normalized turns.
+and multiplication—for example `saturation-=0.15f`. Absolute, additive, and
+subtractive unit-channel amounts follow the same integer, decimal/`f`, and
+percentage convention as functional colors. Multipliers remain ratios, so
+`alpha*=0.5` halves alpha and `alpha*=1` leaves it unchanged. Hue wraps
+cyclically and accepts degrees with `deg`, percentages, or normalized turns;
+alpha, saturation, and brightness clamp to `0..1`.
 
 ## External fonts
 
@@ -306,3 +369,23 @@ Each bundle follows its normal locale chain, such as `de_AT -> de -> root`,
 without an implicit fallback to the system locale. Parameters use
 `MessageFormat` with the selected locale. Stable built-in keys are defined in
 `GLUiKeys`; application keys should use an application-specific namespace.
+
+## Editing localization bundles
+
+`GLCodeEditor` recognizes `.properties` document URIs as
+`GLCodeLanguages.LOCALIZATION`. It provides UTF-8 properties highlighting,
+completion and hover documentation for stable GLSwing keys, duplicate-key and
+`MessageFormat` validation, and support for arbitrary application keys.
+
+When a locale file such as `Messages_de.properties` has a sibling
+`Messages.properties`, the editor also:
+
+- reports translations missing from the root bundle;
+- marks keys not declared by the root bundle;
+- compares the set of `MessageFormat` arguments used by each translation;
+- completes untranslated root keys; and
+- navigates from a localized key to its root declaration.
+
+The same fallback convention works for more specific files such as
+`Messages_de_AT.properties`: the closest existing parent bundle is used for
+editing assistance. Cross-file features require a real document URI.

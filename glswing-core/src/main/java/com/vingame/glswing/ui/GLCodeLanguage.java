@@ -8,4 +8,6 @@ public interface GLCodeLanguage {
 	List<GLCodeToken> tokenize(String source);
 	default List<GLCodeDiagnostic> diagnose(String source) { return List.of(); }
 	default String lineCommentPrefix() { return "//"; }
+	/** Optional in-process code intelligence used when a document URI is configured. */
+	default GLCodeDiagnosticProvider codeIntelligenceProvider() { return null; }
 }

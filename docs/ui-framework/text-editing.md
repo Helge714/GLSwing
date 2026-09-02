@@ -232,6 +232,55 @@ Determining whether otherwise valid statements occur in a legal class, method,
 initializer, lambda, or nested-type scope requires a real grammar and remains a
 language-server responsibility.
 
+### Native configuration-language support
+
+GLSwing provides schema-aware editing for its configuration formats directly
+in `glswing-core`: `GLCodeLanguages.GLTHEME` for `.gltheme`,
+`GLCodeLanguages.GLINPUT` for `.glinput`, and
+`GLCodeLanguages.LOCALIZATION` for UTF-8 localization `.properties` files.
+None starts a process or requires a language-server installation. Construct the
+editor with a real document URI to select the language and enable its in-process
+code intelligence automatically:
+
+```java
+Path themeFile = Path.of("themes", "application.gltheme");
+GLCodeEditor editor = new GLCodeEditor(
+        Files.readString(themeFile), themeFile.toUri());
+```
+
+For an existing editor, call `configureDocument(uri)`. File-name recognition is
+also available through `GLCodeLanguages.forUri(...)` and
+`GLCodeLanguages.forFileName(...)`.
+
+The native providers offer format-specific property and value completion,
+validation, hover documentation, semantic classifications, duplicate-key
+diagnostics, and cross-file navigation. Themes additionally resolve property
+references and fragments; input maps validate inheritance and binding grammar;
+localized bundles compare their keys and `MessageFormat` arguments with the
+closest root bundle. Relative paths are resolved from the document URI;
+therefore an artificial URI cannot provide file completion or cross-file
+navigation.
+
+Resolved color values are accompanied by a compact swatch after the source
+value. The preview supports hexadecimal, RGB, HSV, HSL, OKLab, OKLCH,
+references, and `derive(...)` expressions, including colors declared in
+imported theme fragments. Its checkerboard exposes transparency; hovering shows
+hexadecimal and RGBA values, and clicking selects the represented source
+expression.
+Other providers can expose the same presentation through
+`GLCodeDiagnosticProvider.Session.documentColors(...)`, which returns
+`GLCodeColor` ranges. The default implementation returns no colors, preserving
+compatibility with diagnostic-only and existing language-server adapters.
+
+Applications can use the same infrastructure for their own UTF-8
+`key=value` formats. Define properties with `GLCodePropertySchema`, construct a
+`GLPropertiesCodeLanguage`, and return or assign that language to an editor.
+The schema controls exact and prefix-matched keys, value types, enum choices,
+unknown-key policy, and format-level validators.
+`GLCodeLanguage.codeIntelligenceProvider()` is the extension point for any
+other language that can provide in-process completion, hover, definitions,
+semantic tokens, and diagnostics.
+
 ### Language Server Protocol
 
 The optional `glswing-lsp` artifact connects a code editor to language servers

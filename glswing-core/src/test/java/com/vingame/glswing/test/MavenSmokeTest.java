@@ -78,6 +78,16 @@ final class MavenSmokeTest {
 	}
 
 	@Test
+	void themeCodeSupport() throws Exception {
+		GLThemeCodeSupportSelfTest.main(NO_ARGS);
+	}
+
+	@Test
+	void configurationLanguages() throws Exception {
+		GLConfigurationLanguageSelfTest.main(NO_ARGS);
+	}
+
+	@Test
 	void sliderGroup() {
 		GLSliderGroupSelfTest.main(NO_ARGS);
 	}

@@ -1,11 +1,23 @@
 package com.vingame.glswing.ui;
 
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
 import java.util.Set;
 
-/** Built-in lightweight language profiles for syntax colors and diagnostics. */
+import com.vingame.glswing.input.GLInputCodeSupport;
+
+/** Built-in language profiles, file-name detection, and lightweight diagnostics. */
 public final class GLCodeLanguages {
+	/** Native GLSwing theme language with in-process schema intelligence. */
+	public static final GLCodeLanguage GLTHEME = GLThemeCodeSupport.language();
+	/** Native GLSwing input-map language with in-process schema intelligence. */
+	public static final GLCodeLanguage GLINPUT = GLInputCodeSupport.language();
+	/** Native UTF-8 ResourceBundle localization language. */
+	public static final GLCodeLanguage LOCALIZATION =
+			GLLocalizationCodeSupport.language();
 	public static final GLCodeLanguage JAVA = language("java", Rules.JAVA, Set.of(
 			"class", "interface", "enum", "record", "public", "private", "protected",
 			"static", "final", "void", "new", "return", "if", "else", "for", "while",
@@ -70,6 +82,44 @@ public final class GLCodeLanguages {
 			"flex", "grid", "absolute", "relative", "fixed", "sticky"));
 
 	private GLCodeLanguages() { }
+
+	/** Resolves a built-in language from a file URI or returns an empty result. */
+	public static Optional<GLCodeLanguage> forUri(URI uri) {
+		if (uri == null) return Optional.empty();
+		String path = uri.getPath();
+		if (path == null || path.isBlank()) path = uri.getSchemeSpecificPart();
+		return forFileName(path);
+	}
+
+	/** Resolves a built-in language from a file name or path. */
+	public static Optional<GLCodeLanguage> forFileName(String fileName) {
+		if (fileName == null || fileName.isBlank()) return Optional.empty();
+		String lower = fileName.toLowerCase(Locale.ROOT);
+		int slash = Math.max(lower.lastIndexOf('/'), lower.lastIndexOf('\\'));
+		if (slash >= 0) lower = lower.substring(slash + 1);
+		int dot = lower.lastIndexOf('.');
+		String extension = dot < 0 ? "" : lower.substring(dot + 1);
+		return Optional.ofNullable(switch (extension) {
+		case "gltheme" -> GLTHEME;
+		case "glinput" -> GLINPUT;
+		case "properties" -> LOCALIZATION;
+		case "java" -> JAVA;
+		case "c", "h" -> C;
+		case "cc", "cpp", "cxx", "hh", "hpp", "hxx" -> CPP;
+		case "cs" -> CSHARP;
+		case "glsl", "vert", "frag", "geom", "tesc", "tese", "comp" -> GLSL;
+		case "js", "mjs", "cjs", "jsx" -> JAVASCRIPT;
+		case "ts", "mts", "cts", "tsx" -> TYPESCRIPT;
+		case "py", "pyw" -> PYTHON;
+		case "rb" -> RUBY;
+		case "json" -> JSON;
+		case "html", "htm" -> HTML;
+		case "xml" -> XML;
+		case "css" -> CSS;
+		default -> null;
+		});
+	}
+
 	private enum Rules { JAVA, C_LIKE, SCRIPT, PYTHON, RUBY, JSON, HTML, XML, CSS }
 	private static GLCodeLanguage language(String id, Rules rules,
 			Set<String> keywords) {

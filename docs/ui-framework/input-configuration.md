@@ -17,6 +17,7 @@ input scope.
 - [Inheritance and scopes](#inheritance-and-scopes)
 - [Live reload](#live-reload)
 - [Editable shortcuts and preferences](#editable-shortcuts-and-preferences)
+- [Editing input-map source](#editing-input-map-source)
 - [Standard actions](#standard-actions)
 - [Application actions](#application-actions)
 
@@ -159,6 +160,24 @@ alias. `unsetBinding(...)`, `unsetModifier(...)`, and `unsetValue(...)` restore
 inheritance. `unbind(...)` explicitly disables an inherited key action, and
 `reset()` removes the complete user override layer. Saving atomically replaces
 the file and writes only explicit overrides.
+
+## Editing input-map source
+
+`GLCodeEditor` recognizes `.glinput` document URIs and installs
+`GLCodeLanguages.GLINPUT` automatically:
+
+```java
+Path file = Path.of("config", "application.glinput");
+GLCodeEditor editor = new GLCodeEditor(Files.readString(file), file.toUri());
+```
+
+The built-in language validates shortcut alternatives, key names, modifiers,
+positive behavior values, duplicate properties, inherited files, and
+inheritance cycles using the same contracts as `GLInputMapLoader`. Completion
+and hover documentation cover every bundled action and preference. Application
+entries under `key.*`, `modifier.*`, and `value.*` remain valid and receive the
+same value validation. File completion and navigation from `input.extends`
+require a real file URI.
 
 ## Standard actions
 

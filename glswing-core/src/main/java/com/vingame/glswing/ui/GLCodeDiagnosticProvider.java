@@ -6,7 +6,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.function.Consumer;
 
-/** Optional asynchronous code intelligence source, such as a language server. */
+/** Optional asynchronous code-intelligence source, either in-process or external. */
 public interface GLCodeDiagnosticProvider {
 	/** Opens a document and starts delivering complete diagnostic snapshots. */
 	Session open(GLCodeDocument document, Consumer<Result> listener);
@@ -60,6 +60,11 @@ public interface GLCodeDiagnosticProvider {
 		}
 		/** Requests semantic classifications for the complete document. */
 		default CompletionStage<List<GLCodeSemanticToken>> semanticTokens(
+				GLCodeDocument document) {
+			return CompletableFuture.completedFuture(List.of());
+		}
+		/** Resolves colors represented by source ranges in the document. */
+		default CompletionStage<List<GLCodeColor>> documentColors(
 				GLCodeDocument document) {
 			return CompletableFuture.completedFuture(List.of());
 		}

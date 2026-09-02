@@ -570,6 +570,13 @@ public final class GuiShowcaseDemo {
 			URI initialUri = initialPath.toUri();
 			codeTabs.addTab("HelloGLSwing.java", codeEditor);
 			editorsByUri.put(initialUri, codeEditor);
+			addThemeEditor(showcaseThemeDirectory().resolve("showcase-bundle.gltheme"));
+			addConfigurationEditor(showcaseWorkspace().resolve(
+					"glswing-core/src/main/resources/com/vingame/glswing/input/default.glinput"));
+			addConfigurationEditor(showcaseWorkspace().resolve(
+					"glswing-core/src/main/resources/com/vingame/glswing/languages/Messages_de.properties"));
+			codeTabs.addSelectionListener((source, oldIndex, newIndex) ->
+					updateCodeTabStatus(newIndex));
 			codeTabs.setBounds(18, 50, 1110, 513);
 			codeTabs.setTabsClosable(true);
 			codeTabs.setClosedTabHistoryEnabled(true);
@@ -583,6 +590,37 @@ public final class GuiShowcaseDemo {
 				lspStatus.setText("Core diagnostics active · Java LSP is not installed");
 				showLanguageServerActions(true);
 			});
+		}
+
+		private void updateCodeTabStatus(int index) {
+			if (index < 0 || index >= codeTabs.getTabCount()
+					|| !(codeTabs.getComponentAt(index) instanceof GLCodeEditor editor)) return;
+			if (editor.getLanguage() == GLCodeLanguages.GLTHEME)
+				lspStatus.setText("GLTheme · Built-in schema intelligence active");
+			else if (editor.getLanguage() == GLCodeLanguages.GLINPUT)
+				lspStatus.setText("GLInput · Built-in binding intelligence active");
+			else if (editor.getLanguage() == GLCodeLanguages.LOCALIZATION)
+				lspStatus.setText("Localization · Root-bundle validation active");
+			else if (languageServer != null)
+				lspStatus.setText("Java LSP · Connected");
+			else lspStatus.setText("Core diagnostics active · Java LSP is not connected");
+		}
+
+		private void addThemeEditor(Path path) {
+			addConfigurationEditor(path);
+		}
+
+		private void addConfigurationEditor(Path path) {
+			try {
+				URI uri = path.toAbsolutePath().normalize().toUri();
+				GLCodeEditor editor = new GLCodeEditor(Files.readString(path), uri);
+				editor.setNavigationHandler(this::openDefinition);
+				codeTabs.addTab(path.getFileName().toString(), editor);
+				editorsByUri.put(uri, editor);
+			} catch (java.io.IOException failure) {
+				lspStatus.setText("Configuration · Cannot load showcase file: "
+						+ failure.getMessage());
+			}
 		}
 
 		private void configureCodeEditor(GLCodeEditor editor) {
@@ -637,11 +675,45 @@ public final class GuiShowcaseDemo {
 			if (existing != null) {
 				codeTabs.setSelectedIndex(existingTab);
 				moveTo(existing, location.line(), location.character());
-				lspStatus.setText("Java LSP · Definition is in "
+				lspStatus.setText(languageLabel(existing) + " · Definition is in "
 						+ tabName(location.uri()));
 				return;
 			}
+			com.vingame.glswing.ui.GLCodeLanguage targetLanguage =
+					GLCodeLanguages.forUri(location.uri()).orElse(null);
+			if (targetLanguage == GLCodeLanguages.GLTHEME
+					|| targetLanguage == GLCodeLanguages.GLINPUT
+					|| targetLanguage == GLCodeLanguages.LOCALIZATION) {
+				openLocalConfigurationSource(location);
+				return;
+			}
 			openProfileSource(location);
+		}
+
+		private void openLocalConfigurationSource(
+				com.vingame.glswing.ui.GLCodeLocation location) {
+			try {
+				Path path = Path.of(location.uri());
+				GLCodeEditor editor = new GLCodeEditor(Files.readString(path), location.uri());
+				editor.setNavigationHandler(this::openDefinition);
+				int tab = codeTabs.addTab(tabName(location.uri()), editor);
+				editorsByUri.put(location.uri(), editor);
+				codeTabs.setSelectedIndex(tab);
+				moveTo(editor, location.line(), location.character());
+				lspStatus.setText(languageLabel(editor) + " · Definition is in "
+						+ tabName(location.uri()));
+			} catch (RuntimeException | java.io.IOException failure) {
+				lspStatus.setText("Configuration · Cannot load source: "
+						+ failure.getMessage());
+			}
+		}
+
+		private static String languageLabel(GLCodeEditor editor) {
+			if (editor.getLanguage() == GLCodeLanguages.GLTHEME) return "GLTheme";
+			if (editor.getLanguage() == GLCodeLanguages.GLINPUT) return "GLInput";
+			if (editor.getLanguage() == GLCodeLanguages.LOCALIZATION)
+				return "Localization";
+			return "Java LSP";
 		}
 
 		private void openProfileSource(com.vingame.glswing.ui.GLCodeLocation location) {

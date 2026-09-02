@@ -89,11 +89,15 @@ public final class GLThemeValues {
 	}
 
 	/**
-	 * Parses hex, RGB(A), and derived colors. A {@code derive} expression can
+	 * Parses hex, RGB, HSV, HSL, OKLab, OKLCH, and derived colors. Functional
+	 * colors accept an optional final alpha channel; {@code rgba} remains an
+	 * alias for the four-channel RGB form. A {@code derive} expression can
 	 * set ({@code =}), scale ({@code *=}), add ({@code +=}), or subtract
 	 * ({@code -=}) the alpha, hue, saturation, and value/brightness channels.
-	 * Hue accepts degrees via {@code deg}; unit channels accept percentages,
-	 * normalized {@code f} values, or 0..255 integers.
+	 * Functional RGB(A) channels independently accept 0..255 integers,
+	 * normalized decimal or {@code f}-suffixed values, and percentages. Hue
+	 * accepts degrees via {@code deg}; derived unit channels use the same
+	 * percentage, normalized-float, and integer conventions.
 	 */
 	public static Color parseColor(String text) {
 		if (text == null)
@@ -105,9 +109,17 @@ public final class GLThemeValues {
 		if (lower.startsWith("derive(") && value.endsWith(")"))
 			return parseDerived(value.substring(7, value.length() - 1));
 		if (lower.startsWith("rgba(") && value.endsWith(")"))
-			return parseFunctional(value.substring(5, value.length() - 1), true);
+			return parseRgb(value.substring(5, value.length() - 1), true);
 		if (lower.startsWith("rgb(") && value.endsWith(")"))
-			return parseFunctional(value.substring(4, value.length() - 1), false);
+			return parseRgb(value.substring(4, value.length() - 1), false);
+		if (lower.startsWith("hsv(") && value.endsWith(")"))
+			return parseHsv(value.substring(4, value.length() - 1));
+		if (lower.startsWith("hsl(") && value.endsWith(")"))
+			return parseHsl(value.substring(4, value.length() - 1));
+		if (lower.startsWith("oklab(") && value.endsWith(")"))
+			return parseOklab(value.substring(6, value.length() - 1));
+		if (lower.startsWith("oklch(") && value.endsWith(")"))
+			return parseOklch(value.substring(6, value.length() - 1));
 		throw new IllegalArgumentException("Unsupported theme color: " + text);
 	}
 
@@ -210,11 +222,10 @@ public final class GLThemeValues {
 						value.substring(0, value.length() - 1)) / 100f;
 			else if (hasFloatSuffix(value))
 				result = Float.parseFloat(value.substring(0, value.length() - 1));
-			else {
+			else if (value.indexOf('.') >= 0)
 				result = Float.parseFloat(value);
-				if (Math.abs(result) > 1)
-					result /= 255f;
-			}
+			else
+				result = Integer.parseInt(value) / 255f;
 			result = finite(result, text);
 			return requireUnitRange ? unit(result, text) : result;
 		} catch (NumberFormatException error) {
@@ -334,65 +345,175 @@ public final class GLThemeValues {
 		}
 	}
 
-	private static Color parseFunctional(String body, boolean alphaRequired) {
-		String[] parts = body.split(",");
-		int expected = alphaRequired ? 4 : 3;
-		if (parts.length != expected)
-			throw new IllegalArgumentException(
-					(alphaRequired ? "rgba" : "rgb") + " requires "
-							+ expected + " components");
-		boolean normalized = hasFloatSuffix(parts[0])
-				|| hasFloatSuffix(parts[1]) || hasFloatSuffix(parts[2]);
-		boolean percentages = parts[0].trim().endsWith("%")
-				|| parts[1].trim().endsWith("%") || parts[2].trim().endsWith("%");
-		for (int index = 0; index < 3; index++) {
-			String part = parts[index].trim();
-			if (normalized != hasFloatSuffix(part)
-					|| percentages != part.endsWith("%"))
-				throw new IllegalArgumentException(
-						"RGB components must consistently use integers, f-suffixed floats or percentages");
-		}
-		float red = colorComponent(parts[0], normalized, percentages);
-		float green = colorComponent(parts[1], normalized, percentages);
-		float blue = colorComponent(parts[2], normalized, percentages);
-		float alpha = alphaRequired ? alphaComponent(parts[3]) : 1;
+	private static Color parseRgb(String body, boolean rgbaAlias) {
+		String[] parts = functionalParts(body, rgbaAlias ? "rgba" : "rgb",
+				rgbaAlias ? 4 : 3, 4);
+		float red = functionalColorComponent(parts[0]);
+		float green = functionalColorComponent(parts[1]);
+		float blue = functionalColorComponent(parts[2]);
+		float alpha = parts.length == 4 ? functionalColorComponent(parts[3]) : 1;
 		return new Color(red, green, blue, alpha);
 	}
 
-	private static float colorComponent(String text, boolean normalized,
-			boolean percentage) {
-		String value = text.trim();
-		float result;
-		try {
-			if (percentage)
-				result = Float.parseFloat(value.substring(0, value.length() - 1)) / 100;
-			else if (normalized)
-				result = Float.parseFloat(value.substring(0, value.length() - 1));
-			else
-				result = Integer.parseInt(value) / 255f;
-		} catch (NumberFormatException error) {
-			throw new IllegalArgumentException("Invalid color component: " + text, error);
-		}
-		return unit(result, text);
+	private static Color parseHsv(String body) {
+		String[] parts = functionalParts(body, "hsv", 3, 4);
+		float hue = hueComponent(parts[0]);
+		float saturation = polarUnitComponent(parts[1], "HSV saturation");
+		float value = polarUnitComponent(parts[2], "HSV value");
+		float alpha = parts.length == 4 ? functionalColorComponent(parts[3]) : 1;
+		int rgb = Color.HSBtoRGB(hue, saturation, value);
+		return new Color((rgb >>> 16) & 0xff, (rgb >>> 8) & 0xff, rgb & 0xff,
+				Math.round(alpha * 255));
 	}
 
-	private static float alphaComponent(String text) {
+	private static Color parseHsl(String body) {
+		String[] parts = functionalParts(body, "hsl", 3, 4);
+		float hue = hueComponent(parts[0]);
+		float saturation = polarUnitComponent(parts[1], "HSL saturation");
+		float lightness = polarUnitComponent(parts[2], "HSL lightness");
+		float alpha = parts.length == 4 ? functionalColorComponent(parts[3]) : 1;
+		float amplitude = saturation * Math.min(lightness, 1 - lightness);
+		float red = hslComponent(hue, lightness, amplitude, 0);
+		float green = hslComponent(hue, lightness, amplitude, 8);
+		float blue = hslComponent(hue, lightness, amplitude, 4);
+		return new Color(clampUnit(red), clampUnit(green), clampUnit(blue), alpha);
+	}
+
+	private static float hslComponent(float hue, float lightness,
+			float amplitude, float offset) {
+		float position = (offset + hue * 12) % 12;
+		return lightness - amplitude * Math.max(-1,
+				Math.min(Math.min(position - 3, 9 - position), 1));
+	}
+
+	private static Color parseOklab(String body) {
+		String[] parts = functionalParts(body, "oklab", 3, 4);
+		float lightness = polarUnitComponent(parts[0], "OKLab lightness");
+		float axisA = signedDecimalComponent(parts[1], "OKLab a");
+		float axisB = signedDecimalComponent(parts[2], "OKLab b");
+		float alpha = parts.length == 4 ? functionalColorComponent(parts[3]) : 1;
+		return oklabToSrgb(lightness, axisA, axisB, alpha);
+	}
+
+	private static Color parseOklch(String body) {
+		String[] parts = functionalParts(body, "oklch", 3, 4);
+		float lightness = polarUnitComponent(parts[0], "OKLCH lightness");
+		float chroma = signedDecimalComponent(parts[1], "OKLCH chroma");
+		if (chroma < 0)
+			throw new IllegalArgumentException("OKLCH chroma must not be negative: "
+					+ parts[1]);
+		float hue = hueComponent(parts[2]);
+		float alpha = parts.length == 4 ? functionalColorComponent(parts[3]) : 1;
+		double angle = hue * Math.PI * 2;
+		return oklabToSrgb(lightness, chroma * (float) Math.cos(angle),
+				chroma * (float) Math.sin(angle), alpha);
+	}
+
+	private static String[] functionalParts(String body, String function,
+			int minimum, int maximum) {
+		String[] parts = body.split(",", -1);
+		if (parts.length < minimum || parts.length > maximum)
+			throw new IllegalArgumentException(function + " requires " + minimum
+					+ (minimum == maximum ? "" : " or " + maximum) + " components");
+		for (String part : parts)
+			if (part.isBlank())
+				throw new IllegalArgumentException(
+						function + " components must not be empty");
+		return parts;
+	}
+
+	private static float hueComponent(String text) {
+		String value = text.trim();
+		String lower = value.toLowerCase(Locale.ROOT);
+		try {
+			float turns;
+			if (lower.endsWith("deg"))
+				turns = Float.parseFloat(value.substring(0, value.length() - 3)) / 360f;
+			else if (value.endsWith("%"))
+				turns = Float.parseFloat(value.substring(0, value.length() - 1)) / 100f;
+			else if (hasFloatSuffix(value))
+				turns = Float.parseFloat(value.substring(0, value.length() - 1));
+			else if (value.indexOf('.') >= 0)
+				turns = Float.parseFloat(value);
+			else
+				turns = Integer.parseInt(value) / 360f;
+			return wrapUnit(finite(turns, text));
+		} catch (NumberFormatException error) {
+			throw new IllegalArgumentException("Invalid hue component: " + text, error);
+		}
+	}
+
+	private static float polarUnitComponent(String text, String channel) {
 		String value = text.trim();
 		try {
 			float result;
 			if (value.endsWith("%"))
+				result = Float.parseFloat(value.substring(0, value.length() - 1)) / 100f;
+			else if (hasFloatSuffix(value))
+				result = Float.parseFloat(value.substring(0, value.length() - 1));
+			else if (value.indexOf('.') >= 0)
+				result = Float.parseFloat(value);
+			else
+				throw new NumberFormatException("Expected a percentage or normalized decimal");
+			return unit(result, text);
+		} catch (NumberFormatException error) {
+			throw new IllegalArgumentException(channel
+					+ " must be a percentage or normalized decimal/f-suffixed value: "
+					+ text, error);
+		}
+	}
+
+	private static float signedDecimalComponent(String text, String channel) {
+		String value = text.trim();
+		if (hasFloatSuffix(value)) value = value.substring(0, value.length() - 1);
+		try {
+			return finite(Float.parseFloat(value), text);
+		} catch (NumberFormatException error) {
+			throw new IllegalArgumentException("Invalid " + channel + " component: "
+					+ text, error);
+		}
+	}
+
+	private static Color oklabToSrgb(float lightness, float axisA,
+			float axisB, float alpha) {
+		double lRoot = lightness + 0.3963377774 * axisA + 0.2158037573 * axisB;
+		double mRoot = lightness - 0.1055613458 * axisA - 0.0638541728 * axisB;
+		double sRoot = lightness - 0.0894841775 * axisA - 1.2914855480 * axisB;
+		double l = lRoot * lRoot * lRoot;
+		double m = mRoot * mRoot * mRoot;
+		double s = sRoot * sRoot * sRoot;
+		double red = 4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s;
+		double green = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s;
+		double blue = -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s;
+		return new Color(linearToSrgb(red), linearToSrgb(green),
+				linearToSrgb(blue), alpha);
+	}
+
+	private static float linearToSrgb(double component) {
+		double encoded = component <= 0.0031308
+				? 12.92 * component
+				: 1.055 * Math.pow(component, 1 / 2.4) - 0.055;
+		return clampUnit((float) encoded);
+	}
+
+	private static float functionalColorComponent(String text) {
+		String value = text.trim();
+		float result;
+		try {
+			if (value.endsWith("%"))
 				result = Float.parseFloat(value.substring(0, value.length() - 1)) / 100;
 			else if (hasFloatSuffix(value))
 				result = Float.parseFloat(value.substring(0, value.length() - 1));
-			else {
+			else if (value.indexOf('.') >= 0)
 				result = Float.parseFloat(value);
-				if (result > 1)
-					result /= 255;
-			}
-			return unit(result, text);
+			else
+				result = Integer.parseInt(value) / 255f;
 		} catch (NumberFormatException error) {
-			throw new IllegalArgumentException("Invalid alpha component: " + text, error);
+			throw new IllegalArgumentException("Invalid color component '" + text
+					+ "'; expected a 0..255 integer, 0..1 decimal/f-suffixed value, or percentage",
+					error);
 		}
+		return unit(result, text);
 	}
 
 	private static boolean hasFloatSuffix(String value) {
