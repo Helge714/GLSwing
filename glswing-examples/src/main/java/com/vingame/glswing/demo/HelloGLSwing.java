@@ -5,10 +5,21 @@ public final class HelloGLSwing {
 	private HelloGLSwing() { }
 
 	public static void main(String[] args) {
-		System.out.println("Hello, GLSwing!");
-		// Press F3 or Ctrl-click main to open its source in another tab.
+		Greeting greeting = new DefaultGreeting();
+		System.out.println(greeting.message());
+		// Hold Ctrl over a symbol to inspect its available navigation actions.
 		GuiShowcaseDemo.main(args);
 		// Place the caret after the dot and press Ctrl+Space.
 		System.out.println();
+	}
+
+	private interface Greeting {
+		String message();
+	}
+
+	private static final class DefaultGreeting implements Greeting {
+		@Override public String message() {
+			return "Hello, GLSwing!";
+		}
 	}
 }

@@ -21,6 +21,7 @@ import com.vingame.glswing.ui.GLMenuBarItem;
 import com.vingame.glswing.ui.GLMenuItem;
 import com.vingame.glswing.ui.GLMenuMnemonics;
 import com.vingame.glswing.ui.GLPopupMenu;
+import com.vingame.glswing.ui.GLPopupMenuListener;
 import com.vingame.glswing.ui.GLPopupTitlePosition;
 import com.vingame.glswing.ui.GLPopupTextOverflow;
 
@@ -47,6 +48,12 @@ public final class GLMenuSelfTest {
 		GLMenuItem branch = root.addSubMenu("Branch", nested);
 		root.addSeparator();
 		root.addItem("Other");
+		if (!root.isOutsideInputBlocked())
+			throw new AssertionError("Ordinary popup did not block outside input");
+		GLPopupMenu hoverPopup = new GLPopupMenu();
+		hoverPopup.setOutsideInputBlocked(false);
+		if (hoverPopup.isOutsideInputBlocked())
+			throw new AssertionError("Modeless popup retained outside-input blocking");
 
 		root.show(host, 390, 290);
 		if (!root.isShowing() || host.getGLChildren().size() != 1)
@@ -121,10 +128,23 @@ public final class GLMenuSelfTest {
 		GLPopupMenu transientState = new GLPopupMenu();
 		GLMenuItem formerlyHovered = transientState.addItem("Hovered");
 		transientState.addItem("Next");
+		AtomicInteger pointerEntries = new AtomicInteger();
+		AtomicInteger pointerExits = new AtomicInteger();
+		transientState.addPopupMenuListener(new GLPopupMenuListener() {
+			@Override public void popupMenuPointerEntered(GLPopupMenu menu) {
+				pointerEntries.incrementAndGet();
+			}
+			@Override public void popupMenuPointerExited(GLPopupMenu menu) {
+				pointerExits.incrementAndGet();
+			}
+		});
 		transientState.show(host, 20, 20);
 		formerlyHovered.mouseEntered(mouseEvent());
 		if (formerlyHovered.getControlState() != GLControlState.HOVERED)
 			throw new AssertionError("Menu item did not enter hover state");
+		formerlyHovered.mouseExited(mouseEvent());
+		if (pointerEntries.get() != 1 || pointerExits.get() != 1)
+			throw new AssertionError("Popup pointer-presence events were not delivered");
 		transientState.close();
 		if (formerlyHovered.getControlState() != GLControlState.NORMAL)
 			throw new AssertionError(

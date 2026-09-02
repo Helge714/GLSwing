@@ -89,6 +89,8 @@ public final class UIQuadBatch {
 			attribute(gl, 9, 4, byteStride, 20);
 			attribute(gl, 11, 4, byteStride, 24);
 			attribute(gl, 12, 4, byteStride, UIQuadInstanceFormat.CLIP_OFFSET);
+			attribute(gl, 13, 4, byteStride,
+					UIQuadInstanceFormat.CLIP_RADII_OFFSET);
 
 			gl.glGenBuffers(1, ids, 0);
 			pickVbo = ids[0];
@@ -165,7 +167,7 @@ public final class UIQuadBatch {
 		if (values == null || values.length % STRIDE != 0 || offset < 0 || count < 0
 				|| offset + count * STRIDE > values.length)
 			throw new IllegalArgumentException("UI instance range is invalid");
-		if (clip == null || clip.length < 4)
+		if (clip == null || clip.length < 8)
 			throw new IllegalArgumentException("UI clip rectangle is invalid");
 		if (!accepts(candidate))
 			throw new IllegalStateException("UI batch requires a flush before changing texture");
@@ -186,7 +188,7 @@ public final class UIQuadBatch {
 			float[] clip) {
 		if (modifier == null || modifier.isIdentity()) {
 			instances.put(values, source, UIQuadInstanceFormat.CLIP_OFFSET);
-			instances.put(clip, 0, 4);
+			instances.put(clip, 0, 8);
 			return;
 		}
 		for (int corner = 0; corner < 3; corner++) {
@@ -220,7 +222,7 @@ public final class UIQuadBatch {
 			instances.put(modifier.secondaryAlpha(values[source + 23]));
 		}
 		instances.put(values, source + 24, 4);
-		instances.put(clip, 0, 4);
+		instances.put(clip, 0, 8);
 	}
 
 	public int flush(GL3 gl, float[] projection, ShaderProgram shaderOverride,

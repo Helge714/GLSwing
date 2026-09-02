@@ -11,6 +11,7 @@ flat in int vTextureSlot;
 flat in vec4 vAux;
 flat in vec4 vTertiaryColor;
 flat in vec4 vClipRect;
+flat in vec4 vClipRadii;
 in vec2 vScreenPosition;
 
 uniform sampler2D uTextures[16];
@@ -104,6 +105,15 @@ float insetAsymmetricRoundedDistance(vec2 local, vec2 size, vec4 radii,
 float edgeCoverage(float distance) {
 	float antialias = max(length(vec2(dFdx(distance), dFdy(distance))), 0.0001);
     return 1.0 - smoothstep(-antialias, antialias, distance);
+}
+
+float roundedClipCoverage() {
+	if (max(max(vClipRadii.x, vClipRadii.y),
+			max(vClipRadii.z, vClipRadii.w)) <= 0.0)
+		return 1.0;
+	vec2 size = max(vClipRect.zw - vClipRect.xy, vec2(0.0001));
+	return edgeCoverage(asymmetricRoundedDistance(
+			vScreenPosition - vClipRect.xy, size, vClipRadii));
 }
 
 float squareInsetCoverage(vec2 inset) {
@@ -225,13 +235,16 @@ void main() {
 			|| vScreenPosition.x > vClipRect.z
 			|| vScreenPosition.y > vClipRect.w)
 		discard;
+	float clipCoverage = roundedClipCoverage();
+	if (clipCoverage <= 0.0001)
+		discard;
     if (vPickId == uint(0))
         discard;
 	int mode = int(vParameters.x + 0.5);
 	if (mode == 12)
 		discard;
 	if (mode == 5) {
-		if (vAlpha < uTextAlphaThreshold)
+		if (vAlpha * clipCoverage < uTextAlphaThreshold)
 			discard;
 		outPickId = vPickId;
 		return;
@@ -314,7 +327,7 @@ void main() {
 		coverage = edgeCoverage(roundedDistance(vLocal, vSize, vParameters.y));
 		alpha = max(vAlpha, vSecondaryColor.a);
     }
-	if (alpha * coverage < threshold)
+	if (alpha * coverage * clipCoverage < threshold)
         discard;
     outPickId = vPickId;
 }

@@ -58,6 +58,7 @@ an index of the retained-mode API.
 | [Components and hosts](ui-framework/components.md) | Component lifecycle, bounds, children, z-order, damage, windows, canvas, panel, and dialogs |
 | [Layouts and sizing](ui-framework/layout.md) | Preferred sizes, padding, free layout, grid constraints, and custom layouts |
 | [Controls](ui-framework/controls.md) | Labels, buttons, check boxes, sliders, text editors, combo boxes, menus, tabs, and scrolling |
+| [File dialogs](ui-framework/file-dialogs.md) | Native SWT open/save dialogs, themed fallback, filters, and previews |
 | [Themes and localization](ui-framework/themes-localization.md) | Theme files, style records, color expressions, locale fallback, and live reload |
 | [Input configuration](ui-framework/input-configuration.md) | Semantic actions, external `.glinput` files, platform shortcuts, modifiers, and scopes |
 | [Text editing](ui-framework/text-editing.md) | Single-line fields, multiline documents, selection, wrapping, scrolling, and editing history |

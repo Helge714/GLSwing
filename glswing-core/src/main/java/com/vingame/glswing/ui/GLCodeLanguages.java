@@ -4,7 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
-/** Built-in lightweight Java and GLSL lexers. */
+/** Built-in lightweight language profiles for syntax colors and diagnostics. */
 public final class GLCodeLanguages {
 	public static final GLCodeLanguage JAVA = language("java", Rules.JAVA, Set.of(
 			"class", "interface", "enum", "record", "public", "private", "protected",
@@ -479,7 +479,10 @@ public final class GLCodeLanguages {
 					if (masked.charAt(at) != '\n') masked.setCharAt(at, ' ');
 				index = end;
 			} else if (value == '"' || value == '\'') {
-				char quote = value; masked.setCharAt(index++, ' ');
+				char quote = value;
+				// Preserve one non-whitespace marker so lightweight expression checks
+				// still recognize the literal as a value while its contents stay hidden.
+				masked.setCharAt(index++, '0');
 				while (index < source.length()) {
 					char next = source.charAt(index); if (next != '\n') masked.setCharAt(index, ' '); index++;
 					if (next == '\\' && index < source.length()) { if (source.charAt(index) != '\n') masked.setCharAt(index, ' '); index++; }

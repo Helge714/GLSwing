@@ -25,6 +25,7 @@ see the [rendering guide](graphics-pipeline.md).
 | Basic controls | `GLControl`, `GLLabel`, `GLButton`, `GLCheckBox`, `GLLine` | State, focus, actions, and simple content |
 | Value input | `GLSlider`, `GLSliderGroup`, `GLTextEditor`, `GLTextInputFormats`, `GLComboBox<T>` | Selection, validation, and editing |
 | Navigation | `GLMenuBar`, `GLPopupMenu`, `GLMenuItem`, `GLTabbedPane` | Menus, overlays, and view selection |
+| File access | `GLFileDialogs`, `GLFileDialogRequest` | Native SWT dialogs with a themed GLSwing fallback |
 | Scrolling | `GLScrollPane`, `GLScrollBar` | Clipped viewports and scroll models |
 | Appearance | `GLTheme`, style records, `GLThemeValues`, `GLThemeLoader`, `GLThemeWatcher` | Global and local presentation |
 | Localization | `GLLocalizer`, `GLUiKeys` | UTF-8 bundles, locale fallback, and overrides |

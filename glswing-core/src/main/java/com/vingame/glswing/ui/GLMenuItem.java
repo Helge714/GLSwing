@@ -281,8 +281,11 @@ public class GLMenuItem extends GLControl {
 						Math.max(0, right - left - reservedWidth))
 				: text;
 		float textLeft = left;
+		var textShadow = getGLTheme().textShadow("menu");
 		context.drawUITextShadow(font, renderedText, textLeft, baseline,
-				getGLTheme().textShadow("menu"));
+				textShadow);
+		GLMnemonicSupport.drawUnderlineShadow(context, font, renderedText,
+				displayedMnemonicIndex, textLeft, baseline, textShadow);
 		context.withParameters(textParameters, () -> {
 			context.drawUIText(font, renderedText, textLeft, baseline, Color.WHITE);
 			GLMnemonicSupport.drawUnderline(context, font, renderedText,
@@ -316,6 +319,12 @@ public class GLMenuItem extends GLControl {
 	protected void controlMouseEntered(GLMouseEvent event) {
 		if (isEnabled() && ownerMenu != null)
 			ownerMenu.itemHovered(this);
+	}
+
+	@Override
+	protected void controlMouseExited(GLMouseEvent event) {
+		if (isEnabled() && ownerMenu != null)
+			ownerMenu.itemExited(this);
 	}
 
 	@Override

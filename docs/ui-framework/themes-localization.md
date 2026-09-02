@@ -229,7 +229,8 @@ Any control family can override individual values by prefixing them, for
 example `button.textShadow.color`, `menu.textShadow.offsetX`, or
 `node.textShadow.offsetY`. Supported prefixes include `label`, `button`,
 `checkBox`, `slider`, `textEditor`, `menu`, `menuBar`, `comboBox`,
-`tabbedPane`, and `node`. Missing control-specific values inherit the global
+`tabbedPane`, `node`, and `fileDialog`. Menu mnemonic underlines inherit the
+same shadow as their label. Missing control-specific values inherit the global
 shadow. Offsets use logical surface pixels in the default screen-space mode.
 Softness is a non-negative MSDF spread factor: `0` retains the normal crisp
 MSDF edge, and larger values progressively widen the transition. It does not
@@ -261,6 +262,20 @@ behind an active item. Configure the latter with
 pixels), or derive a typed style with
 `theme.menuStyle().withItemCornerRadius(radius)`. The item radius is applied to
 all four corners and does not change how a ComboBox popup joins its owner.
+
+Popup elevation uses an analytic rounded-rectangle shadow in the shared UI
+batch. Configure it independently from menu colors and geometry:
+
+```properties
+menu.shadow.color=rgba(0, 0, 0, 105)
+menu.shadow.softness=9
+menu.shadow.offsetX=0
+menu.shadow.offsetY=3
+```
+
+Set the shadow color alpha or softness to `0` to disable it. Shadow offsets and
+softness are logical pixels; GLSwing automatically declares the required visual
+overflow so damage tracking and clipping include the complete shadow.
 
 ComboBox press feedback uses `comboBox.pressedLight` and
 `comboBox.pressedDark`. The same gradient remains active while its popup is

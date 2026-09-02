@@ -452,6 +452,18 @@ public final class GLRenderer2D {
 	}
 
 	void beginClip(float x, float y, float width, float height) {
+		beginClip(x, y, width, height, null);
+	}
+
+	void beginUIRoundedClip(float x, float y, float width, float height,
+			GLCornerRadii radii) {
+		if (radii == null)
+			throw new IllegalArgumentException("UI clip radii must not be null");
+		beginClip(x, y, width, height, radii);
+	}
+
+	private void beginClip(float x, float y, float width, float height,
+			GLCornerRadii radii) {
 		requireFrame();
 		if (!Float.isFinite(x) || !Float.isFinite(y)
 				|| !Float.isFinite(width) || !Float.isFinite(height)
@@ -469,15 +481,18 @@ public final class GLRenderer2D {
 		float top = bounds[1];
 		float right = left + bounds[2];
 		float bottom = top + bounds[3];
-		if (!uiClipStack.isEmpty()) {
-			float[] parent = uiClipStack.get(uiClipStack.size() - 1);
-			left = Math.max(left, parent[0]);
-			top = Math.max(top, parent[1]);
-			right = Math.min(right, parent[2]);
-			bottom = Math.min(bottom, parent[3]);
+		float[] requestedRadii = new float[4];
+		if (radii != null) {
+			float scale = worldToScreen.copy().concatenate(transform)
+					.getMaximumScale();
+			requestedRadii[0] = radii.topLeft() * scale;
+			requestedRadii[1] = radii.topRight() * scale;
+			requestedRadii[2] = radii.bottomRight() * scale;
+			requestedRadii[3] = radii.bottomLeft() * scale;
 		}
-		uiClipStack.add(new float[] { left, top,
-				Math.max(left, right), Math.max(top, bottom) });
+		uiClipStack.add(intersectUIClip(left, top, right, bottom,
+				requestedRadii, uiClipStack.isEmpty() ? null
+						: uiClipStack.get(uiClipStack.size() - 1)));
 		int[] viewport = new int[4];
 		gl.glGetIntegerv(GL.GL_VIEWPORT, viewport, 0);
 		int minimumX = viewport[0] + (int) Math.floor(bounds[0] * colorDeviceScaleX);
@@ -501,6 +516,50 @@ public final class GLRenderer2D {
 		gl.glScissor(minimumX, minimumY,
 				Math.max(0, maximumX - minimumX),
 				Math.max(0, maximumY - minimumY));
+	}
+
+	private static float[] intersectUIClip(float left, float top,
+			float right, float bottom, float[] requestedRadii, float[] parent) {
+		float requestedLeft = left;
+		float requestedTop = top;
+		float requestedRight = right;
+		float requestedBottom = bottom;
+		if (parent != null) {
+			left = Math.max(left, parent[0]);
+			top = Math.max(top, parent[1]);
+			right = Math.min(right, parent[2]);
+			bottom = Math.min(bottom, parent[3]);
+		}
+		right = Math.max(left, right);
+		bottom = Math.max(top, bottom);
+		float[] result = { left, top, right, bottom, 0, 0, 0, 0 };
+		if (same(left, requestedLeft) && same(top, requestedTop))
+			result[4] = requestedRadii[0];
+		if (same(right, requestedRight) && same(top, requestedTop))
+			result[5] = requestedRadii[1];
+		if (same(right, requestedRight) && same(bottom, requestedBottom))
+			result[6] = requestedRadii[2];
+		if (same(left, requestedLeft) && same(bottom, requestedBottom))
+			result[7] = requestedRadii[3];
+		if (parent != null) {
+			if (same(left, parent[0]) && same(top, parent[1]))
+				result[4] = Math.max(result[4], parent[4]);
+			if (same(right, parent[2]) && same(top, parent[1]))
+				result[5] = Math.max(result[5], parent[5]);
+			if (same(right, parent[2]) && same(bottom, parent[3]))
+				result[6] = Math.max(result[6], parent[6]);
+			if (same(left, parent[0]) && same(bottom, parent[3]))
+				result[7] = Math.max(result[7], parent[7]);
+		}
+		float maximumRadius = Math.max(0,
+				Math.min((right - left) * 0.5f, (bottom - top) * 0.5f));
+		for (int index = 4; index < 8; index++)
+			result[index] = Math.min(result[index], maximumRadius);
+		return result;
+	}
+
+	private static boolean same(float first, float second) {
+		return Math.abs(first - second) <= 0.001f;
 	}
 
 	void endClip() {
@@ -2117,7 +2176,7 @@ public final class GLRenderer2D {
 
 	private float[] currentUIClip() {
 		return uiClipStack.isEmpty()
-				? new float[] { 0, 0, logicalWidth, logicalHeight }
+				? new float[] { 0, 0, logicalWidth, logicalHeight, 0, 0, 0, 0 }
 				: uiClipStack.get(uiClipStack.size() - 1);
 	}
 

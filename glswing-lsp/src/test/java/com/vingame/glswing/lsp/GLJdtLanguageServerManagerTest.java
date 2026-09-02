@@ -12,6 +12,7 @@ import org.eclipse.lsp4j.Hover;
 import org.eclipse.lsp4j.MarkupContent;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.Range;
+import org.eclipse.lsp4j.SemanticTokens;
 
 final class GLJdtLanguageServerManagerTest {
 	@TempDir Path temporary;
@@ -95,6 +96,25 @@ final class GLJdtLanguageServerManagerTest {
 				java.util.List.of("file:///Example.java", selections));
 		assertTrue(selected.size() == 1 && selected.get(0).getAsJsonObject()
 				.get("fullyQualifiedName").getAsString().equals("java.util.List"));
+	}
+
+	@Test void decodesRelativeSemanticTokensAndModifiers() {
+		String source = "class Demo {\n  int value;\n}";
+		SemanticTokens response = new SemanticTokens(java.util.List.of(
+				0, 6, 4, 0, 1,
+				1, 6, 5, 1, 2));
+		var tokens = GLLanguageServer.decodeSemanticTokens(source, response,
+				java.util.List.of("class", "property"),
+				java.util.List.of("declaration", "readonly"));
+		assertTrue(tokens.size() == 2);
+		assertTrue(source.substring(tokens.get(0).start(), tokens.get(0).end())
+				.equals("Demo"));
+		assertTrue(tokens.get(0).type().equals("class")
+				&& tokens.get(0).modifiers().contains("declaration"));
+		assertTrue(source.substring(tokens.get(1).start(), tokens.get(1).end())
+				.equals("value"));
+		assertTrue(tokens.get(1).type().equals("property")
+				&& tokens.get(1).modifiers().contains("readonly"));
 	}
 
 

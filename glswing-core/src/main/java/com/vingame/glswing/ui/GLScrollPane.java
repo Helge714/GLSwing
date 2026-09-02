@@ -9,6 +9,7 @@ import com.vingame.glswing.input.GLInputActions;
 import com.vingame.glswing.layout.GLInsets;
 import com.vingame.glswing.layout.GLSize;
 import com.vingame.glswing.rendering.GLContext2D;
+import com.vingame.glswing.rendering.GLCornerRadii;
 import com.vingame.glswing.rendering.GLStroke;
 
 /**
@@ -193,7 +194,7 @@ public final class GLScrollPane extends GLContainer {
 		layingOut = true;
 		try {
 			GLScrollPaneStyle style = getGLStyle();
-			GLInsets padding = style.padding();
+			GLInsets padding = contentInsets(style);
 			float availableWidth = Math.max(0, getWidth() - padding.horizontal());
 			float availableHeight = Math.max(0, getHeight() - padding.vertical());
 			GLSize preferred = content == null ? GLSize.ZERO
@@ -242,6 +243,22 @@ public final class GLScrollPane extends GLContainer {
 		}
 	}
 
+	private static GLInsets contentInsets(GLScrollPaneStyle style) {
+		GLInsets padding = style.padding();
+		float border = style.borderWidth();
+		return new GLInsets(Math.max(padding.top(), border),
+				Math.max(padding.left(), border),
+				Math.max(padding.bottom(), border),
+				Math.max(padding.right(), border));
+	}
+
+	private static float innerCornerRadius(float radius,
+			float horizontalInset, float verticalInset) {
+		if (radius <= 0 || horizontalInset >= radius || verticalInset >= radius)
+			return 0;
+		return Math.max(0, radius - Math.min(horizontalInset, verticalInset));
+	}
+
 	private void applyContentPosition() {
 		if (content == null)
 			return;
@@ -274,7 +291,19 @@ public final class GLScrollPane extends GLContainer {
 		protected void renderChildren(GLContext2D context) {
 			if (getWidth() <= 0 || getHeight() <= 0)
 				return;
-			context.beginClip(0, 0, getWidth(), getHeight());
+			float radius = GLScrollPane.this.getGLStyle().cornerRadius();
+			float leftInset = getX();
+			float topInset = getY();
+			float rightInset = Math.max(0, GLScrollPane.this.getWidth()
+					- getX() - getWidth());
+			float bottomInset = Math.max(0, GLScrollPane.this.getHeight()
+					- getY() - getHeight());
+			context.beginUIRoundedClip(0, 0, getWidth(), getHeight(),
+					new GLCornerRadii(
+							innerCornerRadius(radius, leftInset, topInset),
+							innerCornerRadius(radius, rightInset, topInset),
+							innerCornerRadius(radius, rightInset, bottomInset),
+							innerCornerRadius(radius, leftInset, bottomInset)));
 			try {
 				super.renderChildren(context);
 			} finally {

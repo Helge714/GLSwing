@@ -10,6 +10,8 @@ import org.junit.jupiter.api.Test;
 final class MavenSmokeTest {
 	private static final String[] NO_ARGS = {};
 
+	@Test void fileDialogs() { GLFileDialogSelfTest.main(NO_ARGS); }
+
 	@Test
 	void transforms() {
 		GLTransformSelfTest.main(NO_ARGS);

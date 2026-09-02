@@ -4,6 +4,7 @@ package com.vingame.glswing.input;
 public enum GLPointerCursor {
 	DEFAULT,
 	TEXT,
+	HAND,
 	MOVE,
 	HORIZONTAL_RESIZE,
 	VERTICAL_RESIZE,

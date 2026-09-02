@@ -230,6 +230,9 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 				getGLStyle().padding().top(), trailingDecorationWidth(),
 				textViewportHeight());
 		drawVerticalScrollBar(context, rows.size(), lineHeight);
+		// Keep the complete editor bounds pickable independently of glyph coverage,
+		// transparent decorations and the shape supplied by a surrounding tab.
+		context.addUIHitArea(0, 0, width, height);
 	}
 	protected void drawTextDecorations(GLContext2D context, GLFont font,
 			int rowStart, int rowEnd, float x, float baseline, float available) { }

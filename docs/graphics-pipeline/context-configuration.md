@@ -164,12 +164,30 @@ try {
 }
 ```
 
-Clips are nested and recordable. GLSwing resolves every rectangle to transformed,
-axis-aligned logical screen bounds and intersects it with its parent. Built-in
-UI instances retain that effective rectangle, allowing differently clipped
-controls to remain in one batch for both color and picking. Other rendering
-pipelines and custom UI shaders use the OpenGL scissor state and therefore
-flush when the clip changes. Use layer effects for curved boundaries.
+Use a rounded UI clip when a control's content must follow curved viewport
+corners:
+
+```java
+g.beginUIRoundedClip(20, 20, 300, 160,
+        GLCornerRadii.all(8));
+try {
+    drawUIContent(g);
+} finally {
+    g.endClip();
+}
+```
+
+Clips are nested and recordable. GLSwing resolves their bounds to transformed,
+axis-aligned logical screen coordinates and intersects them with the parent
+clip. Standard UI instances retain the effective rectangle and corner radii,
+so differently clipped controls remain in one batch and use the same boundary
+for color and picking. Nested rectangular clips remain square unless they
+share an outer rounded corner.
+
+`beginUIRoundedClip` applies rounded antialiasing only to the standard UI
+pipeline. Other pipelines, including custom UI shaders, receive its rectangular
+bounding scissor and flush when that scissor changes. Use a layer or path-based
+solution when non-UI content requires an arbitrary curved boundary.
 `getClipDepth()` helps detect unbalanced calls.
 
 ## Shader state

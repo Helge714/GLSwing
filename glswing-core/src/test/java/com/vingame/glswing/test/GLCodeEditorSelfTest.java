@@ -58,6 +58,13 @@ public final class GLCodeEditorSelfTest {
 				"final class Example { private Example() { } }").stream()
 				.noneMatch(value -> value.message().contains("value return")),
 				"Lightweight Java diagnostics treated a constructor as a method");
+		var stringReturnDiagnostics = GLCodeLanguages.JAVA.diagnose(
+				"String message() { return \"Hello, GLSwing!\"; }");
+		check(stringReturnDiagnostics.stream()
+				.noneMatch(value -> value.message().contains("return a value")
+						|| value.message().contains("no value return")),
+				"Lightweight Java diagnostics discarded a string return value: "
+						+ stringReturnDiagnostics);
 		check(GLCodeLanguages.C.diagnose("int value() {\n    return 1\n}").stream()
 				.anyMatch(value -> value.message().equals("Missing semicolon")),
 				"C profile missed a definite semicolon error");
@@ -152,6 +159,8 @@ public final class GLCodeEditorSelfTest {
 		boolean[] closed = new boolean[1];
 		boolean[] completed = new boolean[1];
 		boolean[] navigated = new boolean[1];
+		boolean[] semanticRequested = new boolean[1];
+		boolean[] semanticAvailable = new boolean[1];
 		GLCodeDiagnosticProvider provider = (document, listener) -> {
 			latest[0] = document;
 			publish[0] = listener;
@@ -171,16 +180,30 @@ public final class GLCodeEditorSelfTest {
 					return java.util.concurrent.CompletableFuture.completedFuture(java.util.List.of(
 							new GLCodeLocation(URI.create("file:///project/Target.java"), 2, 4)));
 				}
+				@Override public java.util.concurrent.CompletionStage<java.util.List<
+						com.vingame.glswing.ui.GLCodeSemanticToken>> semanticTokens(
+								GLCodeDocument value) {
+					semanticRequested[0] = true;
+					return java.util.concurrent.CompletableFuture.completedFuture(java.util.List.of(
+							new com.vingame.glswing.ui.GLCodeSemanticToken(4, 9, "variable",
+									java.util.Set.of("declaration"))));
+				}
 				@Override public void close() { closed[0] = true; }
 			};
 		};
 		GLCodeEditor editor = new GLCodeEditor("int value;");
+		editor.setSemanticStatusListener(status -> semanticAvailable[0] =
+				status.state() == com.vingame.glswing.ui.GLCodeSemanticStatus.State.AVAILABLE
+				&& status.tokenCount() == 1);
 		editor.setDiagnosticProvider(provider, URI.create("file:///project/Test.java"));
 		editor.setNavigationHandler(location -> navigated[0] = location.uri().toString()
 				.equals("file:///project/Target.java"));
 		editor.goToDefinition();
 		flushEvents();
 		check(navigated[0], "Code editor did not forward a resolved external definition");
+		check(semanticRequested[0] && semanticAvailable[0]
+				&& editor.getSemanticTokens().size() == 1,
+				"Code editor did not retain provider semantic tokens");
 		int initialVersion = latest[0].version();
 		editor.setText("int changed;");
 		publish[0].accept(new GLCodeDiagnosticProvider.Result(initialVersion,

@@ -296,7 +296,8 @@ public final class GLContext2D {
 	/**
 	 * Restricts color and picking draws to the transformed screen-space bounding
 	 * box of a local rectangle. Clips may be nested and are inexpensive scissor
-	 * state changes; use a rounded layer effect when curved clipping is required.
+	 * state changes. {@link #beginUIRoundedClip(float, float, float, float,
+	 * GLCornerRadii)} adds curved clipping for the standard UI batch.
 	 */
 	public void beginClip(float x, float y, float width, float height) {
 		requireNoSpriteBufferRecording("beginClip");
@@ -310,6 +311,28 @@ public final class GLContext2D {
 		else
 			recording.beginClip(target ->
 					target.beginClip(x, y, width, height));
+	}
+
+	/**
+	 * Restricts batched UI color and picking output to an antialiased rounded
+	 * rectangle without creating a layer or splitting the standard UI batch.
+	 * Non-UI drawing remains restricted by the rectangular bounding scissor.
+	 */
+	public void beginUIRoundedClip(float x, float y, float width, float height,
+			GLCornerRadii radii) {
+		requireNoSpriteBufferRecording("beginUIRoundedClip");
+		if (!Float.isFinite(x) || !Float.isFinite(y)
+				|| !Float.isFinite(width) || !Float.isFinite(height)
+				|| width < 0 || height < 0)
+			throw new IllegalArgumentException(
+					"Clip bounds must be finite and non-negative");
+		if (radii == null)
+			throw new IllegalArgumentException("UI clip radii must not be null");
+		if (recording == null)
+			renderer.beginUIRoundedClip(x, y, width, height, radii);
+		else
+			recording.beginClip(target ->
+					target.beginUIRoundedClip(x, y, width, height, radii));
 	}
 
 	/** Restores the clip that was active before the matching beginClip call. */

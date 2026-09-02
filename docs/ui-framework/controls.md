@@ -216,10 +216,21 @@ Clearing the presentation provider restores `setItemTextProvider(...)`.
 `show(host,x,y)` expects host coordinates. Menus and submenus render as topmost
 overlays. `setImmediateCpuPickingEnabled(true)` is available when menu hover
 must update without waiting for the normal GPU-picking snapshot.
+Root popups consume outside pointer input and close on an outside press by
+default. Use `setOutsideInputBlocked(false)` for an interactive hover popup that
+must leave the underlying interface available; the owner remains responsible
+for closing that popup when its hover or focus context ends. A
+`GLPopupMenuListener` can observe pointer entry and exit across the complete
+popup tree, which allows the owner to provide a short movement grace period
+between an anchor and a modeless popup.
 
 Hovered and pressed menu items use the theme's `menu.itemCornerRadius` on all
 four corners. This small inner radius is independent of the popup's outer
 `menu.cornerRadius`.
+
+All popup and submenu surfaces use the theme's `menu.shadow.*` values. The
+shadow is an unpickable analytic UI instance, remains in the shared UI batch,
+and does not require a layer or framebuffer blur pass.
 
 ## Tabs
 
@@ -243,7 +254,12 @@ the same operation programmatically.
 
 `GLScrollPane` clips rendering and picking to its viewport. Horizontal and
 vertical policies independently use `AS_NEEDED`, `ALWAYS`, or `NEVER`. Content
-offsets use logical pixels.
+offsets use logical pixels. The viewport stays inside the configured border and
+uses the remaining inner corner radii as a per-instance UI clip. Content cannot
+cover or extend past the frame, while rows and focus surfaces retain their own
+geometry away from the four viewport corners. The clip participates in the
+shared UI batch and therefore does not create a layer or an additional draw
+call.
 
 `GLScrollBar` models:
 

@@ -191,8 +191,11 @@ public final class GLMenuBarItem extends GLControl {
 				Math.max(0, width - x - style.itemHorizontalPadding()));
 		float baseline = (height - font.getLineHeight()) * 0.5f + font.getAscent();
 		float textX = x;
+		var textShadow = getGLTheme().textShadow("menuBar");
 		context.drawUITextShadow(font, renderedText, textX, baseline,
-				getGLTheme().textShadow("menuBar"));
+				textShadow);
+		GLMnemonicSupport.drawUnderlineShadow(context, font, renderedText,
+				displayedMnemonicIndex, textX, baseline, textShadow);
 		context.withParameters(textParameters, () ->
 				{
 					context.drawUIText(font, renderedText, textX, baseline, Color.WHITE);

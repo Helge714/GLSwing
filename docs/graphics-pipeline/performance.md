@@ -32,12 +32,12 @@ The following operations submit at least one open batch:
 - starting or ending a layer or render target;
 - clearing, explicit `flush()`, and external OpenGL access.
 
-Built-in UI instances carry their effective rectangular clip in logical screen
-coordinates. Changing a nested clip therefore does not split the standard UI
-batch; color and picking apply the same per-instance rectangle in their
-shaders. Clips still split general filled, texture, text, and sprite batches,
-as well as UI rendering through a custom UI shader, because those paths use
-the OpenGL scissor state.
+Built-in UI instances carry their effective rectangular or rounded clip in
+logical screen coordinates. Changing a nested clip therefore does not split
+the standard UI batch; color and picking apply the same per-instance boundary
+in their shaders. Clips still split general filled, texture, text, and sprite
+batches, as well as UI rendering through a custom UI shader, because those
+paths use the OpenGL scissor state.
 
 Avoid alternating pipelines unnecessarily—for example, repeated
 `Fill -> Text -> Fill -> Text`. Draw order still defines compositing, so never

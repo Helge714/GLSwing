@@ -6,19 +6,23 @@ import java.awt.event.KeyEvent;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import javax.swing.Timer;
 
 import com.vingame.glswing.component.GLParent;
 import com.vingame.glswing.input.GLKeyEvent;
 import com.vingame.glswing.input.GLInputActions;
+import com.vingame.glswing.input.GLPointerController;
+import com.vingame.glswing.input.GLPointerCursor;
 import com.vingame.glswing.layout.GLInsets;
 import com.vingame.glswing.rendering.GLContext2D;
 import com.vingame.glswing.rendering.GLFont;
 
-/** Multiline source editor with line numbers, indentation and transient syntax colors. */
+/** Multiline source editor with code navigation and lexical or semantic colors. */
 public class GLCodeEditor extends GLTextArea {
 	private GLCodeLanguage language = GLCodeLanguages.JAVA;
 	private volatile List<GLCodeToken> tokens = List.of();
+	private volatile List<GLCodeSemanticToken> semanticTokens = List.of();
 	private volatile List<GLCodeDiagnostic> diagnostics = List.of();
 	private List<GLCodeDiagnostic> coreDiagnostics = List.of();
 	private final boolean coreDiagnosticsEnabled;
@@ -28,7 +32,9 @@ public class GLCodeEditor extends GLTextArea {
 	private URI documentUri;
 	private int documentVersion;
 	private final Timer diagnosticTimer;
+	private final Timer semanticTokenTimer;
 	private final Timer hoverTimer;
+	private final Timer navigationDismissTimer;
 	private com.vingame.glswing.input.GLMouseEvent hoverEvent;
 	private GLCodeHover hover;
 	private int hoverOffset = -1;
@@ -45,12 +51,27 @@ public class GLCodeEditor extends GLTextArea {
 	private final GLPopupMenu definitionMenu = new GLPopupMenu();
 	private long definitionRequest;
 	private java.util.concurrent.CompletableFuture<?> definitionFuture;
+	private final GLPopupMenu navigationHoverMenu = new GLPopupMenu();
+	private long navigationHoverRequest;
+	private java.util.concurrent.CompletableFuture<?> navigationHoverFuture;
+	private com.vingame.glswing.input.GLMouseEvent lastMouseEvent;
+	private int navigationWordStart = -1;
+	private int navigationWordEnd = -1;
+	private int navigationRequestStart = -1;
+	private int navigationRequestEnd = -1;
+	private final Object navigationCursorOwner = new Object();
+	private GLPointerController navigationPointerController = GLPointerController.NONE;
+	private long semanticTokenRequest;
+	private java.util.concurrent.CompletableFuture<?> semanticTokenFuture;
 	private GLCodeNavigationHandler navigationHandler = location -> { };
 	private java.util.function.Consumer<GLCodeNavigationStatus> navigationStatusListener = value -> { };
 	private java.util.function.Consumer<GLCodeCompletionStatus> completionStatusListener = value -> { };
+	private java.util.function.Consumer<GLCodeSemanticStatus> semanticStatusListener = value -> { };
 	private boolean insertSingleCompletion = true;
 	private int indentationSize = 4;
 	private Color keywordColor, stringColor, numberColor, commentColor, typeColor;
+	private Color navigationLinkColor;
+	private Map<String, Color> semanticColors = Map.of();
 	private final GLPopupMenu codeMenu = new GLPopupMenu();
 	private final GLMenuItem formatItem;
 	private final GLMenuItem commentItem;
@@ -66,8 +87,26 @@ public class GLCodeEditor extends GLTextArea {
 		this.coreDiagnosticsEnabled = coreDiagnosticsEnabled;
 		diagnosticTimer = new Timer(300, event -> validateSource());
 		diagnosticTimer.setRepeats(false);
+		semanticTokenTimer = new Timer(180, event -> requestSemanticTokens());
+		semanticTokenTimer.setRepeats(false);
 		hoverTimer = new Timer(250, event -> requestHover());
 		hoverTimer.setRepeats(false);
+		navigationDismissTimer = new Timer(500,
+				event -> clearNavigationHover(true));
+		navigationDismissTimer.setRepeats(false);
+		navigationHoverMenu.setOutsideInputBlocked(false);
+		navigationHoverMenu.addPopupMenuListener(new GLPopupMenuListener() {
+			@Override public void popupMenuClosed(GLPopupMenu menu) {
+				navigationDismissTimer.stop();
+				clearNavigationHover(false);
+			}
+			@Override public void popupMenuPointerEntered(GLPopupMenu menu) {
+				navigationDismissTimer.stop();
+			}
+			@Override public void popupMenuPointerExited(GLPopupMenu menu) {
+				scheduleNavigationDismiss();
+			}
+		});
 		setLineWrap(false);
 		setTabSize(indentationSize);
 		applyCodeTheme();
@@ -75,12 +114,15 @@ public class GLCodeEditor extends GLTextArea {
 			documentVersion++;
 			closeCompletion();
 			clearHover();
+			clearNavigationHover(true);
 			coreDiagnostics = List.of();
 			providerDiagnostics = List.of();
+			semanticTokens = List.of();
 			mergeDiagnostics();
 			retokenize();
 			diagnosticTimer.restart();
 			updateDiagnosticProvider();
+			semanticTokenTimer.restart();
 		});
 		setTextColorProvider(this::syntaxColor);
 		formatItem = codeMenu.addItem("", event -> formatCode());
@@ -105,6 +147,8 @@ public class GLCodeEditor extends GLTextArea {
 		reopenDiagnosticProvider();
 	}
 	public final List<GLCodeDiagnostic> getDiagnostics() { return diagnostics; }
+	/** Returns the latest immutable semantic-token snapshot from the provider. */
+	public final List<GLCodeSemanticToken> getSemanticTokens() { return semanticTokens; }
 	public final GLCodeDiagnosticProvider getDiagnosticProvider() { return diagnosticProvider; }
 	public final URI getDocumentUri() { return documentUri; }
 	/** Sets the application callback used for definitions in other documents. */
@@ -127,6 +171,11 @@ public class GLCodeEditor extends GLTextArea {
 	public final void setCompletionStatusListener(
 			java.util.function.Consumer<GLCodeCompletionStatus> listener) {
 		completionStatusListener = listener == null ? value -> { } : listener;
+	}
+	/** Receives request, result and failure states for semantic highlighting. */
+	public final void setSemanticStatusListener(
+			java.util.function.Consumer<GLCodeSemanticStatus> listener) {
+		semanticStatusListener = listener == null ? value -> { } : listener;
 	}
 	/** Connects this editor to an external diagnostic provider for one document URI. */
 	public final void setDiagnosticProvider(GLCodeDiagnosticProvider provider, URI uri) {
@@ -177,6 +226,22 @@ public class GLCodeEditor extends GLTextArea {
 	}
 	/** Resolves and navigates to the definition at the current caret. */
 	public final void goToDefinition() { requestDefinitions(getCaretPosition()); }
+	/** Resolves and navigates to an implementation at the current caret. */
+	public final void goToImplementation() {
+		if (diagnosticSession == null || documentUri == null) return;
+		int offset = definitionOffset(getCaretPosition());
+		int version = documentVersion;
+		diagnosticSession.implementations(diagnosticDocument(), offset)
+				.whenComplete((locations, failure) -> EventQueue.invokeLater(() -> {
+					if (failure != null || version != documentVersion
+							|| locations == null || locations.isEmpty()) return;
+					navigateLocations(locations);
+				}));
+	}
+	/** Opens the first-level incoming and outgoing call hierarchy at the caret. */
+	public final void openCallHierarchy() {
+		requestCallHierarchy(definitionOffset(getCaretPosition()));
+	}
 	private void requestDefinitions(int offset) {
 		if (diagnosticSession == null || documentUri == null) {
 			navigationStatusListener.accept(GLCodeNavigationStatus.failed(
@@ -208,6 +273,182 @@ public class GLCodeEditor extends GLTextArea {
 				|| !Character.isJavaIdentifierPart(source.charAt(offset)))
 				&& Character.isJavaIdentifierPart(source.charAt(offset - 1))) return offset - 1;
 		return offset;
+	}
+	private boolean requestNavigationHover(
+			com.vingame.glswing.input.GLMouseEvent event) {
+		if (diagnosticSession == null || documentUri == null
+				|| event == null || !event.hasLocalPosition()
+				|| isOverviewRuler(event.getLocalX()) || diagnosticAt(event) != null) return false;
+		int offset = definitionOffset(positionAt(event.getLocalX(), event.getLocalY()));
+		Range word = identifierRangeAt(offset);
+		if (word == null) {
+			leaveNavigationTarget();
+			return false;
+		}
+		navigationDismissTimer.stop();
+		if (word.start() == navigationWordStart && word.end() == navigationWordEnd
+				&& navigationHoverMenu.isShowing()) {
+			navigationPointerController = event.getPointerController();
+			navigationPointerController.setCursor(navigationCursorOwner, GLPointerCursor.HAND);
+			return true;
+		}
+		if (word.start() == navigationRequestStart
+				&& word.end() == navigationRequestEnd) {
+			navigationPointerController = event.getPointerController();
+			navigationPointerController.setCursor(navigationCursorOwner, GLPointerCursor.HAND);
+			return true;
+		}
+		clearNavigationHover(true);
+		navigationPointerController = event.getPointerController();
+		navigationPointerController.setCursor(navigationCursorOwner, GLPointerCursor.HAND);
+		navigationRequestStart = word.start();
+		navigationRequestEnd = word.end();
+		long request = ++navigationHoverRequest;
+		int version = documentVersion;
+		GLCodeDocument snapshot = diagnosticDocument();
+		var definitions = diagnosticSession.definitions(snapshot, offset).toCompletableFuture()
+				.exceptionally(failure -> List.of());
+		var implementations = diagnosticSession.implementations(snapshot, offset)
+				.toCompletableFuture().exceptionally(failure -> List.of());
+		var hierarchy = diagnosticSession.canOpenCallHierarchy(snapshot, offset)
+				.toCompletableFuture().exceptionally(failure -> false);
+		var combined = java.util.concurrent.CompletableFuture.allOf(
+				definitions, implementations, hierarchy);
+		navigationHoverFuture = combined;
+		combined.whenComplete((ignored, failure) -> EventQueue.invokeLater(() -> {
+			if (request != navigationHoverRequest || version != documentVersion) return;
+			navigationHoverFuture = null;
+			List<GLCodeLocation> definitionTargets = definitions.join();
+			List<GLCodeLocation> implementationTargets = implementations.join();
+			boolean callHierarchy = hierarchy.join();
+			if (definitionTargets.isEmpty() && implementationTargets.isEmpty()
+					&& !callHierarchy) {
+				navigationPointerController.clearCursor(navigationCursorOwner);
+				navigationPointerController = GLPointerController.NONE;
+				return;
+			}
+			navigationWordStart = word.start();
+			navigationWordEnd = word.end();
+			navigationPointerController = event.getPointerController();
+			navigationPointerController.setCursor(navigationCursorOwner, GLPointerCursor.HAND);
+			showNavigationHover(event, definitionTargets,
+					implementationTargets, callHierarchy, offset);
+			invalidateRecording();
+		}));
+		return true;
+	}
+	private Range identifierRangeAt(int offset) {
+		String source = getText();
+		if (source.isEmpty() || offset < 0 || offset >= source.length()) return null;
+		for (GLCodeSemanticToken token : semanticTokens) {
+			if (offset < token.start()) break;
+			if (offset < token.end()) return new Range(token.start(), token.end());
+		}
+		if (!Character.isJavaIdentifierPart(source.charAt(offset))) return null;
+		int start = offset;
+		while (start > 0 && Character.isJavaIdentifierPart(source.charAt(start - 1)))
+			start--;
+		int end = offset + 1;
+		while (end < source.length() && Character.isJavaIdentifierPart(source.charAt(end)))
+			end++;
+		return new Range(start, end);
+	}
+	private void showNavigationHover(com.vingame.glswing.input.GLMouseEvent event,
+			List<GLCodeLocation> definitions, List<GLCodeLocation> implementations,
+			boolean callHierarchy, int offset) {
+		navigationHoverMenu.close();
+		navigationHoverMenu.removeAllItems();
+		if (!definitions.isEmpty()) {
+			GLMenuItem item = navigationHoverMenu.addItem(
+					getGLLocalizer().text(GLUiKeys.CODE_OPEN_DECLARATION), ignored -> {
+						clearNavigationHover(false);
+						navigateLocations(definitions);
+					});
+			item.setMnemonicEnabled(false);
+		}
+		if (!implementations.isEmpty()) {
+			GLMenuItem item = navigationHoverMenu.addItem(
+					getGLLocalizer().text(GLUiKeys.CODE_OPEN_IMPLEMENTATION), ignored -> {
+						clearNavigationHover(false);
+						navigateLocations(implementations);
+					});
+			item.setMnemonicEnabled(false);
+		}
+		if (callHierarchy) {
+			GLMenuItem item = navigationHoverMenu.addItem(
+					getGLLocalizer().text(GLUiKeys.CODE_OPEN_CALL_HIERARCHY), ignored -> {
+						clearNavigationHover(false);
+						requestCallHierarchy(offset);
+					});
+			item.setMnemonicEnabled(false);
+		}
+		GLParent host = popupHost();
+		if (host != null && !navigationHoverMenu.getItems().isEmpty())
+			navigationHoverMenu.show(host, event.getScreenX(), event.getScreenY() + 12);
+	}
+	private void requestCallHierarchy(int offset) {
+		if (diagnosticSession == null || documentUri == null) return;
+		int version = documentVersion;
+		var stage = diagnosticSession.callHierarchy(diagnosticDocument(), offset);
+		stage.whenComplete((hierarchy, failure) -> EventQueue.invokeLater(() -> {
+			if (failure != null || version != documentVersion
+					|| hierarchy == null || hierarchy.isEmpty()) return;
+			showCallHierarchy(hierarchy.get());
+		}));
+	}
+	private void navigateLocations(List<GLCodeLocation> locations) {
+		if (locations.size() == 1) navigateTo(locations.get(0));
+		else showDefinitions(locations);
+	}
+	private void showCallHierarchy(GLCodeCallHierarchy hierarchy) {
+		definitionMenu.close();
+		definitionMenu.removeAllItems();
+		addHierarchyHeading(GLUiKeys.CODE_INCOMING_CALLS);
+		if (hierarchy.incoming().isEmpty()) addHierarchyHeading(GLUiKeys.CODE_NO_CALLS);
+		else for (GLCodeCall call : hierarchy.incoming().stream().limit(20).toList())
+			addCallLocation("← " + call.label(), call.location());
+		definitionMenu.addSeparator();
+		addHierarchyHeading(GLUiKeys.CODE_OUTGOING_CALLS);
+		if (hierarchy.outgoing().isEmpty()) addHierarchyHeading(GLUiKeys.CODE_NO_CALLS);
+		else for (GLCodeCall call : hierarchy.outgoing().stream().limit(20).toList())
+			addCallLocation("→ " + call.label(), call.location());
+		float[] caretPosition = caretScreenPosition();
+		GLParent host = popupHost();
+		if (caretPosition != null && host != null)
+			definitionMenu.show(host, caretPosition[0], caretPosition[1]);
+	}
+	private void addHierarchyHeading(String key) {
+		GLMenuItem heading = definitionMenu.addItem(getGLLocalizer().text(key), event -> { });
+		heading.setEnabled(false);
+		heading.setMnemonicEnabled(false);
+	}
+	private void addCallLocation(String label, GLCodeLocation location) {
+		GLMenuItem row = definitionMenu.addItem(label, event -> navigateTo(location));
+		row.setAcceleratorText(location.uri().toString());
+		row.setMnemonicEnabled(false);
+	}
+	private void clearNavigationHover(boolean closeMenu) {
+		navigationDismissTimer.stop();
+		navigationHoverRequest++;
+		if (navigationHoverFuture != null) navigationHoverFuture.cancel(false);
+		navigationHoverFuture = null;
+		if (closeMenu) navigationHoverMenu.close();
+		navigationPointerController.clearCursor(navigationCursorOwner);
+		navigationPointerController = GLPointerController.NONE;
+		navigationRequestStart = -1;
+		navigationRequestEnd = -1;
+		if (navigationWordStart >= 0 || navigationWordEnd >= 0) {
+			navigationWordStart = -1;
+			navigationWordEnd = -1;
+			invalidateRecording();
+		}
+	}
+	private void leaveNavigationTarget() {
+		if (navigationHoverMenu.isShowing()) scheduleNavigationDismiss();
+		else clearNavigationHover(true);
+	}
+	private void scheduleNavigationDismiss() {
+		if (navigationHoverMenu.isShowing()) navigationDismissTimer.restart();
 	}
 	private void showDefinitions(List<GLCodeLocation> locations) {
 		definitionMenu.close();
@@ -356,6 +597,13 @@ public class GLCodeEditor extends GLTextArea {
 	}
 
 	@Override protected void controlKeyPressed(GLKeyEvent event) {
+		if ((event.getKeyCode() == KeyEvent.VK_CONTROL
+				|| event.getKeyCode() == KeyEvent.VK_META)
+				&& lastMouseEvent != null) {
+			hoverTimer.stop();
+			GLToolTipManager.leave(this);
+			requestNavigationHover(lastMouseEvent);
+		}
 		if (completionMenu.isShowing()) {
 			if (event.getKeyCode() == KeyEvent.VK_ESCAPE) {
 				closeCompletion(); event.consume(); return;
@@ -525,6 +773,14 @@ public class GLCodeEditor extends GLTextArea {
 	}
 	@Override protected void drawTextDecorations(GLContext2D context, GLFont font,
 			int rowStart, int rowEnd, float x, float baseline, float available) {
+		int linkStart = Math.max(rowStart, navigationWordStart);
+		int linkEnd = Math.min(rowEnd, navigationWordEnd);
+		if (linkEnd > linkStart) {
+			float left = x + measureRange(rowStart, linkStart);
+			float right = Math.max(left + 1, x + measureRange(rowStart, linkEnd));
+			context.drawUILine(left, baseline + 1, right, baseline + 1,
+					navigationLinkColor);
+		}
 		for (GLCodeDiagnostic diagnostic : diagnostics) {
 			int start = Math.max(rowStart, diagnostic.start());
 			int end = Math.min(rowEnd, diagnostic.end());
@@ -608,6 +864,7 @@ public class GLCodeEditor extends GLTextArea {
 		}
 		if (event.getButton() == java.awt.event.MouseEvent.BUTTON1 && event.hasLocalPosition()
 				&& (event.getModifiersEx() & java.awt.event.InputEvent.CTRL_DOWN_MASK) != 0) {
+			clearNavigationHover(true);
 			requestDefinitions(positionAt(event.getLocalX(), event.getLocalY()));
 			event.consume();
 			return;
@@ -615,7 +872,17 @@ public class GLCodeEditor extends GLTextArea {
 		super.controlMousePressed(event);
 	}
 	@Override protected void controlMouseMoved(com.vingame.glswing.input.GLMouseEvent event) {
+		lastMouseEvent = event;
+		if (diagnosticSession != null && event.hasLocalPosition()
+				&& navigationModifier(event.getModifiersEx())
+				&& !isOverviewRuler(event.getLocalX()) && diagnosticAt(event) == null) {
+			hoverTimer.stop();
+			GLToolTipManager.leave(this);
+			if (requestNavigationHover(event)) return;
+		}
 		super.controlMouseMoved(event);
+		if (navigationModifier(event.getModifiersEx())) leaveNavigationTarget();
+		else clearNavigationHover(true);
 		if (diagnosticSession == null || !event.hasLocalPosition()
 				|| isOverviewRuler(event.getLocalX()) || diagnosticAt(event) != null) {
 			hoverTimer.stop(); return;
@@ -631,8 +898,31 @@ public class GLCodeEditor extends GLTextArea {
 		}
 	}
 	@Override protected void controlMouseExited(com.vingame.glswing.input.GLMouseEvent event) {
+		boolean navigationPopupVisible = navigationHoverMenu.isShowing();
 		super.controlMouseExited(event);
+		if (navigationPopupVisible)
+			navigationPointerController.setCursor(navigationCursorOwner, GLPointerCursor.HAND);
 		clearHover();
+		lastMouseEvent = null;
+		if (navigationPopupVisible) scheduleNavigationDismiss();
+		else clearNavigationHover(true);
+	}
+	@Override protected void controlFocusChanged(boolean focused) {
+		super.controlFocusChanged(focused);
+		if (!focused) clearNavigationHover(true);
+	}
+	@Override protected void controlKeyReleased(GLKeyEvent event) {
+		if (event.getKeyCode() == KeyEvent.VK_CONTROL
+				|| event.getKeyCode() == KeyEvent.VK_META)
+			clearNavigationHover(true);
+		super.controlKeyReleased(event);
+	}
+	private static boolean navigationModifier(int modifiers) {
+		int expected = System.getProperty("os.name", "")
+				.toLowerCase(java.util.Locale.ROOT).contains("mac")
+						? java.awt.event.InputEvent.META_DOWN_MASK
+						: java.awt.event.InputEvent.CTRL_DOWN_MASK;
+		return (modifiers & expected) != 0;
 	}
 	@Override protected Color toolTipTextColorAt(com.vingame.glswing.input.GLMouseEvent event) {
 		GLCodeDiagnostic diagnostic = diagnosticAt(event);
@@ -680,14 +970,67 @@ public class GLCodeEditor extends GLTextArea {
 	}
 	private void applyCodeTheme() {
 		GLTextEditorStyle themed = getGLTheme().textEditorStyle();
-		setGLStyle(themed.withFont(new GLFontSpec(GLFont.MONOSPACED,
-				GLFont.PLAIN, themed.font().size())));
 		GLThemeValues values = getGLTheme().values();
-		keywordColor = values.getColor("codeEditor.keyword", new Color(198, 120, 221));
-		stringColor = values.getColor("codeEditor.string", new Color(152, 195, 121));
-		numberColor = values.getColor("codeEditor.number", new Color(209, 154, 102));
-		commentColor = values.getColor("codeEditor.comment", new Color(92, 130, 82));
-		typeColor = values.getColor("codeEditor.type", new Color(86, 182, 194));
+		Color codeText = values.getColor("codeEditor.text", themed.textColor());
+		Color codeBackground = values.getColor(
+				"codeEditor.background", themed.backgroundColor());
+		setGLStyle(themed.withColors(codeBackground, codeText,
+				themed.disabledTextColor(), themed.selectionColor(), themed.caretColor())
+				.withFont(new GLFontSpec(GLFont.MONOSPACED,
+						GLFont.PLAIN, themed.font().size())));
+		keywordColor = values.getColor("codeEditor.keyword", new Color(204, 108, 29));
+		stringColor = values.getColor("codeEditor.string", new Color(23, 198, 163));
+		numberColor = values.getColor("codeEditor.number", new Color(104, 151, 187));
+		commentColor = values.getColor("codeEditor.comment", new Color(128, 128, 128));
+		typeColor = values.getColor("codeEditor.type", new Color(18, 144, 195));
+		navigationLinkColor = values.getColor("codeEditor.navigationLink",
+				new Color(82, 156, 255));
+		Map<String, Color> configuredSemanticColors = new java.util.LinkedHashMap<>(
+				Map.ofEntries(
+				Map.entry("namespace", values.getColor("codeEditor.semantic.namespace",
+						new Color(18, 144, 195))),
+				Map.entry("type", values.getColor("codeEditor.semantic.type", typeColor)),
+				Map.entry("class", values.getColor("codeEditor.semantic.class",
+						new Color(18, 144, 195))),
+				Map.entry("enum", values.getColor("codeEditor.semantic.enum",
+						new Color(204, 129, 186))),
+				Map.entry("interface", values.getColor("codeEditor.semantic.interface",
+						new Color(128, 242, 246))),
+				Map.entry("struct", values.getColor("codeEditor.semantic.struct", typeColor)),
+				Map.entry("typeParameter", values.getColor(
+						"codeEditor.semantic.typeParameter", new Color(191, 164, 164))),
+				Map.entry("parameter", values.getColor("codeEditor.semantic.parameter",
+						new Color(121, 171, 255))),
+				Map.entry("variable", values.getColor("codeEditor.semantic.variable",
+						new Color(243, 236, 121))),
+				Map.entry("property", values.getColor("codeEditor.semantic.property",
+						new Color(102, 225, 248))),
+				Map.entry("enumMember", values.getColor("codeEditor.semantic.enumMember",
+						new Color(141, 218, 248))),
+				Map.entry("event", values.getColor("codeEditor.semantic.event",
+						new Color(102, 225, 248))),
+				Map.entry("function", values.getColor("codeEditor.semantic.function",
+						new Color(167, 236, 33))),
+				Map.entry("method", values.getColor("codeEditor.semantic.method",
+						new Color(167, 236, 33))),
+				Map.entry("macro", values.getColor("codeEditor.semantic.macro",
+						new Color(177, 102, 218))),
+				Map.entry("keyword", keywordColor),
+				Map.entry("modifier", values.getColor("codeEditor.semantic.modifier",
+						keywordColor)),
+				Map.entry("comment", commentColor), Map.entry("string", stringColor),
+				Map.entry("number", numberColor),
+				Map.entry("regexp", values.getColor("codeEditor.semantic.regexp", stringColor)),
+				Map.entry("operator", values.getColor("codeEditor.semantic.operator",
+						new Color(230, 230, 250))),
+				Map.entry("decorator", values.getColor("codeEditor.semantic.decorator",
+						new Color(160, 160, 160)))));
+		String semanticPrefix = "codeEditor.semantic.";
+		for (String key : values.asMap().keySet())
+			if (key.startsWith(semanticPrefix) && key.length() > semanticPrefix.length())
+				configuredSemanticColors.put(key.substring(semanticPrefix.length()),
+						values.getColor(key, themed.textColor()));
+		semanticColors = Map.copyOf(configuredSemanticColors);
 	}
 	private void updateCodeMenuText() {
 		if (formatItem == null) return;
@@ -720,6 +1063,7 @@ public class GLCodeEditor extends GLTextArea {
 	private void openDiagnosticSession() {
 		GLCodeDocument snapshot = diagnosticDocument();
 		diagnosticSession = diagnosticProvider.open(snapshot, this::acceptProviderDiagnostics);
+		requestSemanticTokens();
 	}
 	private void updateDiagnosticProvider() {
 		if (diagnosticSession != null) diagnosticSession.update(diagnosticDocument());
@@ -736,10 +1080,21 @@ public class GLCodeEditor extends GLTextArea {
 		providerDiagnostics = result.diagnostics().stream()
 				.filter(value -> value.end() <= getDocument().length()).toList();
 		mergeDiagnostics();
+		// A diagnostic publication means that the server has reconciled this
+		// document version. If an earlier semantic request was empty, retry now
+		// instead of leaving lexer highlighting active indefinitely.
+		if (semanticTokens.isEmpty() && semanticTokenFuture == null)
+			semanticTokenTimer.restart();
 	}
 	private void closeDiagnosticSession() {
 		closeCompletion();
 		closeSignatureHelp();
+		clearNavigationHover(true);
+		semanticTokenTimer.stop();
+		semanticTokenRequest++;
+		if (semanticTokenFuture != null) semanticTokenFuture.cancel(false);
+		semanticTokenFuture = null;
+		semanticTokens = List.of();
 		definitionRequest++;
 		if (definitionFuture != null) definitionFuture.cancel(false);
 		definitionFuture = null;
@@ -887,7 +1242,47 @@ public class GLCodeEditor extends GLTextArea {
 		diagnostics = List.copyOf(merged);
 		invalidateRecording();
 	}
+	private void requestSemanticTokens() {
+		if (diagnosticSession == null || documentUri == null) return;
+		semanticStatusListener.accept(GLCodeSemanticStatus.requesting());
+		long request = ++semanticTokenRequest;
+		int version = documentVersion;
+		if (semanticTokenFuture != null) semanticTokenFuture.cancel(false);
+		var stage = diagnosticSession.semanticTokens(diagnosticDocument());
+		semanticTokenFuture = stage.toCompletableFuture();
+		stage.whenComplete((result, failure) -> EventQueue.invokeLater(() -> {
+			if (request != semanticTokenRequest || version != documentVersion) return;
+			semanticTokenFuture = null;
+			if (failure != null) {
+				semanticStatusListener.accept(GLCodeSemanticStatus.failed(failure));
+				return;
+			}
+			List<GLCodeSemanticToken> received = result == null ? List.of() : result;
+			semanticTokens = received.stream()
+					.filter(value -> value.end() <= getDocument().length())
+					.sorted(java.util.Comparator.comparingInt(GLCodeSemanticToken::start))
+					.toList();
+			semanticStatusListener.accept(
+					GLCodeSemanticStatus.completed(semanticTokens.size()));
+			invalidateRecording();
+		}));
+	}
 	private Color syntaxColor(GLTextDocument document, int offset, Color fallback) {
+		if (offset >= navigationWordStart && offset < navigationWordEnd)
+			return navigationLinkColor;
+		List<GLCodeSemanticToken> semantic = semanticTokens;
+		int semanticLow = 0, semanticHigh = semantic.size() - 1;
+		while (semanticLow <= semanticHigh) {
+			int middle = (semanticLow + semanticHigh) >>> 1;
+			GLCodeSemanticToken token = semantic.get(middle);
+			if (offset < token.start()) semanticHigh = middle - 1;
+			else if (offset >= token.end()) semanticLow = middle + 1;
+			else {
+				Color color = semanticColor(token);
+				if (color != null) return color;
+				break;
+			}
+		}
 		List<GLCodeToken> current = tokens;
 		int low = 0, high = current.size() - 1;
 		while (low <= high) {
@@ -902,5 +1297,14 @@ public class GLCodeEditor extends GLTextArea {
 			};
 		}
 		return fallback;
+	}
+	private Color semanticColor(GLCodeSemanticToken token) {
+		for (String modifier : token.modifiers().stream().sorted().toList()) {
+			Color modified = semanticColors.get(token.type() + "." + modifier);
+			if (modified != null) return modified;
+			modified = semanticColors.get("*." + modifier);
+			if (modified != null) return modified;
+		}
+		return semanticColors.get(token.type());
 	}
 }

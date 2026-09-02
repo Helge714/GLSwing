@@ -178,8 +178,8 @@ public final class UIQuadBatchGpuSelfTest {
 				"/com/vingame/glswing/shaders/ui_quad.frag")
 				.replace("out vec4 fragColor;",
 						"uniform float uTestAlpha;\nout vec4 fragColor;")
-				.replace("fragColor = vec4(color.rgb, color.a * coverage);",
-						"fragColor = vec4(color.rgb, color.a * coverage * uTestAlpha);");
+				.replace("fragColor = vec4(color.rgb, color.a * coverage * clipCoverage);",
+						"fragColor = vec4(color.rgb, color.a * coverage * clipCoverage * uTestAlpha);");
 		ShaderProgram shader = ShaderProgram.fromUIFragmentSource(gl, fragment);
 		try {
 			GLContext2D context = renderer.beginFrame(gl, WIDTH, HEIGHT,

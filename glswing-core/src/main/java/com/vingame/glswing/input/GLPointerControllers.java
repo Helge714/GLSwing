@@ -80,6 +80,7 @@ public final class GLPointerControllers {
 			return switch (cursor) {
 				case DEFAULT -> Cursor.getDefaultCursor();
 				case TEXT -> Cursor.getPredefinedCursor(Cursor.TEXT_CURSOR);
+				case HAND -> Cursor.getPredefinedCursor(Cursor.HAND_CURSOR);
 				case MOVE -> Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR);
 				case HORIZONTAL_RESIZE -> Cursor.getPredefinedCursor(Cursor.E_RESIZE_CURSOR);
 				case VERTICAL_RESIZE -> Cursor.getPredefinedCursor(Cursor.N_RESIZE_CURSOR);

@@ -11,6 +11,7 @@ import com.jogamp.opengl.GLDrawableFactory;
 import com.jogamp.opengl.GLOffscreenAutoDrawable;
 import com.jogamp.opengl.GLProfile;
 import com.vingame.glswing.rendering.GLContext2D;
+import com.vingame.glswing.rendering.GLCornerRadii;
 import com.vingame.glswing.rendering.GLRecording;
 import com.vingame.glswing.rendering.GLRenderer2D;
 import com.vingame.glswing.rendering.GLStroke;
@@ -88,6 +89,29 @@ public final class ClipGpuSelfTest {
 			checkId(renderer, gl, 25, 20, 44, "outer UI pick clip");
 			checkColor(gl, 40, 30, Color.BLUE, "nested UI clip");
 			checkId(renderer, gl, 40, 30, 55, "nested UI pick clip");
+
+			context = renderer.beginFrame(gl, WIDTH, HEIGHT,
+					Projection2D.TOP_LEFT_PIXELS.create(WIDTH, HEIGHT));
+			context.clear(Color.BLACK);
+			context.beginUIRoundedClip(10, 10, 100, 70,
+					GLCornerRadii.all(16));
+			context.setPickId(77);
+			context.fillUIRoundRect(0, 0, WIDTH, HEIGHT, 0, Color.RED);
+			context.beginClip(30, 30, 50, 20);
+			context.setPickId(88);
+			context.fillUIRoundRect(0, 0, WIDTH, HEIGHT, 0, Color.BLUE);
+			context.endClip();
+			context.endClip();
+			renderer.endFrame();
+			if (renderer.drawCallProfile().ui() != 2)
+				throw new AssertionError("Rounded UI clip split the shared batch: "
+						+ renderer.drawCallProfile());
+			checkColor(gl, 11, 11, Color.BLACK, "rounded UI corner clip");
+			checkId(renderer, gl, 11, 11, 0, "rounded UI corner pick clip");
+			checkColor(gl, 20, 20, Color.RED, "rounded UI clip interior");
+			checkId(renderer, gl, 20, 20, 77, "rounded UI interior picking");
+			checkColor(gl, 31, 31, Color.BLUE, "nested square UI clip");
+			checkId(renderer, gl, 31, 31, 88, "nested square UI picking");
 
 			context = renderer.beginFrame(gl, WIDTH, HEIGHT,
 					Projection2D.TOP_LEFT_PIXELS.create(WIDTH, HEIGHT));

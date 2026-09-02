@@ -47,6 +47,7 @@
     <modules>
         <module>glswing-core</module>
         <module>glswing-lsp</module>
+        <module>glswing-filedialogs-swt</module>
         <module>glswing-examples</module>
     </modules>
 
@@ -58,6 +59,7 @@
         <junit.version>5.11.4</junit.version>
         <lsp4j.version>1.0.0</lsp4j.version>
         <commons-compress.version>1.28.0</commons-compress.version>
+        <swt.version>3.130.0</swt.version>
     </properties>
 
     <dependencyManagement>

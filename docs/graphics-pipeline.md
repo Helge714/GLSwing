@@ -135,7 +135,8 @@ and `int` values. Matrix methods accept 16 floats.
 
 | Methods | Purpose |
 |---|---|
-| `beginClip`, `endClip`, `getClipDepth` | Manage nested rectangular scissor clips |
+| `beginClip`, `endClip`, `getClipDepth` | Manage nested rectangular clips |
+| `beginUIRoundedClip` | Add antialiased corner clipping to standard UI color and picking output |
 | `beginLayer()` | Start a layer covering the active surface |
 | `beginLayer(x,y,w,h)` | Start a layer with explicit local bounds |
 | `beginLayer(x,y,w,h,screenInset)` | Add screen-space room around explicit bounds |

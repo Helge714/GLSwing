@@ -87,6 +87,10 @@ applications that do not embed a code editor do not carry its dependencies:
 </dependency>
 ```
 
+Native operating-system file dialogs are likewise optional. Add
+`glswing-filedialogs-swt` to use SWT-native Windows, macOS, or Linux dialogs;
+without it, `GLFileDialogs.auto()` uses the themed GLSwing file browser.
+
 The main artifact declares
 `Automatic-Module-Name: com.vingame.glswing` and works on both the classpath and
 the module path as an automatic module.

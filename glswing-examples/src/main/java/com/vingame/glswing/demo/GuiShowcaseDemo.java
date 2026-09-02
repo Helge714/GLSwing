@@ -22,7 +22,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import javax.swing.AbstractAction;
 import javax.swing.JComponent;
 import javax.swing.JFrame;
-import javax.swing.JFileChooser;
 import javax.swing.JLabel;
 import javax.swing.KeyStroke;
 import javax.swing.SwingConstants;
@@ -35,6 +34,9 @@ import com.vingame.glswing.component.GLFrameProfile;
 import com.vingame.glswing.component.GLParent;
 import com.vingame.glswing.component.GLSwingPanel;
 import com.vingame.glswing.history.GLHistoryManager;
+import com.vingame.glswing.file.GLFileDialogRequest;
+import com.vingame.glswing.file.GLFileDialogs;
+import com.vingame.glswing.file.GLFileSelectionMode;
 import com.vingame.glswing.node.GLNode;
 import com.vingame.glswing.node.GLNodeEditor;
 import com.vingame.glswing.node.GLNodePort;
@@ -513,6 +515,9 @@ public final class GuiShowcaseDemo {
 				.forLanguage("java").orElseThrow();
 		private volatile GLLanguageServer languageServer;
 		private volatile boolean languageServerClosing;
+		private final GLFileDialogs fileDialogs = GLFileDialogs.auto();
+		private final GLFileDialogs nativeFileDialogs = GLFileDialogs.nativeDialogs();
+		private final GLFileDialogs themedFileDialogs = GLFileDialogs.themed();
 
 		ShowcaseSurface(ShowcaseHost host) {
 			this.host = host;
@@ -601,6 +606,19 @@ public final class GuiShowcaseDemo {
 				case EMPTY -> lspStatus.setText("Java LSP · No completion proposals at the caret");
 				case FAILED -> lspStatus.setText("Java LSP · Completion failed: "
 						+ status.failure().getMessage());
+				}
+			});
+			editor.setSemanticStatusListener(status -> {
+				switch (status.state()) {
+				case AVAILABLE -> lspStatus.setText("Java LSP · Semantic highlighting active · "
+						+ status.tokenCount() + " classifications");
+				case EMPTY -> lspStatus.setText(
+						"Java LSP · Lexer highlighting active · no semantic classifications");
+				case FAILED -> lspStatus.setText(
+						"Java LSP · Semantic highlighting unavailable: "
+								+ status.failure().getMessage());
+				case REQUESTING -> lspStatus.setText(
+						"Java LSP · Loading semantic classifications …");
 				}
 			});
 		}
@@ -704,9 +722,9 @@ public final class GuiShowcaseDemo {
 						if (languageServerClosing) return;
 						Path document = workspace.resolve("glswing-examples/src/main/java/"
 								+ "com/vingame/glswing/demo/HelloGLSwing.java");
-						codeEditor.setDiagnosticProvider(started, document.toUri());
 						lspStatus.setText("Core diagnostics active · LSP connected: "
 								+ Path.of(command.get(0)).getFileName());
+						codeEditor.setDiagnosticProvider(started, document.toUri());
 						host.report("Language server connected");
 					});
 				} catch (RuntimeException | java.io.IOException failure) { showLanguageServerFailure(failure); }
@@ -733,16 +751,24 @@ public final class GuiShowcaseDemo {
 		}
 
 		private void selectLanguageServer() {
-			JFileChooser chooser = new JFileChooser();
-			chooser.setDialogTitle("Select extracted Eclipse JDT Language Server");
-			chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-			if (chooser.showOpenDialog(null) != JFileChooser.APPROVE_OPTION) return;
-			try {
-				Path installation = chooser.getSelectedFile().toPath();
-				languageServerProfile.selectInstallation(installation);
-				startLanguageServer(languageServerProfile.command(
-						installation, showcaseWorkspace()));
-			} catch (RuntimeException | java.io.IOException failure) { showLanguageServerFailure(failure); }
+			fileDialogs.show(GLFileDialogRequest.open()
+					.title("Select extracted Eclipse JDT Language Server")
+					.selectionMode(GLFileSelectionMode.DIRECTORIES)
+					.build(), host.parent()).whenComplete((result, failure) -> {
+				if (failure != null) {
+					showLanguageServerFailure(failure);
+					return;
+				}
+				if (!result.approved()) return;
+				try {
+					Path installation = result.selectedPath();
+					languageServerProfile.selectInstallation(installation);
+					startLanguageServer(languageServerProfile.command(
+							installation, showcaseWorkspace()));
+				} catch (RuntimeException | java.io.IOException error) {
+					showLanguageServerFailure(error);
+				}
+			});
 		}
 
 		private void showLanguageServerFailure(Throwable failure) {
@@ -772,6 +798,9 @@ public final class GuiShowcaseDemo {
 
 		void closeLanguageServer() {
 			languageServerClosing = true;
+			fileDialogs.close();
+			nativeFileDialogs.close();
+			themedFileDialogs.close();
 			for (GLCodeEditor editor : editorsByUri.values())
 				editor.clearDiagnosticProvider();
 			GLLanguageServer current = languageServer;
@@ -815,9 +844,20 @@ public final class GuiShowcaseDemo {
 					event -> host.report("Datei > Neu"));
 			create.setIcon(ACTION_ICON);
 			create.setAcceleratorText("Ctrl+N");
-			GLMenuItem open = fileMenu.addItem("Öffnen ...",
-					event -> host.report("Datei > Oeffnen"));
+			GLPopupMenu openDialogs = new GLPopupMenu();
+			openDialogs.addItem("Systemdialog ...",
+					event -> showOpenDialog(nativeFileDialogs, "Native"));
+			openDialogs.addItem("GLSwing-Dialog ...",
+					event -> showOpenDialog(themedFileDialogs, "Themed"));
+			GLMenuItem open = fileMenu.addSubMenu("Öffnen", openDialogs);
 			open.setIcon(LINK_ICON);
+			GLPopupMenu saveDialogs = new GLPopupMenu();
+			saveDialogs.addItem("Systemdialog ...",
+					event -> showSaveDialog(nativeFileDialogs, "Native"));
+			saveDialogs.addItem("GLSwing-Dialog ...",
+					event -> showSaveDialog(themedFileDialogs, "Themed"));
+			GLMenuItem saveAs = fileMenu.addSubMenu("Speichern unter", saveDialogs);
+			saveAs.setIcon(ACTION_ICON);
 			fileMenu.addSeparator();
 			GLPopupMenu export = new GLPopupMenu();
 			export.addItem("PNG",
@@ -882,6 +922,26 @@ public final class GuiShowcaseDemo {
 			GLPopupMenu disabledMenu = new GLPopupMenu();
 			var disabledItem = menuBar.addMenu("Deaktiviert", disabledMenu);
 			disabledItem.setEnabled(false);
+		}
+
+		private void showOpenDialog(GLFileDialogs dialogs, String backendName) {
+			dialogs.show(GLFileDialogRequest.open().title("Open source file")
+					.filter("Java source", "java").filter("All text files", "txt", "md")
+					.build(), host.parent()).whenComplete((result, failure) ->
+					SwingUtilities.invokeLater(() -> host.report(backendName + ": "
+							+ (failure != null ? "file dialog failed: " + failure.getMessage()
+							: result.approved() ? "selected " + result.selectedPath()
+									: "file dialog cancelled"))));
+		}
+
+		private void showSaveDialog(GLFileDialogs dialogs, String backendName) {
+			dialogs.show(GLFileDialogRequest.save().title("Save example")
+					.suggestedFileName("example.java").filter("Java source", "java")
+					.build(), host.parent()).whenComplete((result, failure) ->
+					SwingUtilities.invokeLater(() -> host.report(backendName + ": "
+							+ (failure != null ? "file dialog failed: " + failure.getMessage()
+							: result.approved() ? "save target " + result.selectedPath()
+									: "file dialog cancelled"))));
 		}
 
 		private void updateHistoryActions() {

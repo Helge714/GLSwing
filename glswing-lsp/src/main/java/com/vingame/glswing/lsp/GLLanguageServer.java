@@ -41,6 +41,8 @@ import org.eclipse.lsp4j.ExecuteCommandParams;
 import org.eclipse.lsp4j.InsertTextFormat;
 import org.eclipse.lsp4j.Hover;
 import org.eclipse.lsp4j.HoverParams;
+import org.eclipse.lsp4j.ImplementationCapabilities;
+import org.eclipse.lsp4j.ImplementationParams;
 import org.eclipse.lsp4j.MessageActionItem;
 import org.eclipse.lsp4j.MessageParams;
 import org.eclipse.lsp4j.PublishDiagnosticsParams;
@@ -50,6 +52,13 @@ import org.eclipse.lsp4j.SignatureHelpCapabilities;
 import org.eclipse.lsp4j.SignatureHelpContext;
 import org.eclipse.lsp4j.SignatureHelpParams;
 import org.eclipse.lsp4j.SignatureHelpTriggerKind;
+import org.eclipse.lsp4j.CallHierarchyCapabilities;
+import org.eclipse.lsp4j.CallHierarchyIncomingCallsParams;
+import org.eclipse.lsp4j.CallHierarchyOutgoingCallsParams;
+import org.eclipse.lsp4j.CallHierarchyPrepareParams;
+import org.eclipse.lsp4j.SemanticTokensCapabilities;
+import org.eclipse.lsp4j.SemanticTokensClientCapabilitiesRequests;
+import org.eclipse.lsp4j.SemanticTokensParams;
 import org.eclipse.lsp4j.TextDocumentContentChangeEvent;
 import org.eclipse.lsp4j.TextDocumentIdentifier;
 import org.eclipse.lsp4j.TextDocumentItem;
@@ -65,14 +74,17 @@ import org.eclipse.lsp4j.services.LanguageServer;
 
 import com.vingame.glswing.ui.GLCodeDiagnostic;
 import com.vingame.glswing.ui.GLCodeDiagnosticProvider;
+import com.vingame.glswing.ui.GLCodeCall;
+import com.vingame.glswing.ui.GLCodeCallHierarchy;
 import com.vingame.glswing.ui.GLCodeCompletion;
 import com.vingame.glswing.ui.GLCodeTextEdit;
 import com.vingame.glswing.ui.GLCodeDocument;
 import com.vingame.glswing.ui.GLCodeHover;
 import com.vingame.glswing.ui.GLCodeLocation;
 import com.vingame.glswing.ui.GLCodeSignature;
+import com.vingame.glswing.ui.GLCodeSemanticToken;
 
-/** Process-backed LSP diagnostic provider using standard input and output. */
+/** Process-backed LSP code-intelligence provider using standard input and output. */
 public final class GLLanguageServer implements GLCodeDiagnosticProvider, AutoCloseable {
 	@JsonSegment("java")
 	private interface JavaProtocol {
@@ -90,6 +102,9 @@ public final class GLLanguageServer implements GLCodeDiagnosticProvider, AutoClo
 	private final Thread errorForwarder;
 	private final Map<URI, OpenDocument> documents = new ConcurrentHashMap<>();
 	private final Map<URI, List<GLCodeDiagnostic>> latestDiagnostics = new ConcurrentHashMap<>();
+	private final List<String> semanticTokenTypes;
+	private final List<String> semanticTokenModifiers;
+	private final boolean semanticTokensFullSupported;
 	private volatile boolean closed;
 
 	/** Starts and initializes a language server in the supplied workspace. */
@@ -122,6 +137,27 @@ public final class GLLanguageServer implements GLCodeDiagnosticProvider, AutoClo
 		DefinitionCapabilities definitions = new DefinitionCapabilities();
 		definitions.setLinkSupport(true);
 		textDocument.setDefinition(definitions);
+		ImplementationCapabilities implementations = new ImplementationCapabilities();
+		implementations.setLinkSupport(true);
+		textDocument.setImplementation(implementations);
+		textDocument.setCallHierarchy(new CallHierarchyCapabilities());
+		SemanticTokensCapabilities semanticTokens = new SemanticTokensCapabilities();
+		SemanticTokensClientCapabilitiesRequests semanticRequests =
+				new SemanticTokensClientCapabilitiesRequests();
+		semanticRequests.setFull(true);
+		semanticTokens.setRequests(semanticRequests);
+		semanticTokens.setTokenTypes(List.of("namespace", "type", "class", "enum",
+				"interface", "struct", "typeParameter", "parameter", "variable",
+				"property", "enumMember", "event", "function", "method", "macro",
+				"keyword", "modifier", "comment", "string", "number", "regexp",
+				"operator", "decorator"));
+		semanticTokens.setTokenModifiers(List.of("declaration", "definition",
+				"readonly", "static", "deprecated", "abstract", "async",
+				"modification", "documentation", "defaultLibrary"));
+		semanticTokens.setFormats(List.of("relative"));
+		semanticTokens.setOverlappingTokenSupport(false);
+		semanticTokens.setMultilineTokenSupport(false);
+		textDocument.setSemanticTokens(semanticTokens);
 		textDocument.setCodeAction(new CodeActionCapabilities(
 				new CodeActionLiteralSupportCapabilities(new CodeActionKindCapabilities(
 						List.of("quickfix", "refactor", "source", "source.organizeImports"))), false));
@@ -130,7 +166,17 @@ public final class GLLanguageServer implements GLCodeDiagnosticProvider, AutoClo
 		initialize.setInitializationOptions(initializationOptions == null
 				? Map.of() : Map.copyOf(initializationOptions));
 		if (workspace != null) initialize.setRootUri(workspace.toUri().toString());
-		server.initialize(initialize).join();
+		var initialized = server.initialize(initialize).join();
+		var semanticProvider = initialized.getCapabilities().getSemanticTokensProvider();
+		semanticTokenTypes = semanticProvider == null || semanticProvider.getLegend() == null
+				|| semanticProvider.getLegend().getTokenTypes() == null ? List.of()
+						: List.copyOf(semanticProvider.getLegend().getTokenTypes());
+		semanticTokenModifiers = semanticProvider == null || semanticProvider.getLegend() == null
+				|| semanticProvider.getLegend().getTokenModifiers() == null ? List.of()
+						: List.copyOf(semanticProvider.getLegend().getTokenModifiers());
+		var semanticFull = semanticProvider == null ? null : semanticProvider.getFull();
+		semanticTokensFullSupported = semanticFull != null
+				&& (semanticFull.isRight() || Boolean.TRUE.equals(semanticFull.getLeft()));
 		server.initialized(new org.eclipse.lsp4j.InitializedParams());
 	}
 
@@ -337,19 +383,120 @@ public final class GLLanguageServer implements GLCodeDiagnosticProvider, AutoClo
 				return java.util.concurrent.CompletableFuture.completedFuture(List.of());
 			DefinitionParams params = new DefinitionParams(
 					new TextDocumentIdentifier(uri.toString()), position(document.text(), offset));
-			return requestDefinitions(params).thenApply(result -> {
-				if (result == null) return List.of();
-				if (result.isLeft()) return result.getLeft().stream().map(location ->
-						new GLCodeLocation(URI.create(location.getUri()),
-								location.getRange().getStart().getLine(),
-								location.getRange().getStart().getCharacter())).toList();
-				return result.getRight().stream().map(link -> {
-					var range = link.getTargetSelectionRange() == null
-							? link.getTargetRange() : link.getTargetSelectionRange();
-					return new GLCodeLocation(URI.create(link.getTargetUri()),
-							range.getStart().getLine(), range.getStart().getCharacter());
-				}).toList();
-			});
+			return requestDefinitions(params).thenApply(GLLanguageServer::locations);
+		}
+		@Override public CompletionStage<List<GLCodeLocation>> implementations(
+				GLCodeDocument document, int offset) {
+			if (sessionClosed || !uri.equals(document.uri()) || offset < 0
+					|| offset > document.text().length())
+				return java.util.concurrent.CompletableFuture.completedFuture(List.of());
+			ImplementationParams params = new ImplementationParams(
+					new TextDocumentIdentifier(uri.toString()),
+					position(document.text(), offset));
+			return server.getTextDocumentService().implementation(params)
+					.orTimeout(4, TimeUnit.SECONDS)
+					.thenApply(GLLanguageServer::locations);
+		}
+		@Override public CompletionStage<Optional<GLCodeCallHierarchy>> callHierarchy(
+				GLCodeDocument document, int offset) {
+			if (sessionClosed || !uri.equals(document.uri()) || offset < 0
+					|| offset > document.text().length())
+				return java.util.concurrent.CompletableFuture.completedFuture(Optional.empty());
+			CallHierarchyPrepareParams params = new CallHierarchyPrepareParams();
+			params.setTextDocument(new TextDocumentIdentifier(uri.toString()));
+			params.setPosition(position(document.text(), offset));
+			return server.getTextDocumentService().prepareCallHierarchy(params)
+					.orTimeout(4, TimeUnit.SECONDS).thenCompose(items -> {
+						if (items == null || items.isEmpty()) return java.util.concurrent
+								.CompletableFuture.completedFuture(Optional.empty());
+						var root = items.stream().filter(
+								GLLanguageServer::validCallHierarchyItem)
+								.findFirst().orElse(null);
+						if (root == null) return java.util.concurrent.CompletableFuture
+								.completedFuture(Optional.empty());
+						CallHierarchyIncomingCallsParams incomingParams =
+								new CallHierarchyIncomingCallsParams(root);
+						CallHierarchyOutgoingCallsParams outgoingParams =
+								new CallHierarchyOutgoingCallsParams(root);
+						var incoming = server.getTextDocumentService()
+								.callHierarchyIncomingCalls(incomingParams)
+								.orTimeout(4, TimeUnit.SECONDS)
+								.exceptionally(failure -> List.of());
+						var outgoing = server.getTextDocumentService()
+								.callHierarchyOutgoingCalls(outgoingParams)
+								.orTimeout(4, TimeUnit.SECONDS)
+								.exceptionally(failure -> List.of());
+						return incoming.thenCombine(outgoing, (in, out) -> Optional.of(
+								new GLCodeCallHierarchy(root.getName(), location(root),
+										in.stream().filter(call -> call != null
+												&& validCallHierarchyItem(call.getFrom()))
+												.map(call -> new GLCodeCall(
+												call.getFrom().getName(), location(call.getFrom())))
+												.toList(),
+										out.stream().filter(call -> call != null
+												&& validCallHierarchyItem(call.getTo()))
+												.map(call -> new GLCodeCall(
+												call.getTo().getName(), location(call.getTo())))
+												.toList())));
+					});
+		}
+		@Override public CompletionStage<Boolean> canOpenCallHierarchy(
+				GLCodeDocument document, int offset) {
+			if (sessionClosed || !uri.equals(document.uri()) || offset < 0
+					|| offset > document.text().length())
+				return java.util.concurrent.CompletableFuture.completedFuture(false);
+			CallHierarchyPrepareParams params = new CallHierarchyPrepareParams();
+			params.setTextDocument(new TextDocumentIdentifier(uri.toString()));
+			params.setPosition(position(document.text(), offset));
+			return server.getTextDocumentService().prepareCallHierarchy(params)
+					.orTimeout(4, TimeUnit.SECONDS)
+					.thenApply(items -> items != null && items.stream()
+							.anyMatch(GLLanguageServer::validCallHierarchyItem));
+		}
+		@Override public CompletionStage<List<GLCodeSemanticToken>> semanticTokens(
+				GLCodeDocument document) {
+			if (sessionClosed || !uri.equals(document.uri())
+					|| !semanticTokensFullSupported || semanticTokenTypes.isEmpty())
+				return java.util.concurrent.CompletableFuture.completedFuture(List.of());
+			SemanticTokensParams params = new SemanticTokensParams(
+					new TextDocumentIdentifier(uri.toString()));
+			// JDT may briefly return an empty list while it is reconciling a didOpen
+			// or didChange notification. Treat that as provisional for every document
+			// version, not only during the first project import.
+			return requestSemanticTokens(document, params, 8);
+		}
+		private CompletionStage<List<GLCodeSemanticToken>> requestSemanticTokens(
+				GLCodeDocument document, SemanticTokensParams params,
+				int remainingAttempts) {
+			OpenDocument active = documents.get(uri);
+			if (sessionClosed || active == null
+					|| active.document().version() != document.version())
+				return java.util.concurrent.CompletableFuture.completedFuture(List.of());
+			return server.getTextDocumentService().semanticTokensFull(params)
+					// Initial project import can legitimately take longer than ordinary
+					// interactive requests. This remains asynchronous and is cancelled by
+					// the editor when its document version changes.
+					.orTimeout(60, TimeUnit.SECONDS)
+					.thenApply(tokens -> decodeSemanticTokens(document.text(), tokens,
+							semanticTokenTypes, semanticTokenModifiers))
+					.thenCompose(tokens -> {
+						if (!tokens.isEmpty())
+							return java.util.concurrent.CompletableFuture.completedFuture(tokens);
+						OpenDocument current = documents.get(uri);
+						if (remainingAttempts <= 1 || sessionClosed || document.text().isBlank()
+								|| current == null || current.document().version() != document.version())
+							return java.util.concurrent.CompletableFuture.completedFuture(List.of());
+						long delay = switch (remainingAttempts) {
+						case 8 -> 250; case 7 -> 500; case 6 -> 1_000;
+						case 5 -> 2_000; case 4 -> 4_000; case 3 -> 8_000;
+						default -> 16_000;
+						};
+						return java.util.concurrent.CompletableFuture.supplyAsync(() -> null,
+								java.util.concurrent.CompletableFuture.delayedExecutor(
+										delay, TimeUnit.MILLISECONDS))
+								.thenCompose(ignored -> requestSemanticTokens(document, params,
+										remainingAttempts - 1));
+					});
 		}
 		@Override public CompletionStage<List<GLCodeTextEdit>> organizeImports(
 				GLCodeDocument document) {
@@ -447,6 +594,63 @@ public final class GLLanguageServer implements GLCodeDiagnosticProvider, AutoClo
 		if (value == null) return new WorkspaceEdit();
 		return new com.google.gson.Gson().fromJson(
 				new com.google.gson.Gson().toJsonTree(value), WorkspaceEdit.class);
+	}
+	private static List<GLCodeLocation> locations(
+			org.eclipse.lsp4j.jsonrpc.messages.Either<
+					List<? extends org.eclipse.lsp4j.Location>,
+					List<? extends org.eclipse.lsp4j.LocationLink>> result) {
+		if (result == null) return List.of();
+		if (result.isLeft()) return result.getLeft().stream().map(location ->
+				new GLCodeLocation(URI.create(location.getUri()),
+						location.getRange().getStart().getLine(),
+						location.getRange().getStart().getCharacter())).toList();
+		return result.getRight().stream().map(link -> {
+			var range = link.getTargetSelectionRange() == null
+					? link.getTargetRange() : link.getTargetSelectionRange();
+			return new GLCodeLocation(URI.create(link.getTargetUri()),
+					range.getStart().getLine(), range.getStart().getCharacter());
+		}).toList();
+	}
+	private static GLCodeLocation location(org.eclipse.lsp4j.CallHierarchyItem item) {
+		var range = item.getSelectionRange() == null ? item.getRange()
+				: item.getSelectionRange();
+		return new GLCodeLocation(URI.create(item.getUri()),
+				range.getStart().getLine(), range.getStart().getCharacter());
+	}
+	private static boolean validCallHierarchyItem(
+			org.eclipse.lsp4j.CallHierarchyItem item) {
+		return item != null && item.getName() != null && !item.getName().isBlank()
+				&& item.getUri() != null && (item.getSelectionRange() != null
+						|| item.getRange() != null);
+	}
+	static List<GLCodeSemanticToken> decodeSemanticTokens(String source,
+			org.eclipse.lsp4j.SemanticTokens response, List<String> tokenTypes,
+			List<String> tokenModifiers) {
+		if (response == null || response.getData() == null) return List.of();
+		List<Integer> data = response.getData();
+		ArrayList<GLCodeSemanticToken> result = new ArrayList<>(data.size() / 5);
+		int line = 0, character = 0;
+		for (int index = 0; index + 4 < data.size(); index += 5) {
+			int lineDelta = data.get(index);
+			int characterDelta = data.get(index + 1);
+			line += lineDelta;
+			character = lineDelta == 0 ? character + characterDelta : characterDelta;
+			int length = data.get(index + 2);
+			int typeIndex = data.get(index + 3);
+			if (length <= 0 || typeIndex < 0 || typeIndex >= tokenTypes.size())
+				continue;
+			int start = offset(source, line, character);
+			int end = offset(source, line, character + length);
+			if (end <= start) continue;
+			long mask = Integer.toUnsignedLong(data.get(index + 4));
+			java.util.LinkedHashSet<String> modifiers = new java.util.LinkedHashSet<>();
+			for (int bit = 0; bit < tokenModifiers.size() && bit < 32; bit++)
+				if ((mask & 1L << bit) != 0)
+					modifiers.add(tokenModifiers.get(bit));
+			result.add(new GLCodeSemanticToken(start, end,
+					tokenTypes.get(typeIndex), modifiers));
+		}
+		return List.copyOf(result);
 	}
 	private static List<GLCodeTextEdit> workspaceEdits(String source, URI uri,
 			WorkspaceEdit workspaceEdit) {

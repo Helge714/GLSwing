@@ -16,6 +16,12 @@ public final class GLUiKeys {
 	public static final String CODE_UNCOMMENT = "glswing.code.uncomment";
 	public static final String CODE_ORGANIZE_IMPORTS = "glswing.code.organizeImports";
 	public static final String CODE_GO_TO_DEFINITION = "glswing.code.goToDefinition";
+	public static final String CODE_OPEN_DECLARATION = "glswing.code.openDeclaration";
+	public static final String CODE_OPEN_IMPLEMENTATION = "glswing.code.openImplementation";
+	public static final String CODE_OPEN_CALL_HIERARCHY = "glswing.code.openCallHierarchy";
+	public static final String CODE_INCOMING_CALLS = "glswing.code.incomingCalls";
+	public static final String CODE_OUTGOING_CALLS = "glswing.code.outgoingCalls";
+	public static final String CODE_NO_CALLS = "glswing.code.noCalls";
 	public static final String TAB_CLOSE = "glswing.tab.close";
 	public static final String TAB_CLOSE_OTHERS = "glswing.tab.closeOthers";
 	public static final String TAB_REOPEN_CLOSED = "glswing.tab.reopenClosed";

@@ -83,6 +83,7 @@ public class GLPopupMenu extends GLContainer {
 	private float activeMaximumWidth = Float.POSITIVE_INFINITY;
 	private GLPopupTextOverflow textOverflow = GLPopupTextOverflow.ELLIPSIS;
 	private boolean ellipsisActive;
+	private boolean outsideInputBlocked = true;
 
 	public GLPopupMenu() {
 		scrollBar = new MenuScrollBar(this);
@@ -106,6 +107,7 @@ public class GLPopupMenu extends GLContainer {
 		leftFade.setVisible(false);
 		rightFade.setVisible(false);
 		titleView.setVisible(false);
+		updateShadowOverflow();
 	}
 
 	public final GLMenuItem addItem(String text) {
@@ -469,6 +471,26 @@ public class GLPopupMenu extends GLContainer {
 			current.updateImmediateHoverRegistration();
 	}
 
+	/**
+	 * Returns whether the open popup consumes pointer input outside its own bounds.
+	 * Normal menus block outside input and close on an outside press. Transient
+	 * interactive hover popups can disable this behavior.
+	 */
+	public final boolean isOutsideInputBlocked() {
+		return outsideInputBlocked;
+	}
+
+	/**
+	 * Selects whether pointer input outside this popup is consumed. The setting
+	 * can only be changed while the popup is closed.
+	 */
+	public final void setOutsideInputBlocked(boolean blocked) {
+		if (isShowing())
+			throw new IllegalStateException(
+					"Close a popup before changing outside-input behavior");
+		outsideInputBlocked = blocked;
+	}
+
 	public final boolean isImmediateCpuPickingEnabled() {
 		return immediateCpuPickingEnabled;
 	}
@@ -486,6 +508,17 @@ public class GLPopupMenu extends GLContainer {
 		float height = getHeight();
 		if (width <= 0 || height <= 0)
 			return;
+		GLThemeValues values = getGLTheme().values();
+		float shadowSoftness = Math.max(0,
+				values.getFloat("menu.shadow.softness", 9));
+		float shadowOffsetX = values.getFloat("menu.shadow.offsetX", 0);
+		float shadowOffsetY = values.getFloat("menu.shadow.offsetY", 3);
+		Color shadowColor = values.getColor("menu.shadow.color",
+				new Color(0, 0, 0, 105));
+		if (shadowSoftness > 0 && shadowColor.getAlpha() > 0)
+			context.drawUIRoundRectShadow(0, 0, width, height,
+					style.cornerRadius(), shadowSoftness,
+					shadowOffsetX, shadowOffsetY, shadowColor);
 		if (attachedEdge == AttachedEdge.NONE) {
 			context.fillAndDrawUIRoundRect(0, 0, width, height,
 					style.cornerRadius(), style.borderWidth(), style.background(),
@@ -530,15 +563,25 @@ public class GLPopupMenu extends GLContainer {
 	protected void themeChanged() {
 		if (localStyle == null && !getGLStyle().equals(appliedStyle))
 			styleChanged();
+		else {
+			updateShadowOverflow();
+			invalidateRecording();
+		}
 	}
 
 	final void itemHovered(GLMenuItem item) {
 		if (session == null)
 			return;
+		session.rootMenu.firePopupMenuPointerEntered();
 		if (item.getSubMenu() == null)
 			session.closeAfter(this);
 		else
 			session.openSubMenu(this, item);
+	}
+
+	final void itemExited(GLMenuItem item) {
+		if (session != null)
+			session.rootMenu.firePopupMenuPointerExited();
 	}
 
 	final void openSubMenu(GLMenuItem item) {
@@ -885,6 +928,7 @@ public class GLPopupMenu extends GLContainer {
 
 	private void styleChanged() {
 		appliedStyle = getGLStyle();
+		updateShadowOverflow();
 		scrollBar.menuStyleChanged();
 		horizontalScrollBar.menuStyleChanged();
 		topFade.menuStyleChanged();
@@ -898,6 +942,18 @@ public class GLPopupMenu extends GLContainer {
 			else
 				row.invalidateRecording();
 		invalidateMenuLayout();
+	}
+
+	private void updateShadowOverflow() {
+		GLThemeValues values = getGLTheme().values();
+		float softness = Math.max(0, values.getFloat("menu.shadow.softness", 9));
+		float offsetX = values.getFloat("menu.shadow.offsetX", 0);
+		float offsetY = values.getFloat("menu.shadow.offsetY", 3);
+		setVisualOverflow(new GLInsets(
+				softness + Math.max(0, -offsetY),
+				softness + Math.max(0, -offsetX),
+				softness + Math.max(0, offsetY),
+				softness + Math.max(0, offsetX)));
 	}
 
 	private static GLPopupMenu itemOwner(GLMenuItem item) {
@@ -930,6 +986,16 @@ public class GLPopupMenu extends GLContainer {
 	private void firePopupMenuClosed() {
 		for (GLPopupMenuListener listener : popupMenuListeners)
 			listener.popupMenuClosed(this);
+	}
+
+	private void firePopupMenuPointerEntered() {
+		for (GLPopupMenuListener listener : popupMenuListeners)
+			listener.popupMenuPointerEntered(this);
+	}
+
+	private void firePopupMenuPointerExited() {
+		for (GLPopupMenuListener listener : popupMenuListeners)
+			listener.popupMenuPointerExited(this);
 	}
 
 	private static float hostWidth(GLParent host) {
@@ -1356,6 +1422,8 @@ public class GLPopupMenu extends GLContainer {
 
 		@Override
 		protected void record(GLContext2D context) {
+			if (!session.rootMenu.outsideInputBlocked)
+				return;
 			float[] bounds = session.anchorHostBounds();
 			if (bounds == null) {
 				context.addUIHitArea(0, 0, getWidth(), getHeight());
@@ -1712,8 +1780,10 @@ public class GLPopupMenu extends GLContainer {
 				if (menuHit != null)
 					return menuHit;
 			}
-			// The dismiss layer owns every remaining pixel while the menu is open.
-			return hit(dismissLayer, screenX, screenY);
+			// Modal menus own every remaining pixel. Modeless hover popups leave the
+			// original surface available for ordinary hover, focus and activation.
+			return rootMenu.outsideInputBlocked
+					? hit(dismissLayer, screenX, screenY) : null;
 		}
 
 		private static GLPickResult hit(GLContainer target,

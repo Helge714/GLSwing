@@ -8,6 +8,7 @@ import java.util.List;
 import com.vingame.glswing.rendering.GLContext2D;
 import com.vingame.glswing.rendering.GLFont;
 import com.vingame.glswing.rendering.GLStroke;
+import com.vingame.glswing.rendering.GLTextShadow;
 
 final class GLMnemonicSupport {
 	private GLMnemonicSupport() {
@@ -78,5 +79,19 @@ final class GLMnemonicSupport {
 				.withWidthSpace(GLStroke.WidthSpace.SCREEN));
 		context.drawUILine(start, baseline + 2,
 				start + width, baseline + 2, color);
+	}
+
+	static void drawUnderlineShadow(GLContext2D context, GLFont font,
+			String text, int index, float x, float baseline,
+			GLTextShadow shadow) {
+		if (shadow == null || !shadow.isVisible()
+				|| index < 0 || index >= text.length())
+			return;
+		float start = x + font.measureText(text.substring(0, index));
+		float width = font.measureText(text.substring(index, index + 1));
+		if (width > 0)
+			context.drawUIRoundRectShadow(start, baseline + 1.5f,
+					width, 1, 0.5f, shadow.softness(),
+					shadow.offsetX(), shadow.offsetY(), shadow.color());
 	}
 }

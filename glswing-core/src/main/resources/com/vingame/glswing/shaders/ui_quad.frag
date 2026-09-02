@@ -10,6 +10,7 @@ flat in int vTextureSlot;
 flat in vec4 vAux;
 flat in vec4 vTertiaryColor;
 flat in vec4 vClipRect;
+flat in vec4 vClipRadii;
 in vec2 vScreenPosition;
 
 uniform sampler2D uTextures[16];
@@ -101,6 +102,15 @@ float insetAsymmetricRoundedDistance(vec2 local, vec2 size, vec4 radii,
 float edgeCoverage(float distance) {
 	float antialias = max(length(vec2(dFdx(distance), dFdy(distance))), 0.0001);
     return 1.0 - smoothstep(-antialias, antialias, distance);
+}
+
+float roundedClipCoverage() {
+	if (max(max(vClipRadii.x, vClipRadii.y),
+			max(vClipRadii.z, vClipRadii.w)) <= 0.0)
+		return 1.0;
+	vec2 size = max(vClipRect.zw - vClipRect.xy, vec2(0.0001));
+	return edgeCoverage(asymmetricRoundedDistance(
+			vScreenPosition - vClipRect.xy, size, vClipRadii));
 }
 
 float squareInsetCoverage(vec2 inset) {
@@ -232,6 +242,9 @@ void main() {
 			|| vScreenPosition.x > vClipRect.z
 			|| vScreenPosition.y > vClipRect.w)
 		discard;
+	float clipCoverage = roundedClipCoverage();
+	if (clipCoverage <= 0.0001)
+		discard;
     int mode = int(vParameters.x + 0.5);
     float coverage;
     vec4 color = vColor;
@@ -271,7 +284,7 @@ void main() {
 				+ vSecondaryColor.rgb * borderAlpha;
 		vec3 combinedColor = combinedAlpha > 0.000001
 				? premultiplied / combinedAlpha : vec3(0.0);
-		fragColor = vec4(combinedColor, combinedAlpha);
+		fragColor = vec4(combinedColor, combinedAlpha * clipCoverage);
 		return;
 	} else if (mode == 7) {
 		float outer = edgeCoverage(roundedDistance(vLocal, vSize, vParameters.y));
@@ -331,7 +344,7 @@ void main() {
 				+ vSecondaryColor.rgb * borderAlpha;
 		vec3 combinedColor = combinedAlpha > 0.000001
 				? premultiplied / combinedAlpha : vec3(0.0);
-		fragColor = vec4(combinedColor, combinedAlpha);
+		fragColor = vec4(combinedColor, combinedAlpha * clipCoverage);
 		return;
 	} else if (mode == 14) {
 		float distance = roundedDistance(vLocal, vSize, vParameters.y);
@@ -373,12 +386,12 @@ void main() {
 				+ vTertiaryColor.rgb * backgroundAlpha + vAux.rgb * borderAlpha;
 		vec3 combinedColor = combinedAlpha > 0.000001
 				? premultiplied / combinedAlpha : vec3(0.0);
-		fragColor = vec4(combinedColor, combinedAlpha);
+		fragColor = vec4(combinedColor, combinedAlpha * clipCoverage);
 		return;
 	} else if (mode == 16) {
 		coverage = lineCoverage();
     } else {
         discard;
     }
-    fragColor = vec4(color.rgb, color.a * coverage);
+    fragColor = vec4(color.rgb, color.a * coverage * clipCoverage);
 }

@@ -147,7 +147,10 @@ brace is aligned with the line containing the opening brace.
 Syntax highlighting is transient presentation data: lexer tokens never modify
 the text or the persistent rich-text runs in `GLTextDocument`. Select a built-in
 lexer with `GLCodeLanguages.JAVA` or `GLCodeLanguages.GLSL`, or implement
-`GLCodeLanguage` for an application language.
+`GLCodeLanguage` for an application language. When the connected tooling
+provides semantic tokens, those classifications take precedence over lexer
+colors; unsupported and temporarily unavailable semantic categories retain the
+lexer result.
 
 ```java
 GLCodeEditor editor = new GLCodeEditor(source);
@@ -172,7 +175,16 @@ statement parentheses, commas, and the space before an opening block brace.
 Quoted strings and trailing line comments are preserved. Syntax colors are
 read from the active theme's `codeEditor.keyword`, `codeEditor.string`,
 `codeEditor.number`, `codeEditor.comment`, and `codeEditor.type` values; the
-built-in light and dark themes provide separate palettes.
+built-in light and dark themes provide separate palettes. `codeEditor.text` and
+`codeEditor.background` set the code-specific base foreground and surface.
+Semantic colors use
+`codeEditor.semantic.<token-type>`, including `class`, `interface`, `parameter`,
+`variable`, `property`, `method`, and the other standard LSP token types.
+`codeEditor.navigationLink` controls the Ctrl/Cmd-hover link color.
+Themes can also override a server-specific type or a modifier combination with
+`codeEditor.semantic.<token-type>.<modifier>`; for example,
+`codeEditor.semantic.variable.readonly`. A wildcard such as
+`codeEditor.semantic.*.deprecated` applies to that modifier across token types.
 
 `GLCodeLanguage.diagnose(String)` supplies optional language-specific
 diagnostics. `GLCodeEditor` runs this check 300 milliseconds after the most
@@ -250,8 +262,9 @@ The standard registry includes `GLJdtLanguageServerProfile` for Java. An
 application can implement `GLLanguageServerProfile` and call `register(...)` to
 add clangd, Roslyn, Pyright, TypeScript Language Server, or another LSP
 implementation. `forLanguage(...)` and `forPath(...)` perform ordered profile
-selection. Completion, hover, signatures, diagnostics, definitions, and editor
-tabs remain independent of the selected server.
+selection. Completion, hover, signatures, diagnostics, definitions,
+implementations, call hierarchies, semantic highlighting, and editor tabs remain
+independent of the selected server.
 
 A profile may override `loadSource(...)` for non-file definition URIs. The JDT
 profile uses this hook for `jdt:` class-file sources; ordinary profiles inherit
@@ -329,6 +342,36 @@ the current document move the caret directly. For another URI, configure a
 can then activate an existing editor, open a tab, or delegate navigation to an
 external tool. Multiple targets are presented in a selection popup. The LSP
 adapter maps both `Location` and `LocationLink` definition responses.
+
+Holding Ctrl, or Cmd on macOS, while hovering a resolvable symbol turns its
+source range into a blue underlined link, changes the pointer to a hand, and
+opens an interactive action popup. **Open Declaration**, **Open
+Implementation**, and **Open Call Hierarchy** appear only when the active
+provider returns a corresponding result for that symbol. The first two actions
+navigate through the normal `GLCodeNavigationHandler`. The hierarchy popup
+shows the first level of incoming and outgoing calls and lets the user navigate
+to each location. A short dismissal delay bridges the distance between the
+source link and its popup; entering the popup cancels that delay, so clamped
+popups near the host edges remain reachable. Releasing the modifier, editing
+the document, or dismissing the popup removes the transient link.
+
+Custom tooling implements `Session.implementations(...)`,
+`canOpenCallHierarchy(...)`, and `callHierarchy(...)` to participate in these
+actions. `GLLanguageServer` maps them to the standard
+`textDocument/implementation` and call-hierarchy requests. The Core does not
+assume Java symbol rules, so any LSP-backed language can expose the same UI.
+
+When the server advertises full semantic-token support, the editor requests a
+versioned document snapshot after changes and applies the returned UTF-16
+ranges without modifying the document. `getSemanticTokens()` exposes the latest
+immutable snapshot. Servers without semantic tokens continue to use the
+built-in lexer exclusively; providers can supply the same feature directly via
+`Session.semanticTokens(...)` without depending on `glswing-lsp`.
+`setSemanticStatusListener(...)` reports whether a request is pending, supplied
+classifications, returned an empty result, or failed.
+The lexical palette remains visible while a newly started language server is
+still importing the project; semantic colors replace it when that asynchronous
+analysis completes.
 
 The code-editor context menu also provides **Organize imports**. It requests
 the standard `source.organizeImports` code action from the active provider;

@@ -8,8 +8,9 @@ import com.vingame.glswing.rendering.GLTransform;
 /** CPU-side layout and compilers for instanced standard UI quads. */
 public final class UIQuadInstanceFormat {
 
-	public static final int FLOATS_PER_INSTANCE = 32;
+	public static final int FLOATS_PER_INSTANCE = 36;
 	public static final int CLIP_OFFSET = 28;
+	public static final int CLIP_RADII_OFFSET = 32;
 	public static final float MODE_ROUNDED_FILL = 0;
 	public static final float MODE_ROUNDED_STROKE = 1;
 	public static final float MODE_MSDF_TEXT = 2;
