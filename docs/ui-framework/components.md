@@ -83,6 +83,12 @@ focus.
 
 ## Hosts
 
+New standalone applications should normally use
+[`GLApplication`](application-startup.md). It owns host creation, standard
+configuration loading, startup progress, first-frame handoff, and orderly
+shutdown. Instantiate the hosts below directly when embedding GLSwing in an
+existing window or when an application requires a custom host hierarchy.
+
 ### `GLFrame`
 
 `GLFrame` is the managed standalone window. It combines a `JFrame`, direct
@@ -112,7 +118,10 @@ uses this event-driven mode for both `GLSwingPanel` and
 
 All hosts expose frame metrics, font access, theme/localizer configuration,
 focus, history, render resolution, and GL resource callbacks. Call `close()` to
-stop animation and release host resources.
+stop animation and release host resources. `firstFrameFuture()` completes after
+the host's first successful presentation; `nextFrameFuture()` can be used when
+an integration must await one subsequent presentation. `GLApplication` uses
+the latter internally after attaching the completed root surface.
 
 ## Dialogs
 

@@ -2,6 +2,7 @@ package com.vingame.glswing.demo;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.event.ActionEvent;
@@ -28,10 +29,16 @@ import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 
+import com.vingame.glswing.application.GLApplication;
+import com.vingame.glswing.application.GLApplicationContext;
+import com.vingame.glswing.application.GLApplicationHandle;
+import com.vingame.glswing.application.GLBackend;
+import com.vingame.glswing.application.GLSplashAlignment;
 import com.vingame.glswing.component.GLContainer;
 import com.vingame.glswing.component.GLDialog;
 import com.vingame.glswing.component.GLFrameProfile;
 import com.vingame.glswing.component.GLParent;
+import com.vingame.glswing.component.GLSwingContainerCanvas;
 import com.vingame.glswing.component.GLSwingPanel;
 import com.vingame.glswing.history.GLHistoryManager;
 import com.vingame.glswing.file.GLFileDialogRequest;
@@ -127,8 +134,56 @@ public final class GuiShowcaseDemo {
 
 	public static void main(String[] args) {
 		GLDemoErrorReporter.install("GUI Showcase / GLJPanel");
+		launchShowcase(args, GLBackend.GLJPANEL,
+				"GLSwing – GUI Showcase");
+	}
+
+	static GLApplicationHandle launchShowcase(String[] args, GLBackend backend,
+			String title) {
 		lspCommand = languageServerCommand(args);
-		SwingUtilities.invokeLater(GuiShowcaseDemo::showWindow);
+		AtomicReference<ShowcaseApplicationRoot> rootReference =
+				new AtomicReference<>();
+		return GLApplication.builder()
+				.title(title)
+				.backend(backend)
+				.size(1260, 800)
+				.minimumSize(760, 520)
+				.clearColor(new Color(12, 17, 27))
+				.theme(showcaseThemeDirectory().resolve("dark.gltheme"),
+						GLThemes.DARK)
+				.locale(Locale.GERMAN)
+				.localizationBundle(
+						"com.vingame.glswing.demo.languages.Showcase")
+				.splash(splash -> splash
+						.size(640, 380)
+						.padding(32)
+						.contentAlignment(GLSplashAlignment.CENTER_LEFT)
+						.addTitle("GLSwing")
+						.addGap(4)
+						.addSubtitle("Preparing the GUI showcase")
+						.addGap(22)
+						.addTaskHistory(400, 7, 2, 0.2, true)
+						.addProgressBar(false)
+						.minimumDisplayMillis(500)
+						.handoffDelayMillis(1000))
+				.prepare(startup -> startup.background(
+						"Discovering optional integrations", task -> {
+							task.detail(lspCommand.isEmpty()
+									? "Core language support"
+									: "Language server enabled");
+							return null;
+						}))
+				.surface(application -> {
+					ShowcaseApplicationRoot root =
+							new ShowcaseApplicationRoot(application, backend);
+					rootReference.set(root);
+					return root;
+				})
+				.onClose(application -> {
+					ShowcaseApplicationRoot root = rootReference.get();
+					if (root != null) root.close();
+				})
+				.launch();
 	}
 	private static List<String> languageServerCommand(String[] args) {
 		for (int index = 0; index < args.length; index++)
@@ -407,6 +462,290 @@ public final class GuiShowcaseDemo {
 					getSurfacePixelHeight());
 		}
 
+	}
+
+	/** Eager showcase root used by both managed application backends. */
+	static final class ShowcaseApplicationRoot extends GLContainer
+			implements ShowcaseHost, AutoCloseable {
+		private static final float MIN_ZOOM = 0.45f;
+		private static final float MAX_ZOOM = 2.5f;
+		private static final String SHOWCASE_BUNDLE =
+				"com.vingame.glswing.demo.languages.Showcase";
+		private static final Path THEME_DIRECTORY = showcaseThemeDirectory();
+
+		private final GLApplicationContext application;
+		private final GLBackend backend;
+		private final ShowcaseSurface surface;
+		private final ZoomLayer zoomLayer;
+		private final JLabel status;
+		private final Timer statistics;
+		private volatile float zoom = 1;
+		private volatile String lastAction =
+				"Strg + Mausrad: Zoom | Strg + 0: 100 %";
+		private GLThemeWatcher themeWatcher;
+		private String colorsFile = "showcase-dark-colors.gltheme";
+		private String colorsNameKey = "showcase.theme.colors.dark";
+		private String metricsFile = "showcase-default-metrics.gltheme";
+		private String metricsNameKey = "showcase.theme.metrics.default";
+
+		ShowcaseApplicationRoot(GLApplicationContext application,
+				GLBackend backend) {
+			this.application = application;
+			this.backend = backend;
+			setGLTheme(application.theme());
+			setGLLocalizer(application.localizer());
+			surface = new ShowcaseSurface(this);
+			zoomLayer = new ZoomLayer(this, surface);
+			surface.setBounds(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT);
+			zoomLayer.setBounds(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT);
+			zoomLayer.addGL(surface);
+			addGL(zoomLayer);
+			addGL(surface.menuBar());
+
+			status = createStatusLabel("GUI showcase is starting ...");
+			application.window().getContentPane().add(status, BorderLayout.SOUTH);
+			application.window().pack();
+			application.window().setLocationRelativeTo(null);
+			statistics = new Timer(1000,
+					event -> status.setText(performanceText()));
+			statistics.start();
+
+			installZoomInput(renderComponent());
+			surface.updateLocalizedMenuText();
+			watchShowcaseTheme("dark.gltheme", application.theme(),
+					"showcase.theme.dark", false);
+		}
+
+		private Component renderComponent() {
+			return (Component) application.parent();
+		}
+
+		private void installZoomInput(Component component) {
+			component.addMouseWheelListener(event -> {
+				if (!event.isControlDown()) return;
+				event.consume();
+				double factor = Math.pow(1.15,
+						-event.getPreciseWheelRotation());
+				setZoomFromWheel((float) (zoom * factor));
+			});
+			if (component instanceof JComponent swingComponent) {
+				swingComponent.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(
+						KeyStroke.getKeyStroke(KeyEvent.VK_0,
+								InputEvent.CTRL_DOWN_MASK), "resetZoom");
+				swingComponent.getActionMap().put("resetZoom", new AbstractAction() {
+					private static final long serialVersionUID = 1L;
+					@Override public void actionPerformed(ActionEvent event) { setZoom(1); }
+				});
+			} else {
+				component.addKeyListener(new java.awt.event.KeyAdapter() {
+					@Override public void keyPressed(KeyEvent event) {
+						if (event.getKeyCode() == KeyEvent.VK_0
+								&& (event.getModifiersEx()
+										& InputEvent.CTRL_DOWN_MASK) != 0)
+							setZoom(1);
+					}
+				});
+			}
+		}
+
+		@Override protected void record(GLContext2D context) { }
+
+		@Override protected void render(GLContext2D context) {
+			super.render(context);
+			float menuHeight = surface.menuBar().getPreferredGLSize().height();
+			surface.menuBar().setBounds(0, 0, getWidth(), menuHeight);
+		}
+
+		@Override public GLParent parent() { return application.parent(); }
+		@Override public int viewWidth() { return (int) getWidth(); }
+		@Override public int viewHeight() { return (int) getHeight(); }
+		@Override public float zoom() { return zoom; }
+		@Override public float getRenderResolutionScale() {
+			GLParent parent = application.parent();
+			return parent instanceof GLSwingContainerCanvas canvas
+					? canvas.getRenderResolutionScale()
+					: ((GLSwingPanel) parent).getRenderResolutionScale();
+		}
+		@Override public void setRenderResolutionScale(float scale) {
+			GLParent parent = application.parent();
+			if (parent instanceof GLSwingContainerCanvas canvas)
+				canvas.setRenderResolutionScale(scale);
+			else ((GLSwingPanel) parent).setRenderResolutionScale(scale);
+		}
+		@Override public int getRenderPixelWidth() {
+			GLParent parent = application.parent();
+			return parent instanceof GLSwingContainerCanvas canvas
+					? canvas.getRenderPixelWidth()
+					: ((GLSwingPanel) parent).getRenderPixelWidth();
+		}
+		@Override public int getRenderPixelHeight() {
+			GLParent parent = application.parent();
+			return parent instanceof GLSwingContainerCanvas canvas
+					? canvas.getRenderPixelHeight()
+					: ((GLSwingPanel) parent).getRenderPixelHeight();
+		}
+		@Override public int getSurfacePixelWidth() {
+			GLParent parent = application.parent();
+			return parent instanceof GLSwingContainerCanvas canvas
+					? canvas.getSurfacePixelWidth()
+					: ((GLSwingPanel) parent).getSurfacePixelWidth();
+		}
+		@Override public int getSurfacePixelHeight() {
+			GLParent parent = application.parent();
+			return parent instanceof GLSwingContainerCanvas canvas
+					? canvas.getSurfacePixelHeight()
+					: ((GLSwingPanel) parent).getSurfacePixelHeight();
+		}
+
+		@Override public void setZoom(float zoom) { applyZoom(zoom, true); }
+
+		private void setZoomFromWheel(float zoom) { applyZoom(zoom, false); }
+
+		private void applyZoom(float zoom, boolean rebuildPicking) {
+			float resolved = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom));
+			if (Float.compare(this.zoom, resolved) == 0) return;
+			surface.closeTransientPopups();
+			this.zoom = resolved;
+			lastAction = String.format("Zoom auf %.0f %% gesetzt", resolved * 100);
+			if (rebuildPicking) repaintAndRebuildPicking(zoomLayer);
+			else repaintInteractively(zoomLayer);
+		}
+
+		@Override public void report(String message) { lastAction = message; }
+
+		@Override public GLHistoryManager historyManager() {
+			return application.parent().getGLHistoryManager();
+		}
+
+		@Override public void setThemeCornerRadius(float radius) {
+			applyRootTheme(getGLTheme().withCornerRadius(radius));
+			lastAction = String.format("Theme-Rundung auf %.1f px gesetzt", radius);
+		}
+
+		@Override public void setLanguage(Locale locale) {
+			GLLocalizer localizer = GLLocalizer.forLocale(locale)
+					.withBundle(SHOWCASE_BUNDLE);
+			setGLLocalizer(localizer);
+			application.parent().setGLLocalizer(localizer);
+			surface.updateLocalizedMenuText();
+			lastAction = localizer.text("showcase.status.language",
+					locale.getDisplayLanguage(locale));
+		}
+
+		private void applyRootTheme(GLTheme theme) {
+			setGLTheme(theme);
+			application.parent().setGLTheme(theme);
+		}
+
+		private void applyShowcaseTheme(GLTheme theme, String nameKey,
+				boolean hotReloaded, boolean preserveExternalMetrics) {
+			GLTheme applied = preserveExternalMetrics ? theme
+					: theme.withCornerRadius(surface.themeRadius());
+			applyRootTheme(applied);
+			if (preserveExternalMetrics)
+				surface.syncThemeRadius(applied.buttonStyle().cornerRadius());
+			lastAction = localizer().text("showcase.status.theme",
+					localizer().text(nameKey))
+					+ (hotReloaded ? " | Hot-Reload" : "");
+		}
+
+		@Override public void watchShowcaseTheme(String fileName, GLTheme fallback,
+				String nameKey, boolean preserveExternalMetrics) {
+			closeThemeWatcher();
+			Path file = THEME_DIRECTORY.resolve(fileName);
+			if (!Files.isRegularFile(file)) {
+				applyShowcaseTheme(fallback, nameKey, false,
+						preserveExternalMetrics);
+				if (preserveExternalMetrics)
+					lastAction = "Externe Theme-Datei nicht gefunden: " + file;
+				return;
+			}
+			try {
+				themeWatcher = GLThemeWatcher.watch(file,
+						theme -> applyShowcaseTheme(theme, nameKey, true,
+								preserveExternalMetrics),
+						error -> lastAction = "Theme-Fehler: " + error.getMessage());
+			} catch (GLThemeLoadException error) {
+				applyShowcaseTheme(fallback, nameKey, false,
+						preserveExternalMetrics);
+				lastAction = "Theme-Watcher nicht aktiv: " + error.getMessage();
+			}
+		}
+
+		@Override public void selectShowcaseColors(String fileName, String nameKey) {
+			colorsFile = fileName;
+			colorsNameKey = nameKey;
+			watchThemeFragments();
+		}
+
+		@Override public void selectShowcaseMetrics(String fileName, String nameKey) {
+			metricsFile = fileName;
+			metricsNameKey = nameKey;
+			watchThemeFragments();
+		}
+
+		private void watchThemeFragments() {
+			closeThemeWatcher();
+			Path watchedFile = THEME_DIRECTORY.resolve(metricsFile);
+			try {
+				themeWatcher = GLThemeWatcher.watch(watchedFile,
+						unused -> applyThemeFragments(true),
+						error -> lastAction = "Theme-Fehler: " + error.getMessage());
+			} catch (GLThemeLoadException error) {
+				lastAction = "Theme-Watcher nicht aktiv: " + error.getMessage();
+			}
+		}
+
+		private void applyThemeFragments(boolean hotReloaded) {
+			try {
+				GLTheme theme = GLThemeLoader.loadBundle(GLThemes.DEFAULT,
+						THEME_DIRECTORY.resolve(colorsFile),
+						THEME_DIRECTORY.resolve(metricsFile));
+				applyRootTheme(theme);
+				surface.syncThemeRadius(theme.buttonStyle().cornerRadius());
+				lastAction = localizer().text("showcase.status.themeCombination",
+						localizer().text(colorsNameKey),
+						localizer().text(metricsNameKey))
+						+ (hotReloaded ? " | Hot-Reload" : "");
+			} catch (GLThemeLoadException error) {
+				lastAction = "Theme-Fehler: " + error.getMessage();
+			}
+		}
+
+		@Override public GLLocalizer localizer() { return getGLLocalizer(); }
+
+		private void closeThemeWatcher() {
+			finishInteractiveRepaint();
+			if (themeWatcher == null) return;
+			themeWatcher.close();
+			themeWatcher = null;
+		}
+
+		private String performanceText() {
+			GLParent parent = application.parent();
+			if (parent instanceof GLSwingContainerCanvas canvas)
+				return formatPerformance("GLCanvas / Event-driven", lastAction,
+						zoom, canvas.getFramesPerSecond(), canvas.getFrameProfile(),
+						canvas.getLastDrawCallProfile(),
+						canvas.getActualAntialiasingSamples(),
+						canvas.getActualSwapInterval(),
+						canvas.getRenderResolutionScale(),
+						canvas.getRenderPixelWidth(), canvas.getRenderPixelHeight(),
+						canvas.getSurfacePixelWidth(), canvas.getSurfacePixelHeight());
+			GLSwingPanel panel = (GLSwingPanel) parent;
+			return formatPerformance("GLJPanel / Event-driven", lastAction, zoom,
+					panel.getFramesPerSecond(), panel.getFrameProfile(),
+					panel.getLastDrawCallProfile(), panel.getActualAntialiasingSamples(),
+					-1, panel.getRenderResolutionScale(), panel.getRenderPixelWidth(),
+					panel.getRenderPixelHeight(), panel.getSurfacePixelWidth(),
+					panel.getSurfacePixelHeight());
+		}
+
+		@Override public void close() {
+			statistics.stop();
+			closeThemeWatcher();
+			surface.closeLanguageServer();
+		}
 	}
 
 	/** Keeps only the showcase content in the zoomable coordinate system. */

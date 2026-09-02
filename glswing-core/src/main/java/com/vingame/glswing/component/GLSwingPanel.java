@@ -20,6 +20,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 import javax.swing.SwingUtilities;
@@ -138,6 +140,9 @@ public abstract class GLSwingPanel extends GLJPanel
 	private transient int expectedPointerWarpX;
 	private transient int expectedPointerWarpY;
 	private transient Robot pointerRobot;
+	private final CompletableFuture<Void> firstFrameFuture = new CompletableFuture<>();
+	private final AtomicReference<CompletableFuture<Void>> nextFrameFuture =
+			new AtomicReference<>();
 	private final transient GLPointerController pointerController =
 			GLPointerControllers.forAwt(this);
 
@@ -210,6 +215,18 @@ public abstract class GLSwingPanel extends GLJPanel
 
 	public final GLFrameProfile getFrameProfile() {
 		return frameProfile;
+	}
+
+	/** Completes after the first frame has been rendered and presented. */
+	public final CompletableFuture<Void> firstFrameFuture() {
+		return firstFrameFuture;
+	}
+
+	/** Returns a future completed by the next successfully presented frame. */
+	public final CompletableFuture<Void> nextFrameFuture() {
+		CompletableFuture<Void> created = new CompletableFuture<>();
+		if (nextFrameFuture.compareAndSet(null, created)) return created;
+		return nextFrameFuture.get();
 	}
 
 	public final int getRequestedAntialiasingSamples() {
@@ -1312,6 +1329,9 @@ public abstract class GLSwingPanel extends GLJPanel
 			scene.present(gl, surfaceWidth, surfaceHeight);
 			gpuTimers.end(gl);
 			presentNanos = System.nanoTime() - presentStartNanos;
+			firstFrameFuture.complete(null);
+			CompletableFuture<Void> waiter = nextFrameFuture.getAndSet(null);
+			if (waiter != null) waiter.complete(null);
 		} finally {
 			try {
 				try {

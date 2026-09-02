@@ -8,6 +8,12 @@ Items are removed when completed or intentionally rejected.
 - Develop a virtualized generic `GLList<T>` with selection and replaceable cell renderers.
 - Build future `GLTree<T>` and `GLTable` controls on the list selection model.
 
+## Application startup
+
+- Add opt-in lazy tab-content factories for applications whose measured startup
+  time is dominated by large inactive views. Keep eager tab construction as the
+  default so tab selection remains immediate and lifecycle behavior predictable.
+
 ## File dialogs
 
 - Add switchable content views to the themed file dialog, including the current

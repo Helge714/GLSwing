@@ -19,6 +19,7 @@ see the [rendering guide](graphics-pipeline.md).
 
 | Area | Main types | Responsibility |
 |---|---|---|
+| Application startup | `GLApplication`, `GLStartupPlan`, `GLApplicationContext`, `GLApplicationHandle` | Splash, resources, startup work, first-frame handoff, and lifetime |
 | Hosts | `GLFrame`, `GLSwingContainerCanvas`, `GLSwingPanel`, `GLDialog` | OpenGL surface, animation, root hierarchy, and windows |
 | Component tree | `GLParent`, `GLContainer` | Children, bounds, z-order, culling, damage, and cached rendering |
 | Layout | `GLLayout`, `GLLayouts`, `GLGridLayout`, `GLConstraints`, `GLSize`, `GLInsets` | Measurement and arrangement |
@@ -54,26 +55,24 @@ Important exceptions:
 ## Minimal application
 
 ```java
-GLContainer root = new GLContainer() {
-    @Override
-    protected void record(GLContext2D g) {
-        // Optional cached visuals owned by this container.
-    }
-};
-root.setGLLayout(new GLGridLayout(1).withGap(8));
-root.setGLPadding(12);
+GLApplication.builder()
+        .title("GLSwing")
+        .size(900, 600)
+        .surface(context -> {
+            GLContainer root = new GLContainer() {
+                @Override protected void record(GLContext2D g) { }
+            };
+            root.setGLLayout(new GLGridLayout(1).withGap(8));
+            root.setGLPadding(12);
 
-GLLabel status = new GLLabel("Ready");
-GLButton start = new GLButton("Start");
-start.addActionListener(event -> status.setText("Running"));
-
-root.addGL(status, GLConstraints.auto().fillHorizontal());
-root.addGL(start, GLConstraints.auto().fillHorizontal());
-
-GLFrame frame = new GLFrame("GLSwing");
-frame.addGL(root);
-frame.packGL();
-frame.setVisible(true);
+            GLLabel status = new GLLabel("Ready");
+            GLButton start = new GLButton("Start");
+            start.addActionListener(event -> status.setText("Running"));
+            root.addGL(status, GLConstraints.auto().fillHorizontal());
+            root.addGL(start, GLConstraints.auto().fillHorizontal());
+            return root;
+        })
+        .launch();
 ```
 
 `record(...)` describes only the cacheable appearance owned by the container.
@@ -82,10 +81,11 @@ render methods manually.
 
 ## Detailed guides
 
-1. [Components and hosts](ui-framework/components.md)
-2. [Layouts and sizing](ui-framework/layout.md)
-3. [Standard controls](ui-framework/controls.md)
-4. [Themes and localization](ui-framework/themes-localization.md)
-5. [Input configuration](ui-framework/input-configuration.md)
-6. [Undo and redo](ui-framework/history.md)
-7. [Node editor](ui-framework/nodes.md)
+1. [Application startup](ui-framework/application-startup.md)
+2. [Components and hosts](ui-framework/components.md)
+3. [Layouts and sizing](ui-framework/layout.md)
+4. [Standard controls](ui-framework/controls.md)
+5. [Themes and localization](ui-framework/themes-localization.md)
+6. [Input configuration](ui-framework/input-configuration.md)
+7. [Undo and redo](ui-framework/history.md)
+8. [Node editor](ui-framework/nodes.md)

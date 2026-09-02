@@ -16,7 +16,7 @@ lifecycle, extension points, and the behavior of the standard controls.
 
 | Goal | Start here |
 |---|---|
-| Create a standalone GLSwing application | [Components and hosts](ui-framework/components.md#hosts) |
+| Create a standalone GLSwing application | [Application startup](ui-framework/application-startup.md) |
 | Embed OpenGL rendering in Swing | [Components and hosts](ui-framework/components.md#hosts) |
 | Draw shapes, text, images, or SVG content | [Drawing commands](graphics-pipeline/drawing.md) |
 | Build an interface with standard controls | [Controls](ui-framework/controls.md) |
@@ -55,6 +55,7 @@ an index of the retained-mode API.
 
 | Chapter | Covers |
 |---|---|
+| [Application startup](ui-framework/application-startup.md) | Launcher, splash screen, resource preparation, task progress, first-frame handoff, and shutdown |
 | [Components and hosts](ui-framework/components.md) | Component lifecycle, bounds, children, z-order, damage, windows, canvas, panel, and dialogs |
 | [Layouts and sizing](ui-framework/layout.md) | Preferred sizes, padding, free layout, grid constraints, and custom layouts |
 | [Controls](ui-framework/controls.md) | Labels, buttons, check boxes, sliders, text editors, combo boxes, menus, tabs, and scrolling |

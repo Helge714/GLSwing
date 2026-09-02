@@ -97,14 +97,15 @@ the module path as an automatic module.
 
 ## Quick start
 
-`GLFrame` provides a managed standalone window with a direct OpenGL canvas,
-render loop, root component hierarchy, and orderly shutdown:
+`GLApplication` provides a managed standalone window, startup splash, shared
+configuration loading, root component hierarchy, first-frame handoff, and
+orderly shutdown:
 
 ```java
 import java.awt.Color;
 
+import com.vingame.glswing.application.GLApplication;
 import com.vingame.glswing.component.GLContainer;
-import com.vingame.glswing.component.GLFrame;
 import com.vingame.glswing.layout.GLConstraints;
 import com.vingame.glswing.layout.GLGridLayout;
 import com.vingame.glswing.rendering.GLContext2D;
@@ -113,27 +114,25 @@ import com.vingame.glswing.ui.GLLabel;
 
 public final class HelloGLSwing {
     public static void main(String[] args) {
-        GLContainer root = new GLContainer() {
-            @Override
-            protected void record(GLContext2D g) {
-                // Draw cached component visuals here when needed.
-            }
-        };
-        root.setGLLayout(new GLGridLayout(1).withGap(8));
-        root.setGLPadding(16);
+        GLApplication.builder()
+                .title("GLSwing")
+                .size(900, 600)
+                .clearColor(new Color(20, 24, 32))
+                .surface(context -> {
+                    GLContainer root = new GLContainer() {
+                        @Override protected void record(GLContext2D g) { }
+                    };
+                    root.setGLLayout(new GLGridLayout(1).withGap(8));
+                    root.setGLPadding(16);
 
-        GLLabel status = new GLLabel("Ready");
-        GLButton button = new GLButton("Start");
-        button.addActionListener(event -> status.setText("Running"));
-
-        root.addGL(status, GLConstraints.auto().fillHorizontal());
-        root.addGL(button, GLConstraints.auto().fillHorizontal());
-
-        GLFrame frame = new GLFrame("GLSwing");
-        frame.setGLClearColor(new Color(20, 24, 32));
-        frame.addGL(root);
-        frame.packGL();
-        frame.setVisible(true);
+                    GLLabel status = new GLLabel("Ready");
+                    GLButton button = new GLButton("Start");
+                    button.addActionListener(event -> status.setText("Running"));
+                    root.addGL(status, GLConstraints.auto().fillHorizontal());
+                    root.addGL(button, GLConstraints.auto().fillHorizontal());
+                    return root;
+                })
+                .launch();
     }
 }
 ```
@@ -150,6 +149,7 @@ documentation:
 
 - [Rendering guide and `GLContext2D` reference](docs/graphics-pipeline.md)
 - [UI framework and component reference](docs/ui-framework.md)
+- [Application startup and splash screens](docs/ui-framework/application-startup.md)
 - [Examples and recommended learning paths](docs/README.md#examples)
 - [Release notes](CHANGELOG.md)
 
@@ -171,9 +171,9 @@ Useful starting points include:
 
 | Example | Demonstrates |
 |---|---|
-| `GLFrameDemo` | Managed standalone window |
+| `GLFrameDemo` | Managed startup, splash screen, and standalone window |
 | `DrawingApiDemo` | Shapes, strokes, and per-vertex colors |
-| `GuiShowcaseDemo` | Controls, layouts, dialogs, and a selectable external color/metrics/font bundle |
+| `GuiShowcaseDemo` | Managed startup plus controls, layouts, dialogs, and a selectable external color/metrics/font bundle |
 | `CustomShaderDemo` | Custom rendering programs and uniforms |
 | `RecordingParameterDemo` | Reusable recorded drawing commands |
 | `LayerDemo` | Group compositing and effects |

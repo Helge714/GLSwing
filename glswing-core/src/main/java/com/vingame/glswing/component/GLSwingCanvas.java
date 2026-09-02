@@ -1,6 +1,8 @@
 package com.vingame.glswing.component;
 
 import java.awt.Color;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicReference;
 
 import com.jogamp.opengl.GL3;
 import com.jogamp.opengl.GLAutoDrawable;
@@ -66,6 +68,9 @@ public abstract class GLSwingCanvas extends GLCanvas implements GLEventListener 
 	private long statisticsRenderNanos;
 	private int statisticsFrameCount;
 	private long previousFrameEndNanos;
+	private final CompletableFuture<Void> firstFrameFuture = new CompletableFuture<>();
+	private final AtomicReference<CompletableFuture<Void>> nextFrameFuture =
+			new AtomicReference<>();
 
 	/**
 	 * Returns whether JOGL may inspect the internal AWT graphics configuration
@@ -145,6 +150,18 @@ public abstract class GLSwingCanvas extends GLCanvas implements GLEventListener 
 
 	public final GLFrameProfile getFrameProfile() {
 		return frameProfile;
+	}
+
+	/** Completes after the first frame has been rendered and presented. */
+	public final CompletableFuture<Void> firstFrameFuture() {
+		return firstFrameFuture;
+	}
+
+	/** Returns a future completed by the next successfully presented frame. */
+	public final CompletableFuture<Void> nextFrameFuture() {
+		CompletableFuture<Void> created = new CompletableFuture<>();
+		if (nextFrameFuture.compareAndSet(null, created)) return created;
+		return nextFrameFuture.get();
 	}
 
 	@Override
@@ -319,6 +336,9 @@ public abstract class GLSwingCanvas extends GLCanvas implements GLEventListener 
 				gpuTimers.end(gl);
 				presentNanos = System.nanoTime() - presentStartNanos;
 			}
+			firstFrameFuture.complete(null);
+			CompletableFuture<Void> waiter = nextFrameFuture.getAndSet(null);
+			if (waiter != null) waiter.complete(null);
 		} finally {
 			try {
 				try {

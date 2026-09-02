@@ -27,6 +27,30 @@ may change in subsequent `0.x` releases.
 
 ### UI
 
+- Declarative `GLApplication` startup with event-driven GLJPanel and GLCanvas backends,
+  automatic theme/input/localization stages, weighted custom background/AWT/GL
+  tasks, a configurable progress splash, typed prepared results, visible failure
+  handling, and splash-to-application handoff only after a complete frame has
+  been rendered in the still-hidden native window. An optional handoff delay
+  keeps the completed splash above the revealed window for a controlled visual
+  transition.
+- The standard startup splash supports background artwork with cover, contain,
+  or stretch scaling, translucent readability overlays, nine content anchors,
+  configurable dimensions and padding, and an ordered element recipe. Titles,
+  subtitles, logos, gaps, current-task lines, histories, content progress bars,
+  custom Swing components, and optionally unpadded progress bars are added in a
+  compact declaration; omitting a declaration selects the complete default.
+  Task-history elements independently choose their width, status markers, past
+  and upcoming rows, and fade target. The active row retains its position while
+  both directions fade toward an opacity just beyond the visible range.
+  Status glyphs use a fixed marker column so task labels remain aligned across
+  pending, active, completed, and failed states.
+- Applications can replace the standard splash layout through
+  `splashView(...)` and freely compose automatically bound Swing elements for
+  the title, subtitle, logo, current task, task history, and progress bar.
+  Standard and custom task histories can independently hide status markers,
+  while the standard layout can omit its separate current-task line. Task
+  histories grow upward and keep the newest visible entry bottom-aligned.
 - `GLFrame`, direct canvases, and embeddable `GLSwingPanel` hosts.
 - Containers, layouts, damage tracking, and Z-order control.
 - Buttons, checkboxes, sliders, text editors, combo boxes, and menus.
