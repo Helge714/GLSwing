@@ -5,7 +5,8 @@ Items are removed when completed or intentionally rejected.
 
 ## Data views
 
-- Develop a virtualized generic `GLList<T>` with selection and replaceable cell renderers.
+- Migrate other large item surfaces to `GLList<T>` where profiling shows that
+  virtualization or the shared selection model provides a concrete benefit.
 - Build future `GLTree<T>` and `GLTable` controls on the list selection model.
 
 ## Application startup

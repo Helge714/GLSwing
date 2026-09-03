@@ -282,15 +282,20 @@ void main() {
 	} else if (mode == 8) {
 		coverage = chevronCoverage();
 	} else if (mode == 9) {
-		coverage = edgeCoverage(asymmetricRoundedDistance(
-				vLocal, vSize, vSecondaryColor));
+		coverage = asymmetricCornerRadius(vLocal, vSize, vSecondaryColor) <= 1.0
+				? 1.0 : edgeCoverage(asymmetricRoundedDistance(
+						vLocal, vSize, vSecondaryColor));
 	} else if (mode == 10) {
 		float distance = asymmetricRoundedDistance(
 				vLocal, vSize, vSecondaryColor);
 		float strokeWidth = resolvedStrokeWidth(distance);
-		coverage = max(0.0, edgeCoverage(distance) - edgeCoverage(
-				insetAsymmetricRoundedDistance(vLocal, vSize,
-						vSecondaryColor, strokeWidth)));
+		bool square = asymmetricCornerRadius(
+				vLocal, vSize, vSecondaryColor) <= 1.0;
+		float outer = square ? 1.0 : edgeCoverage(distance);
+		float inner = square ? squareInsetCoverage(resolvedSquareStrokeInset())
+				: edgeCoverage(insetAsymmetricRoundedDistance(vLocal, vSize,
+						vSecondaryColor, strokeWidth));
+		coverage = max(0.0, outer - inner);
 	} else if (mode == 11) {
 		vec4 radii = vec4(vParameters.y, vParameters.y,
 				vParameters.w, vParameters.w);

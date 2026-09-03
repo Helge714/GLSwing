@@ -518,7 +518,7 @@ public final class GLRenderer2D {
 				Math.max(0, maximumY - minimumY));
 	}
 
-	private static float[] intersectUIClip(float left, float top,
+	static float[] intersectUIClip(float left, float top,
 			float right, float bottom, float[] requestedRadii, float[] parent) {
 		float requestedLeft = left;
 		float requestedTop = top;
@@ -533,23 +533,23 @@ public final class GLRenderer2D {
 		right = Math.max(left, right);
 		bottom = Math.max(top, bottom);
 		float[] result = { left, top, right, bottom, 0, 0, 0, 0 };
-		if (same(left, requestedLeft) && same(top, requestedTop))
-			result[4] = requestedRadii[0];
-		if (same(right, requestedRight) && same(top, requestedTop))
-			result[5] = requestedRadii[1];
-		if (same(right, requestedRight) && same(bottom, requestedBottom))
-			result[6] = requestedRadii[2];
-		if (same(left, requestedLeft) && same(bottom, requestedBottom))
-			result[7] = requestedRadii[3];
+		result[4] = insetCornerRadius(requestedRadii[0],
+				left - requestedLeft, top - requestedTop);
+		result[5] = insetCornerRadius(requestedRadii[1],
+				requestedRight - right, top - requestedTop);
+		result[6] = insetCornerRadius(requestedRadii[2],
+				requestedRight - right, requestedBottom - bottom);
+		result[7] = insetCornerRadius(requestedRadii[3],
+				left - requestedLeft, requestedBottom - bottom);
 		if (parent != null) {
-			if (same(left, parent[0]) && same(top, parent[1]))
-				result[4] = Math.max(result[4], parent[4]);
-			if (same(right, parent[2]) && same(top, parent[1]))
-				result[5] = Math.max(result[5], parent[5]);
-			if (same(right, parent[2]) && same(bottom, parent[3]))
-				result[6] = Math.max(result[6], parent[6]);
-			if (same(left, parent[0]) && same(bottom, parent[3]))
-				result[7] = Math.max(result[7], parent[7]);
+			result[4] = Math.max(result[4], insetCornerRadius(parent[4],
+					left - parent[0], top - parent[1]));
+			result[5] = Math.max(result[5], insetCornerRadius(parent[5],
+					parent[2] - right, top - parent[1]));
+			result[6] = Math.max(result[6], insetCornerRadius(parent[6],
+					parent[2] - right, parent[3] - bottom));
+			result[7] = Math.max(result[7], insetCornerRadius(parent[7],
+					left - parent[0], parent[3] - bottom));
 		}
 		float maximumRadius = Math.max(0,
 				Math.min((right - left) * 0.5f, (bottom - top) * 0.5f));
@@ -558,8 +558,10 @@ public final class GLRenderer2D {
 		return result;
 	}
 
-	private static boolean same(float first, float second) {
-		return Math.abs(first - second) <= 0.001f;
+	private static float insetCornerRadius(float radius,
+			float horizontalInset, float verticalInset) {
+		return Math.max(0, radius - Math.max(
+				Math.max(0, horizontalInset), Math.max(0, verticalInset)));
 	}
 
 	void endClip() {

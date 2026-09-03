@@ -14,6 +14,7 @@ behavior from `GLControl`. Geometry and text measurements use logical pixels.
 - [Text editor](#text-editor)
 - [Combo boxes and menus](#combo-boxes-and-menus)
 - [Tabs](#tabs)
+- [Lists](#lists)
 - [Scrolling](#scrolling)
 
 ## Common behavior
@@ -50,6 +51,7 @@ event sequencing, capture, or state management.
 | `GLPopupMenu` | `new GLPopupMenu()` | Menu items and submenus |
 | `GLMenuBar` | `new GLMenuBar()` | Top-level menus |
 | `GLTabbedPane` | `new GLTabbedPane()` | Tab metadata and selected content |
+| `GLList<T>` | Item collection or `GLListModel<T>` constructor | Virtualized cells and index selection |
 | `GLScrollPane` | Empty or content constructor | Viewport, policies, offsets |
 | `GLScrollBar` | Orientation constructor | Value, extent, maximum |
 
@@ -250,16 +252,135 @@ Applications can enable a bounded recently-closed history with
 **Reopen Closed Tab**; `reopenLastClosedTab()` and `reopenTab(content)` expose
 the same operation programmatically.
 
+## Lists
+
+`GLList<T>` displays large data sets without creating one component for every
+item. When used as the direct content of a `GLScrollPane`, it attaches and
+records only cells intersecting the viewport plus a small configurable
+overscan range. Scrolling recycles those cells. Model size therefore does not
+determine component-tree size, picking cost, or per-frame submission count.
+
+```java
+GLList<Path> files = new GLList<>(paths);
+files.setItemTextProvider(path -> path.getFileName().toString());
+files.getSelectionModel().setSelectionMode(
+        GLListSelectionModel.SelectionMode.MULTIPLE_INTERVAL);
+files.addActivationListener((list, path, index) -> open(path));
+
+GLScrollPane viewport = new GLScrollPane(files);
+viewport.setHorizontalScrollBarPolicy(GLScrollPane.ScrollBarPolicy.NEVER);
+viewport.setScrollUnit(files.getRowHeight());
+```
+
+The collection constructor creates a `GLDefaultListModel<T>`. Keep a model
+reference when items change incrementally:
+
+```java
+GLDefaultListModel<Job> jobs = new GLDefaultListModel<>();
+GLList<Job> list = new GLList<>(jobs);
+
+jobs.addElement(new Job("Index assets"));
+jobs.insertElementAt(new Job("Load project"), 0);
+jobs.setElementAt(updatedJob, index);
+jobs.removeElementAt(index);
+```
+
+`GLListModel<T>` is the minimal interface for application-owned or lazy data
+sources. Its range events distinguish additions, removals, and content changes,
+allowing selection indices and visible cells to update without reconstructing
+the complete list. Mutate models on the application's UI event thread.
+
+The independent `GLListSelectionModel` supports `SINGLE`, `SINGLE_INTERVAL`,
+and `MULTIPLE_INTERVAL`. It exposes selected indices, anchor and lead indices,
+range operations, toggle operations, and change listeners. Applications may
+replace the selection model independently of the data model. Insertions and
+removals reported by the list model shift retained selections.
+
+Mouse selection follows desktop conventions: a plain press replaces selection,
+the configured extend modifier selects from the anchor, and the configured
+toggle modifier toggles one row. Right-clicking an unselected row selects it
+before notifying item mouse listeners. A double-click and Enter activation are
+reported through `addActivationListener(...)`. Arrow keys, Home, End, Page Up,
+and Page Down move the lead row and reveal it with the smallest required scroll.
+
+The default renderer converts values with `String.valueOf` and can instead use
+`setItemTextProvider(...)`. For structured rows, install a cell renderer:
+
+```java
+list.setCellRenderer((context, source, value, index, state, width, height) -> {
+    // GLSwing has already painted hover, pressed, selection, disabled,
+    // and lead-focus surfaces in cell-local coordinates.
+    drawJob(context, value, source.getGLStyle(), width, height);
+});
+```
+
+The immutable `CellState` identifies selection, lead, list focus, enabled state,
+and pointer state. `GLListStyle` resolves typography, row colors, focus color,
+border geometry, padding, preferred width, and fixed row height from `list.*`
+theme values. `setRowHeight(...)` provides a local geometry override. Fixed row
+height keeps index-to-viewport conversion constant-time; variable-height cells
+are intentionally outside the initial API.
+
+Lists that support renaming or another in-place operation can install one
+`GLList.CellEditor<T>`. The editor factory receives an `EditController` for
+committing or cancelling the session. Returning `false` from `commitEditor(...)`
+keeps the editor open, which allows validation or a confirmation dialog to
+finish before the value is accepted.
+
+```java
+list.setCellEditor(new GLList.CellEditor<Document>() {
+    @Override
+    public GLContainer createEditor(GLList<Document> source, Document value,
+            int index, GLList.EditController controller) {
+        GLTextEditor editor = new GLTextEditor();
+        editor.setText(value.name());
+        editor.addActionListener(event -> controller.commit());
+        editor.addCancelListener(event -> controller.cancel());
+        return editor;
+    }
+
+    @Override
+    public void layoutEditor(GLList<Document> source, Document value,
+            int index, GLContainer editor, float width, float height) {
+        editor.setBounds(8, 3, width - 16, height - 6);
+    }
+
+    @Override
+    public boolean commitEditor(GLList<Document> source, Document value,
+            int index, GLContainer component) {
+        return rename(value, ((GLTextEditor) component).getText());
+    }
+});
+
+list.startEditingAt(index);
+```
+
+Only one cell editor is active at a time. `commitEditing()` and
+`cancelEditing()` expose the same lifecycle programmatically. Replacing the
+model, changing row metrics, or scrolling the edited row beyond the recycled
+cell range cancels the session safely. `ItemEvent.selectedBeforePress()` is
+useful for desktop-style rename gestures in which a second single click on an
+already selected name begins editing.
+
+List cells are rectangular. When a list is the direct content of a
+`GLScrollPane`, it also delegates its outer corner geometry to that pane, so the
+viewport and scrollbar layout provide the only visible corner treatment. The
+lead-selection focus outline follows those effective corners on the first and
+last row only while that row actually touches the corresponding viewport edge.
+Consequently, a short list does not round its final row in the middle of unused
+viewport space. Corners adjacent to a scrollbar remain square.
+
 ## Scrolling
 
 `GLScrollPane` clips rendering and picking to its viewport. Horizontal and
 vertical policies independently use `AS_NEEDED`, `ALWAYS`, or `NEVER`. Content
-offsets use logical pixels. The viewport stays inside the configured border and
-uses the remaining inner corner radii as a per-instance UI clip. Content cannot
-cover or extend past the frame, while rows and focus surfaces retain their own
-geometry away from the four viewport corners. The clip participates in the
-shared UI batch and therefore does not create a layer or an additional draw
-call.
+offsets use logical pixels. The viewport stays inside the configured outer
+border and padding. `scrollPane.viewportBorder` and
+`scrollPane.viewportBorderWidth` define a separate inner contour around the
+viewport; content is clipped at that contour's inner edge. The remaining corner
+radii are carried through nested UI clips, so rows, pressed surfaces, and focus
+indicators cannot cover either frame. The clip participates in the shared UI
+batch and therefore does not create a layer or an additional draw call.
 
 `GLScrollBar` models:
 
@@ -276,8 +397,8 @@ The wheel scrolls vertically by default. The semantic
 `scroll.horizontal` modifier (mapped to `Shift` by the bundled input map)
 selects the horizontal axis, so applications may remap it without changing the
 control. `setScrollUnit(...)` controls the wheel distance. Use
-`setHorizontalPolicy(...)` and `setVerticalPolicy(...)` to override automatic
-bar visibility, and `setHorizontalOffset(...)` / `setVerticalOffset(...)` for
-direct positioning. `scrollRectToVisible(x,y,width,height)` performs the
+`setHorizontalScrollBarPolicy(...)` and `setVerticalScrollBarPolicy(...)` to
+override automatic bar visibility, and `setScrollOffset(x,y)` for direct
+positioning. `scrollRectToVisible(x,y,width,height)` performs the
 minimal scroll required to reveal a content rectangle and clamps the result to
 the available range.

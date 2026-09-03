@@ -29,12 +29,17 @@ import com.vingame.glswing.component.GLParent;
 import com.vingame.glswing.rendering.GLContext2D;
 import com.vingame.glswing.rendering.GLIcon;
 import com.vingame.glswing.rendering.GLFont;
+import com.vingame.glswing.input.GLInputActions;
 import com.vingame.glswing.input.GLMouseEvent;
 import com.vingame.glswing.ui.GLButton;
 import com.vingame.glswing.ui.GLCheckBox;
 import com.vingame.glswing.ui.GLComboBox;
+import com.vingame.glswing.ui.GLControlState;
+import com.vingame.glswing.ui.GLDefaultListModel;
 import com.vingame.glswing.ui.GLFontSpec;
 import com.vingame.glswing.ui.GLLabel;
+import com.vingame.glswing.ui.GLList;
+import com.vingame.glswing.ui.GLListSelectionModel;
 import com.vingame.glswing.ui.GLPopupMenu;
 import com.vingame.glswing.ui.GLScrollPane;
 import com.vingame.glswing.ui.GLTextEditor;
@@ -80,19 +85,18 @@ public final class GLThemedFileDialogBackend implements GLFileDialogBackend {
 		private final GLPopupMenu entryMenu = new GLPopupMenu();
 		private Path contextEntry;
 		private Timer inlineRenameTimer;
-		private final GLContainer places = new ChromeContainer("fileDialog.sidebar");
-		private final GLScrollPane placesScroll = new GLScrollPane(places);
-		private final GLButton desktopPlace = new PlaceRow("Desktop", place("Desktop"), FOLDER_ICON);
-		private final GLButton documentsPlace = new PlaceRow("Documents", place("Documents"), FILE_ICON);
-		private final GLButton downloadsPlace = new PlaceRow("Downloads", place("Downloads"), FOLDER_ICON);
-		private final GLButton picturesPlace = new PlaceRow("Pictures", place("Pictures"), FOLDER_ICON);
-		private final GLButton musicPlace = new PlaceRow("Music", place("Music"), FOLDER_ICON);
+		private final GLDefaultListModel<PlaceEntry> placeModel =
+				new GLDefaultListModel<>();
+		private final GLList<PlaceEntry> placeList = new GLList<>(placeModel);
+		private final GLScrollPane placesScroll = new GLScrollPane(placeList);
 		private final GLContainer listHeader = new FileListHeader();
 		private final GLLabel nameHeader = new GLLabel("Name");
 		private final GLLabel modifiedHeader = new GLLabel("Modified");
 		private final GLLabel sizeHeader = new GLLabel("Size");
-		private final GLContainer rows = new FileListContainer();
-		private final GLScrollPane scroll = new GLScrollPane(rows);
+		private final GLDefaultListModel<FileEntry> fileModel =
+				new GLDefaultListModel<>();
+		private final GLList<FileEntry> fileList = new GLList<>(fileModel);
+		private final GLScrollPane scroll = new GLScrollPane(fileList);
 		private final GLLabel fileNameLabel = new GLLabel("File name:");
 		private final GLLabel filterLabel = new GLLabel("File type:");
 		private final GLLabel status = new GLLabel("");
@@ -109,12 +113,36 @@ public final class GLThemedFileDialogBackend implements GLFileDialogBackend {
 		private int historyIndex;
 		private GLDialog dialog;
 		private long refreshGeneration;
+		private boolean preservingInlineEditor;
 
 		private Session(GLFileDialogRequest request, GLParent owner) {
 			this.request = request;
 			this.owner = owner;
 			this.localizer = owner.getGLLocalizer();
 			filters = new GLComboBox<>(request.filters());
+			placeList.setRowHeight(34);
+			placeList.getSelectionModel().setSelectionMode(
+					GLListSelectionModel.SelectionMode.SINGLE);
+			placeList.setCellRenderer(this::renderPlaceCell);
+			placeList.getSelectionModel().addSelectionListener(
+					(source, oldSelection, newSelection) -> {
+						PlaceEntry place = placeList.getSelectedValue();
+						if (place != null) navigate(place.path());
+					});
+			fileList.setRowHeight(34);
+			fileList.getSelectionModel().setSelectionMode(request.multiple()
+					? GLListSelectionModel.SelectionMode.MULTIPLE_INTERVAL
+					: GLListSelectionModel.SelectionMode.SINGLE);
+			fileList.setCellRenderer(this::renderFileCell);
+			fileList.setCellEditor(new FileEntryCellEditor());
+			fileList.getSelectionModel().addSelectionListener(
+					(source, oldSelection, newSelection) -> selectionChanged());
+			fileList.addItemMouseListener(this::fileItemClicked);
+			fileList.addActivationListener((source, entry, index) -> {
+				cancelPendingInlineRename();
+				if (entry.directory()) navigate(entry.path());
+				else approve();
+			});
 			placesScroll.setHorizontalScrollBarPolicy(GLScrollPane.ScrollBarPolicy.NEVER);
 			scroll.setHorizontalScrollBarPolicy(GLScrollPane.ScrollBarPolicy.NEVER);
 			filters.setItemTextProvider(GLFileFilter::description);
@@ -137,34 +165,10 @@ public final class GLThemedFileDialogBackend implements GLFileDialogBackend {
 				addressEditor.setText(directory.toString()); addressEditor.selectAll();
 			});
 			showHidden.addActionListener(event -> refresh());
-			desktopPlace.addActionListener(event -> navigate(place("Desktop")));
-			documentsPlace.addActionListener(event -> navigate(place("Documents")));
-			downloadsPlace.addActionListener(event -> navigate(place("Downloads")));
-			picturesPlace.addActionListener(event -> navigate(place("Pictures")));
-			musicPlace.addActionListener(event -> navigate(place("Music")));
 			approve.addActionListener(event -> approve());
 			cancel.addActionListener(event -> finish(GLFileDialogResult.cancelled()));
 			selectFolder.addActionListener(event -> finish(
 					GLFileDialogResult.approved(List.of(directory))));
-			String oneDriveValue = System.getenv("OneDrive");
-			if (oneDriveValue != null && Files.isDirectory(Path.of(oneDriveValue))) {
-				Path oneDrivePath = Path.of(oneDriveValue).toAbsolutePath().normalize();
-				GLButton oneDrive = new PlaceRow("OneDrive", oneDrivePath, HOME_ICON);
-				oneDrive.addActionListener(event -> navigate(oneDrivePath)); places.addGL(oneDrive);
-			}
-			places.addGL(desktopPlace); places.addGL(downloadsPlace);
-			places.addGL(documentsPlace); places.addGL(picturesPlace); places.addGL(musicPlace);
-			Path firstRoot = java.nio.file.FileSystems.getDefault().getRootDirectories()
-					.iterator().hasNext() ? java.nio.file.FileSystems.getDefault()
-							.getRootDirectories().iterator().next() : userHome();
-			GLButton computer = new PlaceRow(text("thisPc"), firstRoot, HOME_ICON);
-			computer.addActionListener(event -> navigate(firstRoot)); places.addGL(computer);
-			for (Path root : java.nio.file.FileSystems.getDefault().getRootDirectories()) {
-				GLButton drive = new PlaceRow(root.toString(), root, FOLDER_ICON);
-				drive.setToolTipText(root.toString());
-				drive.addActionListener(event -> navigate(root));
-				places.addGL(drive);
-			}
 			commandBar.addGL(organize); commandBar.addGL(newFolder); commandBar.addGL(showHidden);
 			listHeader.addGL(nameHeader); listHeader.addGL(modifiedHeader); listHeader.addGL(sizeHeader);
 			pane.addGL(back); pane.addGL(forward); pane.addGL(up); pane.addGL(addressEditor);
@@ -201,9 +205,7 @@ public final class GLThemedFileDialogBackend implements GLFileDialogBackend {
 			up.setToolTipText(text("up")); refreshButton.setToolTipText(text("refresh"));
 			newFolder.setText(text("newFolder"));
 			organize.setText(text("organize"));
-			desktopPlace.setText(text("desktop"));
-			documentsPlace.setText(text("documents")); downloadsPlace.setText(text("downloads"));
-			picturesPlace.setText(text("pictures")); musicPlace.setText(text("music"));
+			rebuildPlaces();
 			nameHeader.setText(text("name")); modifiedHeader.setText(text("modified"));
 			sizeHeader.setText(text("size")); search.setHint(text("searchLocation"));
 			fileNameLabel.setText(text("fileName")); filterLabel.setText(text("fileType"));
@@ -225,9 +227,10 @@ public final class GLThemedFileDialogBackend implements GLFileDialogBackend {
 			dialog.show(owner);
 			refresh();
 		}
-		private void refresh() {
+		private void refresh() { refresh(null); }
+		private void refresh(Path selectAfterRefresh) {
 			long generation = ++refreshGeneration;
-			for (var place : places.getGLChildren()) place.invalidateRecording();
+			synchronizePlaceSelection();
 			if (!addressEditor.isFocused()) addressEditor.setText(directory.toString());
 			up.setEnabled(directory.getParent() != null);
 			back.setEnabled(historyIndex > 0);
@@ -239,43 +242,43 @@ public final class GLThemedFileDialogBackend implements GLFileDialogBackend {
 			CompletableFuture.supplyAsync(() -> list(directory, filter, includeHidden, query))
 					.whenComplete((entries, failure) -> EventQueue.invokeLater(() -> {
 						if (generation != refreshGeneration || result.isDone()) return;
-						rows.removeAllGL();
 						List<FileEntry> visible = failure == null ? entries : List.of();
-						float rowWidth = Math.max(1, rows.getWidth());
-						float y = 0;
-						for (FileEntry entry : visible) {
-							FileRow row = new FileRow(entry);
-							row.setBounds(0, y, rowWidth, 34);
-							rows.addGL(row); y += 34;
+						fileList.cancelEditing();
+						fileList.getSelectionModel().clearSelection();
+						fileModel.setElements(visible);
+						if (selectAfterRefresh != null) {
+							int index = fileIndex(selectAfterRefresh);
+							if (index >= 0) fileList.setSelectedIndex(index);
 						}
 						status.setText(failure == null
 								? text(visible.size() == 1 ? "oneItem" : "items", visible.size())
 								: text("cannotRead"));
-						rows.setPreferredGLSize(1, Math.max(1, y));
 					}));
 		}
 		private void selectEntry(Path entry) {
 			cancelPendingInlineRename();
-			if (Files.isDirectory(entry)) {
-				selected.clear(); selected.add(entry);
-				fileName.setText("");
-			} else {
-				if (!request.multiple()) selected.clear();
-				if (!selected.contains(entry)) selected.add(entry);
-				fileName.setText(entry.getFileName().toString());
-			}
-			for (var child : rows.getGLChildren()) child.invalidateRecording();
+			int index = fileIndex(entry);
+			if (index >= 0) fileList.setSelectedIndex(index);
 		}
 		private void clearEntrySelection() {
 			cancelPendingInlineRename();
-			for (var child : rows.getGLChildren())
-				if (child instanceof FileRow row && row.renaming)
-					row.endRename();
-			selected.clear();
+			fileList.cancelEditing();
+			fileList.getSelectionModel().clearSelection();
 			contextEntry = null;
-			if (request.mode() == GLFileDialogMode.OPEN)
-				fileName.setText("");
-			for (var child : rows.getGLChildren()) child.invalidateRecording();
+		}
+		private void selectionChanged() {
+			selected.clear();
+			for (FileEntry entry : fileList.getSelectedValues())
+				selected.add(entry.path());
+			FileEntry primary = fileList.getSelectedValue();
+			if (primary == null || primary.directory()) {
+				if (request.mode() == GLFileDialogMode.OPEN) fileName.setText("");
+			} else fileName.setText(primary.path().getFileName().toString());
+		}
+		private int fileIndex(Path path) {
+			for (int index = 0; index < fileModel.getSize(); index++)
+				if (fileModel.getElementAt(index).path().equals(path)) return index;
+			return -1;
 		}
 		private void cancelPendingInlineRename() {
 			if (inlineRenameTimer != null) inlineRenameTimer.stop();
@@ -298,13 +301,13 @@ public final class GLThemedFileDialogBackend implements GLFileDialogBackend {
 			while (history.size() > historyIndex + 1) history.remove(history.size() - 1);
 			history.add(normalized); historyIndex = history.size() - 1;
 			directory = normalized;
-			selected.clear(); fileName.setText(""); refresh();
+			clearEntrySelection(); fileName.setText(""); refresh();
 		}
 		private void moveHistory(int delta) {
 			int target = historyIndex + delta;
 			if (target < 0 || target >= history.size()) return;
 			historyIndex = target; directory = history.get(target);
-			selected.clear(); fileName.setText(""); refresh();
+			clearEntrySelection(); fileName.setText(""); refresh();
 		}
 		private void commitAddress() {
 			try {
@@ -331,7 +334,7 @@ public final class GLThemedFileDialogBackend implements GLFileDialogBackend {
 		}
 		private void showEntryMenu(Path entry, GLMouseEvent event) {
 			contextEntry = entry;
-			selectEntry(entry);
+			if (!selected.contains(entry)) selectEntry(entry);
 			GLParent popupHost = pane.getGLParent();
 			if (popupHost != null) entryMenu.show(popupHost,
 					event.getScreenX(), event.getScreenY());
@@ -357,42 +360,46 @@ public final class GLThemedFileDialogBackend implements GLFileDialogBackend {
 		}
 		private void beginInlineRename(Path entry) {
 			cancelPendingInlineRename();
-			for (var child : rows.getGLChildren())
-				if (child instanceof FileRow row && row.path.equals(entry)) {
-					selectEntry(entry); row.beginRename(); return;
-				}
+			int index = fileIndex(entry);
+			if (index < 0) return;
+			fileList.setSelectedIndex(index);
+			fileList.startEditingAt(index);
 		}
-		private void commitInlineRename(FileRow row) {
-			String name = row.renameEditor.getText().strip();
-			Path entry = row.path;
-			if (name.isEmpty()) { status.setText(text("renameInvalid")); return; }
-			if (name.equals(entry.getFileName().toString())) { row.endRename(); return; }
+		private boolean commitInlineRename(FileEntry value, GLTextEditor editor) {
+			String name = editor.getText().strip();
+			Path entry = value.path();
+			if (name.isEmpty()) { status.setText(text("renameInvalid")); return false; }
+			if (name.equals(entry.getFileName().toString())) return true;
 			Path target = entry.resolveSibling(name).normalize();
 			if (entry.getParent() == null || !target.getParent().equals(entry.getParent())
 					|| Files.exists(target)) {
-				status.setText(text("renameInvalid")); return;
+				status.setText(text("renameInvalid")); return false;
 			}
-			if (!row.entry.directory() && !extension(entry).equalsIgnoreCase(extension(target))) {
-				confirmExtensionChange(row, target); return;
+			if (!value.directory() && !extension(entry).equalsIgnoreCase(extension(target))) {
+				confirmExtensionChange(value, editor, target); return false;
 			}
-			performRename(row, target);
+			performRename(value, target);
+			return true;
 		}
-		private void confirmExtensionChange(FileRow row, Path target) {
+		private void confirmExtensionChange(FileEntry entry, GLTextEditor editor,
+				Path target) {
+			preservingInlineEditor = true;
 			ExtensionWarningPane content = new ExtensionWarningPane();
 			GLDialog warning = new GLDialog(text("extensionTitle"), content);
 			warning.setSize(500, 180);
 			warning.closedFuture().thenRun(() -> EventQueue.invokeLater(() -> {
-				if (row.renaming) pane.requestGLFocus(row.renameEditor);
+				preservingInlineEditor = false;
+				if (fileList.getEditingComponent() == editor)
+					pane.requestGLFocus(editor);
 			}));
 			content.cancel.addActionListener(event -> warning.close());
 			content.change.addActionListener(event -> {
-				warning.close(); performRename(row, target);
+				warning.close(); fileList.cancelEditing(); performRename(entry, target);
 			});
 			warning.show(pane.getGLParent());
 		}
-		private void performRename(FileRow row, Path target) {
-			Path source = row.path;
-			row.endRename();
+		private void performRename(FileEntry entry, Path target) {
+			Path source = entry.path();
 			CompletableFuture.runAsync(() -> {
 				try { Files.move(source, target); }
 				catch (IOException failure) {
@@ -400,7 +407,7 @@ public final class GLThemedFileDialogBackend implements GLFileDialogBackend {
 				}
 			}).whenComplete((ignored, failure) -> EventQueue.invokeLater(() -> {
 				status.setText(failure == null ? text("renamed") : text("renameFailed"));
-				selected.clear(); if (failure == null) selected.add(target); refresh();
+				refresh(failure == null ? target : null);
 			}));
 		}
 		private static String extension(Path path) {
@@ -482,6 +489,7 @@ public final class GLThemedFileDialogBackend implements GLFileDialogBackend {
 			try { return Files.isHidden(path); }
 			catch (java.io.IOException failure) { return false; }
 		}
+		private record PlaceEntry(String label, Path path, GLIcon icon) { }
 		private record FileEntry(Path path, boolean directory, boolean hidden,
 				long size, Instant modified) {
 			private static FileEntry read(Path path) {
@@ -582,8 +590,6 @@ public final class GLThemedFileDialogBackend implements GLFileDialogBackend {
 				float contentH = Math.max(1, height - contentY - bottomArea);
 				float sidebarW = 205;
 				placesScroll.setBounds(0, contentY, sidebarW, contentH);
-				float placesHeight = places.getGLChildren().size() * 34 + 18;
-				places.setPreferredGLSize(1, placesHeight);
 				float listX = sidebarW + 2;
 				float listW = Math.max(1, width - listX);
 				listHeader.setBounds(listX, contentY, listW, 30);
@@ -602,183 +608,178 @@ public final class GLThemedFileDialogBackend implements GLFileDialogBackend {
 				cancel.setBounds(width - margin - actionW, formY + 42, actionW, 34);
 			}
 		}
-		private final class FileRow extends GLButton {
-			private final FileEntry entry;
-			private final Path path;
-			private final GLTextEditor renameEditor = new InlineRenameEditor();
-			private boolean renaming;
-			private boolean renameClosedByFocusLoss;
-			private boolean suppressRenameClick;
-			private FileRow(FileEntry entry) {
-				super(""); this.entry = entry; this.path = entry.path();
-				renameEditor.addActionListener(event -> commitInlineRename(this));
-				renameEditor.addCancelListener(event -> endRename());
-			}
-			private void beginRename() {
-				if (renaming) return;
-				renaming = true; renameEditor.setText(path.getFileName().toString());
-				addGL(renameEditor); resized(getWidth(), getHeight());
-				invalidateRecording(); requestGLFocus(renameEditor); renameEditor.selectAll();
-			}
-			private void endRename() {
-				if (!renaming) return;
-				renaming = false; removeGL(renameEditor); invalidateRecording();
-			}
-			private String displayName() {
-				return path.getFileName() == null
-						? path.toString() : path.getFileName().toString();
-			}
-			private boolean isNameHit(GLMouseEvent event) {
-				if (!event.hasLocalPosition()) return false;
-				var font = rowFont();
-				FileColumns columns = fileColumns(getWidth());
-				float columnRight = columns.nameX() + columns.nameWidth();
-				float textRight = columns.nameX() + font.measureText(displayName()) + 5;
-				return event.getLocalX() >= 32
-						&& event.getLocalX() <= Math.min(columnRight, textRight);
-			}
-			private GLFont rowFont() {
-				GLFontSpec base = getGLTheme().labelStyle().font();
-				boolean italic = entry.hidden() && Boolean.parseBoolean(
-						getGLTheme().values().get("fileDialog.hiddenItalic", "true"));
-				return getGLFont(italic
-						? new GLFontSpec(base.family(), base.style() | GLFont.ITALIC, base.size())
-						: base);
-			}
-			private java.awt.Color rowTextColor() {
-				java.awt.Color normal = getGLTheme().labelStyle().textColor();
-				if (!entry.hidden()) return normal;
-				java.awt.Color muted = new java.awt.Color(normal.getRed(), normal.getGreen(),
-						normal.getBlue(), Math.round(normal.getAlpha() * 0.65f));
-				return getGLTheme().values().getColor("fileDialog.hiddenText", muted);
-			}
-			@Override protected void resized(float width, float height) {
-				if (renaming) {
-					FileColumns columns = fileColumns(width);
-					renameEditor.setBounds(32, 3,
-							Math.max(1, columns.modifiedX() - 42),
-							Math.max(1, height - 6));
+		private void rebuildPlaces() {
+			List<PlaceEntry> values = new ArrayList<>();
+			String oneDriveValue = System.getenv("OneDrive");
+			if (oneDriveValue != null && Files.isDirectory(Path.of(oneDriveValue)))
+				values.add(new PlaceEntry("OneDrive",
+						Path.of(oneDriveValue).toAbsolutePath().normalize(), HOME_ICON));
+			values.add(new PlaceEntry(text("desktop"), place("Desktop"), FOLDER_ICON));
+			values.add(new PlaceEntry(text("downloads"), place("Downloads"), FOLDER_ICON));
+			values.add(new PlaceEntry(text("documents"), place("Documents"), FILE_ICON));
+			values.add(new PlaceEntry(text("pictures"), place("Pictures"), FOLDER_ICON));
+			values.add(new PlaceEntry(text("music"), place("Music"), FOLDER_ICON));
+			List<Path> roots = new ArrayList<>();
+			java.nio.file.FileSystems.getDefault().getRootDirectories().forEach(roots::add);
+			Path firstRoot = roots.isEmpty() ? userHome() : roots.get(0);
+			values.add(new PlaceEntry(text("thisPc"), firstRoot, HOME_ICON));
+			for (Path root : roots)
+				values.add(new PlaceEntry(root.toString(), root, FOLDER_ICON));
+			placeList.getSelectionModel().clearSelection();
+			placeModel.setElements(values);
+			synchronizePlaceSelection();
+		}
+		private void synchronizePlaceSelection() {
+			int match = -1;
+			for (int index = 0; index < placeModel.getSize(); index++)
+				if (placeModel.getElementAt(index).path().equals(directory)) {
+					match = index; break;
 				}
+			if (match >= 0) placeList.setSelectedIndex(match);
+			else placeList.getSelectionModel().clearSelection();
+		}
+		private void renderPlaceCell(GLContext2D context, GLList<PlaceEntry> source,
+				PlaceEntry entry, int index, GLList.CellState state,
+				float width, float height) {
+			var theme = source.getGLTheme();
+			var button = theme.buttonStyle();
+			var listStyle = source.getGLStyle();
+			java.awt.Color background = state.selected()
+					? theme.values().getColor("fileDialog.sidebar.selectionColor",
+							state.listFocused() ? listStyle.selectionBackground()
+									: listStyle.selectionInactiveBackground())
+					: state.pointerState() == GLControlState.NORMAL
+							? theme.values().getColor("fileDialog.sidebar.background",
+									theme.textEditorStyle().backgroundColor())
+							: button.background(state.pointerState());
+			context.fillUIRoundRect(0, 0, width, height, 0, background);
+			GLFont font = source.getGLFont(theme.labelStyle().font());
+			java.awt.Color color = theme.labelStyle().textColor();
+			context.drawUIIcon(entry.icon(), 9, (height - 18) * .5f, 18, 18, color);
+			String rendered = fitText(font, entry.label(), Math.max(0, width - 44));
+			float baseline = (height - font.getLineHeight()) * .5f + font.getAscent();
+			context.drawUITextShadow(font, rendered, 36, baseline,
+					theme.textShadow("fileDialog"));
+			context.drawUIText(font, rendered, 36, baseline, color);
+		}
+		private void renderFileCell(GLContext2D context, GLList<FileEntry> source,
+				FileEntry entry, int index, GLList.CellState state,
+				float width, float height) {
+			var theme = source.getGLTheme();
+			var button = theme.buttonStyle();
+			var listStyle = source.getGLStyle();
+			java.awt.Color background = state.selected()
+					? theme.values().getColor("fileDialog.selectionColor",
+							state.listFocused() ? listStyle.selectionBackground()
+									: listStyle.selectionInactiveBackground())
+					: state.pointerState() == GLControlState.NORMAL
+							? theme.values().getColor("fileDialog.row.background",
+									theme.textEditorStyle().backgroundColor())
+							: button.background(state.pointerState());
+			context.fillUIRoundRect(0, 0, width, height, 0, background);
+			GLFont font = rowFont(source, entry);
+			java.awt.Color color = rowTextColor(source, entry);
+			context.drawUIIcon(entry.directory() ? FOLDER_ICON : FILE_ICON,
+					9, (height - 18) * .5f, 18, 18, color);
+			var shadow = theme.textShadow("fileDialog");
+			float baseline = (height - font.getLineHeight()) * .5f + font.getAscent();
+			FileColumns columns = fileColumns(width);
+			if (fileList.getEditingIndex() != index) {
+				String name = fitText(font, displayName(entry), columns.nameWidth());
+				context.drawUITextShadow(font, name, columns.nameX(), baseline, shadow);
+				context.drawUIText(font, name, columns.nameX(), baseline, color);
 			}
-			@Override protected void record(GLContext2D context) {
-				var theme = getGLTheme();
-				var style = theme.buttonStyle();
-				boolean isSelected = selected.contains(path);
-				java.awt.Color rowColor = isSelected
-						? theme.values().getColor("fileDialog.selectionColor", style.focusColor())
-						: getControlState() == com.vingame.glswing.ui.GLControlState.NORMAL
-								? theme.values().getColor("fileDialog.row.background",
-										theme.textEditorStyle().backgroundColor())
-								: style.background(getControlState());
-				context.fillUIRoundRect(0, 0, getWidth(), getHeight(), 0, rowColor);
-				var font = rowFont();
-				java.awt.Color color = rowTextColor();
-				context.drawUIIcon(entry.directory() ? FOLDER_ICON : FILE_ICON,
-						9, 8, 18, 18, color);
-				var textShadow = theme.textShadow("fileDialog");
-				float baseline = 8 + font.getAscent();
-				if (!renaming) {
-					String name = displayName();
-					context.drawUITextShadow(font, name, 35, baseline, textShadow);
-					context.drawUIText(font, name, 35, baseline, color);
-				}
-				if (!entry.directory()) {
-					FileColumns columns = fileColumns(getWidth());
-					String modified = MODIFIED_FORMAT.format(entry.modified());
-					float modifiedX = columns.modifiedX();
-					context.drawUITextShadow(font, modified, modifiedX, baseline, textShadow);
-					context.drawUIText(font, modified, modifiedX, baseline, color);
-					String size = readableSize(entry.size());
-					float sizeX = columns.sizeX();
-					context.drawUITextShadow(font, size, sizeX, baseline, textShadow);
-					context.drawUIText(font, size, sizeX, baseline, color);
-				}
-			}
-			@Override protected void controlMousePressed(GLMouseEvent event) {
-				if (event.getButton() == MouseEvent.BUTTON1 && renameClosedByFocusLoss) {
-					suppressRenameClick = true;
-					renameClosedByFocusLoss = false;
-				}
-			}
-			@Override protected void controlMouseClicked(GLMouseEvent event) {
-				if (event.getButton() == MouseEvent.BUTTON3) {
-					showEntryMenu(path, event); return;
-				}
-				if (event.getButton() != MouseEvent.BUTTON1) return;
-				if (suppressRenameClick) {
-					suppressRenameClick = false;
-					event.consume(); return;
-				}
-				if (event.getClickCount() >= 2) {
-					cancelPendingInlineRename();
-					if (entry.directory()) navigate(path);
-					else approve();
-				} else if (selected.contains(path) && isNameHit(event)) {
-					scheduleInlineRename(path);
-				} else {
-					selectEntry(path);
-				}
-			}
-			private final class InlineRenameEditor extends GLTextEditor {
-				@Override protected void controlFocusChanged(boolean focused) {
-					if (!focused && renaming) {
-						renameClosedByFocusLoss = true;
-						EventQueue.invokeLater(() -> renameClosedByFocusLoss = false);
-					}
-					super.controlFocusChanged(focused);
-				}
-			}
-			@Override protected void controlStateChanged(
-					com.vingame.glswing.ui.GLControlState oldState,
-					com.vingame.glswing.ui.GLControlState newState) {
-				super.controlStateChanged(oldState, newState); invalidateRecording();
+			if (!entry.directory()) {
+				String modified = MODIFIED_FORMAT.format(entry.modified());
+				context.drawUITextShadow(font, modified, columns.modifiedX(), baseline, shadow);
+				context.drawUIText(font, modified, columns.modifiedX(), baseline, color);
+				String size = readableSize(entry.size());
+				context.drawUITextShadow(font, size, columns.sizeX(), baseline, shadow);
+				context.drawUIText(font, size, columns.sizeX(), baseline, color);
 			}
 		}
-		private final class FileListContainer extends GLContainer {
-			@Override protected void record(GLContext2D context) {
-				context.addUIHitArea(0, 0, getWidth(), getHeight());
+		private GLFont rowFont(GLList<FileEntry> source, FileEntry entry) {
+			GLFontSpec base = source.getGLTheme().labelStyle().font();
+			boolean italic = entry.hidden() && Boolean.parseBoolean(
+					source.getGLTheme().values().get("fileDialog.hiddenItalic", "true"));
+			return source.getGLFont(italic
+					? new GLFontSpec(base.family(), base.style() | GLFont.ITALIC, base.size())
+					: base);
+		}
+		private java.awt.Color rowTextColor(GLList<FileEntry> source, FileEntry entry) {
+			java.awt.Color normal = source.getGLTheme().labelStyle().textColor();
+			if (!entry.hidden()) return normal;
+			java.awt.Color muted = new java.awt.Color(normal.getRed(), normal.getGreen(),
+					normal.getBlue(), Math.round(normal.getAlpha() * 0.65f));
+			return source.getGLTheme().values().getColor("fileDialog.hiddenText", muted);
+		}
+		private void fileItemClicked(GLList.ItemEvent<FileEntry> event) {
+			GLMouseEvent mouse = event.mouseEvent();
+			FileEntry entry = event.item();
+			if (mouse.getButton() == MouseEvent.BUTTON3) {
+				showEntryMenu(entry.path(), mouse); return;
 			}
-			@Override protected void resized(float width, float height) {
-				float rowWidth = Math.max(1, width);
-				for (var child : getGLChildren())
-					child.setBounds(0, child.getY(), rowWidth, child.getHeight());
+			if (mouse.getButton() != MouseEvent.BUTTON1) return;
+			if (mouse.getClickCount() >= 2) {
+				cancelPendingInlineRename(); return;
 			}
-			@Override public void mouseClicked(GLMouseEvent event) {
-				if (event.getButton() != MouseEvent.BUTTON1) return;
-				clearEntrySelection(); event.consume();
+			if (fileList.isEditing()) {
+				fileList.cancelEditing(); return;
+			}
+			boolean modifyingSelection = fileList.getGLInputMap().hasModifiers(
+					GLInputActions.LIST_TOGGLE_SELECTION, mouse.getModifiersEx())
+					|| fileList.getGLInputMap().hasModifiers(
+							GLInputActions.LIST_EXTEND_SELECTION, mouse.getModifiersEx());
+			if (!modifyingSelection && event.selectedBeforePress()
+					&& isNameHit(entry, mouse, fileList.getWidth()))
+				scheduleInlineRename(entry.path());
+		}
+		private boolean isNameHit(FileEntry entry, GLMouseEvent event, float width) {
+			if (!event.hasLocalPosition()) return false;
+			GLFont font = rowFont(fileList, entry);
+			FileColumns columns = fileColumns(width);
+			float textRight = columns.nameX() + font.measureText(displayName(entry)) + 5;
+			return event.getLocalX() >= 32 && event.getLocalX()
+					<= Math.min(columns.modifiedX() - 10, textRight);
+		}
+		private static String displayName(FileEntry entry) {
+			Path path = entry.path();
+			return path.getFileName() == null ? path.toString() : path.getFileName().toString();
+		}
+		private final class FileEntryCellEditor implements GLList.CellEditor<FileEntry> {
+			@Override public GLContainer createEditor(GLList<FileEntry> source,
+					FileEntry value, int index, GLList.EditController controller) {
+				InlineRenameEditor editor = new InlineRenameEditor(controller);
+				editor.setText(displayName(value));
+				editor.addActionListener(event -> controller.commit());
+				editor.addCancelListener(event -> controller.cancel());
+				EventQueue.invokeLater(editor::selectAll);
+				return editor;
+			}
+			@Override public void layoutEditor(GLList<FileEntry> source,
+					FileEntry value, int index, GLContainer editor,
+					float width, float height) {
+				FileColumns columns = fileColumns(width);
+				editor.setBounds(32, 3, Math.max(1, columns.modifiedX() - 42),
+						Math.max(1, height - 6));
+			}
+			@Override public boolean commitEditor(GLList<FileEntry> source,
+					FileEntry value, int index, GLContainer editor) {
+				return commitInlineRename(value, (GLTextEditor) editor);
 			}
 		}
-		private final class PlaceRow extends GLButton {
-			private final Path target;
-			private final GLIcon icon;
-			private PlaceRow(String text, Path target, GLIcon icon) {
-				super(text); this.target = target; this.icon = icon;
+		private final class InlineRenameEditor extends GLTextEditor {
+			private final GLList.EditController controller;
+			private InlineRenameEditor(GLList.EditController controller) {
+				this.controller = controller;
 			}
-			@Override protected void record(GLContext2D context) {
-				var theme = getGLTheme();
-				var style = theme.buttonStyle();
-				boolean active = directory.equals(target);
-				java.awt.Color background = active
-						? theme.values().getColor("fileDialog.sidebar.selectionColor",
-								style.focusColor())
-						: getControlState() == com.vingame.glswing.ui.GLControlState.NORMAL
-								? theme.values().getColor("fileDialog.sidebar.background",
-										theme.textEditorStyle().backgroundColor())
-								: style.background(getControlState());
-				context.fillUIRoundRect(0, 0, getWidth(), getHeight(), 0, background);
-				var font = getGLFont(theme.labelStyle().font());
-				java.awt.Color color = theme.labelStyle().textColor();
-				context.drawUIIcon(icon, 9, (getHeight() - 18) * .5f, 18, 18, color);
-				String renderedText = fitText(font, getText(), Math.max(0, getWidth() - 44));
-				float baseline = (getHeight() - font.getLineHeight()) * .5f + font.getAscent();
-				context.drawUITextShadow(font, renderedText, 36, baseline,
-						theme.textShadow("fileDialog"));
-				context.drawUIText(font, renderedText, 36, baseline, color);
-			}
-			@Override protected void controlStateChanged(
-					com.vingame.glswing.ui.GLControlState oldState,
-					com.vingame.glswing.ui.GLControlState newState) {
-				super.controlStateChanged(oldState, newState); invalidateRecording();
+			@Override protected void controlFocusChanged(boolean focused) {
+				super.controlFocusChanged(focused);
+				if (!focused && !preservingInlineEditor)
+					EventQueue.invokeLater(() -> {
+						if (!isFocused() && fileList.getEditingComponent() == this
+								&& !preservingInlineEditor) controller.cancel();
+					});
 			}
 		}
 		private static class IconButton extends GLButton {
@@ -830,8 +831,12 @@ public final class GLThemedFileDialogBackend implements GLFileDialogBackend {
 			}
 			private void layoutColumns() {
 				var style = scroll.getGLStyle();
-				float contentX = Math.max(style.padding().left(), style.borderWidth());
-				float contentWidth = rows.getWidth() > 0 ? rows.getWidth()
+				float contentX = Math.max(style.padding().left(), style.borderWidth())
+						+ style.viewportBorderWidth()
+						+ fileList.getGLStyle().borderWidth();
+				float contentWidth = fileList.getWidth() > 0
+						? Math.max(1, fileList.getWidth()
+								- fileList.getGLStyle().borderWidth() * 2)
 						: Math.max(1, getWidth() - contentX
 								- Math.max(style.padding().right(), style.borderWidth()));
 				FileColumns columns = fileColumns(contentWidth);

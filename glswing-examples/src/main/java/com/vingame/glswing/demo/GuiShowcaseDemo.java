@@ -63,6 +63,8 @@ import com.vingame.glswing.ui.GLComboBox;
 import com.vingame.glswing.ui.GLFontSpec;
 import com.vingame.glswing.ui.GLLabel;
 import com.vingame.glswing.ui.GLLabelStyle;
+import com.vingame.glswing.ui.GLList;
+import com.vingame.glswing.ui.GLListSelectionModel;
 import com.vingame.glswing.ui.GLItemPresentation;
 import com.vingame.glswing.ui.GLLocalizer;
 import com.vingame.glswing.ui.GLMenuBar;
@@ -1337,17 +1339,22 @@ public final class GuiShowcaseDemo {
 
 		private void showOpenDialog(GLFileDialogs dialogs, String backendName) {
 			dialogs.show(GLFileDialogRequest.open().title("Open source file")
-					.filter("Java source", "java").filter("All text files", "txt", "md")
+					.multiple(true)
+					.filter("Java source", "java")
+					.filter("All text files", "txt", "md")
+					.filter("All files")
 					.build(), host.parent()).whenComplete((result, failure) ->
 					SwingUtilities.invokeLater(() -> host.report(backendName + ": "
 							+ (failure != null ? "file dialog failed: " + failure.getMessage()
-							: result.approved() ? "selected " + result.selectedPath()
+							: result.approved() ? "selected " + result.selectedPaths()
 									: "file dialog cancelled"))));
 		}
 
 		private void showSaveDialog(GLFileDialogs dialogs, String backendName) {
 			dialogs.show(GLFileDialogRequest.save().title("Save example")
-					.suggestedFileName("example.java").filter("Java source", "java")
+					.suggestedFileName("example.java")
+					.filter("Java source", "java")
+					.filter("All files")
 					.build(), host.parent()).whenComplete((result, failure) ->
 					SwingUtilities.invokeLater(() -> host.report(backendName + ": "
 							+ (failure != null ? "file dialog failed: " + failure.getMessage()
@@ -1564,18 +1571,34 @@ public final class GuiShowcaseDemo {
 					"Die globale Menueleiste demonstriert Icons, Accelerators, Mnemonics, Untermenues sowie Undo und Redo.",
 					SUBTITLE_STYLE, 28, 260, 380, 58);
 
-			ControlLayer scrolling = controlLayer("ScrollPane",
+			ControlLayer scrolling = controlLayer("Listen & ScrollPane",
 					610, 28, 450, 500, containersPage);
+			GLList<String> list = new GLList<>(java.util.stream.IntStream
+					.rangeClosed(1, 1_000)
+					.mapToObj(index -> "Virtualisierter Eintrag " + index)
+					.toList());
+			list.getSelectionModel().setSelectionMode(
+					GLListSelectionModel.SelectionMode.MULTIPLE_INTERVAL);
+			list.addActivationListener((source, item, index) ->
+					host.report("Liste aktiviert: " + item));
+			GLScrollPane listScroll = new GLScrollPane(list);
+			listScroll.setHorizontalScrollBarPolicy(
+					GLScrollPane.ScrollBarPolicy.NEVER);
+			listScroll.setScrollUnit(list.getRowHeight());
+			addControl(scrolling, listScroll, 24, 48, 402, 220);
+			caption(scrolling,
+					"1.000 Eintraege · Mehrfachauswahl mit Strg/Shift · Doppelklick aktiviert",
+					24, 276);
+
 			GLContainer content = new PassiveLayer();
-			content.setPreferredGLSize(760, 620);
-			for (int index = 0; index < 10; index++) {
+			content.setPreferredGLSize(760, 110);
+			for (int index = 0; index < 6; index++) {
 				GLButton item = new GLButton("Scrollbarer Inhalt " + (index + 1));
-				addControl(content, item, 24 + (index % 2) * 360,
-						24 + (index / 2) * 105, 300, 34);
+				addControl(content, item, 20 + index * 125, 28, 112, 34);
 			}
 			GLScrollPane scrollPane = new GLScrollPane(content);
 			scrollPane.setScrollUnit(24);
-			addControl(scrolling, scrollPane, 24, 56, 402, 400);
+			addControl(scrolling, scrollPane, 24, 310, 402, 142);
 		}
 
 		private void buildNodeEditorPage() {

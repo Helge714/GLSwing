@@ -28,6 +28,7 @@ see the [rendering guide](graphics-pipeline.md).
 | Navigation | `GLMenuBar`, `GLPopupMenu`, `GLMenuItem`, `GLTabbedPane` | Menus, overlays, and view selection |
 | File access | `GLFileDialogs`, `GLFileDialogRequest` | Native SWT dialogs with a themed GLSwing fallback |
 | Scrolling | `GLScrollPane`, `GLScrollBar` | Clipped viewports and scroll models |
+| Data views | `GLList<T>`, `GLListModel<T>`, `GLListSelectionModel` | Virtualized rows, renderers, and selection |
 | Appearance | `GLTheme`, style records, `GLThemeValues`, `GLThemeLoader`, `GLThemeWatcher` | Global and local presentation |
 | Localization | `GLLocalizer`, `GLUiKeys` | UTF-8 bundles, locale fallback, and overrides |
 | History | `GLHistoryManager`, `GLUndoableEdit` | Scoped undo, redo, transactions, and persisted-state tracking |

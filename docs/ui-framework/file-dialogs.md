@@ -46,6 +46,7 @@ GLFileDialogRequest request = GLFileDialogRequest.open()
         .selectionMode(GLFileSelectionMode.FILES)
         .multiple(true)
         .filter("Images", "png", "jpg", "webp")
+        .filter("All files")
         .build();
 
 dialogs.show(request, owner).thenAccept(result -> {
@@ -68,6 +69,9 @@ GLFileDialogRequest request = GLFileDialogRequest.save()
 
 All returned paths are absolute and normalized. Cancellation produces
 `approved() == false` and an empty path list.
+
+A filter without extensions accepts every file, so
+`.filter("All files")` provides the conventional unrestricted option.
 
 ## Native SWT backend
 
@@ -100,9 +104,11 @@ It inherits the owner's theme and supports:
 Filesystem enumeration never runs on the render thread. Generation tokens
 discard obsolete directory results after rapid navigation or search changes.
 Selecting an entry and clicking its visible name again starts inline renaming.
-Clicking outside the editor commits the name; changing a file extension first
-opens a confirmation dialog. Clicking an unused area of the file list clears
-the current entry selection. The fallback's custom text uses the
+Enter commits the name and Escape or a click outside cancels the editing
+session; changing a file extension first opens a confirmation dialog. Clicking
+an unused area of the file list clears the current entry selection. In a
+multiple-selection request, the standard toggle and range-selection modifiers
+select independent files or a contiguous range. The fallback's custom text uses the
 `fileDialog.textShadow.*` theme prefix and inherits the global text shadow when
 no file-dialog-specific override is present.
 

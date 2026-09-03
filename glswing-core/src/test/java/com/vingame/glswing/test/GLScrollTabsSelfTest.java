@@ -164,6 +164,10 @@ public final class GLScrollTabsSelfTest {
 	private static void testThemeValues() {
 		check(GLTheme.DEFAULT.values().contains("scrollBar.thickness"),
 				"Default theme lacks scrollbar values");
+		check(GLTheme.DEFAULT.values().contains("scrollPane.viewportBorder")
+				&& GLScrollPaneStyle.fromTheme(GLTheme.DEFAULT)
+						.viewportBorderWidth() > 0,
+				"Default ScrollPane lacks its viewport border");
 		check(GLTheme.DEFAULT.values().contains("tabbedPane.tabHeight"),
 				"Default theme lacks tabbed-pane values");
 		check(GLTabbedPaneStyle.fromTheme(GLTheme.DEFAULT).contentPadding().horizontal() == 0

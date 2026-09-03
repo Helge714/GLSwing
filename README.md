@@ -23,7 +23,8 @@ The library can run as a standalone OpenGL application, inside a conventional
 - reusable recordings and GPU-resident sprite buffers;
 - nested layers with opacity, blend modes, blur, shadows, outlines, and clips;
 - persistent render targets and ping-pong feedback for GPU simulations;
-- retained UI controls, layouts, themes, localization, dialogs, and undo/redo;
+- retained UI controls, virtualized lists, layouts, themes, localization,
+  dialogs, and undo/redo;
 - an interactive node-editor foundation with ports and Bézier connections.
 
 ## Requirements

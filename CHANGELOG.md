@@ -55,6 +55,15 @@ may change in subsequent `0.x` releases.
 - Containers, layouts, damage tracking, and Z-order control.
 - Buttons, checkboxes, sliders, text editors, combo boxes, and menus.
 - Tabs, scroll panes, dialogs, themes, and localization.
+- Virtualized generic lists with replaceable data and selection models,
+  reusable visible cells, custom renderers, conventional mouse and keyboard
+  selection, activation events, automatic scroll-to-selection behavior, and a
+  reusable single-cell editing lifecycle with validation-aware commits.
+- The themed file dialog now uses `GLList<T>` for its places and file-detail
+  views. Directory changes replace their models without retaining stale
+  selection, while inline renaming, double-click activation, context actions,
+  keyboard navigation, and row virtualization share the standard list
+  behavior.
 - Conventional focus traversal for interactive controls, including safe focus
   release when a control subtree is hidden or removed.
 - Typed color and metrics theme fragments with conflict-free bundle slots,

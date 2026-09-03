@@ -259,10 +259,40 @@ public final class GLScrollPane extends GLContainer {
 		return Math.max(0, radius - Math.min(horizontalInset, verticalInset));
 	}
 
+	GLCornerRadii viewportContentCornerRadii() {
+		float border = Math.min(getGLStyle().viewportBorderWidth(),
+				Math.min(viewport.getWidth(), viewport.getHeight()) * 0.5f);
+		return inset(viewportBorderCornerRadii(), border);
+	}
+
+	private GLCornerRadii viewportBorderCornerRadii() {
+		float radius = getGLStyle().cornerRadius();
+		float leftInset = viewport.getX();
+		float topInset = viewport.getY();
+		float rightInset = Math.max(0, getWidth()
+				- viewport.getX() - viewport.getWidth());
+		float bottomInset = Math.max(0, getHeight()
+				- viewport.getY() - viewport.getHeight());
+		return new GLCornerRadii(
+				innerCornerRadius(radius, leftInset, topInset),
+				innerCornerRadius(radius, rightInset, topInset),
+				innerCornerRadius(radius, rightInset, bottomInset),
+				innerCornerRadius(radius, leftInset, bottomInset));
+	}
+
+	private static GLCornerRadii inset(GLCornerRadii radii, float amount) {
+		return new GLCornerRadii(
+				Math.max(0, radii.topLeft() - amount),
+				Math.max(0, radii.topRight() - amount),
+				Math.max(0, radii.bottomRight() - amount),
+				Math.max(0, radii.bottomLeft() - amount));
+	}
+
 	private void applyContentPosition() {
 		if (content == null)
 			return;
 		content.setLocation(-horizontalBar.getValue(), -verticalBar.getValue());
+		notifyVirtualViewport();
 	}
 
 	private void applyContentBounds(float width, float height) {
@@ -270,6 +300,13 @@ public final class GLScrollPane extends GLContainer {
 			return;
 		content.setBounds(-horizontalBar.getValue(), -verticalBar.getValue(),
 				width, height);
+		notifyVirtualViewport();
+	}
+
+	private void notifyVirtualViewport() {
+		if (content instanceof GLVirtualViewportContent virtualContent)
+			virtualContent.viewportChanged(horizontalBar.getValue(),
+					verticalBar.getValue(), viewportWidth, viewportHeight);
 	}
 
 	private static float reveal(float offset, float extent,
@@ -291,24 +328,24 @@ public final class GLScrollPane extends GLContainer {
 		protected void renderChildren(GLContext2D context) {
 			if (getWidth() <= 0 || getHeight() <= 0)
 				return;
-			float radius = GLScrollPane.this.getGLStyle().cornerRadius();
-			float leftInset = getX();
-			float topInset = getY();
-			float rightInset = Math.max(0, GLScrollPane.this.getWidth()
-					- getX() - getWidth());
-			float bottomInset = Math.max(0, GLScrollPane.this.getHeight()
-					- getY() - getHeight());
-			context.beginUIRoundedClip(0, 0, getWidth(), getHeight(),
-					new GLCornerRadii(
-							innerCornerRadius(radius, leftInset, topInset),
-							innerCornerRadius(radius, rightInset, topInset),
-							innerCornerRadius(radius, rightInset, bottomInset),
-							innerCornerRadius(radius, leftInset, bottomInset)));
-			try {
-				super.renderChildren(context);
-			} finally {
-				context.endClip();
+			GLScrollPaneStyle style = GLScrollPane.this.getGLStyle();
+			GLCornerRadii borderRadii = viewportBorderCornerRadii();
+			float border = Math.min(style.viewportBorderWidth(),
+					Math.min(getWidth(), getHeight()) * 0.5f);
+			float contentWidth = Math.max(0, getWidth() - border * 2);
+			float contentHeight = Math.max(0, getHeight() - border * 2);
+			if (contentWidth > 0 && contentHeight > 0) {
+				context.beginUIRoundedClip(border, border,
+						contentWidth, contentHeight, inset(borderRadii, border));
+				try {
+					super.renderChildren(context);
+				} finally {
+					context.endClip();
+				}
 			}
+			if (border > 0)
+				context.drawUIRoundRect(0, 0, getWidth(), getHeight(), borderRadii,
+						border, style.viewportBorder(), GLStroke.WidthSpace.SCREEN);
 		}
 
 	}

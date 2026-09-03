@@ -13,6 +13,14 @@ public final class GLFileDialogSelfTest {
 		GLFileFilter images = new GLFileFilter("Images", "*.PNG", ".jpg");
 		check(images.accepts(Path.of("photo.png")) && images.swtPattern().equals("*.png;*.jpg"),
 				"File-filter normalization failed");
+		GLFileFilter allFiles = new GLFileFilter("All files");
+		check(allFiles.accepts(Path.of("archive.unknown"))
+				&& allFiles.swtPattern().equals("*.*"),
+				"Unrestricted file filter failed");
+		GLFileDialogRequest open = GLFileDialogRequest.open().multiple(true)
+				.filter("All files").build();
+		check(open.multiple() && open.filters().get(0).extensions().isEmpty(),
+				"Multiple open request or unrestricted filter was lost");
 		GLFileDialogRequest save = GLFileDialogRequest.save().title("Save")
 				.suggestedFileName("image").filter("Images", "png").build();
 		check(save.mode() == GLFileDialogMode.SAVE && save.confirmOverwrite(),

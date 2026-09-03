@@ -15,6 +15,12 @@ key.navigation.left=LEFT
 key.navigation.right=RIGHT
 key.navigation.home=HOME
 key.navigation.end=END
+key.navigation.page-up=PAGE_UP
+key.navigation.page-down=PAGE_DOWN
+
+modifier.list.extend-selection=SHIFT
+modifier.list.toggle-selection=shortcut
+key.list.select-all=shortcut+A
 
 modifier.slider.precise=SHIFT
 modifier.slider.coarse=CTRL

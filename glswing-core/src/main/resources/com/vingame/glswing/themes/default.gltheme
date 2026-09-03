@@ -175,6 +175,25 @@ scrollPane.borderWidth=${metrics.borderWidth}
 scrollPane.cornerRadius=${metrics.cornerRadius}
 scrollPane.scrollBarGap=2
 scrollPane.padding=4,4,4,4
+scrollPane.viewportBorder=${list.background}
+scrollPane.viewportBorderWidth=${metrics.borderWidth}
+
+list.background=${textEditor.background}
+list.rowBackground=rgba(0, 0, 0, 0)
+list.rowHoverBackground=${state.hover}
+list.rowPressedBackground=${state.pressed}
+list.selectionBackground=${palette.selection}
+list.selectionInactiveBackground=derive(${palette.selection}, alpha*=0.67)
+list.text=${palette.text}
+list.selectedText=${palette.text}
+list.textDisabled=${palette.textDisabled}
+list.border=${palette.border}
+list.focus=${palette.accent}
+list.cornerRadius=${metrics.cornerRadius}
+list.borderWidth=${metrics.borderWidth}
+list.rowHeight=28
+list.preferredWidth=180
+list.cellPadding=3,8,3,8
 
 tabbedPane.background=${palette.surface}
 tabbedPane.tabBarBackground=${menuBar.background}

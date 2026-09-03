@@ -44,6 +44,7 @@ public abstract class GLControl extends GLContainer implements GLKeyTarget {
 			clearGLFocus(this);
 		}
 		updateState();
+		controlEnabledChanged(enabled);
 	}
 
 	public final boolean isFocusable() {
@@ -214,6 +215,10 @@ public abstract class GLControl extends GLContainer implements GLKeyTarget {
 	}
 
 	protected void controlFocusChanged(boolean focused) {
+	}
+
+	/** Called after this control's enabled state changes. */
+	protected void controlEnabledChanged(boolean enabled) {
 	}
 
 	/** Called when focus-ring geometry may have become necessary or unnecessary. */

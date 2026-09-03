@@ -230,6 +230,9 @@ public final class UIQuadBatchGpuSelfTest {
 		context.fillAndDrawUIRoundRect(90, 10, 60, 40,
 				new GLCornerRadii(10, 0, 10, 0), 2, Color.RED, Color.BLUE,
 				GLStroke.WidthSpace.SCREEN);
+		context.drawUIRoundRect(10, 60, 60, 20,
+				new GLCornerRadii(0.5f, 0.5f, 0.5f, 0.5f), 2,
+				Color.BLUE, GLStroke.WidthSpace.SCREEN);
 		context.clearMouseTarget();
 		renderer.endFrame();
 
@@ -249,6 +252,14 @@ public final class UIQuadBatchGpuSelfTest {
 				"combined asymmetric square bottom-left border");
 		checkDominantColor(gl, 120, 30, Color.RED,
 				"combined asymmetric fill");
+		checkDominantColor(gl, 10, 60, Color.BLUE,
+				"subpixel asymmetric stroke top-left corner");
+		checkDominantColor(gl, 68, 60, Color.BLUE,
+				"subpixel asymmetric stroke top-right corner");
+		checkDominantColor(gl, 10, 78, Color.BLUE,
+				"subpixel asymmetric stroke bottom-left corner");
+		checkDominantColor(gl, 68, 78, Color.BLUE,
+				"subpixel asymmetric stroke bottom-right corner");
 		if (renderer.readPickResult(gl, 10, 10).isHit())
 			throw new AssertionError(
 					"Transparent asymmetric UI corner was pickable");

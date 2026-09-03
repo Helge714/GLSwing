@@ -108,6 +108,11 @@ final class MavenSmokeTest {
 	}
 
 	@Test
+	void lists() {
+		GLListSelfTest.main(NO_ARGS);
+	}
+
+	@Test
 	void nodes() {
 		GLNodeSelfTest.main(NO_ARGS);
 	}

@@ -21,6 +21,11 @@ public final class GLInputActions {
 	public static final String NAVIGATE_RIGHT = "navigation.right";
 	public static final String NAVIGATE_HOME = "navigation.home";
 	public static final String NAVIGATE_END = "navigation.end";
+	public static final String NAVIGATE_PAGE_UP = "navigation.page-up";
+	public static final String NAVIGATE_PAGE_DOWN = "navigation.page-down";
+	public static final String LIST_EXTEND_SELECTION = "list.extend-selection";
+	public static final String LIST_TOGGLE_SELECTION = "list.toggle-selection";
+	public static final String LIST_SELECT_ALL = "list.select-all";
 
 	public static final String SLIDER_PRECISE = "slider.precise";
 	public static final String SLIDER_COARSE = "slider.coarse";

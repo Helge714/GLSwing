@@ -85,6 +85,8 @@ value.node.interactive-curve-tolerance-factor=3
 modifier.node.horizontal-wheel=CTRL
 modifier.node.vertical-wheel=SHIFT
 modifier.node.toggle-selection=SHIFT
+modifier.list.extend-selection=SHIFT
+modifier.list.toggle-selection=shortcut
 ```
 
 An individual slider may override configured factors with
@@ -182,9 +184,15 @@ require a real file URI.
 ## Standard actions
 
 `GLInputActions` defines identifiers for history, focus traversal, activation,
-directional navigation, slider drag modes, and node-editor interaction. When
+directional and page navigation, list selection, slider drag modes, and
+node-editor interaction. When
 replacing standard bindings, preserve accessible alternatives such as Enter or
 Space for activation and directional keys for navigation.
+
+Lists combine navigation bindings with `list.extend-selection` and
+`list.toggle-selection`; modifier matching does not require duplicate
+`Shift+Down` or `shortcut+Down` key declarations. `list.select-all` is a normal
+key action and defaults to `shortcut+A`.
 
 ## Application actions
 
