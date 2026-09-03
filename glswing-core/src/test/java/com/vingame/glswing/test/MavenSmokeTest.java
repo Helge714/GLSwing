@@ -12,6 +12,8 @@ final class MavenSmokeTest {
 
 	@Test void fileDialogs() { GLFileDialogSelfTest.main(NO_ARGS); }
 
+	@Test void fileBrowser() throws Exception { GLFileBrowserSelfTest.main(NO_ARGS); }
+
 	@Test
 	void transforms() {
 		GLTransformSelfTest.main(NO_ARGS);
@@ -110,6 +112,11 @@ final class MavenSmokeTest {
 	@Test
 	void lists() {
 		GLListSelfTest.main(NO_ARGS);
+	}
+
+	@Test
+	void trees() {
+		GLTreeSelfTest.main(NO_ARGS);
 	}
 
 	@Test

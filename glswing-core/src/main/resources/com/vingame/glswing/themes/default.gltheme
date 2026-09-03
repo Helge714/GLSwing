@@ -195,6 +195,14 @@ list.rowHeight=28
 list.preferredWidth=180
 list.cellPadding=3,8,3,8
 
+tree.indent=18
+tree.disclosureSize=11
+tree.disclosureHover=${state.hover}
+tree.disclosurePressed=${state.pressed}
+tree.disclosureCornerRadius=3
+tree.iconSize=18
+tree.iconGap=6
+
 tabbedPane.background=${palette.surface}
 tabbedPane.tabBarBackground=${menuBar.background}
 tabbedPane.tab=${state.normal}

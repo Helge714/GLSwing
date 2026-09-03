@@ -52,11 +52,19 @@ public final class GLList<T> extends GLControl implements GLVirtualViewportConte
 	@FunctionalInterface
 	public interface ItemMouseListener<T> {
 		void itemClicked(ItemEvent<T> event);
+		default void itemPressed(ItemEvent<T> event) { }
+		default void itemReleased(ItemEvent<T> event) { }
 	}
 
 	@FunctionalInterface
 	public interface ActivationListener<T> {
 		void itemActivated(GLList<T> source, T item, int index);
+	}
+
+	/** Handles a key before the list applies its standard navigation. */
+	@FunctionalInterface
+	public interface KeyHandler<T> {
+		boolean keyPressed(GLList<T> source, GLKeyEvent event);
 	}
 
 	/** Controls the lifetime of an editor created for one visible cell. */
@@ -94,12 +102,14 @@ public final class GLList<T> extends GLControl implements GLVirtualViewportConte
 	private GLListSelectionModel selectionModel = new GLListSelectionModel();
 	private CellRenderer<T> cellRenderer = this::renderDefaultCell;
 	private Function<? super T, String> itemTextProvider = String::valueOf;
+	private KeyHandler<T> keyHandler;
 	private GLListStyle localStyle;
 	private CellEditor<T> cellEditor;
 	private Cell editingCell;
 	private GLContainer editingComponent;
 	private int editingIndex = -1;
 	private long editingGeneration;
+	private boolean committingEditing;
 	private Float localRowHeight;
 	private int overscanRows = 1;
 	private float viewportY;
@@ -108,6 +118,7 @@ public final class GLList<T> extends GLControl implements GLVirtualViewportConte
 	private int lastVisibleIndex = -1;
 	private int hoveredIndex = -1;
 	private float pointerViewportY = Float.NaN;
+	private float pointerCellX = Float.NaN;
 
 	public GLList() { this(new GLDefaultListModel<>()); }
 	public GLList(Collection<? extends T> items) {
@@ -190,6 +201,8 @@ public final class GLList<T> extends GLControl implements GLVirtualViewportConte
 		itemTextProvider = provider;
 		invalidateVisibleCells();
 	}
+	public KeyHandler<T> getKeyHandler() { return keyHandler; }
+	public void setKeyHandler(KeyHandler<T> handler) { keyHandler = handler; }
 
 	public GLListStyle getGLStyle() {
 		return localStyle != null ? localStyle : GLListStyle.fromTheme(getGLTheme());
@@ -231,6 +244,8 @@ public final class GLList<T> extends GLControl implements GLVirtualViewportConte
 	public int getLastVisibleIndex() { return lastVisibleIndex; }
 	/** Returns the row currently below the pointer, or {@code -1}. */
 	public int getHoveredIndex() { return hoveredIndex; }
+	/** Returns the pointer X coordinate within the hovered cell, or NaN. */
+	public float getPointerCellX() { return pointerCellX; }
 	/** Returns the installed inline cell editor, or {@code null}. */
 	public CellEditor<T> getCellEditor() { return cellEditor; }
 	/** Installs an inline editor; {@code null} disables editing. */
@@ -284,7 +299,14 @@ public final class GLList<T> extends GLControl implements GLVirtualViewportConte
 		if (editingIndex < 0) return true;
 		int index = editingIndex;
 		T value = model.getElementAt(index);
-		if (!cellEditor.commitEditor(this, value, index, editingComponent))
+		boolean accepted;
+		committingEditing = true;
+		try {
+			accepted = cellEditor.commitEditor(this, value, index, editingComponent);
+		} finally {
+			committingEditing = false;
+		}
+		if (!accepted)
 			return false;
 		if (editingIndex == index) finishEditing(false, value, index);
 		return true;
@@ -369,9 +391,14 @@ public final class GLList<T> extends GLControl implements GLVirtualViewportConte
 	}
 	@Override protected void controlMouseExited(GLMouseEvent event) {
 		pointerViewportY = Float.NaN;
+		setPointerCellX(Float.NaN);
 		setHoveredIndex(-1);
 	}
 	@Override protected void controlKeyPressed(GLKeyEvent event) {
+		if (keyHandler != null && keyHandler.keyPressed(this, event)) {
+			event.consume();
+			return;
+		}
 		if (model.getSize() == 0) return;
 		var input = getGLInputMap();
 		int target = -1;
@@ -435,7 +462,11 @@ public final class GLList<T> extends GLControl implements GLVirtualViewportConte
 	}
 
 	private void modelChanged(GLListModel.Change change) {
-		cancelEditing();
+		if (editingIndex >= 0 && committingEditing) {
+			int index = editingIndex;
+			T value = index < model.getSize() ? model.getElementAt(index) : null;
+			finishEditing(false, value, index);
+		} else cancelEditing();
 		if (change.type() == GLListModel.ChangeType.INTERVAL_ADDED)
 			selectionModel.insertIndexInterval(change.firstIndex(),
 					change.lastIndex() - change.firstIndex() + 1);
@@ -543,6 +574,7 @@ public final class GLList<T> extends GLControl implements GLVirtualViewportConte
 	private void updatePointerFromListEvent(GLMouseEvent event) {
 		if (!event.hasLocalPosition()) return;
 		pointerViewportY = event.getLocalY() - viewportY;
+		setPointerCellX(event.getLocalX() - getGLStyle().borderWidth());
 		setHoveredIndex(indexAt(event.getLocalY()));
 	}
 	private void updateHoveredIndexAfterScroll() {
@@ -562,6 +594,12 @@ public final class GLList<T> extends GLControl implements GLVirtualViewportConte
 		if (oldCell != null) oldCell.invalidateRecording();
 		if (newCell != null) newCell.invalidateRecording();
 		repaintGL();
+	}
+	private void setPointerCellX(float x) {
+		if (Float.compare(pointerCellX, x) == 0) return;
+		pointerCellX = x;
+		Cell cell = visibleCells.get(hoveredIndex);
+		if (cell != null) cell.invalidateRecording();
 	}
 	private int pageRows() {
 		return Math.max(1, (int) Math.floor(viewportHeight / getRowHeight()) - 1);
@@ -595,6 +633,20 @@ public final class GLList<T> extends GLControl implements GLVirtualViewportConte
 				index, event, selectedBeforePress);
 		for (ItemMouseListener<T> listener : itemMouseListeners)
 			listener.itemClicked(itemEvent);
+	}
+	private void fireItemMousePressed(int index, GLMouseEvent event,
+			boolean selectedBeforePress) {
+		ItemEvent<T> itemEvent = new ItemEvent<>(this, model.getElementAt(index),
+				index, event, selectedBeforePress);
+		for (ItemMouseListener<T> listener : itemMouseListeners)
+			listener.itemPressed(itemEvent);
+	}
+	private void fireItemMouseReleased(int index, GLMouseEvent event,
+			boolean selectedBeforePress) {
+		ItemEvent<T> itemEvent = new ItemEvent<>(this, model.getElementAt(index),
+				index, event, selectedBeforePress);
+		for (ItemMouseListener<T> listener : itemMouseListeners)
+			listener.itemReleased(itemEvent);
 	}
 	private void fireActivated(int index) {
 		T value = model.getElementAt(index);
@@ -733,15 +785,18 @@ public final class GLList<T> extends GLControl implements GLVirtualViewportConte
 		@Override protected void controlMouseExited(GLMouseEvent event) {
 			if (hoveredIndex != index) return;
 			pointerViewportY = Float.NaN;
+			setPointerCellX(Float.NaN);
 			setHoveredIndex(-1);
 		}
 		private void updatePointer(GLMouseEvent event) {
 			if (!event.hasLocalPosition()) return;
 			pointerViewportY = getY() - viewportY + event.getLocalY();
+			setPointerCellX(event.getLocalX());
 			setHoveredIndex(index);
 		}
 		@Override protected void controlMousePressed(GLMouseEvent event) {
 			if (!GLList.this.isEnabled()) return;
+			updatePointer(event);
 			selectedBeforePress = selectionModel.isSelectedIndex(index);
 			if (editingIndex >= 0 && editingIndex != index) cancelEditing();
 			if (event.getButton() == MouseEvent.BUTTON1) {
@@ -750,11 +805,20 @@ public final class GLList<T> extends GLControl implements GLVirtualViewportConte
 			} else if (event.getButton() == MouseEvent.BUTTON3
 					&& !selectionModel.isSelectedIndex(index))
 				selectionModel.setSelectionInterval(index, index);
+			fireItemMousePressed(index, event, selectedBeforePress);
+		}
+		@Override protected void controlMouseDragged(GLMouseEvent event) {
+			updatePointer(event);
+		}
+		@Override protected void controlMouseReleased(GLMouseEvent event) {
+			updatePointer(event);
+			fireItemMouseReleased(index, event, selectedBeforePress);
 		}
 		@Override protected void controlMouseClicked(GLMouseEvent event) {
 			if (!GLList.this.isEnabled()) return;
 			fireItemMouseClicked(index, event, selectedBeforePress);
-			if (event.getButton() == MouseEvent.BUTTON1 && event.getClickCount() >= 2)
+			if (!event.isConsumed() && event.getButton() == MouseEvent.BUTTON1
+					&& event.completesDoubleClick())
 				fireActivated(index);
 		}
 		@Override protected void controlStateChanged(GLControlState oldState,

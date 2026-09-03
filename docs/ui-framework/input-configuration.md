@@ -194,6 +194,10 @@ Lists combine navigation bindings with `list.extend-selection` and
 `Shift+Down` or `shortcut+Down` key declarations. `list.select-all` is a normal
 key action and defaults to `shortcut+A`.
 
+Trees inherit list navigation and use `tree.edit` to start inline editing of
+the selected node. The bundled map assigns F2, matching the accelerator shown
+by the standard localized **Rename** context-menu command.
+
 ## Application actions
 
 Applications may define arbitrary action names and query them directly:

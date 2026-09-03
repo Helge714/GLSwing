@@ -21,6 +21,7 @@ key.navigation.page-down=PAGE_DOWN
 modifier.list.extend-selection=SHIFT
 modifier.list.toggle-selection=shortcut
 key.list.select-all=shortcut+A
+key.tree.edit=F2
 
 modifier.slider.precise=SHIFT
 modifier.slider.coarse=CTRL

@@ -7,7 +7,8 @@ Items are removed when completed or intentionally rejected.
 
 - Migrate other large item surfaces to `GLList<T>` where profiling shows that
   virtualization or the shared selection model provides a concrete benefit.
-- Build future `GLTree<T>` and `GLTable` controls on the list selection model.
+- Build a future `GLTable` control on the list selection model when an
+  application use case justifies the additional column and header APIs.
 
 ## Application startup
 

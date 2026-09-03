@@ -3,6 +3,7 @@
 - [Artifacts and backend selection](#artifacts-and-backend-selection)
 - [Creating a request](#creating-a-request)
 - [Native SWT backend](#native-swt-backend)
+- [Embedded file browser](#embedded-file-browser)
 - [Themed fallback](#themed-fallback)
 - [Lifecycle and failures](#lifecycle-and-failures)
 
@@ -85,10 +86,59 @@ SWT exposes separate file and directory dialogs. A request that combines files
 and directories is therefore unsupported by the native backend; `auto()` uses
 the themed fallback for that request.
 
+## Embedded file browser
+
+`GLFileBrowser` provides the themed dialog's navigable directory tree and
+virtualized details list as a reusable container. Embed it in a window, panel,
+inspector, asset manager, or application-specific dialog when the surrounding
+commands and layout belong to the application:
+
+```java
+GLFileBrowser browser = new GLFileBrowser(projectDirectory);
+browser.setMultipleSelection(true);
+browser.setFileFilter(new GLFileFilter("Images", "png", "jpg", "webp"));
+browser.addDirectoryListener((source, directory) -> updateBreadcrumb(directory));
+browser.addSelectionListener((source, paths) -> updateActions(paths));
+browser.addActivationListener((source, file) -> open(file));
+
+content.addGL(browser);
+browser.refresh();
+```
+
+The browser includes system-derived common locations, filesystem roots, lazy
+directory expansion, directory-first sorted details, hidden-entry styling,
+search filtering, standard single or multiple selection, and file activation.
+Use `setDirectory`, `setSearchQuery`, `setFileFilter`, and `setShowHidden` to
+change its state. These configuration setters do not enumerate the current
+directory; call `refresh()` after applying a group of changes. `setDirectory`
+performs its own refresh. The returned completion stage supplies the accepted
+entries and makes it straightforward to update loading and error indicators.
+
+Applications that need only a filesystem hierarchy can use
+`GLFileSystemTreeModel` independently with `GLTree`:
+
+```java
+GLFileSystemTreeModel model = new GLFileSystemTreeModel(List.of(
+        new GLFileSystemTreeModel.Location("Project", projectDirectory)));
+GLTree<GLFileSystemTreeModel.Node> tree = new GLTree<>(model);
+tree.setItemTextProvider(GLFileSystemTreeModel.Node::label);
+tree.addExpansionListener((source, node, expanded) -> {
+    if (expanded)
+        model.loadChildren(node);
+});
+```
+
+Nodes intentionally use identity semantics because one path may occur under a
+common-location shortcut and a filesystem root. `loadChildren` is asynchronous.
+Call `refresh(path)` to invalidate every loaded occurrence of a directory; an
+expanded consumer should then call `loadChildren` again. The model exposes
+directories only, leaving file presentation to the browser or application.
+
 ## Themed fallback
 
-The built-in fallback is a `GLDialog` composed entirely from GLSwing controls.
-It inherits the owner's theme and supports:
+The built-in fallback composes `GLFileBrowser` with a path field, search,
+commands, request controls, and status reporting inside a `GLDialog`. It
+inherits the owner's theme and supports:
 
 - file and directory navigation;
 - Open, Save, and Save As request semantics;
@@ -98,11 +148,13 @@ It inherits the owner's theme and supports:
 - overwrite confirmation;
 - asynchronous directory enumeration;
 - search, hidden-file visibility, and new-folder creation;
-- system-derived common places and filesystem roots;
+- a hierarchical sidebar with system-derived common places and filesystem roots;
 - contextual open, copy, path-copy, rename, and recycle-bin actions.
 
-Filesystem enumeration never runs on the render thread. Generation tokens
-discard obsolete directory results after rapid navigation or search changes.
+Filesystem enumeration never runs on the render thread. The sidebar loads a
+directory only when its branch is expanded, reveals and selects the current
+path, and refreshes cached branches after file operations. Generation tokens
+discard obsolete directory and navigation results after rapid changes.
 Selecting an entry and clicking its visible name again starts inline renaming.
 Enter commits the name and Escape or a click outside cancels the editing
 session; changing a file extension first opens a confirmation dialog. Clicking

@@ -15,6 +15,7 @@ behavior from `GLControl`. Geometry and text measurements use logical pixels.
 - [Combo boxes and menus](#combo-boxes-and-menus)
 - [Tabs](#tabs)
 - [Lists](#lists)
+- [Trees](#trees)
 - [Scrolling](#scrolling)
 
 ## Common behavior
@@ -52,6 +53,7 @@ event sequencing, capture, or state management.
 | `GLMenuBar` | `new GLMenuBar()` | Top-level menus |
 | `GLTabbedPane` | `new GLTabbedPane()` | Tab metadata and selected content |
 | `GLList<T>` | Item collection or `GLListModel<T>` constructor | Virtualized cells and index selection |
+| `GLTree<T>` | Root collection or `GLTreeModel<T>` constructor | Virtualized hierarchical data |
 | `GLScrollPane` | Empty or content constructor | Viewport, policies, offsets |
 | `GLScrollBar` | Orientation constructor | Value, extent, maximum |
 
@@ -369,6 +371,58 @@ lead-selection focus outline follows those effective corners on the first and
 last row only while that row actually touches the corresponding viewport edge.
 Consequently, a short list does not round its final row in the middle of unused
 viewport space. Corners adjacent to a scrollbar remain square.
+
+## Trees
+
+`GLTree<T>` projects the expanded part of a `GLTreeModel<T>` onto the same
+virtualized cells and selection infrastructure as `GLList<T>`. Collapsed
+descendants create no components, picking entries, or rendering work. The tree
+contains its own `GLScrollPane` and can be added directly to a layout.
+
+```java
+GLDefaultTreeModel<String> model = new GLDefaultTreeModel<>();
+model.addRoot("Project");
+model.addChild("Project", "src");
+model.addChild("src", "Main.java");
+
+GLTree<String> tree = new GLTree<>(model);
+tree.setExpanded("Project", true);
+tree.setExpanded("src", true);
+tree.addActivationListener((source, value) -> open(value));
+```
+
+`GLTreeModel<T>` supplies ordered roots and children and reports structural
+changes. A custom model can return `isLeaf(node) == false` before children are
+available; an expansion listener can then start asynchronous loading and notify
+the model when the result arrives. Models must expose stable, non-null node
+values and must not contain cycles.
+
+The mutable `GLDefaultTreeModel<T>` provides unique roots and children,
+subtree removal, node replacement, and `setAllowsChildren(...)` for empty lazy
+branches. `setChildren(...)` replaces or reorders a branch in one notification,
+which is useful when an asynchronous directory or service request completes.
+Its notifications rebuild only the flattened visible projection, not a
+component hierarchy.
+
+Mouse clicks on disclosure chevrons and double-clicks on branches toggle their
+expanded state. Up and Down use standard list navigation; Right expands a
+branch or selects its first child, while Left collapses it or selects its
+parent. The shared `GLListSelectionModel` provides single, interval, and
+multiple selection. Collapsing the only selected descendant moves selection to
+the collapsed parent.
+
+Install a `GLTree.CellRenderer<T>` for icons or structured content. The callback
+receives depth, expansion state, leaf state, and the horizontal position after
+the disclosure area. For ordinary icon-and-label rows, retain the default
+renderer and install `setItemIconProvider(...)`; `tree.iconSize` and
+`tree.iconGap` control its geometry. `GLTree.CellEditor<T>` uses the standard
+list editing lifecycle, including validation-aware commits and safe
+cancellation when a visible row is recycled. Once an editor is installed,
+every node—including a branch—can be renamed with F2 or the localized
+**Rename** command in its context menu. Use
+`setRenameContextMenuEnabled(false)` when an application supplies its own
+context menu. `GLDefaultTreeModel.replaceNode(...)` preserves the expansion and
+selection state of the replaced node.
 
 ## Scrolling
 

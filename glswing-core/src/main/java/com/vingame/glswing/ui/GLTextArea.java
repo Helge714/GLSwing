@@ -289,7 +289,7 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 	}
 	@Override protected void controlMouseReleased(GLMouseEvent event) { selecting = false; draggingScrollBar = false; }
 	@Override protected void controlMouseClicked(GLMouseEvent event) {
-		if (event.getButton() == MouseEvent.BUTTON1 && event.getClickCount() >= 2
+		if (event.getButton() == MouseEvent.BUTTON1 && event.completesDoubleClick()
 				&& event.hasLocalPosition())
 			selectWordAt(positionAt(event.getLocalX(), event.getLocalY()));
 	}

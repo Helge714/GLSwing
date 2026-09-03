@@ -110,6 +110,16 @@ public class GLMouseEvent {
 		return originalEvent.getClickCount();
 	}
 
+	/**
+	 * Returns whether this click completes a double-click pair. AWT may continue
+	 * counting rapid clicks beyond two, so clicks 2, 4, 6, ... each complete a
+	 * distinct pair.
+	 */
+	public boolean completesDoubleClick() {
+		int count = getClickCount();
+		return count > 0 && (count & 1) == 0;
+	}
+
 	public int getModifiersEx() {
 		return originalEvent.getModifiersEx();
 	}

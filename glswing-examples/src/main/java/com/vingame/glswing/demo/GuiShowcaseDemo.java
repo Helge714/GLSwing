@@ -41,8 +41,10 @@ import com.vingame.glswing.component.GLParent;
 import com.vingame.glswing.component.GLSwingContainerCanvas;
 import com.vingame.glswing.component.GLSwingPanel;
 import com.vingame.glswing.history.GLHistoryManager;
+import com.vingame.glswing.file.GLFileBrowser;
 import com.vingame.glswing.file.GLFileDialogRequest;
 import com.vingame.glswing.file.GLFileDialogs;
+import com.vingame.glswing.file.GLFileFilter;
 import com.vingame.glswing.file.GLFileSelectionMode;
 import com.vingame.glswing.node.GLNode;
 import com.vingame.glswing.node.GLNodeEditor;
@@ -65,6 +67,8 @@ import com.vingame.glswing.ui.GLLabel;
 import com.vingame.glswing.ui.GLLabelStyle;
 import com.vingame.glswing.ui.GLList;
 import com.vingame.glswing.ui.GLListSelectionModel;
+import com.vingame.glswing.ui.GLDefaultTreeModel;
+import com.vingame.glswing.ui.GLTree;
 import com.vingame.glswing.ui.GLItemPresentation;
 import com.vingame.glswing.ui.GLLocalizer;
 import com.vingame.glswing.ui.GLMenuBar;
@@ -813,6 +817,7 @@ public final class GuiShowcaseDemo {
 		private final PassiveLayer controlsPage = new PassiveLayer();
 		private final PassiveLayer codePage = new PassiveLayer();
 		private final PassiveLayer containersPage = new PassiveLayer();
+		private final PassiveLayer filesPage = new PassiveLayer();
 		private final PassiveLayer nodeEditorPage = new PassiveLayer();
 		private final GLTabbedPane workspaceTabs = new GLTabbedPane();
 		private final GLPopupMenu fileMenu = new GLPopupMenu();
@@ -870,10 +875,12 @@ public final class GuiShowcaseDemo {
 			buildValueLayer();
 			buildSelectionLayer();
 			buildContainersPage();
+			buildFilesPage();
 			buildNodeEditorPage();
 			buildCodePage();
 			workspaceTabs.addTab("Controls", controlsPage);
 			workspaceTabs.addTab("Menus & Containers", containersPage);
+			workspaceTabs.addTab("Files", filesPage);
 			workspaceTabs.addTab("Node Editor", nodeEditorPage);
 			workspaceTabs.addTab("Code Editor", codePage);
 			workspaceTabs.addSelectionListener((source, oldIndex, newIndex) -> {
@@ -1590,15 +1597,93 @@ public final class GuiShowcaseDemo {
 					"1.000 Eintraege · Mehrfachauswahl mit Strg/Shift · Doppelklick aktiviert",
 					24, 276);
 
-			GLContainer content = new PassiveLayer();
-			content.setPreferredGLSize(760, 110);
-			for (int index = 0; index < 6; index++) {
-				GLButton item = new GLButton("Scrollbarer Inhalt " + (index + 1));
-				addControl(content, item, 20 + index * 125, 28, 112, 34);
-			}
-			GLScrollPane scrollPane = new GLScrollPane(content);
-			scrollPane.setScrollUnit(24);
-			addControl(scrolling, scrollPane, 24, 310, 402, 142);
+			GLDefaultTreeModel<String> documents = new GLDefaultTreeModel<>();
+			documents.addRoot("GLSwingNext");
+			documents.addChild("GLSwingNext", "glswing-core");
+			documents.addChild("GLSwingNext", "glswing-examples");
+			documents.addChild("GLSwingNext", "docs");
+			documents.addChild("glswing-core", "src/main/java");
+			documents.addChild("glswing-core", "src/main/resources");
+			documents.addChild("glswing-examples", "GuiShowcaseDemo.java");
+			documents.addChild("docs", "README.md");
+			documents.addChild("docs", "ui-framework.md");
+			GLTree<String> tree = new GLTree<>(documents);
+			tree.getSelectionModel().setSelectionMode(
+					GLListSelectionModel.SelectionMode.MULTIPLE_INTERVAL);
+			tree.addActivationListener((source, item) -> {
+				host.report("Baum aktiviert: " + item);
+				source.startEditing(item);
+			});
+			tree.setCellEditor(new GLTree.CellEditor<>() {
+				@Override public GLContainer createEditor(GLTree<String> source,
+						String value, GLList.EditController controller) {
+					GLTextEditor editor = new GLTextEditor(value);
+					editor.addActionListener(event -> controller.commit());
+					editor.addCancelListener(event -> controller.cancel());
+					return editor;
+				}
+				@Override public void layoutEditor(GLTree<String> source, String value,
+						GLContainer editor, float x, float width, float height) {
+					editor.setBounds(x, 2, Math.max(1, width - x - 6), height - 4);
+				}
+				@Override public boolean commitEditor(GLTree<String> source,
+						String value, GLContainer component) {
+					String replacement = ((GLTextEditor) component).getText().strip();
+					if (replacement.isEmpty() || documents.contains(replacement)) return false;
+					documents.replaceNode(value, replacement);
+					return true;
+				}
+			});
+			tree.expandAll();
+			addControl(scrolling, tree, 24, 310, 402, 142);
+			caption(scrolling,
+					"Pfeile links/rechts klappen · Doppelklick auf Blaetter benennt um",
+					24, 458);
+		}
+
+		private void buildFilesPage() {
+			GLFileBrowser browser = new GLFileBrowser(showcaseWorkspace());
+			browser.setMultipleSelection(true);
+			browser.setBounds(18, 54, 1110, 510);
+			browser.addDirectoryListener((source, directory) ->
+					host.report("Ordner: " + directory));
+			browser.addActivationListener((source, file) ->
+					host.report("Datei aktiviert: " + file));
+
+			GLLabel searchLabel = new GLLabel("Search");
+			searchLabel.setBounds(18, 18, 56, 24);
+			filesPage.addGL(searchLabel);
+			GLTextEditor search = new GLTextEditor();
+			search.setBounds(78, 14, 280, 30);
+			search.addTextChangeListener(event -> {
+				browser.setSearchQuery(search.getText());
+				browser.refresh();
+			});
+			filesPage.addGL(search);
+
+			GLComboBox<GLFileFilter> filter = new GLComboBox<>(List.of(
+					new GLFileFilter("All files"),
+					new GLFileFilter("Java source", "java"),
+					new GLFileFilter("Images", "png", "jpg", "jpeg", "webp")));
+			filter.setItemTextProvider(GLFileFilter::description);
+			GLLabel filterLabel = new GLLabel("Filter");
+			filterLabel.setBounds(380, 18, 48, 24);
+			filesPage.addGL(filterLabel);
+			filter.setBounds(432, 14, 220, 30);
+			filter.addActionListener(event -> {
+				browser.setFileFilter(filter.getSelectedItem());
+				browser.refresh();
+			});
+			filesPage.addGL(filter);
+
+			GLCheckBox hidden = new GLCheckBox("Show hidden files");
+			hidden.setBounds(680, 18, 190, 24);
+			hidden.addActionListener(event -> {
+				browser.setShowHidden(hidden.isSelected());
+				browser.refresh();
+			});
+			filesPage.addGL(hidden);
+			filesPage.addGL(browser);
 		}
 
 		private void buildNodeEditorPage() {

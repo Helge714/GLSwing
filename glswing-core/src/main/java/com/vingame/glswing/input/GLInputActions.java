@@ -26,6 +26,7 @@ public final class GLInputActions {
 	public static final String LIST_EXTEND_SELECTION = "list.extend-selection";
 	public static final String LIST_TOGGLE_SELECTION = "list.toggle-selection";
 	public static final String LIST_SELECT_ALL = "list.select-all";
+	public static final String TREE_EDIT = "tree.edit";
 
 	public static final String SLIDER_PRECISE = "slider.precise";
 	public static final String SLIDER_COARSE = "slider.coarse";

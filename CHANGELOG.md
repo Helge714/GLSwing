@@ -59,11 +59,18 @@ may change in subsequent `0.x` releases.
   reusable visible cells, custom renderers, conventional mouse and keyboard
   selection, activation events, automatic scroll-to-selection behavior, and a
   reusable single-cell editing lifecycle with validation-aware commits.
-- The themed file dialog now uses `GLList<T>` for its places and file-detail
-  views. Directory changes replace their models without retaining stale
-  selection, while inline renaming, double-click activation, context actions,
-  keyboard navigation, and row virtualization share the standard list
-  behavior.
+- The reusable `GLFileBrowser` combines a lazy `GLFileSystemTreeModel`,
+  system-derived places and drives, and a virtualized file-details list for
+  embedded asset browsers and application-specific dialogs. Directory
+  enumeration is asynchronous, the current path is revealed in the tree, and
+  refreshes discard stale results. The themed file dialog builds its path,
+  search, commands, inline renaming, and request controls around this public
+  browser instead of maintaining a separate navigation implementation.
+- Virtualized `GLTree<T>` views add replaceable hierarchical models, mutable
+  default models, lazy empty branches, expansion events, disclosure rendering,
+  standard tree keyboard navigation, shared list selection, optional icons,
+  custom renderers, inline cell editing, and localized F2/context-menu renaming
+  without constructing components for collapsed nodes.
 - Conventional focus traversal for interactive controls, including safe focus
   release when a control subtree is hidden or removed.
 - Typed color and metrics theme fragments with conflict-free bundle slots,

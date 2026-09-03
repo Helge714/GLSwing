@@ -347,7 +347,7 @@ public class GLNode extends GLContainer {
 			return;
 		if (getGLParent() instanceof GLNodeEditor editor)
 			editor.completeNodeClick(this, event.getModifiersEx());
-		if (event.getClickCount() >= 2
+		if (event.completesDoubleClick()
 				&& event.hasLocalPosition()
 				&& event.getLocalY() <= getGLStyle().titleHeight()) {
 			editTitle();
