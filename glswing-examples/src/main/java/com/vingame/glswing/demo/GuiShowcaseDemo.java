@@ -71,6 +71,8 @@ import com.vingame.glswing.rendering.GLDrawCallProfile;
 import com.vingame.glswing.rendering.GLIcon;
 import com.vingame.glswing.rendering.GLStroke;
 import com.vingame.glswing.ui.GLButton;
+import com.vingame.glswing.ui.GLAction;
+import com.vingame.glswing.ui.GLActionMap;
 import com.vingame.glswing.ui.GLCheckBox;
 import com.vingame.glswing.ui.GLComboBox;
 import com.vingame.glswing.ui.GLFontSpec;
@@ -883,12 +885,13 @@ public final class GuiShowcaseDemo {
 		private GLMenuItem showcaseColorsItem;
 		private GLMenuItem defaultMetricsItem;
 		private GLMenuItem extremeMetricsItem;
-		private GLMenuItem undoItem;
-		private GLMenuItem redoItem;
-		private GLMenuItem saveItem;
-		private GLMenuItem saveAsItem;
-		private GLMenuItem saveAllItem;
-		private GLMenuItem closeDocumentItem;
+		private final GLActionMap applicationActions = new GLActionMap();
+		private GLAction undoAction;
+		private GLAction redoAction;
+		private GLAction saveAction;
+		private GLAction saveAsAction;
+		private GLAction saveAllAction;
+		private GLAction closeDocumentAction;
 		private boolean syncingThemeRadius;
 		private GLCodeEditor codeEditor;
 		private final GLTabbedPane codeTabs = new GLTabbedPane();
@@ -1350,33 +1353,60 @@ public final class GuiShowcaseDemo {
 		}
 
 		private void buildMenuBar() {
-			GLMenuItem create = fileMenu.addItem("Neu",
-					event -> {
+			GLAction createAction = GLAction.builder(GLInputActions.DOCUMENT_NEW)
+					.textKey("showcase.action.document.new")
+					.shortDescriptionKey("showcase.action.document.new.description")
+					.icon(ACTION_ICON)
+					.onAction(() -> {
 						documentLifecycle.newDocument();
 						showCodeWorkspace();
 						host.report("New Java document created");
-					});
-			create.setIcon(ACTION_ICON);
-			create.setAcceleratorText("Ctrl+N");
-			GLMenuItem openDocument = fileMenu.addItem("Öffnen ...", event ->
-					documentLifecycle.open().whenComplete((document, failure) ->
+					})
+					.build();
+			GLAction openAction = GLAction.builder(GLInputActions.DOCUMENT_OPEN)
+					.textKey("showcase.action.document.open")
+					.shortDescriptionKey("showcase.action.document.open.description")
+					.icon(LINK_ICON)
+					.onAction(event -> documentLifecycle.open().whenComplete((document, failure) ->
 							SwingUtilities.invokeLater(() -> {
 								if (failure != null) host.report("Open failed: " + failure.getMessage());
 								else if (document != null) { showCodeWorkspace(); host.report("Opened " + document.title()); }
-							})));
-			openDocument.setIcon(LINK_ICON);
-			openDocument.setAcceleratorText("Ctrl+O");
-			saveItem = fileMenu.addItem("Speichern", event -> saveActiveDocument(false));
-			saveItem.setAcceleratorText("Ctrl+S");
-			saveAsItem = fileMenu.addItem("Speichern unter ...", event -> saveActiveDocument(true));
-			saveAsItem.setAcceleratorText("Ctrl+Shift+S");
-			saveAllItem = fileMenu.addItem("Alle speichern", event ->
-					documentLifecycle.saveAll().whenComplete((paths, failure) ->
-							reportDocumentOperation("Save all", failure)));
-			saveAllItem.setAcceleratorText("Ctrl+Alt+S");
-			closeDocumentItem = fileMenu.addItem("Schließen",
-					event -> documentLifecycle.closeActiveDocument());
-			closeDocumentItem.setAcceleratorText("Ctrl+W");
+							})))
+					.build();
+			saveAction = GLAction.builder(GLInputActions.DOCUMENT_SAVE)
+					.textKey("showcase.action.document.save")
+					.shortDescriptionKey("showcase.action.document.save.description")
+					.enabledWhen(documentLifecycle::canSave)
+					.onAction(event -> saveActiveDocument(false))
+					.build();
+			saveAsAction = GLAction.builder(GLInputActions.DOCUMENT_SAVE_AS)
+					.textKey("showcase.action.document.saveAs")
+					.shortDescriptionKey("showcase.action.document.saveAs.description")
+					.enabledWhen(documentLifecycle::canSaveAs)
+					.onAction(event -> saveActiveDocument(true))
+					.build();
+			saveAllAction = GLAction.builder(GLInputActions.DOCUMENT_SAVE_ALL)
+					.textKey("showcase.action.document.saveAll")
+					.shortDescriptionKey("showcase.action.document.saveAll.description")
+					.enabledWhen(documentLifecycle::canSaveAll)
+					.onAction(event -> documentLifecycle.saveAll()
+							.whenComplete((paths, failure) ->
+									reportDocumentOperation("Save all", failure)))
+					.build();
+			closeDocumentAction = GLAction.builder(GLInputActions.DOCUMENT_CLOSE)
+					.textKey("showcase.action.document.close")
+					.shortDescriptionKey("showcase.action.document.close.description")
+					.enabledWhen(documentLifecycle::canClose)
+					.onAction(event -> documentLifecycle.closeActiveDocument())
+					.build();
+			applicationActions.add(createAction).add(openAction).add(saveAction)
+					.add(saveAsAction).add(saveAllAction).add(closeDocumentAction);
+			fileMenu.addItem(createAction);
+			fileMenu.addItem(openAction);
+			fileMenu.addItem(saveAction);
+			fileMenu.addItem(saveAsAction);
+			fileMenu.addItem(saveAllAction);
+			fileMenu.addItem(closeDocumentAction);
 			fileMenu.addSeparator();
 			GLPopupMenu openDialogs = new GLPopupMenu();
 			openDialogs.addItem("Systemdialog ...",
@@ -1403,12 +1433,17 @@ public final class GuiShowcaseDemo {
 			GLMenuItem unavailable = fileMenu.addItem("Nicht verfuegbar");
 			unavailable.setEnabled(false);
 
-			undoItem = editMenu.addItem("Rueckgaengig",
-					event -> documentWorkspace.undo());
-			undoItem.setAcceleratorText("Ctrl+Z");
-			redoItem = editMenu.addItem("Wiederholen",
-					event -> documentWorkspace.redo());
-			redoItem.setAcceleratorText("Ctrl+Shift+Z");
+			undoAction = GLAction.builder(GLInputActions.HISTORY_UNDO)
+					.textKey("showcase.action.history.undo")
+					.enabledWhen(documentWorkspace::canUndo)
+					.onAction(() -> documentWorkspace.undo()).build();
+			redoAction = GLAction.builder(GLInputActions.HISTORY_REDO)
+					.textKey("showcase.action.history.redo")
+					.enabledWhen(documentWorkspace::canRedo)
+					.onAction(() -> documentWorkspace.redo()).build();
+			applicationActions.add(undoAction).add(redoAction);
+			editMenu.addItem(undoAction);
+			editMenu.addItem(redoAction);
 
 			viewMenu.addItem("Zoom 100 %",
 					event -> host.setZoom(1));
@@ -1463,24 +1498,13 @@ public final class GuiShowcaseDemo {
 			if (index >= 0) workspaceTabs.setSelectedIndex(index);
 		}
 
-		private void saveActiveDocument(boolean saveAs) {
-			(saveAs ? documentLifecycle.saveAs() : documentLifecycle.save())
+		private java.util.concurrent.CompletionStage<Path> saveActiveDocument(boolean saveAs) {
+			return (saveAs ? documentLifecycle.saveAs() : documentLifecycle.save())
 					.whenComplete((path, failure) -> reportDocumentOperation("Save", failure));
 		}
 
 		@Override public void keyPressed(GLKeyEvent event) {
-			if (getGLInputMap().matches(GLInputActions.DOCUMENT_SAVE_ALL, event)) {
-				if (documentLifecycle.canSaveAll())
-					documentLifecycle.saveAll().whenComplete((paths, failure) ->
-							reportDocumentOperation("Save all", failure));
-				event.consume();
-			} else if (getGLInputMap().matches(GLInputActions.DOCUMENT_SAVE_AS, event)) {
-				if (documentLifecycle.canSaveAs()) saveActiveDocument(true);
-				event.consume();
-			} else if (getGLInputMap().matches(GLInputActions.DOCUMENT_SAVE, event)) {
-				if (documentLifecycle.canSave()) saveActiveDocument(false);
-				event.consume();
-			}
+			applicationActions.handleKeyPressed(event, getGLInputMap(), this);
 		}
 
 		@Override public boolean isFocusTraversable() { return false; }
@@ -1557,22 +1581,21 @@ public final class GuiShowcaseDemo {
 		}
 
 		private void updateHistoryActions() {
-			if (undoItem == null || redoItem == null)
+			if (undoAction == null || redoAction == null)
 				return;
-			undoItem.setEnabled(documentWorkspace.canUndo());
-			redoItem.setEnabled(documentWorkspace.canRedo());
-			undoItem.setText(documentWorkspace.canUndo()
-					? "Rueckgaengig: " + documentWorkspace.undoName() : "Rueckgaengig");
-			redoItem.setText(documentWorkspace.canRedo()
-					? "Wiederholen: " + documentWorkspace.redoName() : "Wiederholen");
+			GLLocalizer text = host.localizer();
+			String undo = text.text("showcase.action.history.undo");
+			String redo = text.text("showcase.action.history.redo");
+			undoAction.setText(documentWorkspace.canUndo()
+					? undo + ": " + documentWorkspace.undoName() : undo);
+			redoAction.setText(documentWorkspace.canRedo()
+					? redo + ": " + documentWorkspace.redoName() : redo);
+			undoAction.refreshEnabled();
+			redoAction.refreshEnabled();
 		}
 
 		private void updateDocumentActions() {
-			if (saveItem == null) return;
-			saveItem.setEnabled(documentLifecycle.canSave());
-			saveAsItem.setEnabled(documentLifecycle.canSaveAs());
-			saveAllItem.setEnabled(documentLifecycle.canSaveAll());
-			closeDocumentItem.setEnabled(documentLifecycle.canClose());
+			applicationActions.refreshEnabled();
 		}
 
 		void updateLocalizedMenuText() {
@@ -1592,6 +1615,7 @@ public final class GuiShowcaseDemo {
 					text.text("showcase.theme.metrics.default"));
 			extremeMetricsItem.setText(
 					text.text("showcase.theme.metrics.extreme"));
+			updateHistoryActions();
 		}
 
 		private void configureDocumentDialogText() {

@@ -5,6 +5,7 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
+import java.beans.PropertyChangeListener;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import com.vingame.glswing.input.GLKeyEvent;
@@ -31,6 +32,9 @@ public class GLCheckBox extends GLControl {
 	private String text;
 	private String actionCommand;
 	private boolean selected;
+	private boolean syncingAction;
+	private GLAction action;
+	private final PropertyChangeListener actionListener = event -> applyAction();
 	private GLCheckBoxStyle localStyle;
 	private GLCheckBoxStyle appliedStyle;
 
@@ -44,6 +48,11 @@ public class GLCheckBox extends GLControl {
 		actionCommand = text;
 		this.selected = selected;
 		updatePresentation(true);
+	}
+
+	public GLCheckBox(GLAction action) {
+		this("");
+		setAction(action);
 	}
 
 	public final String getText() {
@@ -71,6 +80,11 @@ public class GLCheckBox extends GLControl {
 	}
 
 	public final void setSelected(boolean selected) {
+		if (!syncingAction && action != null && action.isSelectable()
+				&& action.isSelected() != selected) {
+			action.setSelected(selected);
+			return;
+		}
 		if (this.selected == selected)
 			return;
 		this.selected = selected;
@@ -87,6 +101,18 @@ public class GLCheckBox extends GLControl {
 			throw new IllegalArgumentException("Action command must not be null");
 		this.actionCommand = actionCommand;
 	}
+
+	public final GLAction getAction() { return action; }
+	/** Binds text, tooltip, availability, selection and invocation. */
+	public final void setAction(GLAction action) {
+		if (this.action == action) return;
+		if (this.action != null)
+			this.action.removePropertyChangeListener(actionListener);
+		this.action = action;
+		if (action != null) action.addPropertyChangeListener(actionListener);
+		applyAction();
+	}
+	public final void clearAction() { setAction(null); }
 
 	public final void addActionListener(ActionListener listener) {
 		if (listener == null)
@@ -230,6 +256,8 @@ public class GLCheckBox extends GLControl {
 			updatePresentation(true);
 	}
 
+	@Override protected void localizerChanged() { applyAction(); }
+
 	private void updatePresentation(boolean geometryChanged) {
 		GLCheckBoxStyle style = getGLStyle();
 		appliedStyle = style;
@@ -259,10 +287,15 @@ public class GLCheckBox extends GLControl {
 
 	private void toggleAndFire() {
 		boolean before = selected;
-		boolean after = !before;
-		applySelectionAndFire(after);
+		if (action != null && action.isSelectable()) action.perform(this);
+		else {
+			setSelected(!before);
+			if (action != null) action.perform(this);
+		}
+		boolean after = selected;
+		fireActionPerformed();
 		var manager = getGLHistoryManager();
-		if (manager != null)
+		if (manager != null && before != after)
 			manager.record("Toggle checkbox",
 					() -> applySelectionAndFire(before),
 					() -> applySelectionAndFire(after));
@@ -270,10 +303,27 @@ public class GLCheckBox extends GLControl {
 
 	private void applySelectionAndFire(boolean selected) {
 		setSelected(selected);
+		fireActionPerformed();
+	}
+
+	private void fireActionPerformed() {
 		ActionEvent event = new ActionEvent(this, ActionEvent.ACTION_PERFORMED, actionCommand,
 				System.currentTimeMillis(), 0);
 		for (ActionListener listener : actionListeners)
 			listener.actionPerformed(event);
+	}
+
+	private void applyAction() {
+		if (action == null) return;
+		setText(action.resolvedText(getGLLocalizer()));
+		setActionCommand(action.id());
+		setToolTipText(action.resolvedShortDescription(getGLLocalizer()));
+		setEnabled(action.isEnabled());
+		if (action.isSelectable()) {
+			syncingAction = true;
+			try { setSelected(action.isSelected()); }
+			finally { syncingAction = false; }
+		}
 	}
 
 	private static String requireText(String text) {

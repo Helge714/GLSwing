@@ -228,7 +228,10 @@ public abstract class GLSwingContainerCanvas extends GLSwingCanvas
 	public final void setGLInputMap(GLInputMap inputMap) {
 		if (inputMap == null)
 			throw new IllegalArgumentException("Input map must not be null");
+		if (this.inputMap == inputMap) return;
 		this.inputMap = inputMap;
+		for (GLContainer child : glChildren.snapshot())
+			child.inheritedInputMapChanged();
 	}
 
 	@Override

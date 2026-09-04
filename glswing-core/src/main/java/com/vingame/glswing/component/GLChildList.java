@@ -47,6 +47,7 @@ final class GLChildList {
 		child.attached(owner);
 		child.inheritedThemeChanged();
 		child.inheritedLocalizerChanged();
+		child.inheritedInputMapChanged();
 		owner.invalidateGLLayout();
 	}
 
@@ -62,6 +63,7 @@ final class GLChildList {
 		child.detached(owner);
 		child.inheritedThemeChanged();
 		child.inheritedLocalizerChanged();
+		child.inheritedInputMapChanged();
 		owner.invalidateGLLayout();
 		return true;
 	}

@@ -3,16 +3,26 @@ package com.vingame.glswing.test;
 import java.awt.Color;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import com.vingame.glswing.component.GLContainer;
 import com.vingame.glswing.component.GLSwingPanel;
 import com.vingame.glswing.layout.GLSize;
+import com.vingame.glswing.input.GLInputMap;
+import com.vingame.glswing.input.GLKeyBinding;
+import com.vingame.glswing.input.GLKeyEvent;
 import com.vingame.glswing.node.GLNodeStyle;
 import com.vingame.glswing.rendering.GLContext2D;
 import com.vingame.glswing.ui.GLButton;
+import com.vingame.glswing.ui.GLAction;
+import com.vingame.glswing.ui.GLActionMap;
 import com.vingame.glswing.ui.GLCheckBox;
 import com.vingame.glswing.ui.GLLabel;
+import com.vingame.glswing.ui.GLLocalizer;
+import com.vingame.glswing.ui.GLMenuItem;
 import com.vingame.glswing.ui.GLTheme;
 
 /** CPU checks for control sizing, actions, theme inheritance and focus. */
@@ -25,6 +35,7 @@ public final class GLControlsSelfTest {
 		testDefaultButtonStyle();
 		testIntrinsicSizingAndOverride();
 		testActionsAndDisabledState();
+		testSharedActions();
 		testThemeAndFocusLifecycle();
 		testDetachedSubtreeFontResolution();
 		System.out.println("GL controls self-test passed.");
@@ -103,6 +114,100 @@ public final class GLControlsSelfTest {
 		checkBox.doClick();
 		check(checkBox.isSelected() && checkBoxActions.get() == 1,
 				"Disabled check box reacted to doClick");
+	}
+
+	private static void testSharedActions() {
+		AtomicBoolean available = new AtomicBoolean(true);
+		AtomicInteger invocations = new AtomicInteger();
+		GLAction action = GLAction.builder("test.run")
+				.textKey("test.action")
+				.shortDescriptionKey("test.action.description")
+				.enabledWhen(available::get)
+				.onAction(invocations::incrementAndGet)
+				.build();
+		GLLocalizer localizer = GLLocalizer.ENGLISH
+				.with("test.action", "Run")
+				.with("test.action.description", "Run the test action");
+		GLButton button = new GLButton(action);
+		GLMenuItem item = new GLMenuItem(action);
+		button.setGLLocalizer(localizer);
+		item.setGLLocalizer(localizer);
+		check("Run".equals(button.getText()) && "Run".equals(item.getText())
+				&& "Run the test action".equals(button.getToolTipText()),
+				"Shared action presentation was not localized consistently");
+		button.doClick();
+		check(invocations.get() == 1, "Action-backed button did not invoke its action");
+
+		available.set(false); action.refreshEnabled();
+		check(!button.isEnabled() && !item.isEnabled(),
+				"Action availability did not update all bound controls");
+		available.set(true); action.refreshEnabled();
+
+		GLInputMap input = new GLInputMap(Map.of("test.run", List.of(
+				new GLKeyBinding(KeyEvent.VK_R, InputEvent.CTRL_DOWN_MASK))),
+				Map.of(), Map.of());
+		GLActionMap actions = new GLActionMap().add(action);
+		item.setGLInputMap(input);
+		check(item.getAcceleratorText().equals(action.acceleratorText(input)),
+				"Action-backed menu item did not refresh its shortcut presentation");
+		KeyEvent original = new KeyEvent(new TestPanel(), KeyEvent.KEY_PRESSED,
+				System.currentTimeMillis(), InputEvent.CTRL_DOWN_MASK,
+				KeyEvent.VK_R, 'R');
+		GLKeyEvent event = new GLKeyEvent(original);
+		check(actions.handleKeyPressed(event, input, actions) && event.isConsumed()
+				&& invocations.get() == 2,
+				"Action map did not dispatch and consume a semantic shortcut");
+		check(!action.acceleratorText(input).isBlank(),
+				"Action did not expose its configured shortcut label");
+
+		AtomicInteger toggleInvocations = new AtomicInteger();
+		GLAction toggle = GLAction.builder("test.toggle")
+				.text("Show guides").selected(false)
+				.onAction(toggleInvocations::incrementAndGet).build();
+		GLCheckBox toggleBox = new GLCheckBox(toggle);
+		GLMenuItem toggleItem = new GLMenuItem(toggle);
+		toggleBox.doClick();
+		check(toggle.isSelected() && toggleBox.isSelected()
+				&& toggleInvocations.get() == 1,
+				"Selectable action did not synchronize its check box binding");
+		toggleItem.doClick();
+		check(!toggle.isSelected() && !toggleBox.isSelected()
+				&& toggleInvocations.get() == 2,
+				"Menu invocation did not synchronize the shared toggle state");
+		AtomicBoolean externalSelection = new AtomicBoolean();
+		GLAction derived = GLAction.builder("test.derived")
+				.selectedWhen(externalSelection::get)
+				.onAction(() -> externalSelection.set(true)).build();
+		new GLActionMap().add(derived).refresh();
+		derived.perform(derived);
+		check(derived.isSelected(),
+				"Derived action did not refresh selection after invocation");
+
+		javax.swing.Action swing = new javax.swing.AbstractAction("Swing command") {
+			private static final long serialVersionUID = 1L;
+			@Override public void actionPerformed(java.awt.event.ActionEvent event) {
+				invocations.incrementAndGet();
+			}
+		};
+		GLAction adapted = GLAction.fromSwing("test.swing", swing);
+		GLButton adaptedButton = new GLButton(adapted);
+		swing.putValue(javax.swing.Action.NAME, "Updated command");
+		swing.setEnabled(false);
+		check("Updated command".equals(adaptedButton.getText())
+				&& !adaptedButton.isEnabled(),
+				"Swing Action changes were not reflected by the GLSwing adapter");
+		check(!adapted.isSelectable(),
+				"A Swing action without SELECTED_KEY became selectable");
+		javax.swing.Action swingToggle = new javax.swing.AbstractAction("Swing toggle") {
+			private static final long serialVersionUID = 1L;
+			@Override public void actionPerformed(java.awt.event.ActionEvent event) { }
+		};
+		swingToggle.putValue(javax.swing.Action.SELECTED_KEY, false);
+		GLAction adaptedToggle = GLAction.fromSwing("test.swing-toggle", swingToggle);
+		adaptedToggle.perform(adaptedToggle);
+		check(adaptedToggle.isSelected() && Boolean.TRUE.equals(swingToggle.getValue(
+				javax.swing.Action.SELECTED_KEY)),
+				"Swing SELECTED_KEY was not synchronized bidirectionally");
 	}
 
 	private static void testThemeAndFocusLifecycle() {

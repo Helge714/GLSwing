@@ -108,6 +108,12 @@ may change in subsequent `0.x` releases.
 - Added semantic `document.save`, `document.save-as`, and `document.save-all`
   input actions with platform-shortcut defaults. Save command availability now
   distinguishes clean documents from Save As and is reflected in the showcase menu.
+- Added shared `GLAction` commands with localized text and descriptions,
+  GLSwing icons, predicate-based availability and selection, asynchronous
+  handlers, automatic input-map accelerator labels, semantic shortcut dispatch,
+  bidirectional Swing Action selection adaptation, and bindings for buttons,
+  checkboxes, and popup-menu items. Text formatting, code-editor commands, and
+  showcase document history now use the shared action model.
 - Bounded mnemonic-underline shadow softness to prevent oversized blur blobs at
   extreme text-shadow settings.
 - Added asynchronous, cancellable `GLApplication` close requests and

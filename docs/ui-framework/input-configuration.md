@@ -200,27 +200,30 @@ by the standard localized **Rename** context-menu command.
 
 ## Application actions
 
-The default map provides `document.save` (`shortcut+S`),
-`document.save-as` (`shortcut+shift+S`), and `document.save-all`
-(`shortcut+alt+S`) as semantic application-level actions.
-Handle them on a `GLKeyTarget` ancestor of the active editor so unconsumed key
-events bubble naturally from the editor to the document surface:
+The default map provides `document.new` (`shortcut+N`), `document.open`
+(`shortcut+O`), `document.save` (`shortcut+S`), `document.save-as`
+(`shortcut+shift+S`), `document.save-all` (`shortcut+alt+S`), and
+`document.close` (`shortcut+W`) as semantic application-level actions.
+Define matching `GLAction` instances and register them with `GLActionMap` on a
+`GLKeyTarget` ancestor of the active editor. Unconsumed key events then bubble
+naturally from the editor to the document surface:
 
 ```java
-if (container.getGLInputMap().matches(GLInputActions.DOCUMENT_SAVE, event)) {
-    saveDocument();
-    event.consume();
-}
-if (container.getGLInputMap().matches(GLInputActions.DOCUMENT_SAVE_ALL, event)) {
-    saveAllDocuments();
-    event.consume();
-}
+actions.handleKeyPressed(event, container.getGLInputMap(), container);
 ```
 
 Applications may define and query additional action names in the same way.
 
-Menu shortcut labels are presentation text; dispatch remains driven by the
-input map.
+Action-backed menu items derive their shortcut label from the input map.
+Manually constructed menu items may still use presentation-only accelerator
+text; dispatch always remains driven by the input map.
+
+The multiline text editor uses actions for left, center, right, and justified
+alignment as well as bold and italic formatting. The code editor uses the same
+mechanism for formatting, line comments, import organization, and definition
+navigation. Consequently, context-menu state, disabled state, and configured
+shortcut labels all come from the same command definitions. Code editors
+consume the rich-text bold and italic bindings without invoking them.
 
 Menu mnemonics are object-specific key codes rather than global shortcuts.
 `modifier.menu.mnemonic` configures the modifier used to open a top-level menu;

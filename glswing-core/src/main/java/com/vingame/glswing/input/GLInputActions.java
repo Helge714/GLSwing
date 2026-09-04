@@ -8,9 +8,12 @@ public final class GLInputActions {
 	public static final String FOCUS_NEXT = "focus.next";
 	public static final String FOCUS_PREVIOUS = "focus.previous";
 	public static final String MENU_MNEMONIC = "menu.mnemonic";
+	public static final String DOCUMENT_NEW = "document.new";
+	public static final String DOCUMENT_OPEN = "document.open";
 	public static final String DOCUMENT_SAVE = "document.save";
 	public static final String DOCUMENT_SAVE_AS = "document.save-as";
 	public static final String DOCUMENT_SAVE_ALL = "document.save-all";
+	public static final String DOCUMENT_CLOSE = "document.close";
 	public static final String RENDER_INTERACTION_SETTLE_MILLIS =
 			"render.interaction-settle-millis";
 	public static final String NODE_INTERACTIVE_CURVE_TOLERANCE_FACTOR =
@@ -52,6 +55,10 @@ public final class GLInputActions {
 	public static final String TEXT_COMMIT = "text.commit";
 	public static final String TEXT_TOGGLE_BOLD = "text.toggle-bold";
 	public static final String TEXT_TOGGLE_ITALIC = "text.toggle-italic";
+	public static final String TEXT_ALIGN_LEFT = "text.align-left";
+	public static final String TEXT_ALIGN_CENTER = "text.align-center";
+	public static final String TEXT_ALIGN_RIGHT = "text.align-right";
+	public static final String TEXT_ALIGN_JUSTIFIED = "text.align-justified";
 	public static final String CODE_FORMAT = "code.format";
 	public static final String CODE_COMMENT = "code.comment";
 	public static final String CODE_UNCOMMENT = "code.uncomment";

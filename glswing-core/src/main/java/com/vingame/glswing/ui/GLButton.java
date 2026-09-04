@@ -5,6 +5,7 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
+import java.beans.PropertyChangeListener;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import com.vingame.glswing.input.GLKeyEvent;
@@ -14,6 +15,7 @@ import com.vingame.glswing.layout.GLInsets;
 import com.vingame.glswing.layout.GLSize;
 import com.vingame.glswing.rendering.GLContext2D;
 import com.vingame.glswing.rendering.GLFont;
+import com.vingame.glswing.rendering.GLIcon;
 import com.vingame.glswing.rendering.GLRenderParameters;
 import com.vingame.glswing.rendering.GLStroke;
 
@@ -32,6 +34,10 @@ public class GLButton extends GLControl {
 	private final GLRenderParameters textParameters = new GLRenderParameters();
 	private String text;
 	private String actionCommand;
+	private GLIcon icon;
+	private GLIcon disabledIcon;
+	private GLAction action;
+	private final PropertyChangeListener actionListener = event -> applyAction();
 	private GLButtonStyle localStyle;
 	private GLButtonStyle appliedStyle;
 
@@ -40,6 +46,11 @@ public class GLButton extends GLControl {
 		this.text = requireText(text);
 		actionCommand = text;
 		updatePresentation(true);
+	}
+
+	public GLButton(GLAction action) {
+		this("");
+		setAction(action);
 	}
 
 	public final String getText() {
@@ -71,6 +82,33 @@ public class GLButton extends GLControl {
 			throw new IllegalArgumentException("Action command must not be null");
 		this.actionCommand = actionCommand;
 	}
+
+	public final GLIcon getIcon() { return icon; }
+	public final void setIcon(GLIcon icon) {
+		if (this.icon == icon) return;
+		this.icon = icon;
+		updatePresentation(true);
+	}
+	public final void clearIcon() { setIcon(null); }
+	public final GLIcon getDisabledIcon() { return disabledIcon; }
+	public final void setDisabledIcon(GLIcon icon) {
+		if (disabledIcon == icon) return;
+		disabledIcon = icon;
+		invalidateRecording();
+	}
+	public final void clearDisabledIcon() { setDisabledIcon(null); }
+
+	public final GLAction getAction() { return action; }
+	/** Binds presentation, availability and invocation to a shared action. */
+	public final void setAction(GLAction action) {
+		if (this.action == action) return;
+		if (this.action != null)
+			this.action.removePropertyChangeListener(actionListener);
+		this.action = action;
+		if (action != null) action.addPropertyChangeListener(actionListener);
+		applyAction();
+	}
+	public final void clearAction() { setAction(null); }
 
 	public final void addActionListener(ActionListener listener) {
 		if (listener == null)
@@ -147,13 +185,22 @@ public class GLButton extends GLControl {
 							1.5f, Color.WHITE, GLStroke.WidthSpace.SCREEN));
 		}
 
-		if (!text.isEmpty()) {
+		GLIcon renderedIcon = !isEnabled() && disabledIcon != null ? disabledIcon : icon;
+		if (!text.isEmpty() || renderedIcon != null) {
 			GLFont font = getGLFont(style.font());
 			GLInsets padding = style.padding();
+			float iconSize = renderedIcon == null ? 0
+					: Math.min(18, Math.max(1, height - padding.vertical()));
+			float gap = renderedIcon != null && !text.isEmpty() ? 5 : 0;
 			String renderedText = GLTextFitter.ellipsize(font, text,
-					Math.max(0, width - padding.horizontal()));
-			float textX = (width - font.measureText(renderedText)) * 0.5f;
+					Math.max(0, width - padding.horizontal() - iconSize - gap));
+			float contentWidth = iconSize + gap + font.measureText(renderedText);
+			float textX = (width - contentWidth) * 0.5f + iconSize + gap;
 			float baselineY = (height - font.getLineHeight()) * 0.5f + font.getAscent();
+			if (renderedIcon != null)
+				context.drawUIIcon(renderedIcon, (width - contentWidth) * 0.5f,
+						(height - iconSize) * 0.5f, iconSize, iconSize,
+						style.text(getControlState()));
 			context.drawUITextShadow(font, renderedText, textX, baselineY,
 					getGLTheme().textShadow("button"));
 			context.withParameters(textParameters, () ->
@@ -171,8 +218,11 @@ public class GLButton extends GLControl {
 		String explicit = super.toolTipTextAt(event);
 		if (explicit != null) return explicit;
 		GLButtonStyle style = getGLStyle();
+		float iconWidth = icon == null ? 0
+				: Math.min(18, Math.max(1, getHeight() - style.padding().vertical()))
+						+ (text.isEmpty() ? 0 : 5);
 		return GLTextFitter.overflowToolTip(getGLFont(style.font()), text,
-				Math.max(0, getWidth() - style.padding().horizontal()));
+				Math.max(0, getWidth() - style.padding().horizontal() - iconWidth));
 	}
 
 	@Override
@@ -216,13 +266,18 @@ public class GLButton extends GLControl {
 			updatePresentation(true);
 	}
 
+	@Override protected void localizerChanged() { applyAction(); }
+
 	private void updatePresentation(boolean geometryChanged) {
 		GLButtonStyle style = getGLStyle();
 		appliedStyle = style;
 		GLFont font = measurementFont(style.font());
 		GLInsets padding = style.padding();
+		float iconWidth = icon == null ? 0
+				: Math.min(18, Math.max(1, style.height() - padding.vertical()))
+						+ (text.isEmpty() ? 0 : 5);
 		setIntrinsicPreferredGLSize(new GLSize(
-				font.measureText(text) + padding.horizontal(),
+				font.measureText(text) + iconWidth + padding.horizontal(),
 				style.height()));
 		focusParameters.setColor(style.focusColor()).setOpacity(isFocused() ? 1 : 0);
 		updateColors();
@@ -250,6 +305,17 @@ public class GLButton extends GLControl {
 				actionCommand, System.currentTimeMillis(), 0);
 		for (ActionListener listener : actionListeners)
 			listener.actionPerformed(event);
+		if (action != null) action.perform(this);
+	}
+
+	private void applyAction() {
+		if (action == null) return;
+		setText(action.resolvedText(getGLLocalizer()));
+		setActionCommand(action.id());
+		setToolTipText(action.resolvedShortDescription(getGLLocalizer()));
+		setIcon(action.icon());
+		setDisabledIcon(action.disabledIcon());
+		setEnabled(action.isEnabled());
 	}
 
 	private static String requireText(String text) {

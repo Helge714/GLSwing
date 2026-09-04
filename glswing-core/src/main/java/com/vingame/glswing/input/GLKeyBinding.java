@@ -38,6 +38,13 @@ public record GLKeyBinding(int keyCode, int modifiers) {
 		return prefix.isEmpty() ? keyName(keyCode) : prefix + "+" + keyName(keyCode);
 	}
 
+	/** Returns a platform-localized label suitable for menus and tooltips. */
+	public String toDisplayString() {
+		String prefix = InputEvent.getModifiersExText(modifiers);
+		String key = KeyEvent.getKeyText(keyCode);
+		return prefix.isEmpty() ? key : prefix + "+" + key;
+	}
+
 	static String modifiersToConfigString(int modifiers) {
 		StringBuilder result = new StringBuilder();
 		int remaining = modifiers & KEY_MODIFIERS;

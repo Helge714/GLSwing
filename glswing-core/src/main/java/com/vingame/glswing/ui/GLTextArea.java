@@ -45,6 +45,7 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 	private final GLPopupMenu alignmentMenu = new GLPopupMenu();
 	private final GLPopupMenu alignmentSubMenu = new GLPopupMenu();
 	private final GLPopupMenu formatSubMenu = new GLPopupMenu();
+	private final GLActionMap textActions = new GLActionMap();
 	private final GLMenuItem alignmentMenuItem;
 	private final GLMenuItem formatMenuItem;
 	private final GLMenuItem leftItem;
@@ -81,12 +82,26 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 		this.document = document;
 		document.addDocumentListener(documentListener);
 		editBaseline = document.snapshot();
-		leftItem = alignmentSubMenu.addItem("", event -> changeTextAlignment(GLTextAlignment.LEFT));
-		centerItem = alignmentSubMenu.addItem("", event -> changeTextAlignment(GLTextAlignment.CENTER));
-		rightItem = alignmentSubMenu.addItem("", event -> changeTextAlignment(GLTextAlignment.RIGHT));
-		justifiedItem = alignmentSubMenu.addItem("", event -> changeTextAlignment(GLTextAlignment.JUSTIFIED));
-		boldItem = formatSubMenu.addItem("", event -> toggleCharacterStyle(true));
-		italicItem = formatSubMenu.addItem("", event -> toggleCharacterStyle(false));
+		GLAction leftAction = alignmentAction(GLInputActions.TEXT_ALIGN_LEFT,
+				GLUiKeys.TEXT_ALIGN_LEFT, GLTextAlignment.LEFT);
+		GLAction centerAction = alignmentAction(GLInputActions.TEXT_ALIGN_CENTER,
+				GLUiKeys.TEXT_ALIGN_CENTER, GLTextAlignment.CENTER);
+		GLAction rightAction = alignmentAction(GLInputActions.TEXT_ALIGN_RIGHT,
+				GLUiKeys.TEXT_ALIGN_RIGHT, GLTextAlignment.RIGHT);
+		GLAction justifiedAction = alignmentAction(GLInputActions.TEXT_ALIGN_JUSTIFIED,
+				GLUiKeys.TEXT_ALIGN_JUSTIFIED, GLTextAlignment.JUSTIFIED);
+		GLAction boldAction = characterStyleAction(GLInputActions.TEXT_TOGGLE_BOLD,
+				GLUiKeys.TEXT_FORMAT_BOLD, true);
+		GLAction italicAction = characterStyleAction(GLInputActions.TEXT_TOGGLE_ITALIC,
+				GLUiKeys.TEXT_FORMAT_ITALIC, false);
+		textActions.add(leftAction).add(centerAction).add(rightAction)
+				.add(justifiedAction).add(boldAction).add(italicAction);
+		leftItem = alignmentSubMenu.addItem(leftAction);
+		centerItem = alignmentSubMenu.addItem(centerAction);
+		rightItem = alignmentSubMenu.addItem(rightAction);
+		justifiedItem = alignmentSubMenu.addItem(justifiedAction);
+		boldItem = formatSubMenu.addItem(boldAction);
+		italicItem = formatSubMenu.addItem(italicAction);
 		alignmentMenuItem = alignmentMenu.addSubMenu("", alignmentSubMenu);
 		formatMenuItem = alignmentMenu.addSubMenu("", formatSubMenu);
 		updateContextMenuText();
@@ -122,7 +137,14 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 	public final int getTabSize() { return tabSize; }
 	public final void setTabSize(int value) { if (value < 1) throw new IllegalArgumentException("Tab size must be positive"); tabSize = value; invalidateRowLayout(); contentChanged(); }
 	public final boolean isEditable() { return editable; }
-	public final void setEditable(boolean value) { editable = value; }
+	public final void setEditable(boolean value) {
+		if (editable == value) return;
+		editable = value;
+		textActions.refreshEnabled();
+		editableChanged();
+	}
+	/** Called after the editor's mutability changes. */
+	protected void editableChanged() { }
 	public final GLTextAlignment getTextAlignment() { return textAlignment; }
 	public final GLTextColorProvider getTextColorProvider() { return textColorProvider; }
 	public final void setTextColorProvider(GLTextColorProvider value) {
@@ -143,7 +165,11 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 					() -> setTextAlignment(before), () -> setTextAlignment(value));
 	}
 	/** The menu opened by a secondary-button press. Applications may customize it. */
-	public GLPopupMenu getContextMenu() { updateContextMenuText(); return alignmentMenu; }
+	public GLPopupMenu getContextMenu() {
+		updateContextMenuText();
+		textActions.refresh();
+		return alignmentMenu;
+	}
 	/** Whether a completed focus session is recorded in the enclosing history. */
 	public final boolean isHistoryEnabled() { return historyEnabled; }
 	public final void setHistoryEnabled(boolean value) { historyEnabled = value; }
@@ -314,8 +340,7 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 		boolean extend = getGLInputMap().hasModifiers(GLInputActions.TEXT_EXTEND_SELECTION, event.getModifiersEx());
 		boolean command = getGLInputMap().hasModifiers(GLInputActions.TEXT_COMMAND, event.getModifiersEx());
 		if (GLHistoryManager.isHistoryShortcut(event.getOriginalEvent(), getGLInputMap())) editingHistory.handleKeyPressed(event.getOriginalEvent(), getGLInputMap());
-		else if (getGLInputMap().matches(GLInputActions.TEXT_TOGGLE_BOLD, event)) toggleCharacterStyle(true);
-		else if (getGLInputMap().matches(GLInputActions.TEXT_TOGGLE_ITALIC, event)) toggleCharacterStyle(false);
+		else if (textActions.handleKeyPressed(event, getGLInputMap(), this)) return;
 		else if (getGLInputMap().matches(GLInputActions.TEXT_SELECT_ALL, event)) selectAll();
 		else if (getGLInputMap().matches(GLInputActions.TEXT_COPY, event)) copy();
 		else if (getGLInputMap().matches(GLInputActions.TEXT_CUT, event)) { if (editable) { copy(); replaceSelection(""); } }
@@ -362,6 +387,7 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 	@Override protected void resized(float width, float height) { invalidateRowLayout(); clampScroll(); contentChanged(); }
 	@Override protected void themeChanged() { if (localStyle == null) { invalidateRowLayout(); contentChanged(); } }
 	@Override protected void localizerChanged() { updateContextMenuText(); }
+	@Override protected void inputMapChanged() { updateContextMenuText(); }
 
 	protected final void replaceSelection(String inserted) {
 		int start = getSelectionStart(), end = getSelectionEnd();
@@ -452,34 +478,41 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 		editBaseline = after;
 		contentChanged();
 	}
+	private GLAction alignmentAction(String id, String textKey,
+			GLTextAlignment alignment) {
+		return GLAction.builder(id).textKey(textKey)
+				.enabledWhen(this::isEditable)
+				.selectedWhen(() -> textAlignment == alignment)
+				.onAction(() -> changeTextAlignment(alignment)).build();
+	}
+	private GLAction characterStyleAction(String id, String textKey,
+			boolean boldAttribute) {
+		return GLAction.builder(id).textKey(textKey)
+				.enabledWhen(this::isEditable)
+				.selectedWhen(() -> isCharacterStyleActive(boldAttribute))
+				.onAction(() -> toggleCharacterStyle(boldAttribute)).build();
+	}
+	private boolean isCharacterStyleActive(boolean boldAttribute) {
+		int start = getSelectionStart(), end = getSelectionEnd();
+		if (start == end)
+			return boldAttribute ? typingStyle.bold() : typingStyle.italic();
+		boolean found = false;
+		for (GLTextDocument.StyleRun run : document.getStyleRuns(start, end)) {
+			found = true;
+			if (!(boldAttribute ? run.style().bold() : run.style().italic()))
+				return false;
+		}
+		return found;
+	}
 	protected final void updateContextMenuText() {
 		GLLocalizer localizer = getGLLocalizer();
 		alignmentMenuItem.setText(localizer.text(GLUiKeys.TEXT_MENU_ALIGNMENT));
 		formatMenuItem.setText(localizer.text(GLUiKeys.TEXT_MENU_FORMAT));
-		leftItem.setText(localizer.text(GLUiKeys.TEXT_ALIGN_LEFT));
-		centerItem.setText(localizer.text(GLUiKeys.TEXT_ALIGN_CENTER));
-		rightItem.setText(localizer.text(GLUiKeys.TEXT_ALIGN_RIGHT));
-		justifiedItem.setText(localizer.text(GLUiKeys.TEXT_ALIGN_JUSTIFIED));
-		boldItem.setText(localizer.text(GLUiKeys.TEXT_FORMAT_BOLD));
-		italicItem.setText(localizer.text(GLUiKeys.TEXT_FORMAT_ITALIC));
-		boldItem.setAcceleratorText(acceleratorText(GLInputActions.TEXT_TOGGLE_BOLD));
-		italicItem.setAcceleratorText(acceleratorText(GLInputActions.TEXT_TOGGLE_ITALIC));
+		textActions.refresh();
 	}
 	protected final String acceleratorText(String action) {
 		var bindings = getGLInputMap().getKeyBindings(action);
-		if (bindings.isEmpty()) return "";
-		String shortcut = System.getProperty("os.name", "")
-				.toLowerCase(java.util.Locale.ROOT).contains("mac") ? "Cmd" : "Ctrl";
-		String text = bindings.get(0).toConfigString().replace("shortcut", shortcut);
-		String[] parts = text.split("\\+");
-		StringBuilder result = new StringBuilder();
-		for (String part : parts) {
-			if (!result.isEmpty()) result.append('+');
-			result.append(part.length() == 1 ? part.toUpperCase(java.util.Locale.ROOT)
-					: part.substring(0, 1).toUpperCase(java.util.Locale.ROOT)
-							+ part.substring(1).toLowerCase(java.util.Locale.ROOT));
-		}
-		return result.toString();
+		return bindings.isEmpty() ? "" : bindings.get(0).toDisplayString();
 	}
 	@Override public final boolean commitEditingHistory() {
 		commitEditingSession();
@@ -704,7 +737,12 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 		if (offset <= removedEnd) return start + change.insertedText().length();
 		return offset + change.insertedText().length() - change.removedText().length();
 	}
-	private void contentChanged() { ensureCaretVisible(); invalidateRecording(); repaintGL(); }
+	private void contentChanged() {
+		textActions.refresh();
+		ensureCaretVisible();
+		invalidateRecording();
+		repaintGL();
+	}
 	private GLFont font() { try { return getGLFont(getGLStyle().font()); } catch (IllegalStateException error) { return getGLStyle().font().measurementFont(); } }
 	private float measure(GLFont font, String value) { return font.measureText(expand(value)); }
 	private float rowOffset(GLFont font, Row row, float available) {

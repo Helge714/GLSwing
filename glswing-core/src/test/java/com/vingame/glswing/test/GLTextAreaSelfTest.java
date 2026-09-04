@@ -128,10 +128,13 @@ public final class GLTextAreaSelfTest {
 		panel.requestGLFocus(area);
 		area.setCaretPosition(6);
 		press(area, KeyEvent.VK_END, InputEvent.SHIFT_DOWN_MASK);
-		area.getContextMenu().getItems().get(1).getSubMenu()
-				.getItems().get(0).doClick();
+		var boldItem = area.getContextMenu().getItems().get(1).getSubMenu()
+				.getItems().get(0);
+		boldItem.doClick();
 		check(area.getDocument().getStyleAt(6).bold(),
 				"Bold formatting was not applied to the selection");
+		check(boldItem.getAction() != null && boldItem.getAction().isSelected(),
+				"Bold action did not expose the active selection style");
 		panel.getGLHistoryManager().undo();
 		check(!area.getDocument().getStyleAt(6).bold(),
 				"Bold formatting was not undoable through the enclosing history");
@@ -169,11 +172,14 @@ public final class GLTextAreaSelfTest {
 		TestPanel panel = new TestPanel();
 		GLTextArea historyArea = new GLTextArea("alignment");
 		panel.addGL(historyArea);
-		historyArea.getContextMenu().getItems().get(0).getSubMenu()
-				.getItems().get(1).doClick();
+		var centerItem = historyArea.getContextMenu().getItems().get(0).getSubMenu()
+				.getItems().get(1);
+		centerItem.doClick();
 		check(historyArea.getTextAlignment()
 				== com.vingame.glswing.ui.GLTextAlignment.CENTER,
 				"The alignment menu did not apply its command");
+		check(centerItem.getAction() != null && centerItem.getAction().isSelected(),
+				"Alignment action did not expose the active alignment");
 		panel.getGLHistoryManager().undo();
 		check(historyArea.getTextAlignment()
 				== com.vingame.glswing.ui.GLTextAlignment.LEFT,
@@ -182,6 +188,11 @@ public final class GLTextAreaSelfTest {
 		check(historyArea.getTextAlignment()
 				== com.vingame.glswing.ui.GLTextAlignment.CENTER,
 				"Alignment menu changes were not redoable");
+		historyArea.setEditable(false);
+		check(historyArea.getContextMenu().getItems().stream()
+				.flatMap(item -> item.getSubMenu().getItems().stream())
+				.noneMatch(com.vingame.glswing.ui.GLMenuItem::isEnabled),
+				"Read-only text area retained enabled formatting actions");
 	}
 
 	private static void press(GLTextArea area, int code, int modifiers) {

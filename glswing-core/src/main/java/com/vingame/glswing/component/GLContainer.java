@@ -520,12 +520,16 @@ public abstract class GLContainer implements GLParent, GLMouseTarget {
 	public final void setGLInputMap(GLInputMap inputMap) {
 		if (inputMap == null)
 			throw new IllegalArgumentException("Input map must not be null");
+		if (localInputMap == inputMap) return;
 		localInputMap = inputMap;
+		notifyInputMapChanged();
 	}
 
 	/** Restores input-map inheritance from the nearest parent or host. */
 	public final void clearGLInputMap() {
+		if (localInputMap == null) return;
 		localInputMap = null;
+		notifyInputMapChanged();
 	}
 
 	public final boolean hasExplicitGLInputMap() {
@@ -736,6 +740,10 @@ public abstract class GLContainer implements GLParent, GLMouseTarget {
 	protected void localizerChanged() {
 	}
 
+	/** Called when the resolved inherited or local semantic input map changes. */
+	protected void inputMapChanged() {
+	}
+
 	final void inheritedThemeChanged() {
 		if (localTheme != null)
 			return;
@@ -756,6 +764,17 @@ public abstract class GLContainer implements GLParent, GLMouseTarget {
 		if (localLocalizer != null)
 			return;
 		notifyLocalizerChanged();
+	}
+
+	final void inheritedInputMapChanged() {
+		if (localInputMap != null) return;
+		notifyInputMapChanged();
+	}
+
+	private void notifyInputMapChanged() {
+		inputMapChanged();
+		for (GLContainer child : glChildren.snapshot())
+			child.inheritedInputMapChanged();
 	}
 
 	private void notifyLocalizerChanged() {

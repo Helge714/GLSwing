@@ -6,6 +6,7 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.MouseEvent;
 import java.awt.event.KeyEvent;
+import java.beans.PropertyChangeListener;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import com.vingame.glswing.input.GLMouseEvent;
@@ -39,6 +40,8 @@ public class GLMenuItem extends GLControl {
 	private GLPopupMenu subMenu;
 	private GLIcon icon;
 	private GLIcon disabledIcon;
+	private GLAction action;
+	private final PropertyChangeListener actionListener = event -> applyAction();
 	private boolean keyboardSelected;
 
 	public GLMenuItem(String text) {
@@ -61,6 +64,11 @@ public class GLMenuItem extends GLControl {
 	public GLMenuItem(String text, int mnemonic, ActionListener listener) {
 		this(text, mnemonic);
 		addActionListener(listener);
+	}
+
+	public GLMenuItem(GLAction action) {
+		this("");
+		setAction(action);
 	}
 
 	public final String getText() {
@@ -200,6 +208,18 @@ public class GLMenuItem extends GLControl {
 		this.actionCommand = requireText(actionCommand);
 	}
 
+	public final GLAction getAction() { return action; }
+	/** Binds presentation, availability, shortcut label and invocation. */
+	public final void setAction(GLAction action) {
+		if (this.action == action) return;
+		if (this.action != null)
+			this.action.removePropertyChangeListener(actionListener);
+		this.action = action;
+		if (action != null) action.addPropertyChangeListener(actionListener);
+		applyAction();
+	}
+	public final void clearAction() { setAction(null); }
+
 	public final void addActionListener(ActionListener listener) {
 		if (listener == null)
 			throw new IllegalArgumentException("Action listener must not be null");
@@ -263,9 +283,12 @@ public class GLMenuItem extends GLControl {
 			float iconSize = ownerMenu.iconSize();
 			GLIcon renderedIcon = !isEnabled() && disabledIcon != null
 					? disabledIcon : icon;
-			if (renderedIcon != null) {
-				Color tint = isEnabled() ? style.textColor()
-						: style.disabledTextColor();
+			Color tint = isEnabled() ? style.textColor() : style.disabledTextColor();
+			if (action != null && action.isSelectable() && action.isSelected())
+				context.drawUICheckMark(left + 2, (height - iconSize) * 0.5f + 2,
+						Math.max(1, iconSize - 4), Math.max(1, iconSize - 4),
+						1.5f, tint);
+			else if (renderedIcon != null) {
 				context.drawUIIcon(renderedIcon, left,
 						(height - iconSize) * 0.5f, iconSize, iconSize, tint);
 			}
@@ -360,6 +383,9 @@ public class GLMenuItem extends GLControl {
 		updatePresentation();
 	}
 
+	@Override protected void localizerChanged() { applyAction(); }
+	@Override protected void inputMapChanged() { applyAction(); }
+
 	final void setOwnerMenu(GLPopupMenu menu) {
 		if (menu != null && ownerMenu != null && ownerMenu != menu)
 			throw new IllegalStateException("Menu item already belongs to another menu");
@@ -425,6 +451,7 @@ public class GLMenuItem extends GLControl {
 		Runnable notify = () -> {
 			for (ActionListener listener : actionListeners)
 				listener.actionPerformed(event);
+			if (action != null) action.perform(this);
 		};
 		if (popupAction) EventQueue.invokeLater(notify);
 		else notify.run();
@@ -458,6 +485,23 @@ public class GLMenuItem extends GLControl {
 				? style.disabledTextColor()
 				: subMenu == null ? style.acceleratorColor() : style.arrowColor());
 		repaintGL();
+	}
+
+	private void applyAction() {
+		if (action == null) return;
+		setText(action.resolvedText(getGLLocalizer()));
+		setActionCommand(action.id());
+		setToolTipText(action.resolvedShortDescription(getGLLocalizer()));
+		setAcceleratorText(action.acceleratorText(getGLInputMap()));
+		setIcon(action.icon());
+		setDisabledIcon(action.disabledIcon());
+		setEnabled(action.isEnabled());
+		invalidateRecording();
+		if (ownerMenu != null) ownerMenu.invalidateMenuLayout();
+	}
+
+	final boolean hasSelectionMarker() {
+		return action != null && action.isSelectable();
 	}
 
 	final void setKeyboardSelected(boolean selected) {

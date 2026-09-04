@@ -114,6 +114,10 @@ public class GLPopupMenu extends GLContainer {
 		return addItem(new GLMenuItem(text));
 	}
 
+	public final GLMenuItem addItem(GLAction action) {
+		return addItem(new GLMenuItem(action));
+	}
+
 	public final GLMenuItem addItem(String text, int mnemonic) {
 		return addItem(new GLMenuItem(text, mnemonic));
 	}
@@ -222,7 +226,7 @@ public class GLPopupMenu extends GLContainer {
 
 	final boolean hasIconColumn() {
 		return getItems().stream().anyMatch(item -> item.getIcon() != null
-				|| item.getDisabledIcon() != null);
+				|| item.getDisabledIcon() != null || item.hasSelectionMarker());
 	}
 
 	final float iconSize() {

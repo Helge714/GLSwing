@@ -36,6 +36,13 @@ public final class GLInputMapSelfTest {
 		check(GLInputMaps.DEFAULT.matches(GLInputActions.DOCUMENT_SAVE,
 				key(KeyEvent.VK_S, InputEvent.CTRL_DOWN_MASK)),
 				"Default save binding must use Ctrl+S on Windows");
+		check(GLInputMaps.DEFAULT.matches(GLInputActions.DOCUMENT_NEW,
+				key(KeyEvent.VK_N, InputEvent.CTRL_DOWN_MASK))
+				&& GLInputMaps.DEFAULT.matches(GLInputActions.DOCUMENT_OPEN,
+						key(KeyEvent.VK_O, InputEvent.CTRL_DOWN_MASK))
+				&& GLInputMaps.DEFAULT.matches(GLInputActions.DOCUMENT_CLOSE,
+						key(KeyEvent.VK_W, InputEvent.CTRL_DOWN_MASK)),
+				"Default document lifecycle shortcuts are incomplete");
 		check(GLInputMaps.DEFAULT.matches(GLInputActions.DOCUMENT_SAVE_AS,
 				key(KeyEvent.VK_S, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK)),
 				"Default save-as binding must use Ctrl+Shift+S on Windows");

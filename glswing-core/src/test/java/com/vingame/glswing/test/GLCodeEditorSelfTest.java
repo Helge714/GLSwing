@@ -129,6 +129,11 @@ public final class GLCodeEditorSelfTest {
 				&& editor.getContextMenu().getItems().stream()
 						.noneMatch(item -> item.getSubMenu() != null),
 				"Code editor exposed the inherited rich-text context menu");
+		editor.setEditable(false);
+		check(editor.getContextMenu().getItems().subList(0, 3).stream()
+				.allMatch(item -> !item.isEnabled()),
+				"Read-only code editor retained enabled modifying actions");
+		editor.setEditable(true);
 		editor.select(0, editor.getText().length());
 		press(editor, KeyEvent.VK_B, 'B', InputEvent.CTRL_DOWN_MASK);
 		check(editor.getDocument().getStyleRuns(0, editor.getText().length())

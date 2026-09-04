@@ -79,6 +79,7 @@ public class GLCodeEditor extends GLTextArea {
 	private Color navigationLinkColor;
 	private Map<String, Color> semanticColors = Map.of();
 	private final GLPopupMenu codeMenu = new GLPopupMenu();
+	private final GLActionMap codeActions = new GLActionMap();
 	private final GLMenuItem formatItem;
 	private final GLMenuItem commentItem;
 	private final GLMenuItem uncommentItem;
@@ -151,19 +152,41 @@ public class GLCodeEditor extends GLTextArea {
 			documentColorTimer.restart();
 		});
 		setTextColorProvider(this::syntaxColor);
-		formatItem = codeMenu.addItem("", event -> formatCode());
+		GLAction formatAction = editableCodeAction(GLInputActions.CODE_FORMAT,
+				GLUiKeys.CODE_FORMAT, this::formatCode);
+		GLAction commentAction = editableCodeAction(GLInputActions.CODE_COMMENT,
+				GLUiKeys.CODE_COMMENT, this::commentSelection);
+		GLAction uncommentAction = editableCodeAction(GLInputActions.CODE_UNCOMMENT,
+				GLUiKeys.CODE_UNCOMMENT, this::uncommentSelection);
+		GLAction organizeImportsAction = editableCodeAction(
+				GLInputActions.CODE_ORGANIZE_IMPORTS,
+				GLUiKeys.CODE_ORGANIZE_IMPORTS, this::organizeImports);
+		GLAction definitionAction = GLAction.builder(
+				GLInputActions.CODE_GO_TO_DEFINITION)
+				.textKey(GLUiKeys.CODE_GO_TO_DEFINITION)
+				.onAction(this::goToDefinition).build();
+		codeActions.add(formatAction).add(commentAction).add(uncommentAction)
+				.add(organizeImportsAction).add(definitionAction);
+		formatItem = codeMenu.addItem(formatAction);
 		codeMenu.addSeparator();
-		commentItem = codeMenu.addItem("", event -> commentSelection());
-		uncommentItem = codeMenu.addItem("", event -> uncommentSelection());
+		commentItem = codeMenu.addItem(commentAction);
+		uncommentItem = codeMenu.addItem(uncommentAction);
 		codeMenu.addSeparator();
-		organizeImportsItem = codeMenu.addItem("", event -> organizeImports());
+		organizeImportsItem = codeMenu.addItem(organizeImportsAction);
 		codeMenu.addSeparator();
-		definitionItem = codeMenu.addItem("", event -> goToDefinition());
+		definitionItem = codeMenu.addItem(definitionAction);
 		updateCodeMenuText();
 		retokenize();
 		if (coreDiagnosticsEnabled) validateSource();
 	}
-	@Override public GLPopupMenu getContextMenu() { updateCodeMenuText(); return codeMenu; }
+	@Override public GLPopupMenu getContextMenu() {
+		updateCodeMenuText();
+		return codeMenu;
+	}
+	private GLAction editableCodeAction(String id, String textKey, Runnable handler) {
+		return GLAction.builder(id).textKey(textKey).enabledWhen(this::isEditable)
+				.onAction(handler).build();
+	}
 
 	public final GLCodeLanguage getLanguage() { return language; }
 	public final void setLanguage(GLCodeLanguage value) {
@@ -669,21 +692,7 @@ public class GLCodeEditor extends GLTextArea {
 			event.consume();
 			return;
 		}
-		if (getGLInputMap().matches(GLInputActions.CODE_FORMAT, event)) {
-			formatCode(); event.consume(); return;
-		}
-		if (getGLInputMap().matches(GLInputActions.CODE_COMMENT, event)) {
-			commentSelection(); event.consume(); return;
-		}
-		if (getGLInputMap().matches(GLInputActions.CODE_UNCOMMENT, event)) {
-			uncommentSelection(); event.consume(); return;
-		}
-		if (getGLInputMap().matches(GLInputActions.CODE_ORGANIZE_IMPORTS, event)) {
-			organizeImports(); event.consume(); return;
-		}
-		if (getGLInputMap().matches(GLInputActions.CODE_GO_TO_DEFINITION, event)) {
-			goToDefinition(); event.consume(); return;
-		}
+		if (codeActions.handleKeyPressed(event, getGLInputMap(), this)) return;
 		if (event.getKeyCode() == KeyEvent.VK_ENTER && isEditable()) {
 			int caret = getCaretPosition();
 			int line = getDocument().getLineOfOffset(caret);
@@ -1098,6 +1107,13 @@ public class GLCodeEditor extends GLTextArea {
 		super.localizerChanged();
 		updateCodeMenuText();
 	}
+	@Override protected void inputMapChanged() {
+		super.inputMapChanged();
+		updateCodeMenuText();
+	}
+	@Override protected void editableChanged() {
+		codeActions.refreshEnabled();
+	}
 	@Override protected void themeChanged() {
 		applyCodeTheme();
 	}
@@ -1167,17 +1183,7 @@ public class GLCodeEditor extends GLTextArea {
 	}
 	private void updateCodeMenuText() {
 		if (formatItem == null) return;
-		formatItem.setText(getGLLocalizer().text(GLUiKeys.CODE_FORMAT));
-		commentItem.setText(getGLLocalizer().text(GLUiKeys.CODE_COMMENT));
-		uncommentItem.setText(getGLLocalizer().text(GLUiKeys.CODE_UNCOMMENT));
-		organizeImportsItem.setText(getGLLocalizer().text(GLUiKeys.CODE_ORGANIZE_IMPORTS));
-		definitionItem.setText(getGLLocalizer().text(GLUiKeys.CODE_GO_TO_DEFINITION));
-		formatItem.setAcceleratorText(acceleratorText(GLInputActions.CODE_FORMAT));
-		commentItem.setAcceleratorText(acceleratorText(GLInputActions.CODE_COMMENT));
-		uncommentItem.setAcceleratorText(acceleratorText(GLInputActions.CODE_UNCOMMENT));
-		organizeImportsItem.setAcceleratorText(
-				acceleratorText(GLInputActions.CODE_ORGANIZE_IMPORTS));
-		definitionItem.setAcceleratorText(acceleratorText(GLInputActions.CODE_GO_TO_DEFINITION));
+		codeActions.refresh();
 	}
 	private void retokenize() { tokens = language.tokenize(getText()); invalidateRecording(); }
 	/**

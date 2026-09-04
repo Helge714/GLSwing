@@ -8,6 +8,7 @@ behavior from `GLControl`. Geometry and text measurements use logical pixels.
 ## Contents
 
 - [Common behavior](#common-behavior)
+- [Shared actions](#shared-actions)
 - [Control overview](#control-overview)
 - [Labels, buttons, checkboxes, and lines](#labels-buttons-checkboxes-and-lines)
 - [Sliders and slider groups](#sliders-and-slider-groups)
@@ -37,13 +38,86 @@ local override; `clearGLStyle()` returns to inherited theme values. Subclasses
 implement protected `control...` hooks without bypassing `GLControl`'s final
 event sequencing, capture, or state management.
 
+## Shared actions
+
+`GLAction` keeps one command's semantic ID, localized presentation, icons,
+availability, optional selection state, and synchronous or asynchronous handler
+together. Bind the same action to controls and menu items so every presentation
+stays consistent:
+
+```java
+GLAction save = GLAction.builder(GLInputActions.DOCUMENT_SAVE)
+        .textKey("action.document.save")
+        .shortDescriptionKey("action.document.save.description")
+        .icon(Icons.SAVE)
+        .enabledWhen(documentLifecycle::canSave)
+        .onAction(event -> documentLifecycle.save())
+        .build();
+
+GLMenuItem saveItem = fileMenu.addItem(save);
+GLButton saveButton = new GLButton(save);
+documentLifecycle.addListener(source -> save.refreshEnabled());
+```
+
+Selectable actions provide the shared model for checkboxes and checked menu
+commands. `selected(initialValue)` creates a self-toggling action. Use
+`selectedWhen(...)` when the state belongs to an application model; the handler
+updates that model and the action re-evaluates the predicate after invocation:
+
+```java
+GLAction showGrid = GLAction.builder("view.show-grid")
+        .textKey("action.view.showGrid")
+        .selectedWhen(settings::isGridVisible)
+        .onAction(() -> settings.setGridVisible(!settings.isGridVisible()))
+        .build();
+
+GLCheckBox gridBox = new GLCheckBox(showGrid);
+GLMenuItem gridItem = viewMenu.addItem(showGrid);
+```
+
+Both controls follow later `setSelected(...)` or `refreshSelected()` changes.
+Selectable menu actions reserve the standard icon column and render a check
+mark while selected. `GLActionMap#refresh()` updates both availability and
+derived selection; use `refreshEnabled()` when only command availability can
+have changed.
+
+The text and description keys are resolved against each bound component's
+inherited `GLLocalizer`. Menu items derive their accelerator label from the
+action ID's first binding in the inherited `GLInputMap`; applications do not
+need to duplicate shortcut display strings. Changing an action updates every
+bound control. Direct `setText(...)`, `setIcon(...)`, or `setEnabled(...)`
+calls on a bound control act as temporary presentation overrides and can be
+replaced by the next action update.
+
+Register actions in a `GLActionMap` to dispatch their semantic shortcuts from
+a `GLKeyTarget` ancestor:
+
+```java
+GLActionMap actions = new GLActionMap()
+        .add(save)
+        .add(saveAs)
+        .add(saveAll);
+
+@Override
+public void keyPressed(GLKeyEvent event) {
+    actions.handleKeyPressed(event, getGLInputMap(), this);
+}
+```
+
+A matched shortcut is consumed even while its action is disabled. This keeps
+disabled application commands from leaking into the active editor. Use
+`GLAction.fromSwing(id, action)` when existing Swing integration already owns
+a `javax.swing.Action`; name, short description, enabled state, optional
+`SELECTED_KEY`, and invocation are adapted while GLSwing icons and semantic
+shortcuts remain native.
+
 ## Control overview
 
 | Type | Creation | Principal model |
 |---|---|---|
 | `GLLabel` | `new GLLabel(text)` | Text and alignment |
-| `GLButton` | `new GLButton(text)` | Action listeners and `doClick()` |
-| `GLCheckBox` | Text constructor | Selected state and action |
+| `GLButton` | Text or `GLAction` constructor | Action listeners and `doClick()` |
+| `GLCheckBox` | Text or `GLAction` constructor | Selected state and action |
 | `GLLine` | Orientation constructor | Stroke and relative endpoints |
 | `GLSlider` | `fixed(...)` or `free(...)` | Value, range, step, editor, reset |
 | `GLSliderGroup` | `new GLSliderGroup(sliders...)` | Coordinated multi-slider gesture |
@@ -146,8 +220,10 @@ light and dark colors come from `comboBox.pressedLight` and
 `comboBox.pressedDark`; the gradient respects the attachment-side contour.
 
 `GLMenuItem` supports text, mnemonic keys, accelerator display text, action
-commands, listeners, `doClick()`, and an optional submenu. Accelerator text is
-presentational; bind the actual global shortcut in the application.
+commands, listeners, `doClick()`, and an optional submenu. When backed by a
+selectable `GLAction`, it displays the shared selected state in the icon column.
+Accelerator text is presentational; bind the actual global shortcut in the
+application.
 
 ```java
 GLPopupMenu menu = new GLPopupMenu();

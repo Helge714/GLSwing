@@ -87,18 +87,24 @@ documents.addDocument(sourceDocument, codeEditor);
 
 Keyboard undo/redo inside `nodeEditor` now affects `graphDocument`; the same
 shortcut inside `codeEditor` affects `sourceDocument`. Application menu actions
-use the workspace:
+can derive their availability from the workspace:
 
 ```java
-undoItem.addActionListener(event -> workspace.undo());
-redoItem.addActionListener(event -> workspace.redo());
+GLAction undo = GLAction.builder(GLInputActions.HISTORY_UNDO)
+        .textKey("action.undo")
+        .enabledWhen(workspace::canUndo)
+        .onAction(() -> workspace.undo())
+        .build();
+GLAction redo = GLAction.builder(GLInputActions.HISTORY_REDO)
+        .textKey("action.redo")
+        .enabledWhen(workspace::canRedo)
+        .onAction(() -> workspace.redo())
+        .build();
 
-workspace.addListener(source -> {
-    undoItem.setEnabled(source.canUndo());
-    undoItem.setText(source.canUndo()
-            ? "Undo " + source.undoName()
-            : "Undo");
-});
+GLActionMap documentActions = new GLActionMap().add(undo).add(redo);
+workspace.addListener(source -> documentActions.refreshEnabled());
+editMenu.addItem(undo);
+editMenu.addItem(redo);
 ```
 
 The fallback manager handles commands when no document is active. If the tab
@@ -129,13 +135,18 @@ GLDocumentLifecycle<NodeGraph> lifecycle = new GLDocumentLifecycle<>(
         NodeGraph::new,
         document -> new NodeGraphEditor(document.content()));
 
-newItem.addActionListener(event -> lifecycle.newDocument());
-openItem.addActionListener(event -> lifecycle.open());
-saveItem.addActionListener(event -> lifecycle.save());
-saveAsItem.addActionListener(event -> lifecycle.saveAs());
-saveAllItem.addActionListener(event -> lifecycle.saveAll());
-closeItem.addActionListener(event -> lifecycle.closeActiveDocument());
+GLAction save = GLAction.builder(GLInputActions.DOCUMENT_SAVE)
+        .textKey("action.save")
+        .enabledWhen(lifecycle::canSave)
+        .onAction(event -> lifecycle.save())
+        .build();
+fileMenu.addItem(save);
 ```
+
+Create the remaining New, Open, Save As, Save All, and Close commands in the
+same form. A lifecycle listener can refresh their state through one
+`GLActionMap#refreshEnabled()` call; buttons, menu items, and shortcut dispatch
+can then share those instances.
 
 `open()` and save-as operations use the configured asynchronous file-dialog
 backend. `open(Path)` bypasses the chooser. The codec's extensions populate the
