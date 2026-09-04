@@ -45,6 +45,9 @@ may change in subsequent `0.x` releases.
   both directions fade toward an opacity just beyond the visible range.
   Status glyphs use a fixed marker column so task labels remain aligned across
   pending, active, completed, and failed states.
+- Startup splashes are owned by their application window instead of being
+  globally always-on-top by default. Global foreground behavior remains
+  available through an explicit splash option.
 - Applications can replace the standard splash layout through
   `splashView(...)` and freely compose automatically bound Swing elements for
   the title, subtitle, logo, current task, task history, and progress bar.

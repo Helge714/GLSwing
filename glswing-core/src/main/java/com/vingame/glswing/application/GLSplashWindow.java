@@ -4,6 +4,7 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
+import java.awt.Window;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 
@@ -19,14 +20,15 @@ import javax.swing.WindowConstants;
 
 final class GLSplashWindow {
 	private final GLSplashConfiguration configuration;
-	private final JDialog dialog = new JDialog();
+	private final JDialog dialog;
 	private final JPanel shell = new JPanel(new BorderLayout());
 	private final GLSplashViewContext viewContext;
 	private long shownAt;
 
 	GLSplashWindow(GLSplashConfiguration configuration, String applicationTitle,
-			GLSplashViewFactory viewFactory) {
+			GLSplashViewFactory viewFactory, Window owner) {
 		this.configuration = configuration;
+		dialog = new JDialog(owner);
 		viewContext = new GLSplashViewContext(configuration, applicationTitle);
 		JComponent content = viewFactory == null
 				? createStandardView() : viewFactory.create(viewContext);
@@ -37,7 +39,7 @@ final class GLSplashWindow {
 		shell.add(content, BorderLayout.CENTER);
 		dialog.setUndecorated(true);
 		dialog.setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
-		dialog.setAlwaysOnTop(true);
+		dialog.setAlwaysOnTop(configuration.alwaysOnTop());
 		dialog.setContentPane(shell);
 		dialog.setSize(configuration.width(), configuration.height());
 		dialog.setLocationRelativeTo(null);

@@ -80,6 +80,7 @@ final class GLStartupEngineTest {
 				.contentAlignment(GLSplashAlignment.BOTTOM_LEFT)
 				.size(720, 420)
 				.padding(28)
+				.alwaysOnTop(true)
 				.addLogo(Path.of("branding", "logo.png"), 96, 80)
 				.addTitle("Test")
 				.addTaskHistory(320, 4, 2, 0.35, false)
@@ -93,6 +94,7 @@ final class GLStartupEngineTest {
 		assertEquals(GLSplashAlignment.BOTTOM_LEFT,
 				configuration.contentAlignment());
 		assertEquals(720, configuration.width());
+		assertTrue(configuration.alwaysOnTop());
 		assertEquals(5, configuration.elements().size());
 		GLSplashElement.Logo logo =
 				(GLSplashElement.Logo) configuration.elements().get(0);
@@ -107,6 +109,10 @@ final class GLStartupEngineTest {
 		GLSplashElement.ProgressBar unpaddedProgress =
 				(GLSplashElement.ProgressBar) configuration.elements().get(4);
 		assertFalse(unpaddedProgress.usePadding());
+	}
+
+	@Test void splashIsNotGloballyAlwaysOnTopByDefault() {
+		assertFalse(GLSplashConfiguration.builder().build().alwaysOnTop());
 	}
 
 	@Test void rejectsInvalidSplashDimensions() {

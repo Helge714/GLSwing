@@ -13,7 +13,8 @@ import javax.swing.JComponent;
 public record GLSplashConfiguration(Path backgroundImage,
 		GLSplashImageFit backgroundImageFit, Color backgroundOverlay,
 		GLSplashAlignment contentAlignment, int width, int height, int padding,
-		long minimumDisplayMillis, long handoffDelayMillis, Color background,
+		long minimumDisplayMillis, long handoffDelayMillis, boolean alwaysOnTop,
+		Color background,
 		Color foreground, Color mutedForeground, Color accent,
 		List<GLSplashElement> elements) {
 
@@ -48,6 +49,7 @@ public record GLSplashConfiguration(Path backgroundImage,
 		private int padding = 32;
 		private long minimumDisplayMillis = 450;
 		private long handoffDelayMillis;
+		private boolean alwaysOnTop;
 		private Color background = new Color(24, 27, 32);
 		private Color foreground = new Color(242, 244, 247);
 		private Color mutedForeground = new Color(166, 173, 184);
@@ -88,6 +90,14 @@ public record GLSplashConfiguration(Path backgroundImage,
 		/** Keeps the completed splash above the revealed application window. */
 		public Builder handoffDelayMillis(long millis) {
 			handoffDelayMillis = millis;
+			return this;
+		}
+		/**
+		 * Controls whether the splash stays above every desktop window. The default
+		 * is {@code false}; it remains above only its owning application window.
+		 */
+		public Builder alwaysOnTop(boolean value) {
+			alwaysOnTop = value;
 			return this;
 		}
 		public Builder colors(Color background, Color foreground,
@@ -183,7 +193,8 @@ public record GLSplashConfiguration(Path backgroundImage,
 					? List.copyOf(elements) : defaultElements();
 			return new GLSplashConfiguration(backgroundImage, backgroundImageFit,
 					backgroundOverlay, contentAlignment, width, height, padding,
-					minimumDisplayMillis, handoffDelayMillis, background, foreground,
+					minimumDisplayMillis, handoffDelayMillis, alwaysOnTop,
+					background, foreground,
 					mutedForeground, accent, resolved);
 		}
 

@@ -172,7 +172,10 @@ The minimum duration prevents a very short launch from producing a distracting
 flash. It does not delay work and is measured from the moment the splash becomes
 visible. The handoff delay starts after the prepared application window is
 revealed and keeps the completed splash above it for a deliberate transition.
-It is disabled by default. `GLSplashConfiguration.Builder#colors(...)` can
+It is disabled by default. The splash is owned by the application window, so it
+stays above that window but does not cover unrelated applications. Set
+`alwaysOnTop(true)` only when the splash must remain above every desktop window.
+`GLSplashConfiguration.Builder#colors(...)` can
 set the background, primary text, secondary text, and accent colors before the
 normal application theme is available.
 

@@ -11,6 +11,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
+import javax.swing.JFrame;
+
 import com.vingame.glswing.component.GLContainer;
 import com.vingame.glswing.component.GLSwingCanvas;
 import com.vingame.glswing.input.GLInputMap;
@@ -67,11 +69,14 @@ public final class GLApplication {
 	private void run(GLApplicationHandle handle) {
 		AtomicReference<GLSplashWindow> splashReference = new AtomicReference<>();
 		AtomicReference<GLApplicationWindow> windowReference = new AtomicReference<>();
+		AtomicReference<JFrame> frameReference = new AtomicReference<>();
 		AtomicReference<GLApplicationContext> contextReference = new AtomicReference<>();
 		try {
 			onAwt(() -> {
+				JFrame frame = new JFrame(settings.title);
+				frameReference.set(frame);
 				GLSplashWindow splash = new GLSplashWindow(settings.splash,
-						settings.title, settings.splashViewFactory);
+						settings.title, settings.splashViewFactory, frame);
 				splashReference.set(splash);
 				splash.show();
 				return null;
@@ -80,7 +85,7 @@ public final class GLApplication {
 			// creation performs any platform or graphics-driver initialization.
 			onAwt(() -> {
 				GLApplicationWindow window = GLApplicationWindow.create(
-						settings.backend, settings.title, settings.width, settings.height,
+						frameReference.get(), settings.backend, settings.width, settings.height,
 						settings.minimumWidth, settings.minimumHeight, settings.clearColor,
 						settings.renderingSettings,
 						() -> handle.mutableClosedFuture().complete(null));
@@ -144,10 +149,14 @@ public final class GLApplication {
 			}
 			GLSplashWindow splash = splashReference.get();
 			GLApplicationWindow window = windowReference.get();
+			JFrame frame = frameReference.get();
 			Runnable close = () -> {
 				if (window != null)
 					window.close(() -> handle.mutableClosedFuture().complete(null));
-				else handle.mutableClosedFuture().complete(null);
+				else {
+					if (frame != null) frame.dispose();
+					handle.mutableClosedFuture().complete(null);
+				}
 			};
 			if (splash != null) splash.showFailure(failure, close);
 			else {

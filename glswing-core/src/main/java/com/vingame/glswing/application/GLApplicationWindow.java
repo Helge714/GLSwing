@@ -67,11 +67,12 @@ final class GLApplicationWindow {
 		});
 	}
 
-	static GLApplicationWindow create(GLBackend backend, String title, int width,
+	static GLApplicationWindow create(JFrame frame, GLBackend backend, int width,
 			int height, int minimumWidth, int minimumHeight, Color clearColor,
 			GLApplication.RenderingSettings renderingSettings, Runnable onClosed) {
 		if (!EventQueue.isDispatchThread())
 			throw new IllegalStateException("Application windows must be created on AWT");
+		if (frame == null) throw new IllegalArgumentException("Application frame required");
 		if (backend == GLBackend.CANVAS) {
 			if (!GLSwingCanvas.hasRequiredAwtModuleAccess())
 				throw new IllegalStateException(
@@ -81,7 +82,6 @@ final class GLApplicationWindow {
 					renderingSettings.antialiasingSamples(),
 					renderingSettings.swapInterval());
 			canvas.setPreferredSize(new Dimension(width, height));
-			JFrame frame = new JFrame(title);
 			frame.setLayout(new BorderLayout());
 			frame.add(canvas, BorderLayout.CENTER);
 			frame.pack();
@@ -107,7 +107,6 @@ final class GLApplicationWindow {
 
 		ApplicationPanel panel = new ApplicationPanel(clearColor);
 		panel.setPreferredSize(new Dimension(width, height));
-		JFrame frame = new JFrame(title);
 		frame.setLayout(new BorderLayout());
 		frame.add(panel, BorderLayout.CENTER);
 		frame.pack();
