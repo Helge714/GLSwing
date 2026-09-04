@@ -18,6 +18,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 import javax.swing.JFrame;
 
@@ -40,7 +41,10 @@ final class GLApplicationWindow {
 	private final Runnable destroy;
 	private final GLInvoker glInvoker;
 	private final AtomicBoolean closed = new AtomicBoolean();
+	private final AtomicBoolean closeRequestPending = new AtomicBoolean();
 	private Runnable beforeClose = () -> { };
+	private Supplier<java.util.concurrent.CompletionStage<Boolean>> closeRequest =
+			() -> CompletableFuture.completedFuture(true);
 	private GLContainer root;
 	private Point revealLocation;
 	private boolean primedVisible;
@@ -56,7 +60,7 @@ final class GLApplicationWindow {
 		this.glInvoker = glInvoker;
 		frame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
 		frame.addWindowListener(new WindowAdapter() {
-			@Override public void windowClosing(WindowEvent event) { close(onClosed); }
+			@Override public void windowClosing(WindowEvent event) { requestClose(onClosed); }
 		});
 		renderComponent.addComponentListener(new ComponentAdapter() {
 			@Override public void componentResized(ComponentEvent event) { resizeRoot(); }
@@ -167,6 +171,31 @@ final class GLApplicationWindow {
 
 	void beforeClose(Runnable operation) {
 		beforeClose = operation == null ? () -> { } : operation;
+	}
+
+	void closeRequest(Supplier<java.util.concurrent.CompletionStage<Boolean>> operation) {
+		closeRequest = operation == null
+				? () -> CompletableFuture.completedFuture(true) : operation;
+	}
+
+	void requestClose(Runnable onClosed) {
+		if (closed.get() || !closeRequestPending.compareAndSet(false, true)) return;
+		java.util.concurrent.CompletionStage<Boolean> decision;
+		try { decision = closeRequest.get(); }
+		catch (Throwable failure) {
+			closeRequestPending.set(false);
+			failure.printStackTrace();
+			return;
+		}
+		if (decision == null) decision = CompletableFuture.completedFuture(false);
+		decision.whenComplete((approved, failure) -> EventQueue.invokeLater(() -> {
+			closeRequestPending.set(false);
+			if (failure != null) {
+				failure.printStackTrace();
+				return;
+			}
+			if (Boolean.TRUE.equals(approved)) close(onClosed);
+		}));
 	}
 
 	void renderFirstFrame() {

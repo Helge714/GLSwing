@@ -150,7 +150,10 @@ lexer with `GLCodeLanguages.JAVA` or `GLCodeLanguages.GLSL`, or implement
 `GLCodeLanguage` for an application language. When the connected tooling
 provides semantic tokens, those classifications take precedence over lexer
 colors; unsupported and temporarily unavailable semantic categories retain the
-lexer result.
+lexer result. While a new semantic snapshot is pending after an edit, tokens
+outside the changed source range remain visible and their offsets follow the
+edit. Only intersecting classifications are discarded; the lexer immediately
+colors that source until the provider responds.
 
 ```java
 GLCodeEditor editor = new GLCodeEditor(source);
@@ -420,7 +423,8 @@ built-in lexer exclusively; providers can supply the same feature directly via
 classifications, returned an empty result, or failed.
 The lexical palette remains visible while a newly started language server is
 still importing the project; semantic colors replace it when that asynchronous
-analysis completes.
+analysis completes. Diagnostics from the obsolete document version are removed
+immediately rather than being translated to potentially incorrect lines.
 
 The code-editor context menu also provides **Organize imports**. It requests
 the standard `source.organizeImports` code action from the active provider;

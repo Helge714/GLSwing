@@ -8,6 +8,9 @@ public final class GLInputActions {
 	public static final String FOCUS_NEXT = "focus.next";
 	public static final String FOCUS_PREVIOUS = "focus.previous";
 	public static final String MENU_MNEMONIC = "menu.mnemonic";
+	public static final String DOCUMENT_SAVE = "document.save";
+	public static final String DOCUMENT_SAVE_AS = "document.save-as";
+	public static final String DOCUMENT_SAVE_ALL = "document.save-all";
 	public static final String RENDER_INTERACTION_SETTLE_MILLIS =
 			"render.interaction-settle-millis";
 	public static final String NODE_INTERACTIVE_CURVE_TOLERANCE_FACTOR =

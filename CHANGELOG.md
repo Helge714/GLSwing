@@ -71,6 +71,45 @@ may change in subsequent `0.x` releases.
   standard tree keyboard navigation, shared list selection, optional icons,
   custom renderers, inline cell editing, and localized F2/context-menu renaming
   without constructing components for collapsed nodes.
+- Typed `GLDocument<T>` models combine URI/title metadata, read-only state,
+  independent undo history, and a persisted-state checkpoint. Registries and
+  asynchronous managers keep storage separate from application models and
+  resolve caller-defined codecs by stable IDs or file extension.
+- Versioned ZIP document bundles index independently readable subdocuments,
+  apply explicit consecutive schema migrations, save through atomic sibling
+  replacement, and preserve unloaded or unrecognized payloads. Container,
+  application-format, and per-entry schema versions remain independent.
+- Document workspaces route application menu state and undo/redo commands to
+  the active document with an optional application-history fallback. A tab
+  controller installs document histories as inherited component scopes,
+  maintains modified-title markers, switches routing on tab selection, and
+  preserves bindings when closed tabs are reopened.
+- Asynchronous tab close requests let applications keep a tab open while a
+  confirmation or save is pending. The document lifecycle provides conventional
+  new, open, save, save-as, save-all, and close commands; integrates codec-based
+  file filters and file dialogs; exposes menu-state predicates; and coordinates
+  save, discard, and cancel decisions for modified documents.
+- `GLPlainTextDocumentCodec` persists source and plain-text models as UTF-8, and
+  code editors can now be constructed directly over an existing
+  `GLTextDocument` model.
+- Live text edits now update a visible `* ` prefix before the editor loses focus.
+  Saving commits the active editor transaction before establishing the persisted
+  checkpoint, so a later focus change cannot mark the same content as modified again.
+- Ellipsized standard controls, tabs, menus, tree rows, and list rows expose
+  their complete text as delayed tooltips. Tree disclosure arrows expand and
+  collapse branches without changing selection.
+- Tooltips close when their owning controls leave the component hierarchy.
+- Code edits preserve unaffected semantic classifications while updated
+  language-server results are pending; classifications intersecting the edit
+  and obsolete diagnostics are discarded.
+- Added semantic `document.save`, `document.save-as`, and `document.save-all`
+  input actions with platform-shortcut defaults. Save command availability now
+  distinguishes clean documents from Save As and is reflected in the showcase menu.
+- Bounded mnemonic-underline shadow softness to prevent oversized blur blobs at
+  extreme text-shadow settings.
+- Added asynchronous, cancellable `GLApplication` close requests and
+  `GLDocumentLifecycle.prepareCloseAll()` for save/discard/cancel processing
+  before application teardown.
 - Conventional focus traversal for interactive controls, including safe focus
   release when a control subtree is hidden or removed.
 - Typed color and metrics theme fragments with conflict-free bundle slots,

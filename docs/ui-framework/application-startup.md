@@ -19,6 +19,7 @@ window only after the first application frame has been presented.
 - [Progress and task weights](#progress-and-task-weights)
 - [Failures and fallbacks](#failures-and-fallbacks)
 - [Application lifetime](#application-lifetime)
+- [Close confirmation](#close-confirmation)
 - [Choosing a backend](#choosing-a-backend)
 
 ## Minimal application
@@ -366,6 +367,23 @@ rendering host is still valid:
     languageServer.close();
 })
 ```
+
+## Close confirmation
+
+`onCloseRequest(...)` installs an asynchronous close guard for both the native
+window close control and `GLApplicationHandle.close()`. Complete with `true` to
+continue into `onClose(...)`, or `false` to keep the fully initialized window
+open. Repeated close requests share the pending decision and do not create
+duplicate dialogs.
+
+```java
+.onCloseRequest(context -> documentLifecycle.prepareCloseAll())
+.onClose(context -> resources.close())
+```
+
+This supports themed confirmations and asynchronous save-as dialogs without
+blocking the AWT event-dispatch thread. A failed or `null` decision also leaves
+the application open.
 
 ## Choosing a backend
 

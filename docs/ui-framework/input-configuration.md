@@ -200,14 +200,24 @@ by the standard localized **Rename** context-menu command.
 
 ## Application actions
 
-Applications may define arbitrary action names and query them directly:
+The default map provides `document.save` (`shortcut+S`),
+`document.save-as` (`shortcut+shift+S`), and `document.save-all`
+(`shortcut+alt+S`) as semantic application-level actions.
+Handle them on a `GLKeyTarget` ancestor of the active editor so unconsumed key
+events bubble naturally from the editor to the document surface:
 
 ```java
-if (container.getGLInputMap().matches("application.save", event)) {
+if (container.getGLInputMap().matches(GLInputActions.DOCUMENT_SAVE, event)) {
     saveDocument();
     event.consume();
 }
+if (container.getGLInputMap().matches(GLInputActions.DOCUMENT_SAVE_ALL, event)) {
+    saveAllDocuments();
+    event.consume();
+}
 ```
+
+Applications may define and query additional action names in the same way.
 
 Menu shortcut labels are presentation text; dispatch remains driven by the
 input map.

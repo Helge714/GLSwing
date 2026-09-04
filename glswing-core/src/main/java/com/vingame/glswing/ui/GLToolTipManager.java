@@ -35,6 +35,13 @@ final class GLToolTipManager {
 			if (session != null) session.leave(owner);
 		}
 	}
+	/** Removes a pending or visible tooltip after its owner leaves the scene graph. */
+	static void detached(GLControl owner) {
+		synchronized (SESSIONS) {
+			for (Session session : SESSIONS.values())
+				session.leave(owner);
+		}
+	}
 	private static GLParent root(GLContainer child) {
 		GLParent host = child.getGLParent();
 		while (host instanceof GLContainer container && container.getGLParent() != null)

@@ -1,6 +1,6 @@
 theme.type=colors
 
-textShadow.color=rgba(0, 0, 0, 255)
+textShadow.color=rgba(0, 0, 0, 100)
 
 palette.surface=rgba(54, 54, 60, 255)
 palette.text=rgba(224, 224, 224, 255)

@@ -19,7 +19,7 @@ public final class HelloGLSwing {
 
 	private static final class DefaultGreeting implements Greeting {
 		@Override public String message() {
-			return "Hello, GLSwing!";
+			return "Hello, GLSwing";
 		}
 	}
 }

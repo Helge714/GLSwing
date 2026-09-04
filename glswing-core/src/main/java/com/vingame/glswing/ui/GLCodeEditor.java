@@ -85,16 +85,27 @@ public class GLCodeEditor extends GLTextArea {
 	private final GLMenuItem organizeImportsItem;
 	private final GLMenuItem definitionItem;
 
-	public GLCodeEditor() { this("", true); }
-	public GLCodeEditor(String source) { this(source, true); }
+	public GLCodeEditor() { this(new GLTextDocument(), true); }
+	public GLCodeEditor(String source) { this(new GLTextDocument(source), true); }
+	/** Creates an editor over an existing document model. */
+	public GLCodeEditor(GLTextDocument document) { this(document, true); }
 	/** Creates an editor and configures its language from the document URI. */
 	public GLCodeEditor(String source, URI uri) {
-		this(source, true);
+		this(new GLTextDocument(source), true);
+		configureDocument(uri);
+	}
+	/** Creates an editor over an existing document and configures its language. */
+	public GLCodeEditor(GLTextDocument document, URI uri) {
+		this(document, true);
 		configureDocument(uri);
 	}
 	/** Creates an editor, optionally disabling lightweight diagnostics for source viewers. */
 	public GLCodeEditor(String source, boolean coreDiagnosticsEnabled) {
-		super(source);
+		this(new GLTextDocument(source), coreDiagnosticsEnabled);
+	}
+	/** Creates an editor over an existing model with optional lightweight diagnostics. */
+	public GLCodeEditor(GLTextDocument model, boolean coreDiagnosticsEnabled) {
+		super(model);
 		this.coreDiagnosticsEnabled = coreDiagnosticsEnabled;
 		diagnosticTimer = new Timer(300, event -> validateSource());
 		diagnosticTimer.setRepeats(false);
@@ -130,7 +141,7 @@ public class GLCodeEditor extends GLTextArea {
 			clearNavigationHover(true);
 			coreDiagnostics = List.of();
 			providerDiagnostics = List.of();
-			semanticTokens = List.of();
+			semanticTokens = retainUnaffectedSemanticTokens(semanticTokens, change);
 			documentColors = List.of();
 			mergeDiagnostics();
 			retokenize();
@@ -1169,6 +1180,32 @@ public class GLCodeEditor extends GLTextArea {
 		definitionItem.setAcceleratorText(acceleratorText(GLInputActions.CODE_GO_TO_DEFINITION));
 	}
 	private void retokenize() { tokens = language.tokenize(getText()); invalidateRecording(); }
+	/**
+	 * Keeps classifications whose source range is unchanged while a fresh semantic
+	 * snapshot is pending. Tokens intersecting the edit are discarded and the
+	 * following ranges are translated by the edit delta; the lexer therefore
+	 * remains the immediate fallback only around the changed source.
+	 */
+	private static List<GLCodeSemanticToken> retainUnaffectedSemanticTokens(
+			List<GLCodeSemanticToken> current, GLTextDocument.Change change) {
+		if (current.isEmpty()) return current;
+		int editStart = change.offset();
+		int oldEnd = editStart + change.removedText().length();
+		int delta = change.insertedText().length() - change.removedText().length();
+		ArrayList<GLCodeSemanticToken> retained = new ArrayList<>(current.size());
+		for (GLCodeSemanticToken token : current) {
+			if (token.end() <= editStart) {
+				retained.add(token);
+			} else if (token.start() >= oldEnd) {
+				int start = token.start() + delta;
+				int end = token.end() + delta;
+				if (start >= 0 && end > start)
+					retained.add(new GLCodeSemanticToken(start, end,
+							token.type(), token.modifiers()));
+			}
+		}
+		return List.copyOf(retained);
+	}
 	private void validateSource() {
 		if (!coreDiagnosticsEnabled) return;
 		coreDiagnostics = language.diagnose(getText()).stream()

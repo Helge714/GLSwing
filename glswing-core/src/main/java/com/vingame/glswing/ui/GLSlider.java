@@ -526,6 +526,24 @@ public class GLSlider extends GLControl {
 		updateColors();
 	}
 
+	@Override protected String toolTipTextAt(GLMouseEvent event) {
+		String explicit = super.toolTipTextAt(event);
+		if (explicit != null) return explicit;
+		GLSliderStyle style = getGLStyle();
+		GLFont font = getGLFont(style.font());
+		float left = style.padding().left(), right = getWidth() - style.padding().right();
+		if (mode == Mode.FREE) {
+			left += style.arrowInset() + style.arrowButtonWidth();
+			right -= style.arrowInset() + style.arrowButtonWidth();
+		}
+		float width = Math.max(0, right - left);
+		String value = valueText();
+		if (GLTextFitter.overflowToolTip(font, value, width) != null) return value;
+		float valueWidth = font.measureText(value);
+		float labelWidth = Math.max(0, width - valueWidth - (value.isEmpty() ? 0 : 6));
+		return GLTextFitter.overflowToolTip(font, text, labelWidth);
+	}
+
 	@Override
 	protected void controlMouseEntered(GLMouseEvent event) {
 		showResizeCursor(event);

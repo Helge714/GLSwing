@@ -315,6 +315,20 @@ public class GLMenuItem extends GLControl {
 		updateColors();
 	}
 
+	@Override protected String toolTipTextAt(GLMouseEvent event) {
+		String explicit = super.toolTipTextAt(event);
+		if (explicit != null || ownerMenu == null || !ownerMenu.isEllipsisActive())
+			return explicit;
+		GLMenuStyle style = menuStyle();
+		GLFont font = getGLFont(style.font());
+		float available = getWidth() - style.itemHorizontalPadding() * 2;
+		if (ownerMenu.hasIconColumn()) available -= ownerMenu.iconSize() + style.columnGap();
+		if (subMenu != null) available -= Math.min(13, getHeight() - 8) + style.columnGap();
+		else if (!acceleratorText.isEmpty())
+			available -= font.measureText(acceleratorText) + style.columnGap();
+		return GLTextFitter.overflowToolTip(font, text, Math.max(0, available));
+	}
+
 	@Override
 	protected void controlMouseEntered(GLMouseEvent event) {
 		if (isEnabled() && ownerMenu != null)

@@ -40,6 +40,10 @@ public final class GLList<T> extends GLControl implements GLVirtualViewportConte
 		void renderCell(GLContext2D context, GLList<T> list, T value, int index,
 				CellState state, float width, float height);
 	}
+	@FunctionalInterface
+	public interface ItemToolTipProvider<T> {
+		String toolTipText(GLList<T> source, T item, int index, float cellWidth);
+	}
 
 	/**
 	 * Mouse event associated with a concrete model element.
@@ -102,6 +106,7 @@ public final class GLList<T> extends GLControl implements GLVirtualViewportConte
 	private GLListSelectionModel selectionModel = new GLListSelectionModel();
 	private CellRenderer<T> cellRenderer = this::renderDefaultCell;
 	private Function<? super T, String> itemTextProvider = String::valueOf;
+	private ItemToolTipProvider<T> itemToolTipProvider;
 	private KeyHandler<T> keyHandler;
 	private GLListStyle localStyle;
 	private CellEditor<T> cellEditor;
@@ -200,6 +205,11 @@ public final class GLList<T> extends GLControl implements GLVirtualViewportConte
 			throw new IllegalArgumentException("Text provider must not be null");
 		itemTextProvider = provider;
 		invalidateVisibleCells();
+	}
+	public ItemToolTipProvider<T> getItemToolTipProvider() { return itemToolTipProvider; }
+	/** Overrides automatic overflow tooltips for list rows. */
+	public void setItemToolTipProvider(ItemToolTipProvider<T> provider) {
+		itemToolTipProvider = provider;
 	}
 	public KeyHandler<T> getKeyHandler() { return keyHandler; }
 	public void setKeyHandler(KeyHandler<T> handler) { keyHandler = handler; }
@@ -799,13 +809,14 @@ public final class GLList<T> extends GLControl implements GLVirtualViewportConte
 			updatePointer(event);
 			selectedBeforePress = selectionModel.isSelectedIndex(index);
 			if (editingIndex >= 0 && editingIndex != index) cancelEditing();
+			fireItemMousePressed(index, event, selectedBeforePress);
+			if (event.isConsumed()) return;
 			if (event.getButton() == MouseEvent.BUTTON1) {
 				GLList.this.requestGLFocus(GLList.this);
 				selectFromInput(index, event.getModifiersEx());
 			} else if (event.getButton() == MouseEvent.BUTTON3
 					&& !selectionModel.isSelectedIndex(index))
 				selectionModel.setSelectionInterval(index, index);
-			fireItemMousePressed(index, event, selectedBeforePress);
 		}
 		@Override protected void controlMouseDragged(GLMouseEvent event) {
 			updatePointer(event);
@@ -824,6 +835,17 @@ public final class GLList<T> extends GLControl implements GLVirtualViewportConte
 		@Override protected void controlStateChanged(GLControlState oldState,
 				GLControlState newState) {
 			invalidateRecording();
+		}
+		@Override protected String toolTipTextAt(GLMouseEvent event) {
+			if (index < 0 || index >= model.getSize()) return null;
+			T item = model.getElementAt(index);
+			if (itemToolTipProvider != null)
+				return itemToolTipProvider.toolTipText(GLList.this, item, index, getWidth());
+			GLListStyle style = getGLStyle();
+			String text = itemTextProvider.apply(item);
+			return GLTextFitter.overflowToolTip(getGLFont(style.font()),
+					text == null ? "" : text,
+					Math.max(0, getWidth() - style.cellPadding().horizontal()));
 		}
 	}
 }

@@ -466,6 +466,19 @@ public class GLComboBox<T> extends GLControl
 		updateColors();
 	}
 
+	@Override protected String toolTipTextAt(GLMouseEvent event) {
+		String explicit = super.toolTipTextAt(event);
+		if (explicit != null || selectedEntry == null) return explicit;
+		GLComboBoxStyle style = getGLStyle();
+		GLItemPresentation selected = presentation(selectedEntry.value);
+		float iconWidth = selected.icon() == null ? 0
+				: Math.min(18, Math.max(1, getHeight() - 8)) + 5;
+		float available = getWidth() - style.arrowAreaWidth()
+				- style.padding().horizontal() - iconWidth;
+		return GLTextFitter.overflowToolTip(getGLFont(style.font()), selected.text(),
+				Math.max(0, available));
+	}
+
 	@Override
 	protected void controlMouseClicked(GLMouseEvent event) {
 		if (!isEnabled() || event.getButton() != MouseEvent.BUTTON1)
@@ -506,6 +519,7 @@ public class GLComboBox<T> extends GLControl
 	@Override
 	protected void detached(GLParent formerParent) {
 		popupMenu.close();
+		super.detached(formerParent);
 	}
 
 	@Override

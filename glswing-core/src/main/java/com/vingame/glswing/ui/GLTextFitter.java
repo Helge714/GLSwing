@@ -31,4 +31,10 @@ public final class GLTextFitter {
 		}
 		return text.substring(0, text.offsetByCodePoints(0, low)) + ELLIPSIS;
 	}
+
+	/** Returns the original text only when fitting would replace it with an ellipsis. */
+	public static String overflowToolTip(GLFont font, String text, float maximumWidth) {
+		return text != null && !text.isEmpty() && font.measureText(text) > maximumWidth
+				? text : null;
+	}
 }

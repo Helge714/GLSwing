@@ -89,9 +89,14 @@ final class GLMnemonicSupport {
 			return;
 		float start = x + font.measureText(text.substring(0, index));
 		float width = font.measureText(text.substring(index, index + 1));
-		if (width > 0)
+		if (width > 0) {
+			// A one-pixel decoration cannot carry the same unbounded geometric blur
+			// as a glyph without turning into a disproportionately large capsule.
+			// Keep its shadow present, but bound the blur to its own visual scale.
+			float decorationSoftness = Math.min(0.75f, shadow.softness());
 			context.drawUIRoundRectShadow(start, baseline + 1.5f,
-					width, 1, 0.5f, shadow.softness(),
+					width, 1, 0.5f, decorationSoftness,
 					shadow.offsetX(), shadow.offsetY(), shadow.color());
+		}
 	}
 }

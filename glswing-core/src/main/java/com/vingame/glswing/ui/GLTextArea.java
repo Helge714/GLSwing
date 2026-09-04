@@ -481,6 +481,10 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 		}
 		return result.toString();
 	}
+	@Override public final boolean commitEditingHistory() {
+		commitEditingSession();
+		return true;
+	}
 	protected final void commitEditingSession() {
 		GLTextDocument.Snapshot before = editBaseline;
 		GLTextDocument.Snapshot after = document.snapshot();

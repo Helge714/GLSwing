@@ -108,6 +108,9 @@ browser.refresh();
 The browser includes system-derived common locations, filesystem roots, lazy
 directory expansion, directory-first sorted details, hidden-entry styling,
 search filtering, standard single or multiple selection, and file activation.
+The sidebar disclosure arrow expands or collapses a directory without changing
+the current selection. Ellipsized sidebar and file names expose their complete
+text through the standard delayed tooltip.
 Use `setDirectory`, `setSearchQuery`, `setFileFilter`, and `setShowHidden` to
 change its state. These configuration setters do not enumerate the current
 directory; call `refresh()` after applying a group of changes. `setDirectory`

@@ -14,6 +14,8 @@ final class MavenSmokeTest {
 
 	@Test void fileBrowser() throws Exception { GLFileBrowserSelfTest.main(NO_ARGS); }
 
+	@Test void documents() throws Exception { GLDocumentSelfTest.main(NO_ARGS); }
+
 	@Test
 	void transforms() {
 		GLTransformSelfTest.main(NO_ARGS);

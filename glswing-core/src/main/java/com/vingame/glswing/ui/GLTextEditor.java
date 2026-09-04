@@ -378,6 +378,8 @@ public class GLTextEditor extends GLControl implements GLEditingHistoryTarget {
 		}
 	}
 
+	@Override public final boolean commitEditingHistory() { return commit(); }
+
 	public final void cancel() {
 		if (ending)
 			return;

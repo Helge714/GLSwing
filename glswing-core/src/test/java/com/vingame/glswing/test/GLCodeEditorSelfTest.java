@@ -204,6 +204,17 @@ public final class GLCodeEditorSelfTest {
 		check(semanticRequested[0] && semanticAvailable[0]
 				&& editor.getSemanticTokens().size() == 1,
 				"Code editor did not retain provider semantic tokens");
+		editor.getDocument().insert(editor.getText().length(), " ");
+		check(editor.getSemanticTokens().size() == 1
+				&& editor.getSemanticTokens().get(0).start() == 4,
+				"An edit after a semantic token discarded an unaffected classification");
+		editor.getDocument().insert(0, " ");
+		check(editor.getSemanticTokens().size() == 1
+				&& editor.getSemanticTokens().get(0).start() == 5,
+				"An edit before a semantic token did not translate its source range");
+		editor.getDocument().insert(7, "x");
+		check(editor.getSemanticTokens().isEmpty(),
+				"An edit inside a semantic token retained a stale classification");
 		int initialVersion = latest[0].version();
 		editor.setText("int changed;");
 		publish[0].accept(new GLCodeDiagnosticProvider.Result(initialVersion,

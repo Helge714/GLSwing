@@ -210,6 +210,16 @@ public final class GLMenuBarItem extends GLControl {
 		updateColors();
 	}
 
+	@Override protected String toolTipTextAt(GLMouseEvent event) {
+		String explicit = super.toolTipTextAt(event);
+		if (explicit != null) return explicit;
+		GLMenuBarStyle style = style();
+		float iconWidth = icon == null ? 0
+				: Math.min(16, Math.max(1, getHeight() - 8)) + 5;
+		return GLTextFitter.overflowToolTip(getGLFont(style.font()), text,
+				Math.max(0, getWidth() - style.itemHorizontalPadding() * 2 - iconWidth));
+	}
+
 	@Override
 	protected void controlMouseEntered(GLMouseEvent event) {
 		if (isEnabled() && owner != null)

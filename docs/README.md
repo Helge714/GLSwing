@@ -27,6 +27,7 @@ lifecycle, extension points, and the behavior of the standard controls.
 | Respond to pointer input on custom geometry | [Picking](graphics-pipeline/picking.md) |
 | Customize appearance or language | [Themes and localization](ui-framework/themes-localization.md) |
 | Configure shortcuts and interaction modifiers | [Input configuration](ui-framework/input-configuration.md) |
+| Load and save application documents | [Documents and serialization](ui-framework/documents.md) |
 | Create a node-based editor | [Node editor](ui-framework/nodes.md) |
 
 ## Rendering guide
@@ -64,6 +65,7 @@ an index of the retained-mode API.
 | [Input configuration](ui-framework/input-configuration.md) | Semantic actions, external `.glinput` files, platform shortcuts, modifiers, and scopes |
 | [Text editing](ui-framework/text-editing.md) | Single-line fields, multiline documents, selection, wrapping, scrolling, and editing history |
 | [Undo and redo](ui-framework/history.md) | Edits, transactions, keyboard shortcuts, and save state |
+| [Documents and serialization](ui-framework/documents.md) | Typed documents, codecs, migrations, lazy bundles, and atomic persistence |
 | [Node editor](ui-framework/nodes.md) | Nodes, rows, ports, connections, selection, view controls, and history |
 
 ## Examples

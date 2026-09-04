@@ -304,7 +304,10 @@ applies the offset after the current transform, so zooming, scaling, or rotating
 content does not change the shadow's direction or distance on the surface.
 `local` applies the offset before transformation for effects that should follow
 the text's object space. Control-specific overrides such as
-`node.textShadow.offsetSpace=local` are supported.
+`node.textShadow.offsetSpace=local` are supported. Mnemonic underlines retain
+the configured shadow color and offset, but bound softness to the scale of their
+one-pixel decoration so extreme text softness does not create an oversized
+rectangular blur.
 
 Custom controls can obtain the resolved immutable value through
 `theme.textShadow(prefix)`. `GLTextShadow.NONE` represents a disabled shadow.

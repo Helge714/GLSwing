@@ -4,6 +4,9 @@ key.history.redo=shortcut+shift+Z, shortcut+Y
 key.focus.next=shortcut+TAB
 key.focus.previous=shortcut+shift+TAB
 modifier.menu.mnemonic=ALT
+key.document.save=shortcut+S
+key.document.save-as=shortcut+shift+S
+key.document.save-all=shortcut+alt+S
 value.render.interaction-settle-millis=75
 value.node.interactive-curve-tolerance-factor=3
 

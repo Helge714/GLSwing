@@ -33,6 +33,15 @@ public final class GLInputMapSelfTest {
 		KeyEvent undo = key(KeyEvent.VK_Z, InputEvent.CTRL_DOWN_MASK);
 		check(GLInputMaps.DEFAULT.matches(GLInputActions.HISTORY_UNDO, undo),
 				"Default undo binding must use the platform shortcut modifier");
+		check(GLInputMaps.DEFAULT.matches(GLInputActions.DOCUMENT_SAVE,
+				key(KeyEvent.VK_S, InputEvent.CTRL_DOWN_MASK)),
+				"Default save binding must use Ctrl+S on Windows");
+		check(GLInputMaps.DEFAULT.matches(GLInputActions.DOCUMENT_SAVE_AS,
+				key(KeyEvent.VK_S, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK)),
+				"Default save-as binding must use Ctrl+Shift+S on Windows");
+		check(GLInputMaps.DEFAULT.matches(GLInputActions.DOCUMENT_SAVE_ALL,
+				key(KeyEvent.VK_S, InputEvent.CTRL_DOWN_MASK | InputEvent.ALT_DOWN_MASK)),
+				"Default save-all binding must use Ctrl+Alt+S on Windows");
 		check(GLInputMaps.DEFAULT.hasModifiers(GLInputActions.SLIDER_PRECISE,
 				InputEvent.SHIFT_DOWN_MASK), "Default precise modifier must be Shift");
 		check(GLInputMaps.DEFAULT.matches(GLInputActions.CODE_COMPLETE,

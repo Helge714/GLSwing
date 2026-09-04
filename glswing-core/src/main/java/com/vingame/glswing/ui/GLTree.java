@@ -79,6 +79,13 @@ public final class GLTree<T> extends GLContainer {
 	}
 	public GLTree(GLTreeModel<T> model) {
 		list.setCellRenderer(this::renderRow);
+		list.setItemToolTipProvider((source, row, index, width) -> {
+			String text = itemTextProvider.apply(row.value());
+			GLListStyle style = list.getGLStyle();
+			return GLTextFitter.overflowToolTip(list.getGLFont(style.font()),
+					text == null ? "" : text, Math.max(0,
+							width - contentX(row) - style.cellPadding().right()));
+		});
 		list.setKeyHandler(this::handleTreeKey);
 		list.addItemMouseListener(new GLList.ItemMouseListener<>() {
 			@Override public void itemClicked(GLList.ItemEvent<Row<T>> event) {
@@ -317,6 +324,7 @@ public final class GLTree<T> extends GLContainer {
 				&& !row.leaf() && isInDisclosure(row, mouse.getLocalX())) {
 			pressedDisclosure = row.value();
 			pressedDisclosureExpanded = isExpanded(row.value());
+			mouse.consume();
 		}
 	}
 	private void itemReleased(GLList.ItemEvent<Row<T>> event) {

@@ -184,6 +184,16 @@ public class GLCheckBox extends GLControl {
 		updateColors();
 	}
 
+	@Override protected String toolTipTextAt(GLMouseEvent event) {
+		String explicit = super.toolTipTextAt(event);
+		if (explicit != null) return explicit;
+		GLCheckBoxStyle style = getGLStyle();
+		float available = getWidth() - style.padding().right()
+				- style.padding().left() - style.boxSize() - style.gap();
+		return GLTextFitter.overflowToolTip(getGLFont(style.font()), text,
+				Math.max(0, available));
+	}
+
 	@Override
 	protected void controlFocusChanged(boolean focused) {
 		invalidateRecording();

@@ -5,6 +5,8 @@ import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 
 import com.vingame.glswing.component.GLContainer;
 import com.vingame.glswing.input.GLMouseEvent;
@@ -35,6 +37,9 @@ public final class GLTabbedPane extends GLContainer {
 	private boolean tabsClosable;
 	private boolean closedTabHistoryEnabled;
 	private final java.util.ArrayDeque<ClosedTab> closedTabs = new java.util.ArrayDeque<>();
+	private final java.util.IdentityHashMap<GLContainer, CompletionStage<Boolean>> closeRequests =
+			new java.util.IdentityHashMap<>();
+	private GLTabCloseRequestHandler closeRequestHandler;
 
 	public GLTabbedPane() {
 		addGL(contentHost);
@@ -78,10 +83,54 @@ public final class GLTabbedPane extends GLContainer {
 		updateVisibility();
 		updatePreferredSize();
 		layoutTabs();
-		if (old != selectedIndex)
+		if (old != selectedIndex || index == old)
 			fireSelectionChanged(old);
 		for (GLTabCloseListener listener : closeListeners)
 			listener.tabClosed(this, index, removed.title, removed.content);
+	}
+
+	/**
+	 * Requests a user-visible tab close and removes the tab only after approval.
+	 * Repeated requests for the same tab share the pending result. Programmatic
+	 * callers that intentionally bypass confirmation can use {@link #removeTabAt(int)}.
+	 */
+	public CompletionStage<Boolean> requestCloseTabAt(int index) {
+		checkIndex(index);
+		Tab tab = tabs.get(index);
+		CompletionStage<Boolean> pending = closeRequests.get(tab.content);
+		if (pending != null) return pending;
+		CompletionStage<Boolean> decision;
+		try {
+			decision = closeRequestHandler == null
+					? CompletableFuture.completedFuture(true)
+					: closeRequestHandler.requestClose(this, index, tab.title, tab.content);
+			if (decision == null) decision = CompletableFuture.completedFuture(false);
+		} catch (RuntimeException failure) {
+			decision = CompletableFuture.failedFuture(failure);
+		}
+		CompletableFuture<Boolean> result = new CompletableFuture<>();
+		closeRequests.put(tab.content, result);
+		decision.whenComplete((approved, failure) -> java.awt.EventQueue.invokeLater(() -> {
+			closeRequests.remove(tab.content);
+			if (failure != null || !Boolean.TRUE.equals(approved)) {
+				if (failure != null) result.completeExceptionally(failure);
+				else result.complete(false);
+				return;
+			}
+			int current = tabs.indexOf(tab);
+			if (current >= 0) removeTabAt(current);
+			result.complete(current >= 0);
+		}));
+		return result;
+	}
+
+	public GLTabCloseRequestHandler getCloseRequestHandler() {
+		return closeRequestHandler;
+	}
+
+	/** Sets the single close policy used by close buttons, middle-clicks and menus. */
+	public void setCloseRequestHandler(GLTabCloseRequestHandler handler) {
+		closeRequestHandler = handler;
 	}
 
 	public void removeAllTabs() {
@@ -123,6 +172,13 @@ public final class GLTabbedPane extends GLContainer {
 			}
 		return false;
 	}
+	/** Removes a retained closed-tab entry without affecting an open tab. */
+	public boolean forgetClosedTab(GLContainer content) {
+		if (content == null) return false;
+		for (ClosedTab closed : List.copyOf(closedTabs))
+			if (closed.content == content) return closedTabs.remove(closed);
+		return false;
+	}
 	private boolean restore(ClosedTab closed) {
 		int index = Math.min(closed.index, tabs.size());
 		Tab tab = new Tab(closed.title, closed.content);
@@ -135,7 +191,7 @@ public final class GLTabbedPane extends GLContainer {
 		updatePreferredSize();
 		layoutTabs();
 		ensureSelectedTabVisible();
-		if (old != selectedIndex) fireSelectionChanged(old);
+		fireSelectionChanged(old);
 		return true;
 	}
 	public int getSelectedIndex() { return selectedIndex; }
@@ -560,16 +616,35 @@ public final class GLTabbedPane extends GLContainer {
 		@Override protected void controlMouseExited(GLMouseEvent event) {
 			if (closeHovered) { closeHovered = false; invalidateRecording(); }
 		}
+		@Override protected String toolTipTextAt(GLMouseEvent event) {
+			String explicit = super.toolTipTextAt(event);
+			if (explicit != null) return explicit;
+			GLTabbedPaneStyle style = getGLStyle();
+			float available = getWidth() - style.tabHorizontalPadding() * 2
+					- (tabsClosable ? 20 : 0);
+			return GLTextFitter.overflowToolTip(getGLFont(style.font()), tab.title,
+					Math.max(0, available));
+		}
 
 		private void closeTab() {
 			int index = tabs.indexOf(tab);
-			if (index >= 0) removeTabAt(index);
+			if (index >= 0) requestCloseTabAt(index);
 		}
 		private void closeOtherTabs() {
+			closeNextOtherTab(tab);
+		}
+		private void closeNextOtherTab(Tab retained) {
+			int target = -1;
 			for (int index = tabs.size() - 1; index >= 0; index--)
-				if (tabs.get(index) != tab) removeTabAt(index);
-			int remaining = tabs.indexOf(tab);
-			if (remaining >= 0) setSelectedIndex(remaining);
+				if (tabs.get(index) != retained) { target = index; break; }
+			if (target < 0) {
+				int remaining = tabs.indexOf(retained);
+				if (remaining >= 0) setSelectedIndex(remaining);
+				return;
+			}
+			requestCloseTabAt(target).whenComplete((closed, failure) -> {
+				if (failure == null && Boolean.TRUE.equals(closed)) closeNextOtherTab(retained);
+			});
 		}
 	}
 

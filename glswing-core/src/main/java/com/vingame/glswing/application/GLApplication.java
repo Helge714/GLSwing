@@ -86,7 +86,7 @@ public final class GLApplication {
 						() -> handle.mutableClosedFuture().complete(null));
 				windowReference.set(window);
 				handle.window(window.frame());
-				handle.closeAction(() -> onAwtLater(() -> window.close(
+				handle.closeAction(() -> onAwtLater(() -> window.requestClose(
 						() -> handle.mutableClosedFuture().complete(null))));
 				return null;
 			});
@@ -111,6 +111,7 @@ public final class GLApplication {
 				GLContainer root = settings.surface.create(context);
 				window.root(root);
 				window.beforeClose(() -> settings.closeHandler.accept(context));
+				window.closeRequest(() -> settings.closeRequestHandler.requestClose(context));
 				contextReference.set(context);
 				return null;
 			});
@@ -227,6 +228,8 @@ public final class GLApplication {
 		private GLApplicationSurfaceFactory surface;
 		private Consumer<Throwable> failureHandler = Throwable::printStackTrace;
 		private Consumer<GLApplicationContext> closeHandler = context -> { };
+		private GLApplicationCloseRequestHandler closeRequestHandler = context ->
+				java.util.concurrent.CompletableFuture.completedFuture(true);
 		private Duration firstFrameTimeout = Duration.ofSeconds(30);
 
 		public Builder() { }
@@ -252,6 +255,7 @@ public final class GLApplication {
 			surface = source.surface;
 			failureHandler = source.failureHandler;
 			closeHandler = source.closeHandler;
+			closeRequestHandler = source.closeRequestHandler;
 			firstFrameTimeout = source.firstFrameTimeout;
 		}
 
@@ -386,6 +390,16 @@ public final class GLApplication {
 			if (handler == null)
 				throw new IllegalArgumentException("Close handler is required");
 			closeHandler = handler;
+			return this;
+		}
+		/**
+		 * Installs an asynchronous close guard. Returning {@code false}, completing
+		 * exceptionally, or returning {@code null} keeps the application open.
+		 */
+		public Builder onCloseRequest(GLApplicationCloseRequestHandler handler) {
+			if (handler == null)
+				throw new IllegalArgumentException("Close request handler is required");
+			closeRequestHandler = handler;
 			return this;
 		}
 		public Builder firstFrameTimeout(Duration timeout) {

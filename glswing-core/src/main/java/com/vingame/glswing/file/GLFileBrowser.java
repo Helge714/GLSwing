@@ -116,6 +116,9 @@ public final class GLFileBrowser extends GLContainer {
 		});
 		entryList.setRowHeight(34);
 		entryList.setCellRenderer(this::renderEntry);
+		entryList.setItemToolTipProvider((source, entry, index, width) ->
+				com.vingame.glswing.ui.GLTextFitter.overflowToolTip(rowFont(entry),
+						entry.displayName(), columns(width).nameWidth));
 		entryList.getSelectionModel().addSelectionListener(
 				(source, oldValue, newValue) -> fireSelectionChanged());
 		entryList.addActivationListener((source, entry, index) -> {

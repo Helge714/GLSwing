@@ -167,6 +167,14 @@ public class GLButton extends GLControl {
 		updateColors();
 	}
 
+	@Override protected String toolTipTextAt(GLMouseEvent event) {
+		String explicit = super.toolTipTextAt(event);
+		if (explicit != null) return explicit;
+		GLButtonStyle style = getGLStyle();
+		return GLTextFitter.overflowToolTip(getGLFont(style.font()), text,
+				Math.max(0, getWidth() - style.padding().horizontal()));
+	}
+
 	@Override
 	protected void controlFocusChanged(boolean focused) {
 		focusParameters.setOpacity(focused ? 1 : 0);

@@ -27,6 +27,7 @@ see the [rendering guide](graphics-pipeline.md).
 | Value input | `GLSlider`, `GLSliderGroup`, `GLTextEditor`, `GLTextInputFormats`, `GLComboBox<T>` | Selection, validation, and editing |
 | Navigation | `GLMenuBar`, `GLPopupMenu`, `GLMenuItem`, `GLTabbedPane` | Menus, overlays, and view selection |
 | File access | `GLFileDialogs`, `GLFileDialogRequest` | Native SWT dialogs with a themed GLSwing fallback |
+| Documents | `GLDocument<T>`, `GLDocumentManager`, `GLDocumentLifecycle<T>`, `GLDocumentBundle`, `GLDocumentWorkspace` | Typed models, commands, active history routing, codecs, migration, and atomic persistence |
 | Scrolling | `GLScrollPane`, `GLScrollBar` | Clipped viewports and scroll models |
 | Data views | `GLList<T>`, `GLListModel<T>`, `GLListSelectionModel` | Virtualized rows, renderers, and selection |
 | Appearance | `GLTheme`, style records, `GLThemeValues`, `GLThemeLoader`, `GLThemeWatcher` | Global and local presentation |
@@ -89,4 +90,5 @@ render methods manually.
 5. [Themes and localization](ui-framework/themes-localization.md)
 6. [Input configuration](ui-framework/input-configuration.md)
 7. [Undo and redo](ui-framework/history.md)
-8. [Node editor](ui-framework/nodes.md)
+8. [Documents and serialization](ui-framework/documents.md)
+9. [Node editor](ui-framework/nodes.md)

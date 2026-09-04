@@ -240,7 +240,8 @@ and does not require a layer or framebuffer blur pass.
 
 `GLTabbedPane` shows only selected content. Applications can change titles,
 disable or remove tabs, and select by index or component. An overflowing tab
-strip scrolls with the wheel and ellipsizes long titles.
+strip scrolls with the wheel and ellipsizes long titles. Hovering an ellipsized
+title shows its complete text in the standard tooltip.
 
 The selected component fills the content area by default. The tabbed pane owns
 the surrounding border and clips its content; applications that need an inset
@@ -254,6 +255,13 @@ Applications can enable a bounded recently-closed history with
 **Reopen Closed Tab**; `reopenLastClosedTab()` and `reopenTab(content)` expose
 the same operation programmatically.
 
+Close buttons, middle-click, and context-menu close actions use
+`requestCloseTabAt(...)`. An optional `GLTabCloseRequestHandler` may approve or
+veto the operation asynchronously; repeated gestures reuse the pending request.
+`removeTabAt(...)` bypasses that policy and is intended for already-approved
+programmatic removal. Document applications normally install this behavior
+through [`GLDocumentLifecycle`](documents.md#closing-modified-documents).
+
 ## Lists
 
 `GLList<T>` displays large data sets without creating one component for every
@@ -261,6 +269,12 @@ item. When used as the direct content of a `GLScrollPane`, it attaches and
 records only cells intersecting the viewport plus a small configurable
 overscan range. Scrolling recycles those cells. Model size therefore does not
 determine component-tree size, picking cost, or per-frame submission count.
+
+Default rows show an automatic full-text tooltip only when their label is
+ellipsized. Custom renderers can provide the equivalent behavior through
+`setItemToolTipProvider(...)`; `GLFileBrowser` and `GLTree` configure this for
+their name columns. Standard buttons, checkboxes, combo boxes, sliders, menu
+items, menu-bar items, and tab titles follow the same overflow-tooltip rule.
 
 ```java
 GLList<Path> files = new GLList<>(paths);

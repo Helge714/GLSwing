@@ -1,6 +1,7 @@
 # Undo and Redo with `GLHistoryManager`
 
-[UI guide](../ui-framework.md) · [Controls](controls.md) · [Node editor](nodes.md)
+[UI guide](../ui-framework.md) · [Controls](controls.md) ·
+[Documents](documents.md) · [Node editor](nodes.md)
 
 `GLHistoryManager` stores named reversible edits, groups related operations, and
 tracks whether the current state differs from the last saved state.
@@ -53,6 +54,10 @@ Keyboard undo and redo resolve both the history manager and the semantic
 [input map](input-configuration.md) from the focused component. The bundled
 `Ctrl/Cmd+Z` binding therefore affects the active surface rather than an
 unrelated host-level history, and applications may replace the binding.
+
+For document tabs, `GLDocumentTabController` installs these scopes and
+`GLDocumentWorkspace` routes application-level menu actions to the selected
+document. See [Documents and serialization](documents.md#active-documents-and-tabs).
 
 ## Recording completed changes
 

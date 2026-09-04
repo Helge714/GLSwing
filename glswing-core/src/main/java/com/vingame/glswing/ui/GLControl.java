@@ -3,6 +3,7 @@ package com.vingame.glswing.ui;
 import java.awt.event.MouseEvent;
 
 import com.vingame.glswing.component.GLContainer;
+import com.vingame.glswing.component.GLParent;
 import com.vingame.glswing.input.GLKeyEvent;
 import com.vingame.glswing.input.GLKeyTarget;
 import com.vingame.glswing.input.GLMouseEvent;
@@ -77,6 +78,11 @@ public abstract class GLControl extends GLContainer implements GLKeyTarget {
 	protected String toolTipTextAt(GLMouseEvent event) { return toolTipText; }
 	/** Optional tooltip text color; {@code null} uses the active theme. */
 	protected java.awt.Color toolTipTextColorAt(GLMouseEvent event) { return null; }
+
+	@Override
+	protected void detached(GLParent formerParent) {
+		GLToolTipManager.detached(this);
+	}
 
 	@Override
 	public final boolean isFocusTraversable() {
