@@ -58,7 +58,43 @@ public final class GLPropertiesCodeLanguage implements GLCodeLanguage {
 	public GLCodePropertySchema schema() { return schema; }
 	@Override public String id() { return schema.id(); }
 	@Override public String lineCommentPrefix() { return "#"; }
+	@Override public boolean supportsDefinitionNavigation() { return true; }
+	@Override public boolean supportsInlayHints() { return true; }
+	@Override public boolean supportsColorFormatting() {
+		return "gltheme".equals(schema.id());
+	}
 	@Override public GLCodeDiagnosticProvider codeIntelligenceProvider() { return provider; }
+
+	String formatColorValues(String source, GLColorModel preferredModel,
+			GLColorExpressionFormat format) {
+		if (source == null || format == null)
+			throw new IllegalArgumentException("Source and color format are required");
+		Document document = parse(source);
+		StringBuilder result = new StringBuilder(source);
+		List<Line> lines = document.lines();
+		for (int index = lines.size() - 1; index >= 0; index--) {
+			Line line = lines.get(index);
+			if (!line.hasProperty() || line.value().isBlank()) continue;
+			GLColorModel sourceModel = functionalColorModel(line.value());
+			if (sourceModel == null) continue;
+			try {
+				java.awt.Color color = GLThemeValues.parseColor(line.value());
+				GLColorModel output = preferredModel == null ? sourceModel : preferredModel;
+				String replacement = output.format(output.channels(color),
+						color.getAlpha() / 255d, format);
+				result.replace(line.valueStart(), line.valueEnd(), replacement);
+			} catch (RuntimeException ignored) { }
+		}
+		return result.toString();
+	}
+
+	private static GLColorModel functionalColorModel(String value) {
+		String lower = value.stripLeading().toLowerCase(java.util.Locale.ROOT);
+		for (GLColorModel model : GLColorModel.values())
+			if (lower.startsWith(model.name().toLowerCase(java.util.Locale.ROOT) + "("))
+				return model;
+		return null;
+	}
 
 	@Override
 	public List<GLCodeToken> tokenize(String source) {
@@ -482,6 +518,10 @@ public final class GLPropertiesCodeLanguage implements GLCodeLanguage {
 		}
 		if (offset >= line.valueStart() && offset <= line.valueEnd()) {
 			Property property = schema.property(line.key());
+			if (property != null && property.type() == ValueType.PATH
+					&& builtInThemeLocation(line) != null)
+				return Optional.of(new GLCodeHover(line.valueStart(), line.valueEnd(),
+						"Built-in theme preset: `" + line.value() + "`"));
 			if (property != null && property.type() == ValueType.PATH)
 				return Optional.of(new GLCodeHover(line.valueStart(), line.valueEnd(),
 						"Referenced file: `" + line.value() + "`"));
@@ -503,6 +543,8 @@ public final class GLPropertiesCodeLanguage implements GLCodeLanguage {
 		Property property = schema.property(line.key());
 		if (property != null && property.type() == ValueType.PATH
 				&& offset >= line.valueStart() && offset <= line.valueEnd()) {
+			GLCodeLocation builtIn = builtInThemeLocation(line);
+			if (builtIn != null) return List.of(builtIn);
 			Path target = resolvePath(document.uri(), line.value());
 			if (target != null && Files.isRegularFile(target) && isConfigurationFile(target))
 				return List.of(new GLCodeLocation(target.toUri(), 0, 0));
@@ -853,6 +895,17 @@ public final class GLPropertiesCodeLanguage implements GLCodeLanguage {
 		String value = line.value().toLowerCase(java.util.Locale.ROOT);
 		return ("theme.extends".equals(line.key()) && BUILT_IN_REFERENCES.contains(value))
 				|| ("input.extends".equals(line.key()) && "default".equals(value));
+	}
+
+	private static GLCodeLocation builtInThemeLocation(Line line) {
+		if (!"theme.extends".equals(line.key())) return null;
+		String name = line.value().trim().toLowerCase(java.util.Locale.ROOT);
+		if (!BUILT_IN_REFERENCES.contains(name)) return null;
+		var resource = GLPropertiesCodeLanguage.class.getResource(
+				"/com/vingame/glswing/themes/" + name + ".gltheme");
+		if (resource == null) return null;
+		try { return new GLCodeLocation(resource.toURI(), 0, 0); }
+		catch (java.net.URISyntaxException invalidResource) { return null; }
 	}
 
 	private static Path filePath(URI uri) {

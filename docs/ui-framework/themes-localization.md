@@ -145,7 +145,9 @@ enum and boolean values, built-in base themes, sibling theme fragments, and
 font files. Hovering a known property shows its type, purpose, permitted values,
 and default where available. Ctrl/Cmd-click and **Go to definition** navigate
 to local `${property}` declarations, imported fragment declarations, and theme
-files named by `theme.extends`, `theme.colors`, or `theme.metrics`.
+files named by `theme.extends`, `theme.colors`, or `theme.metrics`. The built-in
+`default`, `dark`, and `light` inheritance targets resolve to their packaged,
+read-only `.gltheme` sources as well.
 
 Diagnostics cover malformed or duplicate declarations, invalid typed values,
 unknown references, missing imported files, local reference cycles, import

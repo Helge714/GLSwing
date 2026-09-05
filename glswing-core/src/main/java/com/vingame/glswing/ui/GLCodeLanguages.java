@@ -125,6 +125,22 @@ public final class GLCodeLanguages {
 			Set<String> keywords) {
 		return new GLCodeLanguage() {
 			@Override public String id() { return id; }
+			@Override public String lineCommentPrefix() {
+				return switch (rules) {
+				case PYTHON, RUBY -> "#";
+				case JAVA, C_LIKE, SCRIPT -> "//";
+				case JSON, HTML, XML, CSS -> "";
+				};
+			}
+			@Override public boolean supportsOrganizeImports() {
+				return rules == Rules.JAVA;
+			}
+			@Override public boolean supportsDefinitionNavigation() {
+				return rules == Rules.JAVA;
+			}
+			@Override public boolean supportsInlayHints() {
+				return rules == Rules.JAVA;
+			}
 			@Override public List<GLCodeToken> tokenize(String source) {
 				List<GLCodeToken> result = new ArrayList<>();
 				for (int index = 0; index < source.length();) {

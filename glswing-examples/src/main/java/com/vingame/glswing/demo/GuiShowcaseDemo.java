@@ -1158,8 +1158,21 @@ public final class GuiShowcaseDemo {
 		private void openLocalConfigurationSource(
 				com.vingame.glswing.ui.GLCodeLocation location) {
 			try {
-				Path path = Path.of(location.uri());
-				GLCodeEditor editor = new GLCodeEditor(Files.readString(path), location.uri());
+				boolean localFile = "file".equalsIgnoreCase(location.uri().getScheme());
+				String uriPath = location.uri().getPath();
+				boolean bundled = uriPath != null && uriPath.replace('\\', '/')
+						.contains("/com/vingame/glswing/themes/");
+				String source;
+				if (localFile) source = Files.readString(Path.of(location.uri()));
+				else if ("jar".equalsIgnoreCase(location.uri().getScheme()))
+					try (var stream = location.uri().toURL().openStream()) {
+						source = new String(stream.readAllBytes(),
+								java.nio.charset.StandardCharsets.UTF_8);
+					}
+				else throw new java.io.IOException(
+						"Unsupported configuration source URI: " + location.uri());
+				GLCodeEditor editor = new GLCodeEditor(source, location.uri());
+				if (bundled || !localFile) editor.setEditable(false);
 				editor.setNavigationHandler(this::openDefinition);
 				int tab = addCodeDocumentTab(tabName(location.uri()), location.uri(), editor);
 				editorsByUri.put(location.uri(), editor);
@@ -1913,10 +1926,11 @@ public final class GuiShowcaseDemo {
 			fixedSlider.setStep(5);
 			addControl(section, fixedSlider, 18, 72, 324, 26);
 
-			caption(section, "FIXED DISABLED", 18, 108);
-			GLSlider fixedDisabled = GLSlider.fixed("Fortschritt", 0, 1, 0.65);
-			fixedDisabled.setEnabled(false);
-			addControl(section, fixedDisabled, 18, 130, 324, 26);
+			caption(section, "FIXED + BUTTONS: ganzzahlige Schritte", 18, 108);
+			GLSlider fixedButtons = GLSlider.fixed("Iterations", 0, 10, 4,
+					GLSlider.Presentation.BUTTONS);
+			fixedButtons.setIntegerValuesOnly(true);
+			addControl(section, fixedButtons, 18, 130, 324, 26);
 
 			caption(section, "FREE: Shift fein, Strg grob, Rechtsklick-Menue", 18, 166);
 			freeSlider.setDefaultValue(0);
@@ -1928,18 +1942,17 @@ public final class GuiShowcaseDemo {
 					event -> freeSlider.setValue(42));
 			addControl(section, freeSlider, 18, 188, 324, 26);
 
-			caption(section, "FREE DISABLED", 18, 224);
-			GLSlider freeDisabled = GLSlider.free("Offset", -8);
-			freeDisabled.setEnabled(false);
-			addControl(section, freeDisabled, 18, 246, 324, 26);
+			caption(section, "FREE + BAR: Basis 0 ... 10, erweitert sich", 18, 224);
+			GLSlider freeBar = GLSlider.free("Dynamischer Wert", 0, 10, 5);
+			addControl(section, freeBar, 18, 246, 324, 26);
 
 			caption(section, "GRUPPE: vertikal ueberstreichen", 18, 310);
-			GLSlider red = GLSlider.fixed("Rot", 0, 1, 128);
-			GLSlider green = GLSlider.fixed("Gruen", 0, 1, 96);
-			GLSlider blue = GLSlider.fixed("Blau", 0, 1, 160);
-			red.setDragSensitivity(1);
-			green.setDragSensitivity(1);
-			blue.setDragSensitivity(1);
+			GLSlider red = GLSlider.fixed("Rot", 0, 255, 128);
+			GLSlider green = GLSlider.fixed("Gruen", 0, 255, 96);
+			GLSlider blue = GLSlider.fixed("Blau", 0, 255, 160);
+			red.setIntegerValuesOnly(true);
+			green.setIntegerValuesOnly(true);
+			blue.setIntegerValuesOnly(true);
 			GLSliderGroup colorGroup = new GLSliderGroup(red, green, blue);
 			addControl(section, colorGroup, 18, 334, 314, 72);
 			caption(section, "Aenderungen unterstuetzen Undo / Redo", 18, 438);

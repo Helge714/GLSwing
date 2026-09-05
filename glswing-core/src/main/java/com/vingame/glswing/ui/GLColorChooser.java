@@ -54,8 +54,17 @@ public class GLColorChooser extends GLButton {
 	/** Opens a picker with customized eyedropper preview content. */
 	public static GLDialog show(GLParent owner, Color color, GLColorModel model,
 			GLPipettePreview preview, Consumer<GLColorPicker> accepted) {
+		return show(owner, color, model, model, GLColorExpressionFormat.DEFAULT,
+				preview, accepted);
+	}
+	/** Opens a picker with independent editing model and output formatting. */
+	public static GLDialog show(GLParent owner, Color color, GLColorModel model,
+			GLColorModel outputModel, GLColorExpressionFormat format,
+			GLPipettePreview preview, Consumer<GLColorPicker> accepted) {
 		Objects.requireNonNull(owner); Objects.requireNonNull(accepted);
 		GLColorPicker picker=new GLColorPicker(color); picker.setColorModel(model);
+		picker.setOutputColorModel(Objects.requireNonNull(outputModel));
+		picker.setColorExpressionFormat(Objects.requireNonNull(format));
 		picker.setPipettePreview(preview);
 		picker.setGLHistoryManager(new GLHistoryManager());
 		GLButton apply=new GLButton(owner.getGLLocalizer().text("glswing.colorPicker.apply"));

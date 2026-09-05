@@ -12,6 +12,7 @@ behavior from `GLControl`. Geometry and text measurements use logical pixels.
 - [Control overview](#control-overview)
 - [Labels, buttons, checkboxes, and lines](#labels-buttons-checkboxes-and-lines)
 - [Sliders and slider groups](#sliders-and-slider-groups)
+- [Numeric spinners](#numeric-spinners)
 - [Color controls](#color-controls)
 - [Visual and input groups](#visual-and-input-groups)
 - [Text editor](#text-editor)
@@ -202,6 +203,7 @@ shortcuts remain native.
 | `GLLine` | Orientation constructor | Stroke and relative endpoints |
 | `GLSlider` | `fixed(...)` or `free(...)` | Value, range, step, editor, reset |
 | `GLSliderGroup` | `new GLSliderGroup(sliders...)` | Coordinated multi-slider gesture |
+| `GLNumberSpinner` | Value or range-and-value constructor | Numeric field with increment/decrement buttons |
 | `GLTextEditor` | Text constructor | Single-line editing and validation |
 | `GLComboBox<T>` | Empty or item-list constructor | Selection, sorting, popup |
 | `GLPopupMenu` | `new GLPopupMenu()` | Menu items and submenus |
@@ -250,13 +252,36 @@ gain.setDefaultValue(50);
 
 GLSlider offset = GLSlider.free("Offset", 0);
 offset.setStep(0.1f);
+
+GLSlider boundedButtons = GLSlider.fixed("Iterations", 0, 64, 8,
+        GLSlider.Presentation.BUTTONS);
+boundedButtons.setIntegerValuesOnly(true);
+
+GLSlider unboundedBar = GLSlider.free("Exposure", -1, 1, 0);
 ```
 
-`FIXED` clamps to `minimum..maximum` and displays progress. `FREE` has no range
-and supports arrow regions. Drag sensitivity is value change per horizontal
-logical screen pixel; Shift applies the precise factor and Ctrl the coarse
-factor. `step` quantizes changes. `increment()`, `decrement()`, and `reset()`
-perform semantic operations.
+Value behavior and presentation are independent. `FIXED` clamps to
+`minimum..maximum`; `FREE` accepts every finite value. `BAR` uses an absolute
+progress position, while `BUTTONS` provides decrement/increment regions and
+relative center dragging. The traditional factories remain concise defaults:
+`fixed(...)` uses `BAR`, and `free(text, value)` uses `BUTTONS`. Pass a
+`GLSlider.Presentation` explicitly or call `setPresentation(...)` for any of
+the other combinations.
+
+A free bar has a baseline display range configured through the four-argument
+`free(text, displayMinimum, displayMaximum, value)` factory or
+`setDisplayRange(...)`. When its value leaves that range, the visible edge
+expands to include the value. The expanded range remains stable while the value
+is outside, then returns to the baseline as soon as editing or dragging moves
+the value back inside. `getVisibleMinimum()` and `getVisibleMaximum()` expose
+the current rendered range.
+
+`setIntegerValuesOnly(true)` restricts programmatic assignment, inline editing,
+button changes, and bar dragging to whole values, so the fill moves in discrete
+positions. Drag sensitivity is value change per horizontal logical screen
+pixel for `BUTTONS`; Shift applies the precise factor and Ctrl the coarse
+factor. `step` controls buttons and keyboard changes. `increment()`,
+`decrement()`, and `reset()` perform semantic operations.
 
 Clicking the value starts the embedded editor. Control it with
 `startValueEditing()`, `cancelValueEditing()`, and `isValueEditing()`. The
@@ -270,6 +295,33 @@ gradient across the complete group; each row receives the color interval that
 corresponds to its position instead of restarting the gradient per slider.
 The linked-editing focus outline covers only selected slider rows. Reversing the
 vertical selection gesture removes rows before the editor opens.
+
+## Numeric spinners
+
+Use `GLNumberSpinner` when a precise numeric setting does not benefit from a
+visual range, for example a decimal-place count, retry limit, or grid size. It
+combines a validated text editor with vertically stacked increment and decrement
+buttons and participates in the active theme, focus system, localization, and
+history manager.
+
+```java
+GLNumberSpinner precision = new GLNumberSpinner(0, 12, 3);
+precision.setIntegerValuesOnly(true);
+
+GLNumberSpinner scale = new GLNumberSpinner(1.0);
+scale.setStep(0.1);
+scale.addChangeListener(event -> updateScale(scale.getValue()));
+```
+
+The one-argument constructor is unbounded. The three-argument constructor
+clamps values to `minimum..maximum`. `setStep(...)` controls both buttons and
+the Up/Down arrow keys while the editor is focused. Holding a pointer button
+repeats the step and records the complete gesture as one undoable change.
+The corresponding step button is disabled automatically at either range limit.
+Programmatic `setValue(...)`, `increment()`, and `decrement()` do not create
+history entries. Use `setValueFormatter(...)` for an application-specific
+display representation and `getEditor()` when local editor customization is
+needed.
 
 ## Color controls
 
@@ -337,6 +389,28 @@ are independent; an empty selection also hides the preview. Settings apply to
 the next sampling session. For theme-editor pickers, configure
 `editor.setColorPickerPipettePreview(...)`. The `GLColorChooser.show(...)`
 overload accepting a `GLPipettePreview` configures a standalone picker dialog.
+
+Color expressions have an independent output model and numeric policy. This
+keeps model selection (`RGB`, `HSV`, `HSL`, `OKLAB`, or `OKLCH`) separate from
+channel notation and rounding:
+
+```java
+GLColorExpressionFormat format = new GLColorExpressionFormat(
+        GLColorExpressionFormat.ChannelNotation.PERCENT,
+        3,     // maximum fractional digits
+        true); // remove trailing zeros
+
+picker.setOutputColorModel(GLColorModel.OKLCH);
+picker.setColorExpressionFormat(format);
+String expression = picker.getColorExpression();
+```
+
+`BYTE` writes bounded channels as integers from 0 through 255,
+`NORMALIZED_FLOAT` writes explicit `f`-suffixed values from 0 through 1, and
+`PERCENT` writes values from 0 through 100. Hue remains expressed in degrees;
+the signed OKLab axes and OKLCH chroma remain decimal quantities. The default
+uses normalized floats, at most four fractional digits, and no redundant
+trailing zeros.
 
 ## Text editor
 

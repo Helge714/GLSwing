@@ -94,10 +94,11 @@ public final class GLThemeValues {
 	 * alias for the four-channel RGB form. A {@code derive} expression can
 	 * set ({@code =}), scale ({@code *=}), add ({@code +=}), or subtract
 	 * ({@code -=}) the alpha, hue, saturation, and value/brightness channels.
-	 * Functional RGB(A) channels independently accept 0..255 integers,
+	 * Bounded functional channels independently accept 0..255 integers,
 	 * normalized decimal or {@code f}-suffixed values, and percentages. Hue
-	 * accepts degrees via {@code deg}; derived unit channels use the same
-	 * percentage, normalized-float, and integer conventions.
+	 * accepts degrees via {@code deg}; signed OKLab axes and OKLCH chroma remain
+	 * decimal quantities. Derived unit channels use the same percentage,
+	 * normalized-float, and integer conventions.
 	 */
 	public static Color parseColor(String text) {
 		if (text == null)
@@ -454,7 +455,7 @@ public final class GLThemeValues {
 			else if (value.indexOf('.') >= 0)
 				result = Float.parseFloat(value);
 			else
-				throw new NumberFormatException("Expected a percentage or normalized decimal");
+				result = Integer.parseInt(value) / 255f;
 			return unit(result, text);
 		} catch (NumberFormatException error) {
 			throw new IllegalArgumentException(channel

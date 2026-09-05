@@ -97,6 +97,11 @@ final class MavenSmokeTest {
 	}
 
 	@Test
+	void numberSpinner() {
+		GLNumberSpinnerSelfTest.main(NO_ARGS);
+	}
+
+	@Test
 	void controlsAndFocus() {
 		GLControlsSelfTest.main(NO_ARGS);
 	}

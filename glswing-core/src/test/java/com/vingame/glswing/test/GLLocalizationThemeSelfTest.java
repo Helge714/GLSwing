@@ -83,7 +83,9 @@ public final class GLLocalizationThemeSelfTest {
 				new Color(255, 0, 0, 128), 1, "OKLCH conversion failed");
 		expectColorFailure("rgba(0, 0, 0, 1e-1)");
 		expectColorFailure("rgba(256, 0, 0, 255)");
-		expectColorFailure("hsv(120deg, 1, 100%)");
+		check(GLThemeValues.parseColor("hsv(120deg, 1, 100%)").equals(
+				new Color(254, 255, 254)),
+				"Mixed byte and percentage polar channels failed");
 		expectColorFailure("oklch(0.5, -0.1, 20deg)");
 		check(GLThemeValues.parseColor(
 				"derive(rgba(100, 150, 200, 128), alpha*=50%)").equals(

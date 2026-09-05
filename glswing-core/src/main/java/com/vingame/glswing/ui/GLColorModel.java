@@ -1,7 +1,6 @@
 package com.vingame.glswing.ui;
 
 import java.awt.Color;
-import java.util.Locale;
 
 /** Editing coordinates for an sRGB color. Hue is measured in degrees. */
 public enum GLColorModel {
@@ -78,16 +77,33 @@ public enum GLColorModel {
 				encoded(-1.2684380046*l+2.6097574011*m-.3413193965*s),
 				encoded(-.0041960863*l-.7034186147*m+1.7076147010*s)};
 	}
-	/** A theme-compatible expression with explicit fractional channel syntax. */
+	/** A compact theme-compatible expression using the default numeric policy. */
 	public String format(double[] c, double alpha) {
+		return format(c, alpha, GLColorExpressionFormat.DEFAULT);
+	}
+	/** Formats a theme-compatible expression with an explicit numeric policy. */
+	public String format(double[] c, double alpha, GLColorExpressionFormat format) {
 		if (c == null || c.length != 3 || !Double.isFinite(alpha) || alpha<0 || alpha>1)
 			throw new IllegalArgumentException("Three channels and normalized alpha required");
 		for (double value : c) if (!Double.isFinite(value)) throw new IllegalArgumentException("Finite channels required");
-		if (this == HSV || this == HSL) return String.format(Locale.ROOT,"%s(%.6fdeg, %.6f, %.6f, %.6ff)", name().toLowerCase(Locale.ROOT),c[0],c[1],c[2],alpha);
-		if (this == OKLCH) return String.format(Locale.ROOT,"oklch(%.6f, %.6f, %.6fdeg, %.6ff)",c[0],c[1],c[2],alpha);
-		return this == RGB ? String.format(Locale.ROOT,"rgb(%d, %d, %d, %.6ff)",
-				Math.round(c[0]),Math.round(c[1]),Math.round(c[2]),alpha)
-				: String.format(Locale.ROOT,"%s(%.6f, %.6f, %.6f, %.6ff)",
-						name().toLowerCase(Locale.ROOT),c[0],c[1],c[2],alpha);
+		if (format == null) throw new IllegalArgumentException("Color expression format required");
+		String a = format.bounded(alpha);
+		return switch (this) {
+		case RGB -> "rgb(" + rgb(c[0], format) + ", " + rgb(c[1], format)
+				+ ", " + rgb(c[2], format) + ", " + a + ")";
+		case HSV, HSL -> name().toLowerCase(java.util.Locale.ROOT) + "("
+				+ format.decimal(c[0]) + "deg, " + format.bounded(c[1]) + ", "
+				+ format.bounded(c[2]) + ", " + a + ")";
+		case OKLAB -> "oklab(" + format.bounded(c[0]) + ", "
+				+ format.decimal(c[1]) + "f, " + format.decimal(c[2]) + "f, "
+				+ a + ")";
+		case OKLCH -> "oklch(" + format.bounded(c[0]) + ", "
+				+ format.decimal(c[1]) + "f, " + format.decimal(c[2]) + "deg, "
+				+ a + ")";
+		};
+	}
+	private static String rgb(double value, GLColorExpressionFormat format) {
+		return format.channelNotation() == GLColorExpressionFormat.ChannelNotation.BYTE
+				? Long.toString(Math.round(value)) : format.bounded(value / 255d);
 	}
 }

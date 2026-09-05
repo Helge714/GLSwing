@@ -2,7 +2,6 @@ package com.vingame.glswing.ui;
 
 import java.awt.Color;
 import java.util.List;
-import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
@@ -18,6 +17,7 @@ public class GLColorPicker extends GLContainer {
 	private Color color, original;
 	private GLColorModel model = GLColorModel.RGB;
 	private GLColorModel outputModel = GLColorModel.RGB;
+	private GLColorExpressionFormat expressionFormat = GLColorExpressionFormat.DEFAULT;
 	private double[] channels;
 	private boolean syncing;
 	private GLPipettePreview pipettePreview = GLPipettePreview.DEFAULT;
@@ -151,6 +151,14 @@ public class GLColorPicker extends GLContainer {
 	public final void setOutputColorModel(GLColorModel value) {
 		outputModel=Objects.requireNonNull(value);refresh();
 	}
+	/** Returns the numeric policy used by the output expression. */
+	public final GLColorExpressionFormat getColorExpressionFormat() {
+		return expressionFormat;
+	}
+	/** Configures rounding, trailing zeros and bounded-channel notation. */
+	public final void setColorExpressionFormat(GLColorExpressionFormat value) {
+		expressionFormat=Objects.requireNonNull(value);refresh();
+	}
 	/** Sets the comparison swatch without changing the edited color. */
 	public final void setOriginalColor(Color value) {
 		original=Objects.requireNonNull(value);comparison.invalidateRecording();invalidateRecording();
@@ -168,7 +176,7 @@ public class GLColorPicker extends GLContainer {
 	/** Formats the current color with the selected output model. */
 	public final String getColorExpression() {
 		double[] outputChannels=outputModel==model?channels:outputModel.channels(color);
-		return outputModel.format(outputChannels,color.getAlpha()/255d);
+		return outputModel.format(outputChannels,color.getAlpha()/255d,expressionFormat);
 	}
 	private void fire() { for(var listener:listeners) listener.accept(color); }
 	private void recordChange(Color before, Color after) {
@@ -276,7 +284,7 @@ public class GLColorPicker extends GLContainer {
 					if(index<3) sample[index]=selected.minimum(index)+position*(selected.maximum(index)-selected.minimum(index));
 					return selected.isInGamut(sample);
 				});
-				if(!preservedEditors.contains(i)) numbers[i].setText(String.format(Locale.ROOT,"%.4f",value));
+				if(!preservedEditors.contains(i)) numbers[i].setText(expressionFormat.decimal(value));
 			}
 			refreshExpression();
 			setStatus(model.isInGamut(channels)?null:text("outOfGamut"));

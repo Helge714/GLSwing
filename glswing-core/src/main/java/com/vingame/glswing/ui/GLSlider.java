@@ -29,12 +29,19 @@ import com.vingame.glswing.rendering.GLRenderParameters;
 import com.vingame.glswing.rendering.GLStroke;
 import com.vingame.glswing.rendering.GLTextShadow;
 
-/** A numeric slider with either a bounded progress fill or unbounded arrows. */
+/** A numeric slider with independent value constraints and interaction style. */
 public class GLSlider extends GLControl {
 
 	public enum Mode {
 		FIXED,
 		FREE
+	}
+	/** Visual and pointer interaction presented independently of {@link Mode}. */
+	public enum Presentation {
+		/** An absolute position represented by a progress fill. */
+		BAR,
+		/** Increment/decrement buttons with relative dragging in the center. */
+		BUTTONS
 	}
 
 	public static final float DEFAULT_WIDTH = 180;
@@ -45,6 +52,7 @@ public class GLSlider extends GLControl {
 	static final float DRAG_THRESHOLD = 2;
 
 	private final Mode mode;
+	private Presentation presentation;
 	private final CopyOnWriteArrayList<ChangeListener> changeListeners =
 			new CopyOnWriteArrayList<>();
 	private final GLRenderParameters backgroundParameters = new GLRenderParameters();
@@ -60,9 +68,14 @@ public class GLSlider extends GLControl {
 	private String text;
 	private double minimum;
 	private double maximum;
+	private double displayMinimum;
+	private double displayMaximum;
+	private double visibleMinimum;
+	private double visibleMaximum;
 	private double value;
 	private double defaultValue;
 	private double step = 1;
+	private boolean integerValuesOnly;
 	private double dragSensitivity = DEFAULT_DRAG_SENSITIVITY;
 	private double preciseDragFactor = Double.NaN;
 	private double coarseDragFactor = Double.NaN;
@@ -85,14 +98,21 @@ public class GLSlider extends GLControl {
 	private boolean groupGesturePressed;
 	private double gestureStartValue;
 
-	private GLSlider(String text, Mode mode, double minimum,
-			double maximum, double value) {
+	private GLSlider(String text, Mode mode, Presentation presentation,
+			double minimum, double maximum, double displayMinimum,
+			double displayMaximum, double value) {
 		super(true);
 		this.text = requireText(text);
 		this.mode = mode;
+		this.presentation = java.util.Objects.requireNonNull(presentation);
 		this.minimum = minimum;
 		this.maximum = maximum;
+		this.displayMinimum = displayMinimum;
+		this.displayMaximum = displayMaximum;
+		visibleMinimum = displayMinimum;
+		visibleMaximum = displayMaximum;
 		this.value = value;
+		updateVisibleRange();
 		defaultValue = value;
 		validationFeedbackTimer = new Timer(450, event -> {
 			validationFeedbackActive = false;
@@ -105,7 +125,8 @@ public class GLSlider extends GLControl {
 
 	/** Constructor for specialized bounded slider presentations. */
 	protected GLSlider(String text, double minimum, double maximum, double value) {
-		this(text, Mode.FIXED, minimum, maximum, value);
+		this(text, Mode.FIXED, Presentation.BAR, minimum, maximum,
+				minimum, maximum, value);
 		requireFinite(minimum, "Minimum");
 		requireFinite(maximum, "Maximum");
 		requireFinite(value, "Value");
@@ -117,23 +138,58 @@ public class GLSlider extends GLControl {
 
 	public static GLSlider fixed(String text, double minimum,
 			double maximum, double value) {
+		return fixed(text, minimum, maximum, value, Presentation.BAR);
+	}
+
+	/** Creates a bounded slider with independently selected presentation. */
+	public static GLSlider fixed(String text, double minimum,
+			double maximum, double value, Presentation presentation) {
 		requireFinite(minimum, "Minimum");
 		requireFinite(maximum, "Maximum");
 		if (!(maximum > minimum))
 			throw new IllegalArgumentException("Slider maximum must exceed minimum");
 		requireFinite(value, "Value");
-		return new GLSlider(text, Mode.FIXED, minimum, maximum,
-				clamp(value, minimum, maximum));
+		return new GLSlider(text, Mode.FIXED, presentation, minimum, maximum,
+				minimum, maximum, clamp(value, minimum, maximum));
 	}
 
 	public static GLSlider free(String text, double value) {
+		return free(text, value, Presentation.BUTTONS);
+	}
+
+	/** Creates an unbounded slider using the requested presentation. */
+	public static GLSlider free(String text, double value,
+			Presentation presentation) {
 		requireFinite(value, "Value");
-		return new GLSlider(text, Mode.FREE,
-				Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, value);
+		return new GLSlider(text, Mode.FREE, presentation,
+				Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0, 1, value);
+	}
+
+	/** Creates an unbounded bar with a stable baseline display range. */
+	public static GLSlider free(String text, double displayMinimum,
+			double displayMaximum, double value) {
+		validateRange(displayMinimum, displayMaximum, "Display range");
+		requireFinite(value, "Value");
+		return new GLSlider(text, Mode.FREE, Presentation.BAR,
+				Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY,
+				displayMinimum, displayMaximum, value);
 	}
 
 	public final Mode getMode() {
 		return mode;
+	}
+
+	public final Presentation getPresentation() { return presentation; }
+
+	/** Switches between progress-bar and increment-button interaction. */
+	public final void setPresentation(Presentation value) {
+		value = java.util.Objects.requireNonNull(value, "Slider presentation");
+		if (presentation == value) return;
+		if (relativeDragging) endRelativeDrag(null, false);
+		else restoreHoverCursor();
+		presentation = value;
+		hoverPart = pressedPart = armedArrow = HitPart.NONE;
+		updatePresentation(false);
 	}
 
 	public final String getText() {
@@ -159,11 +215,13 @@ public class GLSlider extends GLControl {
 
 	public final void setValue(double value) {
 		requireFinite(value, "Value");
-		double resolved = mode == Mode.FIXED
-				? clamp(value, minimum, maximum) : value;
-		if (Double.compare(this.value, resolved) == 0)
+		double resolved = resolveValue(value);
+		if (Double.compare(this.value, resolved) == 0) {
+			updateVisibleRange();
 			return;
+		}
 		this.value = resolved;
+		updateVisibleRange();
 		invalidateRecording();
 		fireStateChanged();
 	}
@@ -176,8 +234,7 @@ public class GLSlider extends GLControl {
 	/** Sets the reset value, clamped to the range of a FIXED slider. */
 	public final void setDefaultValue(double defaultValue) {
 		requireFinite(defaultValue, "Default value");
-		this.defaultValue = mode == Mode.FIXED
-				? clamp(defaultValue, minimum, maximum) : defaultValue;
+		this.defaultValue = resolveValue(defaultValue);
 	}
 
 	/** Restores the configured default value. */
@@ -213,17 +270,21 @@ public class GLSlider extends GLControl {
 
 	public final void setRange(double minimum, double maximum) {
 		requireFixed();
-		requireFinite(minimum, "Minimum");
-		requireFinite(maximum, "Maximum");
-		if (!(maximum > minimum))
-			throw new IllegalArgumentException("Slider maximum must exceed minimum");
+		validateRange(minimum, maximum, "Slider range");
+		if (integerValuesOnly && Math.ceil(minimum) > Math.floor(maximum))
+			throw new IllegalArgumentException(
+					"Integer-only slider range must contain an integer");
 		if (this.minimum == minimum && this.maximum == maximum)
 			return;
 		if (sliderGroup != null)
 			sliderGroup.validateRangeChange(this, minimum, maximum);
 		this.minimum = minimum;
 		this.maximum = maximum;
-		defaultValue = clamp(defaultValue, minimum, maximum);
+		displayMinimum = minimum;
+		displayMaximum = maximum;
+		visibleMinimum = minimum;
+		visibleMaximum = maximum;
+		defaultValue = resolveValue(defaultValue);
 		setValue(value);
 		invalidateRecording();
 	}
@@ -236,6 +297,50 @@ public class GLSlider extends GLControl {
 		if (!Double.isFinite(step) || step <= 0)
 			throw new IllegalArgumentException("Slider step must be finite and positive");
 		this.step = step;
+	}
+
+	/** Returns whether every assigned or edited value is rounded to an integer. */
+	public final boolean isIntegerValuesOnly() { return integerValuesOnly; }
+
+	/** Restricts values to integers and makes bar dragging advance in whole steps. */
+	public final void setIntegerValuesOnly(boolean value) {
+		if (integerValuesOnly == value) return;
+		if (value && mode == Mode.FIXED
+				&& Math.ceil(minimum) > Math.floor(maximum))
+			throw new IllegalStateException(
+					"The slider range does not contain an integer");
+		cancelValueEditing();
+		integerValuesOnly = value;
+		defaultValue = resolveValue(defaultValue);
+		setValue(this.value);
+		invalidateRecording();
+	}
+
+	/** Baseline range rendered by a FREE bar before temporary expansion. */
+	public final void setDisplayRange(double minimum, double maximum) {
+		requireFree();
+		validateRange(minimum, maximum, "Display range");
+		displayMinimum = minimum;
+		displayMaximum = maximum;
+		visibleMinimum = minimum;
+		visibleMaximum = maximum;
+		updateVisibleRange();
+		invalidateRecording();
+	}
+
+	public final double getDisplayMinimum() {
+		return mode == Mode.FIXED ? minimum : displayMinimum;
+	}
+	public final double getDisplayMaximum() {
+		return mode == Mode.FIXED ? maximum : displayMaximum;
+	}
+	/** Current rendered minimum, including a FREE bar's temporary expansion. */
+	public final double getVisibleMinimum() {
+		return mode == Mode.FIXED ? minimum : visibleMinimum;
+	}
+	/** Current rendered maximum, including a FREE bar's temporary expansion. */
+	public final double getVisibleMaximum() {
+		return mode == Mode.FIXED ? maximum : visibleMaximum;
 	}
 
 	/** Value units added per horizontal logical screen pixel while dragging FREE. */
@@ -382,9 +487,9 @@ public class GLSlider extends GLControl {
 				? GLCornerRadii.all(layoutCornerRadius(style.cornerRadius()))
 				: sliderGroup.cornerRadii(this, layoutCornerRadius(style.cornerRadius()));
 		float border = sliderGroup == null ? layoutBorderWidth(style.borderWidth()) : 0;
-		boolean compositeFixed = sliderGroup == null && mode == Mode.FIXED
+		boolean compositeBar = sliderGroup == null && presentation == Presentation.BAR
 				&& border > 0;
-		if (!compositeFixed) context.withParameters(backgroundParameters, () -> {
+		if (!compositeBar) context.withParameters(backgroundParameters, () -> {
 			if (border > 0)
 				context.fillAndDrawUIRoundRect(0, 0, width, height,
 						layoutCornerRadius(style.cornerRadius()), border, Color.WHITE,
@@ -393,15 +498,18 @@ public class GLSlider extends GLControl {
 				context.fillUIRoundRect(0, 0, width, height, radii, Color.WHITE);
 		});
 
-		if (mode == Mode.FIXED) {
-			float progress = (float) ((value - minimum) / (maximum - minimum));
+		if (presentation == Presentation.BAR) {
+			double barMinimum = getVisibleMinimum();
+			double barMaximum = getVisibleMaximum();
+			float progress = (float) ((value - barMinimum)
+					/ (barMaximum - barMinimum));
 			Color progressLight = sliderGroup == null ? style.progressLightColor()
 					: sliderGroup.progressColor(this, style.progressLightColor(),
 							style.progressDarkColor(), false);
 			Color progressDark = sliderGroup == null ? style.progressDarkColor()
 					: sliderGroup.progressColor(this, style.progressLightColor(),
 							style.progressDarkColor(), true);
-			if (compositeFixed) {
+			if (compositeBar) {
 				GLControlState presentationState = groupGesturePressed && isEnabled()
 						? GLControlState.PRESSED : getControlState();
 				float progressOpacity = isEnabled() ? 1 : 0.45f;
@@ -435,7 +543,7 @@ public class GLSlider extends GLControl {
 			recordArrowButton(context, style, radii, false);
 		}
 
-		if (!compositeFixed && sliderGroup == null && border > 0
+		if (!compositeBar && sliderGroup == null && border > 0
 				&& validationFeedbackActive)
 			context.withParameters(borderParameters, () ->
 					context.drawUIRoundRect(0, 0, width, height,
@@ -500,7 +608,7 @@ public class GLSlider extends GLControl {
 		GLInsets padding = style.padding();
 		float contentLeft = padding.left();
 		float contentRight = width - padding.right();
-		if (mode == Mode.FREE) {
+		if (presentation == Presentation.BUTTONS) {
 			contentLeft += style.arrowInset() + style.arrowButtonWidth();
 			contentRight -= style.arrowInset() + style.arrowButtonWidth();
 		}
@@ -546,7 +654,7 @@ public class GLSlider extends GLControl {
 		GLSliderStyle style = getGLStyle();
 		GLFont font = getGLFont(style.font());
 		float left = style.padding().left(), right = getWidth() - style.padding().right();
-		if (mode == Mode.FREE) {
+		if (presentation == Presentation.BUTTONS) {
 			left += style.arrowInset() + style.arrowButtonWidth();
 			right -= style.arrowInset() + style.arrowButtonWidth();
 		}
@@ -605,10 +713,11 @@ public class GLSlider extends GLControl {
 		if (!dragOccurred || !groupSliding)
 			return;
 		boolean manipulated = false;
-		if (mode == Mode.FIXED && event.hasLocalPosition()) {
-			setFixedValue(event.getLocalX());
+		if (presentation == Presentation.BAR && event.hasLocalPosition()) {
+			setBarValue(event.getLocalX());
 			manipulated = true;
-		} else if (mode == Mode.FREE && pressedPart == HitPart.CENTER) {
+		} else if (presentation == Presentation.BUTTONS
+				&& pressedPart == HitPart.CENTER) {
 			if (!relativeDragging)
 				beginRelativeDrag(event);
 			if (Math.abs(event.getDeltaX()) > 0.0001f)
@@ -626,12 +735,12 @@ public class GLSlider extends GLControl {
 	}
 
 	private boolean canStartGroupGesture() {
-		return mode == Mode.FIXED || pressedPart == HitPart.CENTER;
+		return presentation == Presentation.BAR || pressedPart == HitPart.CENTER;
 	}
 
 	@Override
 	protected void controlMouseReleased(GLMouseEvent event) {
-		if (mode == Mode.FREE) {
+		if (presentation == Presentation.BUTTONS) {
 			HitPart releasedPart = event.hasLocalPosition()
 					? hitPart(event.getLocalX()) : HitPart.NONE;
 			if (!dragOccurred && pressedPart.isArrow()
@@ -676,9 +785,9 @@ public class GLSlider extends GLControl {
 			return;
 		HitPart action = armedArrow;
 		armedArrow = HitPart.NONE;
-		if (mode == Mode.FREE && action == HitPart.LEFT)
+		if (presentation == Presentation.BUTTONS && action == HitPart.LEFT)
 			changeValueFromUser(value - step, "Decrease slider");
-		else if (mode == Mode.FREE && action == HitPart.RIGHT)
+		else if (presentation == Presentation.BUTTONS && action == HitPart.RIGHT)
 			changeValueFromUser(value + step, "Increase slider");
 		else if (!dragOccurred && event.hasLocalPosition()
 				&& hitPart(event.getLocalX()) == HitPart.CENTER)
@@ -775,7 +884,7 @@ public class GLSlider extends GLControl {
 	}
 
 	private void updateArrowColors() {
-		if (mode != Mode.FREE)
+		if (presentation != Presentation.BUTTONS)
 			return;
 		GLSliderStyle style = getGLStyle();
 		leftArrowBackgroundParameters.setColor(arrowBackground(style, HitPart.LEFT));
@@ -804,7 +913,7 @@ public class GLSlider extends GLControl {
 	}
 
 	private void updateHoverPart(GLMouseEvent event) {
-		if (mode != Mode.FREE || !event.hasLocalPosition())
+		if (presentation != Presentation.BUTTONS || !event.hasLocalPosition())
 			return;
 		HitPart next = hitPart(event.getLocalX());
 		if (hoverPart == next)
@@ -814,7 +923,7 @@ public class GLSlider extends GLControl {
 	}
 
 	private HitPart hitPart(float localX) {
-		if (mode != Mode.FREE)
+		if (presentation != Presentation.BUTTONS)
 			return HitPart.CENTER;
 		GLSliderStyle style = getGLStyle();
 		float edge = style.arrowInset() + style.arrowButtonWidth();
@@ -825,9 +934,11 @@ public class GLSlider extends GLControl {
 		return HitPart.CENTER;
 	}
 
-	private void setFixedValue(float localX) {
+	private void setBarValue(float localX) {
 		float progress = Math.max(0, Math.min(1, localX / Math.max(1, getWidth())));
-		setValue(minimum + progress * (maximum - minimum));
+		double barMinimum = getVisibleMinimum();
+		double barMaximum = getVisibleMaximum();
+		setValue(barMinimum + progress * (barMaximum - barMinimum));
 	}
 
 	private void layoutValueEditor() {
@@ -864,8 +975,10 @@ public class GLSlider extends GLControl {
 					}
 				};
 		editor.setHistoryEnabled(false);
-		editor.setInputFilter(GLTextInputFormats.DECIMAL_NUMBER);
-		editor.setInputVerifier(GLSlider::isValidNumber);
+		editor.setInputFilter(integerValuesOnly ? GLTextInputFormats.INTEGER_NUMBER
+				: GLTextInputFormats.DECIMAL_NUMBER);
+		editor.setInputVerifier(integerValuesOnly ? GLSlider::isValidInteger
+				: GLSlider::isValidNumber);
 		editor.setValidationFailureMode(
 				GLTextEditor.ValidationFailureMode.RESTORE_LAST_VALID);
 		if (!interactive)
@@ -1001,7 +1114,7 @@ public class GLSlider extends GLControl {
 	}
 
 	private void showResizeCursor(GLMouseEvent event) {
-		if (mode != Mode.FREE || !isEnabled() || relativeDragging)
+		if (presentation != Presentation.BUTTONS || !isEnabled() || relativeDragging)
 			return;
 		pointerController = event.getPointerController();
 		pointerController.setCursor(this, GLPointerCursor.HORIZONTAL_RESIZE);
@@ -1052,6 +1165,45 @@ public class GLSlider extends GLControl {
 			throw new IllegalStateException("FREE sliders do not have a fixed range");
 	}
 
+	private void requireFree() {
+		if (mode != Mode.FREE)
+			throw new IllegalStateException(
+					"Only FREE sliders have an independent display range");
+	}
+
+	private void updateVisibleRange() {
+		if (mode == Mode.FIXED) {
+			visibleMinimum = minimum;
+			visibleMaximum = maximum;
+			return;
+		}
+		if (value >= displayMinimum && value <= displayMaximum) {
+			visibleMinimum = displayMinimum;
+			visibleMaximum = displayMaximum;
+		} else if (value < displayMinimum) {
+			if (visibleMaximum != displayMaximum
+					|| visibleMinimum >= displayMinimum)
+				visibleMinimum = displayMinimum;
+			visibleMinimum = Math.min(visibleMinimum, value);
+			visibleMaximum = displayMaximum;
+		} else {
+			if (visibleMinimum != displayMinimum
+					|| visibleMaximum <= displayMaximum)
+				visibleMaximum = displayMaximum;
+			visibleMinimum = displayMinimum;
+			visibleMaximum = Math.max(visibleMaximum, value);
+		}
+	}
+
+	private double resolveValue(double candidate) {
+		if (!integerValuesOnly)
+			return mode == Mode.FIXED
+					? clamp(candidate, minimum, maximum) : candidate;
+		double rounded = Math.round(candidate);
+		if (mode == Mode.FREE) return rounded;
+		return clamp(rounded, Math.ceil(minimum), Math.floor(maximum));
+	}
+
 	private static String defaultValueText(double value) {
 		return BigDecimal.valueOf(value).setScale(3, RoundingMode.HALF_UP)
 				.stripTrailingZeros().toPlainString();
@@ -1074,12 +1226,26 @@ public class GLSlider extends GLControl {
 					description + " must be finite and positive");
 	}
 
+	private static void validateRange(double minimum, double maximum,
+			String description) {
+		requireFinite(minimum, description + " minimum");
+		requireFinite(maximum, description + " maximum");
+		if (!(maximum > minimum))
+			throw new IllegalArgumentException(
+					description + " maximum must exceed its minimum");
+	}
+
 	private static double clamp(double value, double minimum, double maximum) {
 		return Math.max(minimum, Math.min(maximum, value));
 	}
 
 	private static boolean isValidNumber(String text) {
 		return parseNumber(text) != null;
+	}
+
+	private static boolean isValidInteger(String text) {
+		Double parsed = parseNumber(text);
+		return parsed != null && parsed == Math.rint(parsed);
 	}
 
 	private static Double parseNumber(String text) {

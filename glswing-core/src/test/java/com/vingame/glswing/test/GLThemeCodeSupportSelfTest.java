@@ -69,6 +69,18 @@ public final class GLThemeCodeSupportSelfTest {
 			List<GLCodeLocation> definitions = session.definitions(document,
 					referenceOffset).toCompletableFuture().join();
 			check(definitions.isEmpty(), "Bundled base value resolved to a false local location");
+			int presetOffset = source.indexOf("default") + 2;
+			List<GLCodeLocation> presetDefinitions = session.definitions(document,
+					presetOffset).toCompletableFuture().join();
+			check(presetDefinitions.size() == 1
+					&& presetDefinitions.get(0).uri().toString().endsWith(
+							"/com/vingame/glswing/themes/default.gltheme"),
+					"Built-in default theme has no navigable source");
+			try (var presetSource = presetDefinitions.get(0).uri().toURL().openStream()) {
+				check(new String(presetSource.readAllBytes(), StandardCharsets.UTF_8)
+						.contains("theme.name=Default"),
+						"Built-in definition URI cannot load its source");
+			}
 			check(session.hover(document, source.indexOf("button.background") + 2)
 					.toCompletableFuture().join().isPresent(),
 					"Known theme property has no hover documentation");

@@ -9,9 +9,12 @@ public final class GLTextInputFormats {
 	public static final Predicate<String> ANY = text -> true;
 	public static final Predicate<String> DECIMAL_NUMBER =
 			GLTextInputFormats::isPartialDecimalNumber;
+	public static final Predicate<String> INTEGER_NUMBER =
+			GLTextInputFormats::isPartialIntegerNumber;
 
 	private static final Pattern DECIMAL = Pattern.compile(
 			"[+-]?(?:(?:\\d+(?:\\.\\d*)?)|(?:\\.\\d*))(?:[eE][+-]?\\d*)?");
+	private static final Pattern INTEGER = Pattern.compile("[+-]?\\d*");
 
 	private GLTextInputFormats() {
 	}
@@ -26,5 +29,10 @@ public final class GLTextInputFormats {
 		if (text.isEmpty() || text.equals("+") || text.equals("-"))
 			return true;
 		return DECIMAL.matcher(text.replace(',', '.')).matches();
+	}
+
+	/** Accepts complete integers and the intermediate sign-only states. */
+	private static boolean isPartialIntegerNumber(String text) {
+		return text != null && INTEGER.matcher(text).matches();
 	}
 }

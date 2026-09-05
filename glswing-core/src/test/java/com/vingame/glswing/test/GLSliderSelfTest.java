@@ -26,6 +26,9 @@ public final class GLSliderSelfTest {
 	public static void main(String[] args) {
 		testFixedSlider();
 		testFreeSlider();
+		testIndependentPresentations();
+		testFreeBarRangeExpansion();
+		testIntegerBarSnapping();
 		testClickToEdit();
 		testFreeDragRequestsRecentering();
 		testLocalToScreenConversion();
@@ -212,6 +215,85 @@ public final class GLSliderSelfTest {
 			rejectedRange = true;
 		}
 		check(rejectedRange, "FREE slider exposed a fixed range");
+	}
+
+	private static void testIndependentPresentations() {
+		GLSlider fixedButtons = GLSlider.fixed("Fixed buttons", 0, 10, 4,
+				GLSlider.Presentation.BUTTONS);
+		GLSlider freeBar = GLSlider.free("Free bar", 4,
+				GLSlider.Presentation.BAR);
+		check(fixedButtons.getMode() == GLSlider.Mode.FIXED
+				&& fixedButtons.getPresentation() == GLSlider.Presentation.BUTTONS,
+				"A fixed slider could not use button presentation");
+		check(freeBar.getMode() == GLSlider.Mode.FREE
+				&& freeBar.getPresentation() == GLSlider.Presentation.BAR,
+				"A free slider could not use bar presentation");
+		fixedButtons.increment();
+		check(fixedButtons.getValue() == 5,
+				"Fixed button presentation did not retain bounded step controls");
+		freeBar.setPresentation(GLSlider.Presentation.BUTTONS);
+		check(freeBar.getMode() == GLSlider.Mode.FREE
+				&& freeBar.getPresentation() == GLSlider.Presentation.BUTTONS,
+				"Changing presentation also changed the value mode");
+	}
+
+	private static void testFreeBarRangeExpansion() {
+		GLSlider slider = GLSlider.free("Free bar", 0, 10, 5);
+		check(slider.getDisplayMinimum() == 0 && slider.getDisplayMaximum() == 10
+				&& slider.getVisibleMinimum() == 0 && slider.getVisibleMaximum() == 10,
+				"Free bar did not retain its baseline display range");
+		slider.setValue(20);
+		check(slider.getVisibleMaximum() == 20,
+				"Free bar did not expand to an out-of-range value");
+		slider.setValue(15);
+		check(slider.getVisibleMaximum() == 20,
+				"Free bar discarded its expansion before returning to baseline");
+		slider.setValue(10);
+		check(slider.getVisibleMaximum() == 10,
+				"Free bar did not restore its baseline range");
+		slider.setValue(-4);
+		check(slider.getVisibleMinimum() == -4,
+				"Free bar did not expand its lower display edge");
+
+		slider.setBounds(0, 0, 100, 22);
+		slider.setValue(20);
+		Canvas source = new Canvas();
+		GLPickResult start = pick(slider, 100, 11);
+		slider.mousePressed(mouse(source, MouseEvent.MOUSE_PRESSED,
+				MouseEvent.BUTTON1, start, 0, 0, null));
+		GLPickResult middle = pick(slider, 50, 11);
+		slider.mouseDragged(mouse(source, MouseEvent.MOUSE_DRAGGED,
+				MouseEvent.NOBUTTON, middle, -50, 0, null));
+		check(slider.getValue() == 10 && slider.getVisibleMaximum() == 10,
+				"Dragging into the baseline did not collapse the expanded range");
+	}
+
+	private static void testIntegerBarSnapping() {
+		GLSlider slider = GLSlider.fixed("Whole", 0, 10, 2.5);
+		slider.setIntegerValuesOnly(true);
+		check(slider.getValue() == 3 && slider.isIntegerValuesOnly(),
+				"Enabling integer values did not normalize the current value");
+		slider.setValue(7.6);
+		check(slider.getValue() == 8,
+				"Integer-only assignment did not snap to a whole value");
+		slider.setBounds(0, 0, 100, 22);
+		Canvas source = new Canvas();
+		GLPickResult start = pick(slider, 80, 11);
+		slider.mousePressed(mouse(source, MouseEvent.MOUSE_PRESSED,
+				MouseEvent.BUTTON1, start, 0, 0, null));
+		GLPickResult dragged = pick(slider, 46, 11);
+		slider.mouseDragged(mouse(source, MouseEvent.MOUSE_DRAGGED,
+				MouseEvent.NOBUTTON, dragged, -34, 0, null));
+		check(slider.getValue() == 5,
+				"Integer-only bar dragging did not jump between whole values");
+		slider.mouseReleased(mouse(source, MouseEvent.MOUSE_RELEASED,
+				MouseEvent.BUTTON1, dragged, 0, 0, null));
+		slider.startValueEditing();
+		GLTextEditor editor = (GLTextEditor) slider.getGLChildren().get(0);
+		check(!editor.getInputFilter().test("1.5")
+				&& editor.getInputFilter().test("-12"),
+				"Integer-only inline editing retained decimal input");
+		editor.cancel();
 	}
 
 	private static void testLocalToScreenConversion() {

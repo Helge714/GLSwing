@@ -166,11 +166,40 @@ editor.setLanguage(GLCodeLanguages.GLSL);
 editor.setIndentationSize(4);
 ```
 
+For `.gltheme` documents, the color picker and the built-in formatter share a
+configurable expression policy:
+
+```java
+editor.setPreferredColorOutputModel(GLColorModel.OKLCH); // null preserves the source model
+editor.setColorExpressionFormat(new GLColorExpressionFormat(
+        GLColorExpressionFormat.ChannelNotation.PERCENT, 3, true));
+```
+
+Formatting then rounds direct functional color literals to the requested
+precision and removes redundant trailing zeros. Hex colors, references, and
+derived expressions are preserved. The same policy is used when a color is
+replaced through the editor's color preview.
+
+The `.gltheme` context menu exposes **Color formatting…**, which opens a
+theme-aware settings dialog. It provides the output model and notation as
+combo boxes, a 0–12 decimal-place slider, trailing-zero control, and a live
+expression example. Applications may open it directly with
+`editor.showColorFormattingDialog()`. The reusable
+`GLColorExpressionFormatDialog.show(...)` API is also available when the
+settings are managed outside a code editor.
+
 The code editor replaces the rich-text context menu with code-specific
-**Format code**, **Comment**, and **Uncomment** commands. A selection expands to
-all touched logical lines. Without a selection, formatting processes the
-complete document, while commenting and uncommenting affect the caret's logical
-line. The corresponding API methods are `formatCode()`,
+commands. Its contents are capability-driven: a language only exposes
+formatting, line comments, import organization, definition navigation, inlay
+hints, or color formatting when the corresponding `GLCodeLanguage` capability
+reports support and, where required, a code-intelligence session is active.
+Consequently, `.gltheme` files do not show import organization, while a Java
+editor connected to a suitable language server does. Custom languages can
+override the `supports...()` methods on `GLCodeLanguage`.
+
+A selection expands comment commands to all touched logical lines. Without a
+selection, formatting processes the complete document, while commenting and
+uncommenting affect the caret's logical line. The corresponding API methods are `formatCode()`,
 `commentSelection()`, and `uncommentSelection()`. Each command is recorded as
 one document-level undo/redo operation. All ordinary selection, scrolling,
 Unicode navigation, focus-session history, and document APIs remain available.

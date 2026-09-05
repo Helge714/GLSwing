@@ -73,6 +73,35 @@ class GLColorPickerTest {
 		assertNotNull(com.vingame.glswing.rendering.GLSvgDocument.loadResource(
 				"com/vingame/glswing/icons/eyedropper.svg").rasterize(24,24));
 	}
+	@Test void expressionFormattingControlsNotationPrecisionAndTrailingZeros() {
+		Color color=new Color(84,120,181,97);
+		GLColorExpressionFormat normalized=new GLColorExpressionFormat(
+				GLColorExpressionFormat.ChannelNotation.NORMALIZED_FLOAT,3,true);
+		assertEquals("rgb(0.329f, 0.471f, 0.71f, 0.38f)",
+				GLColorModel.RGB.format(GLColorModel.RGB.channels(color),97/255d,normalized));
+		GLColorExpressionFormat bytes=normalized.withChannelNotation(
+				GLColorExpressionFormat.ChannelNotation.BYTE);
+		assertEquals("rgb(84, 120, 181, 97)",
+				GLColorModel.RGB.format(GLColorModel.RGB.channels(color),97/255d,bytes));
+		String hsv=GLColorModel.HSV.format(GLColorModel.HSV.channels(Color.GREEN),1,bytes);
+		assertEquals("hsv(120deg, 255, 255, 255)",hsv);
+		assertEquals(Color.GREEN,GLThemeValues.parseColor(hsv));
+		GLColorExpressionFormat percent=new GLColorExpressionFormat(
+				GLColorExpressionFormat.ChannelNotation.PERCENT,2,true);
+		assertEquals("hsv(120deg, 100%, 100%, 100%)",
+				GLColorModel.HSV.format(GLColorModel.HSV.channels(Color.GREEN),1,percent));
+		assertThrows(IllegalArgumentException.class,()->new GLColorExpressionFormat(
+				GLColorExpressionFormat.ChannelNotation.PERCENT,13,true));
+	}
+	@Test void themeAutoFormatUsesTheConfiguredColorPolicy() {
+		GLCodeEditor editor=new GLCodeEditor(
+				"palette.sample=rgb(0.500000f, 1.000000f, 0.000000f, 1.000000f)");
+		editor.setLanguage(GLCodeLanguages.GLTHEME);
+		editor.setColorExpressionFormat(new GLColorExpressionFormat(
+				GLColorExpressionFormat.ChannelNotation.NORMALIZED_FLOAT,3,true));
+		editor.formatCode();
+		assertEquals("palette.sample=rgb(0.502f, 1f, 0f, 1f)",editor.getText());
+	}
 	@Test void validChannelTextUpdatesColorBeforeCommit() {
 		GLColorPicker picker=new GLColorPicker(Color.BLACK);picker.setBounds(0,0,480,226);
 		GLTextEditor red=descendants(picker).stream().filter(child ->

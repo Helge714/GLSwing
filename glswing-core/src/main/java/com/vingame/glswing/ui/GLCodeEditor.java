@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import javax.swing.Timer;
 
+import com.vingame.glswing.component.GLDialog;
 import com.vingame.glswing.component.GLParent;
 import com.vingame.glswing.input.GLKeyEvent;
 import com.vingame.glswing.input.GLInputActions;
@@ -26,12 +27,43 @@ public class GLCodeEditor extends GLTextArea {
 	private volatile List<GLCodeSemanticToken> semanticTokens = List.of();
 	private volatile List<GLCodeColor> documentColors = List.of();
 	private GLPipettePreview colorPickerPipettePreview = GLPipettePreview.DEFAULT;
+	private GLColorModel preferredColorOutputModel;
+	private GLColorExpressionFormat colorExpressionFormat =
+			GLColorExpressionFormat.DEFAULT;
 
 	/** Configures the eyedropper preview in color pickers opened from this editor. */
 	public final void setColorPickerPipettePreview(GLPipettePreview preview) {
 		colorPickerPipettePreview = java.util.Objects.requireNonNull(preview);
 	}
 	public final GLPipettePreview getColorPickerPipettePreview() { return colorPickerPipettePreview; }
+	/**
+	 * Selects the model emitted by color editing and theme auto-formatting.
+	 * {@code null}, the default, preserves the model of each source expression.
+	 */
+	public final void setPreferredColorOutputModel(GLColorModel value) {
+		preferredColorOutputModel = value;
+	}
+	public final GLColorModel getPreferredColorOutputModel() {
+		return preferredColorOutputModel;
+	}
+	/** Configures numeric color output for the picker and theme formatter. */
+	public final void setColorExpressionFormat(GLColorExpressionFormat value) {
+		colorExpressionFormat = java.util.Objects.requireNonNull(value);
+	}
+	public final GLColorExpressionFormat getColorExpressionFormat() {
+		return colorExpressionFormat;
+	}
+	/** Opens the theme-aware color-expression settings dialog. */
+	public final GLDialog showColorFormattingDialog() {
+		if (!language.supportsColorFormatting())
+			throw new IllegalStateException(
+					"The active language does not support color formatting");
+		return GLColorExpressionFormatDialog.show(this,
+				preferredColorOutputModel, colorExpressionFormat, selection -> {
+					preferredColorOutputModel = selection.preferredModel();
+					colorExpressionFormat = selection.format();
+				});
+	}
 	private volatile List<GLCodeInlayHint> inlayHints = List.of();
 	private List<GLCodeInlayHint> signatureInlayHints = List.of();
 	private volatile List<GLCodeDiagnostic> diagnostics = List.of();
@@ -94,11 +126,13 @@ public class GLCodeEditor extends GLTextArea {
 	private Map<String, Color> semanticColors = Map.of();
 	private final GLPopupMenu codeMenu = new GLPopupMenu();
 	private final GLActionMap codeActions = new GLActionMap();
-	private final GLMenuItem formatItem;
-	private final GLMenuItem commentItem;
-	private final GLMenuItem uncommentItem;
-	private final GLMenuItem organizeImportsItem;
-	private final GLMenuItem definitionItem;
+	private final GLAction formatAction;
+	private final GLAction commentAction;
+	private final GLAction uncommentAction;
+	private final GLAction organizeImportsAction;
+	private final GLAction definitionAction;
+	private final GLAction inlayHintsAction;
+	private final GLAction colorFormattingAction;
 
 	public GLCodeEditor() { this(new GLTextDocument(), true); }
 	public GLCodeEditor(String source) { this(new GLTextDocument(source), true); }
@@ -172,43 +206,71 @@ public class GLCodeEditor extends GLTextArea {
 			if (inlayHintsVisible) inlayHintTimer.restart();
 		});
 		setTextColorProvider(this::syntaxColor);
-		GLAction formatAction = editableCodeAction(GLInputActions.CODE_FORMAT,
+		formatAction = editableCodeAction(GLInputActions.CODE_FORMAT,
 				GLUiKeys.CODE_FORMAT, this::formatCode);
-		GLAction commentAction = editableCodeAction(GLInputActions.CODE_COMMENT,
+		commentAction = editableCodeAction(GLInputActions.CODE_COMMENT,
 				GLUiKeys.CODE_COMMENT, this::commentSelection);
-		GLAction uncommentAction = editableCodeAction(GLInputActions.CODE_UNCOMMENT,
+		uncommentAction = editableCodeAction(GLInputActions.CODE_UNCOMMENT,
 				GLUiKeys.CODE_UNCOMMENT, this::uncommentSelection);
-		GLAction organizeImportsAction = editableCodeAction(
+		organizeImportsAction = editableCodeAction(
 				GLInputActions.CODE_ORGANIZE_IMPORTS,
 				GLUiKeys.CODE_ORGANIZE_IMPORTS, this::organizeImports);
-		GLAction definitionAction = GLAction.builder(
+		definitionAction = GLAction.builder(
 				GLInputActions.CODE_GO_TO_DEFINITION)
 				.textKey(GLUiKeys.CODE_GO_TO_DEFINITION)
 				.onAction(this::goToDefinition).build();
-		GLAction inlayHintsAction = GLAction.builder(
+		inlayHintsAction = GLAction.builder(
 				GLInputActions.CODE_TOGGLE_INLAY_HINTS)
 				.textKey(GLUiKeys.CODE_SHOW_INLAY_HINTS)
 				.selectedWhen(this::isInlayHintsVisible)
 				.onAction(() -> setInlayHintsVisible(!isInlayHintsVisible())).build();
+		colorFormattingAction = GLAction.builder("code.color-formatting")
+				.textKey(GLUiKeys.CODE_COLOR_FORMATTING)
+				.onAction(this::showColorFormattingDialog).build();
 		codeActions.add(formatAction).add(commentAction).add(uncommentAction)
-				.add(organizeImportsAction).add(definitionAction).add(inlayHintsAction);
-		formatItem = codeMenu.addItem(formatAction);
-		codeMenu.addSeparator();
-		commentItem = codeMenu.addItem(commentAction);
-		uncommentItem = codeMenu.addItem(uncommentAction);
-		codeMenu.addSeparator();
-		organizeImportsItem = codeMenu.addItem(organizeImportsAction);
-		codeMenu.addSeparator();
-		definitionItem = codeMenu.addItem(definitionAction);
-		codeMenu.addSeparator();
-		codeMenu.addItem(inlayHintsAction);
+				.add(organizeImportsAction).add(definitionAction).add(inlayHintsAction)
+				.add(colorFormattingAction);
 		updateCodeMenuText();
 		retokenize();
 		if (coreDiagnosticsEnabled) validateSource();
 	}
 	@Override public GLPopupMenu getContextMenu() {
 		updateCodeMenuText();
+		rebuildCodeMenu();
 		return codeMenu;
+	}
+	private void rebuildCodeMenu() {
+		codeMenu.removeAllItems();
+		boolean hasGroup = false;
+		if (language.supportsFormatting()) {
+			codeMenu.addItem(formatAction);
+			hasGroup = true;
+		}
+		if (language.supportsColorFormatting()) {
+			if (hasGroup) codeMenu.addSeparator();
+			codeMenu.addItem(colorFormattingAction);
+			hasGroup = true;
+		}
+		if (language.supportsLineComments()) {
+			if (hasGroup) codeMenu.addSeparator();
+			codeMenu.addItem(commentAction);
+			codeMenu.addItem(uncommentAction);
+			hasGroup = true;
+		}
+		if (language.supportsOrganizeImports() && diagnosticSession != null) {
+			if (hasGroup) codeMenu.addSeparator();
+			codeMenu.addItem(organizeImportsAction);
+			hasGroup = true;
+		}
+		if (language.supportsDefinitionNavigation() && diagnosticSession != null) {
+			if (hasGroup) codeMenu.addSeparator();
+			codeMenu.addItem(definitionAction);
+			hasGroup = true;
+		}
+		if (language.supportsInlayHints() && diagnosticSession != null) {
+			if (hasGroup) codeMenu.addSeparator();
+			codeMenu.addItem(inlayHintsAction);
+		}
 	}
 	private GLAction editableCodeAction(String id, String textKey, Runnable handler) {
 		return GLAction.builder(id).textKey(textKey).enabledWhen(this::isEditable)
@@ -318,7 +380,12 @@ public class GLCodeEditor extends GLTextArea {
 			if (index + 1 < lines.length) formatted.append('\n');
 			if (line.endsWith("{") && !line.startsWith("//")) level++;
 		}
-		applyCommand(range, formatted.toString());
+		String replacement = formatted.toString();
+		if (language == GLCodeLanguages.GLTHEME
+				&& language instanceof GLPropertiesCodeLanguage properties)
+			replacement = properties.formatColorValues(replacement,
+					preferredColorOutputModel, colorExpressionFormat);
+		applyCommand(range, replacement);
 	}
 	/** Applies the provider's document-wide organize-imports operation. */
 	public final void organizeImports() {
@@ -401,13 +468,9 @@ public class GLCodeEditor extends GLTextArea {
 		}
 		if (word.start() == navigationRequestStart
 				&& word.end() == navigationRequestEnd) {
-			navigationPointerController = event.getPointerController();
-			navigationPointerController.setCursor(navigationCursorOwner, GLPointerCursor.HAND);
 			return true;
 		}
 		clearNavigationHover(true);
-		navigationPointerController = event.getPointerController();
-		navigationPointerController.setCursor(navigationCursorOwner, GLPointerCursor.HAND);
 		navigationRequestStart = word.start();
 		navigationRequestEnd = word.end();
 		long request = ++navigationHoverRequest;
@@ -430,8 +493,6 @@ public class GLCodeEditor extends GLTextArea {
 			boolean callHierarchy = hierarchy.join();
 			if (definitionTargets.isEmpty() && implementationTargets.isEmpty()
 					&& !callHierarchy) {
-				navigationPointerController.clearCursor(navigationCursorOwner);
-				navigationPointerController = GLPointerController.NONE;
 				return;
 			}
 			navigationWordStart = word.start();
@@ -1003,7 +1064,10 @@ public class GLCodeEditor extends GLTextArea {
 				GLColorModel model = GLColorModel.RGB;
 				for (GLColorModel candidate : GLColorModel.values())
 					if (literal.toLowerCase(java.util.Locale.ROOT).startsWith(candidate.name().toLowerCase(java.util.Locale.ROOT)+"(")) model=candidate;
-				GLColorChooser.show(this, sourceColor.color(), model, colorPickerPipettePreview, picker -> {
+				GLColorModel outputModel = preferredColorOutputModel == null
+						? model : preferredColorOutputModel;
+				GLColorChooser.show(this, sourceColor.color(), model, outputModel,
+						colorExpressionFormat, colorPickerPipettePreview, picker -> {
 					if (!isEditable() || !before.equals(getText()) || picker.getColor().equals(sourceColor.color())) return;
 					select(sourceColor.start(), sourceColor.end());
 					String replacement=picker.getColorExpression();
@@ -1243,7 +1307,6 @@ public class GLCodeEditor extends GLTextArea {
 		semanticColors = Map.copyOf(configuredSemanticColors);
 	}
 	private void updateCodeMenuText() {
-		if (formatItem == null) return;
 		codeActions.refresh();
 	}
 	private void retokenize() { tokens = language.tokenize(getText()); invalidateRecording(); }

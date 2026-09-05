@@ -3,6 +3,9 @@ package com.vingame.glswing.ui;
 /** Stable namespaced keys used by built-in GLSwing controls. */
 public final class GLUiKeys {
 	public static final String SLIDER_RESET = "glswing.slider.reset";
+	public static final String NUMBER_INCREMENT = "glswing.number.increment";
+	public static final String NUMBER_DECREMENT = "glswing.number.decrement";
+	public static final String NUMBER_EDIT = "glswing.number.edit";
 	public static final String TEXT_MENU_ALIGNMENT = "glswing.text.menu.alignment";
 	public static final String TEXT_MENU_FORMAT = "glswing.text.menu.format";
 	public static final String TEXT_ALIGN_LEFT = "glswing.text.align.left";
@@ -17,6 +20,7 @@ public final class GLUiKeys {
 	public static final String CODE_ORGANIZE_IMPORTS = "glswing.code.organizeImports";
 	public static final String CODE_GO_TO_DEFINITION = "glswing.code.goToDefinition";
 	public static final String CODE_SHOW_INLAY_HINTS = "glswing.code.showInlayHints";
+	public static final String CODE_COLOR_FORMATTING = "glswing.code.colorFormatting";
 	public static final String CODE_OPEN_DECLARATION = "glswing.code.openDeclaration";
 	public static final String CODE_OPEN_IMPLEMENTATION = "glswing.code.openImplementation";
 	public static final String CODE_OPEN_CALL_HIERARCHY = "glswing.code.openCallHierarchy";

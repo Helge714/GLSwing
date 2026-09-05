@@ -125,18 +125,17 @@ public final class GLCodeEditorSelfTest {
 				"Enter did not expand a generated brace pair into an indented block");
 		editor.toggleLineComment();
 		check(editor.getText().contains("//"), "Line comment command did not add a prefix");
-		check(editor.getContextMenu().getItems().size() == 6
+		check(editor.getContextMenu().getItems().size() == 3
 				&& editor.getContextMenu().getItems().stream()
 						.noneMatch(item -> item.getSubMenu() != null),
 				"Code editor exposed the inherited rich-text context menu");
-		var hintsItem = editor.getContextMenu().getItems().get(5);
-		hintsItem.doClick();
-		check(!editor.isInlayHintsVisible()
-				&& hintsItem.getAction() != null && !hintsItem.getAction().isSelected(),
-				"Parameter-hint context action did not hide inlay hints");
-		hintsItem.doClick();
-		check(editor.isInlayHintsVisible() && hintsItem.getAction().isSelected(),
-				"Parameter-hint context action did not restore inlay hints");
+		GLCodeEditor themeEditor = new GLCodeEditor(
+				"palette.sample=rgb(10, 20, 30)", URI.create("untitled:/test.gltheme"));
+		var themeActions = themeEditor.getContextMenu().getItems().stream()
+				.map(item -> item.getAction().id()).toList();
+		check(themeActions.contains("code.color-formatting")
+				&& !themeActions.contains("code.organize-imports"),
+				"Theme context menu did not follow language capabilities: " + themeActions);
 		editor.setEditable(false);
 		check(editor.getContextMenu().getItems().subList(0, 3).stream()
 				.allMatch(item -> !item.isEnabled()),
@@ -231,6 +230,22 @@ public final class GLCodeEditorSelfTest {
 				status.state() == com.vingame.glswing.ui.GLCodeSemanticStatus.State.AVAILABLE
 				&& status.tokenCount() == 1);
 		editor.setDiagnosticProvider(provider, URI.create("file:///project/Test.java"));
+		var menuActions = editor.getContextMenu().getItems().stream()
+				.map(item -> item.getAction().id()).toList();
+		check(menuActions.contains(com.vingame.glswing.input.GLInputActions.CODE_ORGANIZE_IMPORTS)
+				&& menuActions.contains(com.vingame.glswing.input.GLInputActions.CODE_GO_TO_DEFINITION)
+				&& menuActions.contains(com.vingame.glswing.input.GLInputActions.CODE_TOGGLE_INLAY_HINTS),
+				"Provider-backed Java actions were not exposed: " + menuActions);
+		var hintsItem = editor.getContextMenu().getItems().stream()
+				.filter(item -> item.getAction().id().equals(
+						com.vingame.glswing.input.GLInputActions.CODE_TOGGLE_INLAY_HINTS))
+				.findFirst().orElseThrow();
+		hintsItem.doClick();
+		check(!editor.isInlayHintsVisible(),
+				"Parameter-hint context action did not hide inlay hints");
+		hintsItem.doClick();
+		check(editor.isInlayHintsVisible(),
+				"Parameter-hint context action did not restore inlay hints");
 		editor.setNavigationHandler(location -> navigated[0] = location.uri().toString()
 				.equals("file:///project/Target.java"));
 		editor.goToDefinition();
