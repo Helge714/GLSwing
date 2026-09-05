@@ -5,3 +5,6 @@ theme.metrics=showcase-metrics.gltheme
 theme.name=External Showcase Bundle
 comboBox.pressedLight=rgba(112, 82, 78, 255)
 comboBox.pressedDark=rgba(35, 30, 48, 255)
+
+# Editable color-space sample with inline channel hints and a live preview.
+palette.colorSpacePreview=oklch(65%, 0.14, 245deg, 100%)

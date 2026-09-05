@@ -388,21 +388,21 @@ public class GLComboBox<T> extends GLControl
 		float height = getHeight();
 		if (width <= 0 || height <= 0)
 			return;
-		float radius = style.cornerRadius();
+		float radius = layoutCornerRadius(style.cornerRadius());
 		float topRadius = popupDirection == GLPopupDirection.ABOVE ? 0 : radius;
 		float bottomRadius = popupDirection == GLPopupDirection.BELOW ? 0 : radius;
 		GLCornerRadii radii = new GLCornerRadii(topRadius, topRadius,
 				bottomRadius, bottomRadius);
 		context.withParameters(backgroundParameters, () -> {
-			if (style.borderWidth() > 0)
+			if (layoutBorderWidth(style.borderWidth()) > 0)
 				context.fillAndDrawUIRoundRect(0, 0, width, height, radii,
-						style.borderWidth(), Color.WHITE, style.borderColor(),
+						layoutBorderWidth(style.borderWidth()), Color.WHITE, style.borderColor(),
 						GLStroke.WidthSpace.SCREEN);
 			else
 				context.fillUIRoundRect(0, 0, width, height, radii, Color.WHITE);
 		});
-		float gradientInset = style.borderWidth() > 0
-				? Math.min(style.borderWidth() + 1,
+		float gradientInset = layoutBorderWidth(style.borderWidth()) > 0
+				? Math.min(layoutBorderWidth(style.borderWidth()) + 1,
 						Math.min(width, height) * 0.5f) : 0;
 		context.withParameters(pressedGradientParameters, () ->
 				context.fillUIVerticalGradientRoundRect(

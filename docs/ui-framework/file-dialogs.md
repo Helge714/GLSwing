@@ -1,4 +1,9 @@
-# File dialogs
+# File Dialogs
+
+[UI guide](../ui-framework.md) · [Controls](controls.md) ·
+[Documents](documents.md)
+
+## Contents
 
 - [Artifacts and backend selection](#artifacts-and-backend-selection)
 - [Creating a request](#creating-a-request)

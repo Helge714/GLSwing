@@ -23,11 +23,14 @@ see the [rendering guide](graphics-pipeline.md).
 | Hosts | `GLFrame`, `GLSwingContainerCanvas`, `GLSwingPanel`, `GLDialog` | OpenGL surface, animation, root hierarchy, and windows |
 | Component tree | `GLParent`, `GLContainer` | Children, bounds, z-order, culling, damage, and cached rendering |
 | Layout | `GLLayout`, `GLLayouts`, `GLGridLayout`, `GLConstraints`, `GLSize`, `GLInsets` | Measurement and arrangement |
-| Basic controls | `GLControl`, `GLLabel`, `GLButton`, `GLCheckBox`, `GLLine` | State, focus, actions, and simple content |
-| Value input | `GLSlider`, `GLSliderGroup`, `GLTextEditor`, `GLTextInputFormats`, `GLComboBox<T>` | Selection, validation, and editing |
+| Basic controls | `GLControl`, `GLLabel`, `GLButton`, `GLDialogButtonBar`, `GLCheckBox`, `GLLine` | State, focus, actions, and simple content |
+| Value input | `GLSlider`, `GLSliderGroup`, `GLInputGroup<T>`, `GLTextEditor`, `GLTextInputFormats`, `GLComboBox<T>` | Selection, validation, grouped editing, and history |
+| Color input | `GLColorPicker`, `GLColorChooser`, `GLColorSlider`, `GLColorModel` | Color-model conversion, channel editing, previews, and screen sampling |
+| Visual grouping | `GLLayoutGroup`, `GLConstraints.Connection` | Connected control outlines independent of value grouping |
 | Navigation | `GLMenuBar`, `GLPopupMenu`, `GLMenuItem`, `GLTabbedPane` | Menus, overlays, and view selection |
 | File access | `GLFileDialogs`, `GLFileDialogRequest` | Native SWT dialogs with a themed GLSwing fallback |
 | Documents | `GLDocument<T>`, `GLDocumentManager`, `GLDocumentLifecycle<T>`, `GLDocumentBundle`, `GLDocumentWorkspace` | Typed models, commands, active history routing, codecs, migration, and atomic persistence |
+| Text editing | `GLTextEditor`, `GLTextArea`, `GLCodeEditor`, `GLCodeDiagnosticProvider` | Plain text, styled text, code intelligence, diagnostics, colors, and inlay hints |
 | Scrolling | `GLScrollPane`, `GLScrollBar` | Clipped viewports and scroll models |
 | Data views | `GLList<T>`, `GLListModel<T>`, `GLListSelectionModel` | Virtualized rows, renderers, and selection |
 | Appearance | `GLTheme`, style records, `GLThemeValues`, `GLThemeLoader`, `GLThemeWatcher` | Global and local presentation |
@@ -87,8 +90,10 @@ render methods manually.
 2. [Components and hosts](ui-framework/components.md)
 3. [Layouts and sizing](ui-framework/layout.md)
 4. [Standard controls](ui-framework/controls.md)
-5. [Themes and localization](ui-framework/themes-localization.md)
-6. [Input configuration](ui-framework/input-configuration.md)
-7. [Undo and redo](ui-framework/history.md)
-8. [Documents and serialization](ui-framework/documents.md)
-9. [Node editor](ui-framework/nodes.md)
+5. [File dialogs](ui-framework/file-dialogs.md)
+6. [Text editing and code intelligence](ui-framework/text-editing.md)
+7. [Themes and localization](ui-framework/themes-localization.md)
+8. [Input configuration](ui-framework/input-configuration.md)
+9. [Undo and redo](ui-framework/history.md)
+10. [Documents and serialization](ui-framework/documents.md)
+11. [Node editor](ui-framework/nodes.md)

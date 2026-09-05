@@ -199,6 +199,18 @@ public final class GLTabbedPane extends GLContainer {
 		return selectedIndex < 0 ? null : tabs.get(selectedIndex).content;
 	}
 	public GLContainer getComponentAt(int index) { return tab(index).content; }
+	/** Replaces a tab's content without changing its title, position, or selection. */
+	public void setComponentAt(int index, GLContainer content) {
+		if (content == null) throw new IllegalArgumentException("Tab content required");
+		Tab tab = tab(index);
+		if (tab.content == content) return;
+		contentHost.removeGL(tab.content);
+		tab.content = content;
+		contentHost.addGL(content);
+		updateVisibility();
+		updatePreferredSize();
+		layoutTabs();
+	}
 	/** Returns the index of a tab content component, or {@code -1}. */
 	public int indexOfComponent(GLContainer content) {
 		for (int index = 0; index < tabs.size(); index++)
@@ -299,11 +311,11 @@ public final class GLTabbedPane extends GLContainer {
 			return;
 		GLTabbedPaneStyle style = getGLStyle();
 		context.fillAndDrawUIRoundRect(0, 0, width, height,
-				style.cornerRadius(), style.borderWidth(), style.background(),
+				layoutCornerRadius(style.cornerRadius()), layoutBorderWidth(style.borderWidth()), style.background(),
 				style.border(), GLStroke.WidthSpace.SCREEN);
-		context.fillUIRoundRect(style.borderWidth(), style.borderWidth(),
-				Math.max(0, width - style.borderWidth() * 2), style.tabHeight(),
-				new GLCornerRadii(style.cornerRadius(), style.cornerRadius(), 0, 0),
+		context.fillUIRoundRect(layoutBorderWidth(style.borderWidth()), layoutBorderWidth(style.borderWidth()),
+				Math.max(0, width - layoutBorderWidth(style.borderWidth()) * 2), style.tabHeight(),
+				new GLCornerRadii(layoutCornerRadius(style.cornerRadius()), layoutCornerRadius(style.cornerRadius()), 0, 0),
 				style.tabBarBackground());
 	}
 
@@ -348,7 +360,7 @@ public final class GLTabbedPane extends GLContainer {
 		layingOut = true;
 		try {
 			GLTabbedPaneStyle style = getGLStyle();
-			float border = style.borderWidth();
+			float border = layoutBorderWidth(style.borderWidth());
 			tabStripWidth = Math.max(0, getWidth() - border * 2);
 			float[] widths = tabWidths(style, tabStripWidth);
 			tabsWidth = totalWidth(widths, style.tabGap());
@@ -381,7 +393,7 @@ public final class GLTabbedPane extends GLContainer {
 				tab.content.setBounds(padding.left(), padding.top(),
 						Math.max(0, contentHost.getWidth() - padding.horizontal()),
 						Math.max(0, contentHost.getHeight() - padding.vertical()));
-			float contentRadius = Math.max(0, style.cornerRadius() - style.borderWidth());
+			float contentRadius = Math.max(0, layoutCornerRadius(style.cornerRadius()) - layoutBorderWidth(style.borderWidth()));
 			GLCornerRadii contentRadii = new GLCornerRadii(0, 0,
 					contentRadius, contentRadius);
 			for (Tab tab : tabs) {
@@ -461,9 +473,9 @@ public final class GLTabbedPane extends GLContainer {
 		}
 		setIntrinsicPreferredGLSize(new GLSize(
 				Math.max(240, width + style.contentPadding().horizontal()
-						+ style.borderWidth() * 2),
+						+ layoutBorderWidth(style.borderWidth()) * 2),
 				Math.max(160, height + style.contentPadding().vertical()
-						+ style.tabHeight() + style.borderWidth() * 2)));
+						+ style.tabHeight() + layoutBorderWidth(style.borderWidth()) * 2)));
 	}
 
 	private int nextEnabled(int disabledIndex) {
@@ -496,7 +508,7 @@ public final class GLTabbedPane extends GLContainer {
 
 	private final class Tab {
 		private String title;
-		private final GLContainer content;
+		private GLContainer content;
 		private final TabButton button;
 		private Tab(String title, GLContainer content) {
 			this.title = title;
@@ -542,8 +554,8 @@ public final class GLTabbedPane extends GLContainer {
 			// Every tab shares one connected tab-strip silhouette. Keeping the
 			// lower corners square also prevents inactive and disabled tabs from
 			// looking like unrelated standalone buttons.
-			GLCornerRadii radii = new GLCornerRadii(style.cornerRadius(),
-					style.cornerRadius(), 0, 0);
+			GLCornerRadii radii = new GLCornerRadii(layoutCornerRadius(style.cornerRadius()),
+					layoutCornerRadius(style.cornerRadius()), 0, 0);
 			context.fillUIRoundRect(0, 0, width, height, radii, background);
 			context.addUIHitArea(0, 0, width, height);
 			GLFont font = getGLFont(style.font());

@@ -9,7 +9,7 @@
     <version>0.1.0</version>
     <packaging>pom</packaging>
 
-    <name>GLSwingNext Parent</name>
+    <name>GLSwing Parent</name>
     <description>GPU-accelerated 2D rendering and lightweight UI for Java</description>
     <url>https://github.com/Helge97/GLSwingNext</url>
 
@@ -107,6 +107,13 @@
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-javadoc-plugin</artifactId>
                     <version>3.11.2</version>
+                    <configuration>
+                        <!-- GLSwing publishes automatic-module names but does not
+                             compile as a JPMS module. Keep Javadoc on the class path
+                             so package discovery works on current JDKs. -->
+                        <legacyMode>true</legacyMode>
+                        <doclint>none</doclint>
+                    </configuration>
                 </plugin>
             </plugins>
         </pluginManagement>

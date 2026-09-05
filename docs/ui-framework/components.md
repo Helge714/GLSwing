@@ -3,8 +3,10 @@
 [UI guide](../ui-framework.md) · [Next: Layout](layout.md)
 
 GLSwing UI is a lightweight component tree rendered by one OpenGL host.
-`GLComponent` defines bounds, visibility, focus, invalidation, and lifecycle;
-`GLContainer` adds children, layout, recording, clipping, and inherited state.
+`GLContainer` is the public component base. It defines bounds, visibility,
+focus, invalidation, lifecycle, children, layout, recording, clipping, and
+inherited state. Leaf-style controls specialize that same container contract;
+there is no separate heavyweight peer for each control.
 
 ## Contents
 
@@ -128,3 +130,36 @@ the latter internally after attaching the completed root surface.
 `GLDialog` is a GPU-rendered dialog hosted in the component tree. Modality modes
 include `MODELESS` and `OWNER_MODAL`. Set content and bounds before showing it;
 use `toFront()` when application logic activates an existing dialog.
+
+System window chrome remains the default. Select optional GLSwing-rendered
+chrome before `show(...)` when a dialog should follow the application theme:
+
+```java
+GLDialog dialog = new GLDialog("Preferences", content);
+dialog.setDecoration(GLDialog.Decoration.THEMED);
+dialog.setCornerRadius(12);
+dialog.show(owner);
+```
+
+`Decoration.NONE` creates an undecorated surface without a title bar. Both
+undecorated modes use `dialog.cornerRadius` unless `setCornerRadius(...)`
+overrides it; `clearCornerRadius()` restores theme resolution. Shaped-window
+support is desktop-dependent, so unsupported platforms retain square native
+window bounds. The themed title bar supplies dragging and a close action. Its
+close target is flat in the normal state and uses configurable hover and pressed
+colors while preserving the window's outer top-right radius. Relevant theme
+keys include `dialog.titleBar.height`, `dialog.titleBar.background`,
+`dialog.titleBar.text`, `dialog.titleBar.border`,
+`dialog.titleBar.borderWidth`, `dialog.close.text`,
+`dialog.close.hover`, and `dialog.close.pressed`. On desktops supporting
+per-pixel translucent windows, GLSwing renders an antialiased outer contour and
+a soft shadow configured through `dialog.border*` and `dialog.shadow.*`. Other
+desktops use the native shaped-window fallback. The close target's hit area is
+the complete hover surface rather than only the visible cross. The dialog body
+and border share one analytic primitive, while the title separator is an opaque
+inner fill; neither seam exposes the transparent window surface. The configured
+dialog size
+continues to describe application content; themed chrome adds its title-bar
+height instead of reducing the content area. Native resize handles are not
+available on undecorated windows, so use themed decoration primarily for fixed
+dialogs or provide application-specific resize handles.

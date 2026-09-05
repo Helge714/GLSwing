@@ -217,9 +217,9 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 		if (width <= 0 || height <= 0) return;
 		Color border = isFocused() ? style.focusedBorderColor() : style.borderColor();
 		GLCornerRadii radii = containerRadii();
-		if (containerBorderVisible && style.borderWidth() > 0)
+		if (containerBorderVisible && layoutBorderWidth(style.borderWidth()) > 0)
 			context.fillAndDrawUIRoundRect(0, 0, width, height, radii,
-					style.borderWidth(), style.backgroundColor(), border,
+					layoutBorderWidth(style.borderWidth()), style.backgroundColor(), border,
 					GLStroke.WidthSpace.SCREEN);
 		else context.fillUIRoundRect(0, 0, width, height, radii,
 				style.backgroundColor());
@@ -243,7 +243,7 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 			if (isFocused())
 				drawSelection(context, font, row, x, top, lineHeight,
 						style.selectionColor());
-			drawRow(context, font, row, x, baseline, available, style);
+			drawRow(context, font, row, x, top, baseline, available, style);
 			drawTextDecorations(context, font, row.start, row.end, x, baseline,
 					available);
 			if (isFocused() && caretVisible && index == caretRow) {
@@ -262,6 +262,15 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 	}
 	protected void drawTextDecorations(GLContext2D context, GLFont font,
 			int rowStart, int rowEnd, float x, float baseline, float available) { }
+	/** Returns the next visual-only inline decoration in the half-open range. */
+	protected int nextInlineDecorationOffset(int startInclusive, int endExclusive) {
+		return -1;
+	}
+	/** Returns the horizontal space occupied by the decoration before this offset. */
+	protected float inlineDecorationWidth(GLFont font, int offset) { return 0; }
+	/** Draws a visual-only decoration immediately before the character at offset. */
+	protected void drawInlineDecoration(GLContext2D context, GLFont font, int offset,
+			float x, float top, float baseline, float lineHeight) { }
 	/** Additional unwrapped width drawn after a visual row. */
 	protected float trailingRowDecorationWidth(int rowStart, int rowEnd) { return 0; }
 
@@ -756,6 +765,8 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 	private float rowAdvance(GLFont font, Row row, int offset, float available) {
 		int bounded = Math.max(row.start, Math.min(row.end, offset));
 		float advance = measureRange(row.start, bounded);
+		if (bounded < row.end)
+			advance += inlineDecorationWidth(font, bounded);
 		if (textAlignment == GLTextAlignment.JUSTIFIED && row.softWrapped) {
 			String rowText = document.getText(row.start, row.end);
 			int spaces = spaceCount(rowText);
@@ -767,7 +778,7 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 		return advance;
 	}
 	private void drawRow(GLContext2D context, GLFont font, Row row, float x,
-			float baseline, float available, GLTextEditorStyle style) {
+			float top, float baseline, float available, GLTextEditorStyle style) {
 		String text = document.getText(row.start, row.end);
 		Color color = isEnabled() ? style.textColor() : style.disabledTextColor();
 		boolean justified = textAlignment == GLTextAlignment.JUSTIFIED
@@ -782,6 +793,15 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 					end = start;
 					while (end < run.end() && document.getText().charAt(end) != ' ') end++;
 				}
+				int decoration = nextInlineDecorationOffset(start, end);
+				if (decoration == start) {
+					float decorationWidth = inlineDecorationWidth(font, start);
+					drawInlineDecoration(context, font, start,
+							x + rowAdvance(font, row, start, available) - decorationWidth,
+							top, baseline, font.getLineHeight());
+					decoration = nextInlineDecorationOffset(start + 1, end);
+				}
+				if (decoration > start) end = Math.min(end, decoration);
 				int colorEnd = end;
 				Color partColor = presentedColor(start, color);
 				for (int offset = start + 1; offset < end; offset++)
@@ -843,7 +863,7 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 		float width = style.thickness();
 		float trackHeight = viewport;
 		context.fillUIRoundRect(x, y, width, trackHeight,
-				Math.min(style.cornerRadius(), width / 2), style.track());
+				Math.min(layoutCornerRadius(style.cornerRadius()), width / 2), style.track());
 		float thumbHeight = scrollBarThumbHeight(contentHeight, viewport, style);
 		float travel = Math.max(0, trackHeight - thumbHeight);
 		float maximum = Math.max(1, contentHeight - viewport);
@@ -852,7 +872,7 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 				thumbY + style.trackPadding(),
 				Math.max(1, width - style.trackPadding() * 2),
 				Math.max(1, thumbHeight - style.trackPadding() * 2),
-				Math.min(style.cornerRadius(), width / 2),
+				Math.min(layoutCornerRadius(style.cornerRadius()), width / 2),
 				draggingScrollBar ? style.thumbPressed() : style.thumb());
 	}
 	private float scrollBarThumbHeight(float contentHeight, float viewport,
@@ -920,6 +940,10 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 		float width = 0;
 		for (GLTextDocument.StyleRun run : document.getStyleRuns(start, end))
 			width += font(run.style()).measureText(expand(document.getText(run.start(), run.end())));
+		GLFont baseFont = font();
+		for (int offset = nextInlineDecorationOffset(start, end); offset >= start
+				&& offset < end; offset = nextInlineDecorationOffset(offset + 1, end))
+			width += inlineDecorationWidth(baseFont, offset);
 		return width;
 	}
 	private GLFont font(GLTextStyle style) {

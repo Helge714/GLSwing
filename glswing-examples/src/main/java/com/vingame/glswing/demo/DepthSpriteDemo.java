@@ -34,7 +34,7 @@ public final class DepthSpriteDemo {
 	}
 
 	private static void show() {
-		GLFrame frame = new GLFrame("GLSwingNext - 2.5D Materials",
+		GLFrame frame = new GLFrame("GLSwing - 2.5D Materials",
 				GLFrame.RenderingSettings.DEFAULT.withTargetFps(144));
 		frame.setGLClearColor(new Color(13, 18, 28));
 		frame.setMinimumSize(new Dimension(720, 480));

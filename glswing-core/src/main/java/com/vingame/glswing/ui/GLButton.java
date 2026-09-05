@@ -156,16 +156,16 @@ public class GLButton extends GLControl {
 		float height = getHeight();
 		if (width <= 0 || height <= 0)
 			return;
-		float border = style.borderWidth();
+		float border = layoutBorderWidth(style.borderWidth());
 
 		context.withParameters(backgroundParameters, () -> {
 			if (border > 0)
 				context.fillAndDrawUIRoundRect(0, 0, width, height,
-						style.cornerRadius(), border, Color.WHITE,
+						layoutCornerRadius(style.cornerRadius()), border, Color.WHITE,
 						style.borderColor(), GLStroke.WidthSpace.SCREEN);
 			else
 				context.fillUIRoundRect(0, 0, width, height,
-						style.cornerRadius(), Color.WHITE);
+						layoutCornerRadius(style.cornerRadius()), Color.WHITE);
 		});
 		float gradientInset = border > 0 ? Math.min(border + 1,
 				Math.min(width, height) * 0.5f) : 0;
@@ -173,7 +173,7 @@ public class GLButton extends GLControl {
 				context.fillUIVerticalGradientRoundRect(gradientInset, gradientInset,
 						Math.max(0.0001f, width - gradientInset * 2),
 						Math.max(0.0001f, height - gradientInset * 2),
-						Math.max(0, style.cornerRadius() - gradientInset),
+						Math.max(0, layoutCornerRadius(style.cornerRadius()) - gradientInset),
 						style.pressedLightColor(), style.pressedDarkColor()));
 
 		float focusInset = border;
@@ -181,7 +181,7 @@ public class GLButton extends GLControl {
 			context.withParameters(focusParameters, () ->
 					context.drawUIRoundRect(focusInset, focusInset,
 							width - focusInset * 2, height - focusInset * 2,
-							Math.max(0, style.cornerRadius() - focusInset),
+							Math.max(0, layoutCornerRadius(style.cornerRadius()) - focusInset),
 							1.5f, Color.WHITE, GLStroke.WidthSpace.SCREEN));
 		}
 

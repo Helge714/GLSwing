@@ -153,7 +153,6 @@ public class GLTextEditor extends GLControl implements GLEditingHistoryTarget {
 		showCaret();
 		invalidateRecording();
 	}
-
 	/** Restricts intermediate edits without replacing final validation. */
 	public final void setInputFilter(Predicate<String> filter) {
 		if (filter == null)
@@ -429,25 +428,25 @@ public class GLTextEditor extends GLControl implements GLEditingHistoryTarget {
 		GLFont font = getGLFont(style.font());
 		GLInsets padding = style.padding();
 		GLCornerRadii radii = containerRadii == null
-				? GLCornerRadii.all(style.cornerRadius()) : containerRadii;
+				? GLCornerRadii.all(layoutCornerRadius(style.cornerRadius())) : containerRadii;
 		context.withParameters(backgroundParameters, () -> {
-			if (containerBorderVisible && style.borderWidth() > 0) {
+			if (containerBorderVisible && layoutBorderWidth(style.borderWidth()) > 0) {
 				Color borderColor = invalid ? style.invalidBorderColor()
 						: isFocused() ? style.focusedBorderColor()
 								: style.borderColor();
 				context.fillAndDrawUIRoundRect(0, 0, width, height, radii,
-						style.borderWidth(), Color.WHITE, borderColor,
+						layoutBorderWidth(style.borderWidth()), Color.WHITE, borderColor,
 						GLStroke.WidthSpace.SCREEN);
 			} else
 				context.fillUIRoundRect(0, 0, width, height, radii, Color.WHITE);
 		});
 
-		float clipInset = style.borderWidth() > 0
-				? style.borderWidth() + 1 : 0;
+		float clipInset = layoutBorderWidth(style.borderWidth()) > 0
+				? layoutBorderWidth(style.borderWidth()) + 1 : 0;
 		context.beginLayer(0, 0, width, height, clipInset);
 		float textOrigin = padding.left() - scrollX;
 		float baseline = (height - font.getLineHeight()) * 0.5f + font.getAscent();
-		if (anchor != caret) {
+		if (isFocused() && anchor != caret) {
 			float selectionStart = textOrigin
 					+ font.measureText(text.substring(0, getSelectionStart()));
 			float selectionEnd = textOrigin
@@ -466,12 +465,10 @@ public class GLTextEditor extends GLControl implements GLEditingHistoryTarget {
 				getGLTheme().textShadow("textEditor"));
 		context.withParameters(textParameters, () ->
 				context.drawUIText(font, text, textOrigin, baseline, Color.WHITE));
-		float caretX = textOrigin
-				+ font.measureText(text.substring(0, caret));
+		float caretX = textOrigin + font.measureText(text.substring(0, caret));
 		if (caretX >= padding.left() - 1 && caretX <= width - padding.right() + 1)
 			context.withParameters(caretParameters, () ->
-					context.fillUIRoundRect(caretX, baseline - font.getAscent(),
-							1, font.getLineHeight(), 0, Color.WHITE));
+					context.fillUIRoundRect(caretX,baseline-font.getAscent(),1,font.getLineHeight(),0,Color.WHITE));
 
 		float availableWidth = Math.max(0, width - padding.horizontal());
 		float textWidth = font.measureText(text);

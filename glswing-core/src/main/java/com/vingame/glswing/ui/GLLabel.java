@@ -10,11 +10,15 @@ import com.vingame.glswing.rendering.GLRenderParameters;
 
 /** A lightweight, non-pickable text label with theme inheritance. */
 public class GLLabel extends com.vingame.glswing.component.GLContainer {
+	public enum Alignment { LEFT, CENTER, RIGHT }
+	public enum VerticalAlignment { TOP, CENTER, BOTTOM }
 
 	private String text;
 	private GLLabelStyle localStyle;
 	private GLLabelStyle appliedStyle;
 	private final GLRenderParameters textParameters = new GLRenderParameters();
+	private Alignment alignment = Alignment.LEFT;
+	private VerticalAlignment verticalAlignment = VerticalAlignment.TOP;
 
 	public GLLabel(String text) {
 		this.text = requireText(text);
@@ -52,6 +56,16 @@ public class GLLabel extends com.vingame.glswing.component.GLContainer {
 	public final GLLabelStyle getGLStyle() {
 		return localStyle != null ? localStyle : getGLTheme().labelStyle();
 	}
+	public final Alignment getAlignment() { return alignment; }
+	public final void setAlignment(Alignment alignment) {
+		if(alignment==null)throw new IllegalArgumentException("Label alignment must not be null");
+		if(this.alignment==alignment)return;this.alignment=alignment;invalidateRecording();
+	}
+	public final VerticalAlignment getVerticalAlignment() { return verticalAlignment; }
+	public final void setVerticalAlignment(VerticalAlignment alignment) {
+		if(alignment==null)throw new IllegalArgumentException("Vertical label alignment must not be null");
+		if(verticalAlignment==alignment)return;verticalAlignment=alignment;invalidateRecording();
+	}
 
 	@Override
 	protected void record(GLContext2D context) {
@@ -60,11 +74,20 @@ public class GLLabel extends com.vingame.glswing.component.GLContainer {
 		GLInsets padding = style.padding();
 		String renderedText = GLTextFitter.ellipsize(font, text,
 				Math.max(0, getWidth() - padding.horizontal()));
-		context.drawUITextShadow(font, renderedText, padding.left(),
-				padding.top() + font.getAscent(), getGLTheme().textShadow("label"));
+		float available=Math.max(0,getWidth()-padding.horizontal());
+		float textWidth=font.measureText(renderedText);
+		float x=padding.left()+switch(alignment) {
+			case LEFT -> 0; case CENTER -> (available-textWidth)/2; case RIGHT -> available-textWidth;
+		};
+		float verticalSpace=Math.max(0,getHeight()-padding.vertical()-font.getLineHeight());
+		float baseline=padding.top()+switch(verticalAlignment) {
+			case TOP -> 0;case CENTER -> verticalSpace/2;case BOTTOM -> verticalSpace;
+		}+font.getAscent();
+		context.drawUITextShadow(font, renderedText, x,
+				baseline, getGLTheme().textShadow("label"));
 		context.withParameters(textParameters, () -> context.drawUIText(font,
 				renderedText,
-				padding.left(), padding.top() + font.getAscent(), Color.WHITE));
+				x, baseline, Color.WHITE));
 	}
 
 	@Override

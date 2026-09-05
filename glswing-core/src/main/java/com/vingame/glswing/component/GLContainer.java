@@ -31,6 +31,18 @@ import com.vingame.glswing.ui.GLTheme;
  * recording.
  */
 public abstract class GLContainer implements GLParent, GLMouseTarget {
+	private Object connectedShapeOwner;
+	private com.vingame.glswing.rendering.GLCornerRadii connectedShape;
+	/** Layout-owned clip; custom controls should use the layout metric helpers below. */
+	public final com.vingame.glswing.rendering.GLCornerRadii getConnectedShape() { return connectedShape; }
+	public final void setConnectedShape(Object owner, com.vingame.glswing.rendering.GLCornerRadii shape) {
+		java.util.Objects.requireNonNull(owner);
+		if(shape==null && connectedShapeOwner!=owner) return;
+		if(java.util.Objects.equals(shape,connectedShape) && owner==connectedShapeOwner) return;
+		connectedShapeOwner=shape==null?null:owner; connectedShape=shape; invalidateRecording();
+	}
+	protected final float layoutCornerRadius(float radius) { return connectedShape==null?radius:0; }
+	protected final float layoutBorderWidth(float width) { return connectedShape==null?width:0; }
 
 	private final GLChildList glChildren = new GLChildList(this);
 	private final GLRecordingCache recordingCache = new GLRecordingCache();
@@ -103,6 +115,7 @@ public abstract class GLContainer implements GLParent, GLMouseTarget {
 		int previousPickId = context.getPickId();
 		Color previousColor = context.getColor();
 		GLStroke previousStroke = context.getStroke();
+		boolean connectedClip = false;
 		try {
 			context.setTransform(previousTransform.copy().translate(x, y));
 			transformComponent(context);
@@ -113,6 +126,9 @@ public abstract class GLContainer implements GLParent, GLMouseTarget {
 				context.clearPickId();
 			}
 			layoutSupport.ensure(width, height);
+			if(connectedShape!=null) {
+				context.beginUIRoundedClip(0,0,width,height,connectedShape); connectedClip=true;
+			}
 			GLInsets overflow = visualOverflow;
 			float localX = -overflow.left();
 			float localY = -overflow.top();
@@ -133,6 +149,7 @@ public abstract class GLContainer implements GLParent, GLMouseTarget {
 			}
 			renderChildren(context);
 		} finally {
+			if(connectedClip) context.endClip();
 			context.setTransform(previousTransform);
 			context.setColor(previousColor);
 			context.setStroke(previousStroke);
@@ -592,6 +609,8 @@ public abstract class GLContainer implements GLParent, GLMouseTarget {
 	}
 
 	final void setGLParent(GLParent parent) {
+		if (glParent != parent && connectedShapeOwner != null)
+			setConnectedShape(connectedShapeOwner, null);
 		glParent = parent;
 	}
 

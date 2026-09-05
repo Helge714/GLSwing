@@ -12,12 +12,92 @@ behavior from `GLControl`. Geometry and text measurements use logical pixels.
 - [Control overview](#control-overview)
 - [Labels, buttons, checkboxes, and lines](#labels-buttons-checkboxes-and-lines)
 - [Sliders and slider groups](#sliders-and-slider-groups)
+- [Color controls](#color-controls)
+- [Visual and input groups](#visual-and-input-groups)
 - [Text editor](#text-editor)
 - [Combo boxes and menus](#combo-boxes-and-menus)
 - [Tabs](#tabs)
 - [Lists](#lists)
 - [Trees](#trees)
 - [Scrolling](#scrolling)
+
+## Visual and input groups
+
+`GLLayoutGroup` connects touching controls without linking their values. Its
+default grid layout supports spans: one tall input can meet two shorter buttons.
+Connections are opt-in on both adjoining sides:
+
+```java
+GLLayoutGroup group = new GLLayoutGroup();
+group.addGL(new GLTextEditor("0"),
+    GLConstraints.at(0, 0).span(1, 2).weight(1, 1).fillBoth().connectAll());
+group.addGL(new GLButton("+"),
+    GLConstraints.at(1, 0).weight(0, 1).fillBoth().connectAll());
+group.addGL(new GLButton("-"),
+    GLConstraints.at(1, 1).weight(0, 1).fillBoth().connectAll());
+```
+
+Use `connect(Connection.RIGHT, Connection.BOTTOM)` to restrict individual sides.
+Gaps remain gaps. Nested layout groups contribute their actual occupied cells,
+so L- and T-shaped arrangements do not acquire a rectangular background across
+empty space. Connections crossing a nested group's boundary also require that
+group's permission in its parent's constraints. Layouts must be axis-aligned.
+Convex exterior corners are rounded; concave junctions remain square. Standard
+controls share the outline and single internal separators, while hover, pressed
+and focus rendering remain local to the control. Theme keys are
+`layoutGroup.cornerRadius`, `layoutGroup.borderWidth`, and `layoutGroup.border`,
+falling back to the button style when omitted.
+
+Custom controls can use the protected `layoutCornerRadius(...)` and
+`layoutBorderWidth(...)` helpers to suppress independent borders within a group.
+The rounded content clip applies to UI-batched drawing; other drawing pipelines
+retain rectangular scissoring and require their own rounded masking if needed.
+
+`GLInputGroup<T>` is independent of layout. Register immutable value snapshots
+with `add(getter, setter)`, then call `begin(label)`, perform changes directly or
+with `update(operation)`, and `commit()` to record one undo operation. `cancel()`
+restores the snapshots without recording. Setters should apply values without
+recording additional history. Use the group on the UI event thread.
+
+The color picker uses one compact visual group for the three model channels and
+a separate, aligned alpha group with its own numeric field and up/down buttons.
+The separating gap makes the independent alpha semantics visible without
+changing the column geometry. Drag vertically through the first three
+sliders or fields to select several normalized color channels. During linked
+numeric editing, only the selected rows receive the focus outline and the
+raw text from the active field is mirrored immediately, including incomplete or
+temporarily invalid input. Only the active field displays a caret. Enter commits
+a valid value to every selected channel; invalid input is discarded and the
+color state from before the edit is restored.
+Moving the vertical selection gesture back removes rows again; `Ctrl`-click
+toggles individual numeric fields. Alpha has the same row geometry
+but remains logically independent. Color sliders respond to dragging rather than
+track clicks and do not enter keyboard focus; their adjacent fields provide
+precise input. Valid field content is reflected live, while committing or
+leaving the field records one color edit. Holding an arrow button repeats the
+change; releasing it records one edit. The precise/coarse slider modifiers and
+factors also apply to these buttons.
+
+Channel labels use their complete names (`Red`, `Hue`, `Saturation`,
+`Lightness`, and so on) and are vertically centered and right-aligned. During a
+linked field edit, every selected field mirrors the same temporary text and
+caret position. Committing converts that shared normalized position back to the
+individual channel ranges.
+
+For other labels, `GLLabel.setAlignment(...)` and
+`setVerticalAlignment(...)` independently control horizontal and vertical text
+placement. Their defaults preserve left/top placement.
+
+The top row contains a generously sized, keyboard-focusable icon-only eyedropper
+action, one compact split original/current swatch aligned to the slider column,
+and the editing color-model selector.
+The selector begins at the numeric-field column. A separate selector in the
+same column beside the expression field controls output formatting without
+changing the editing model; the expression begins at the slider column. The
+dialog reserves a status row only for actionable validation or gamut messages.
+Color history stores complete colors, so undo remains correct after switching
+models. The screen sampler uses the same eyedropper silhouette as the button
+where custom desktop cursors are supported, with a crosshair fallback.
 
 ## Common behavior
 
@@ -117,6 +197,7 @@ shortcuts remain native.
 |---|---|---|
 | `GLLabel` | `new GLLabel(text)` | Text and alignment |
 | `GLButton` | Text or `GLAction` constructor | Action listeners and `doClick()` |
+| `GLDialogButtonBar` | Add one or more `GLButton` instances | Localized dialog-action sizing and alignment |
 | `GLCheckBox` | Text or `GLAction` constructor | Selected state and action |
 | `GLLine` | Orientation constructor | Stroke and relative endpoints |
 | `GLSlider` | `fixed(...)` or `free(...)` | Value, range, step, editor, reset |
@@ -139,6 +220,22 @@ combine a selected boolean with button-like activation. Use `get/setText` and
 `get/setSelected` for their models.
 
 Buttons and checkboxes activate with `Space` or `Enter` while focused.
+
+Place dialog actions in a `GLDialogButtonBar` instead of assigning fixed button
+widths. The bar uses each button's complete preferred width, including localized
+text, icon, theme font, and padding. It is right-aligned by default:
+
+```java
+GLDialogButtonBar actions = new GLDialogButtonBar()
+        .addButton(cancel)
+        .addButton(apply);
+actions.setBounds(20, height - 48, width - 40, 30);
+```
+
+Use `setAlignment(GLDialogButtonBar.Alignment.RIGHT)`, `setGap(...)`, and
+`setMinimumButtonWidth(...)` for application-specific conventions. Buttons are
+ellipsized only if the bar itself is narrower than their combined preferred
+width and gaps. Dialogs should therefore give the bar the full content width.
 
 `GLLine` draws horizontal, vertical, or diagonal separators. Orientations are
 `HORIZONTAL`, `VERTICAL`, `DIAGONAL_DOWN`, and `DIAGONAL_UP`.
@@ -168,7 +265,78 @@ items through `getContextMenu()`.
 
 `GLSliderGroup` joins vertically arranged sliders visually. A vertical gesture
 selects multiple sliders and the following horizontal drag changes them as one
-history transaction.
+history transaction. Fixed groups render one continuous vertical progress
+gradient across the complete group; each row receives the color interval that
+corresponds to its position instead of restarting the gradient per slider.
+The linked-editing focus outline covers only selected slider rows. Reversing the
+vertical selection gesture removes rows before the editor opens.
+
+## Color controls
+
+`GLColorPicker` is an embeddable color editor. `GLColorChooser` is a compact
+color button that opens the same editor in an owned, modal GLSwing dialog.
+
+```java
+GLColorPicker picker = new GLColorPicker(new Color(84, 120, 181));
+picker.setBounds(0, 0, 480, 340);
+picker.setColorModel(GLColorModel.OKLCH);
+picker.addColorChangeListener(color -> preview.setColor(color));
+parent.addGL(picker);
+
+GLColorChooser chooser = new GLColorChooser(Color.RED);
+chooser.setBounds(0, 350, 72, 28);
+chooser.addColorChangeListener(color -> updateAccent(color));
+parent.addGL(chooser);
+```
+
+The picker supports RGB (gamma-encoded sRGB), HSV, HSL, OKLab, and OKLCH.
+RGB channels use 0–255, hue uses degrees, alpha and normalized channels use
+0–1. OKLab a/b use −0.4–0.4 and the OKLCH chroma slider uses 0–0.4.
+Changing the editing model does not change the selected color. Results are
+8-bit sRGB `java.awt.Color` values; this is not an HDR or wide-gamut editor.
+
+Each `GLColorSlider` previews the result of varying one channel while keeping
+the other channels fixed. Transparent samples are composited over a checkerboard.
+The black-and-white marker identifies the current value. Stripes on the lower
+edge mark out-of-sRGB samples; their previews use component clipping, not
+perceptual gamut mapping. The two comparison swatches show original/current color.
+Numeric fields accept precise values; the expression field accepts the same
+color syntax as theme files. Hold Shift while dragging for finer adjustments.
+
+`GLColorSlider` can also be used independently. Its `setColorSampler(...)`
+callback receives actual slider values; samples are cached until the callback
+is replaced. Replace it when another channel changes. The optional gamut
+predicate controls the striped warning edge.
+
+The picker emits live color-change notifications. Pointer gestures become one
+color-history operation; numeric commits and keyboard steps are separate edits.
+The chooser keeps dialog edits local until **Apply**. **Cancel** leaves its caller
+unchanged. `GLColorChooser.show(owner, initial, model, accepted)` opens the dialog
+without adding a chooser button.
+
+The enabled-by-default eyedropper captures the connected screens into temporary
+in-memory overlays. Move the pointer to preview a pixel and its hex value; click
+to select it. Escape or a non-left click cancels. Sampling preserves the current
+alpha, because desktop pixels have no useful source alpha. Screen capture may
+require operating-system permission and may be unavailable for protected content.
+No screenshots are saved. Use `setPipetteEnabled(false)` to disable this feature.
+
+The eyedropper button uses an SVG icon. Its pointer-following preview uses the
+active theme's surface/text colors and sizes itself to the enabled content:
+
+```java
+// Enabled, color swatch, hexadecimal value, RGB values:
+picker.setPipettePreview(new GLPipettePreview(true, true, true, true));
+chooser.setPipettePreview(new GLPipettePreview(true, false, true, false));
+// Disable only the preview; sampling and Escape remain available:
+picker.setPipettePreview(GLPipettePreview.NONE);
+```
+
+`GLPipettePreview.DEFAULT` shows a swatch and hex value. All content switches
+are independent; an empty selection also hides the preview. Settings apply to
+the next sampling session. For theme-editor pickers, configure
+`editor.setColorPickerPipettePreview(...)`. The `GLColorChooser.show(...)`
+overload accepting a `GLPipettePreview` configures a standalone picker dialog.
 
 ## Text editor
 
@@ -261,9 +429,9 @@ Write `new GLMenuItem("Open ...")` when an action opens a dialog; it is exposed
 and rendered as `Open …`. GLSwing does not infer whether an action needs an
 ellipsis, and it does not alter editable user text. Overflow truncation also
 uses the single Unicode ellipsis character.
-The default `GLFont` atlas includes this glyph. When constructing a `GLFont`
-with an explicit character set, include `…` if menu labels or overflow
-truncation can use it.
+The default `GLFont` atlas includes this glyph. Explicit font character sets are
+available for application-specific scripts and symbols; include every character
+that application-provided menu labels or localized text may render.
 
 Menus accept the renderer-independent `GLIcon` type, including raster images,
 adaptive SVG icons, and tintable MSDF icons. A popup reserves one shared leading

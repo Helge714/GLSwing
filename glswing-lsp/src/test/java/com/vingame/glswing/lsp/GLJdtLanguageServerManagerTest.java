@@ -9,6 +9,8 @@ import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.eclipse.lsp4j.Hover;
+import org.eclipse.lsp4j.InlayHint;
+import org.eclipse.lsp4j.InlayHintKind;
 import org.eclipse.lsp4j.MarkupContent;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.Range;
@@ -115,6 +117,23 @@ final class GLJdtLanguageServerManagerTest {
 				.equals("value"));
 		assertTrue(tokens.get(1).type().equals("property")
 				&& tokens.get(1).modifiers().contains("readonly"));
+	}
+
+	@Test void convertsLspInlayHintsToUtf16DocumentOffsets() {
+		String source = "call(Color.RED, 1f);";
+		InlayHint color = new InlayHint();
+		color.setPosition(new Position(0, source.indexOf("Color")));
+		color.setLabel("color:");
+		color.setKind(InlayHintKind.Parameter);
+		InlayHint brightness = new InlayHint();
+		brightness.setPosition(new Position(0, source.indexOf("1f")));
+		brightness.setLabel("brightness:");
+		brightness.setKind(InlayHintKind.Parameter);
+		var hints = GLLanguageServer.decodeInlayHints(source,
+				java.util.List.of(color, brightness));
+		assertTrue(hints.size() == 2
+				&& hints.get(0).offset() == source.indexOf("Color")
+				&& hints.get(1).label().equals("brightness:"));
 	}
 
 

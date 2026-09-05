@@ -125,10 +125,18 @@ public final class GLCodeEditorSelfTest {
 				"Enter did not expand a generated brace pair into an indented block");
 		editor.toggleLineComment();
 		check(editor.getText().contains("//"), "Line comment command did not add a prefix");
-		check(editor.getContextMenu().getItems().size() == 5
+		check(editor.getContextMenu().getItems().size() == 6
 				&& editor.getContextMenu().getItems().stream()
 						.noneMatch(item -> item.getSubMenu() != null),
 				"Code editor exposed the inherited rich-text context menu");
+		var hintsItem = editor.getContextMenu().getItems().get(5);
+		hintsItem.doClick();
+		check(!editor.isInlayHintsVisible()
+				&& hintsItem.getAction() != null && !hintsItem.getAction().isSelected(),
+				"Parameter-hint context action did not hide inlay hints");
+		hintsItem.doClick();
+		check(editor.isInlayHintsVisible() && hintsItem.getAction().isSelected(),
+				"Parameter-hint context action did not restore inlay hints");
 		editor.setEditable(false);
 		check(editor.getContextMenu().getItems().subList(0, 3).stream()
 				.allMatch(item -> !item.isEnabled()),
@@ -185,6 +193,14 @@ public final class GLCodeEditorSelfTest {
 					return java.util.concurrent.CompletableFuture.completedFuture(java.util.List.of(
 							new GLCodeLocation(URI.create("file:///project/Target.java"), 2, 4)));
 				}
+				@Override public java.util.concurrent.CompletionStage<java.util.List<GLCodeSignature>>
+						signatureHelp(GLCodeDocument value, int offset, Character trigger) {
+					return java.util.concurrent.CompletableFuture.completedFuture(java.util.List.of(
+							new GLCodeSignature("call(String value)", "",
+									java.util.List.of("String value"), 0),
+							new GLCodeSignature("call(Object value)", "",
+									java.util.List.of("Object value"), 0)));
+				}
 				@Override public java.util.concurrent.CompletionStage<java.util.List<
 						com.vingame.glswing.ui.GLCodeSemanticToken>> semanticTokens(
 								GLCodeDocument value) {
@@ -192,6 +208,20 @@ public final class GLCodeEditorSelfTest {
 					return java.util.concurrent.CompletableFuture.completedFuture(java.util.List.of(
 							new com.vingame.glswing.ui.GLCodeSemanticToken(4, 9, "variable",
 									java.util.Set.of("declaration"))));
+				}
+				@Override public java.util.concurrent.CompletionStage<java.util.List<
+						com.vingame.glswing.ui.GLCodeInlayHint>> inlayHints(
+							GLCodeDocument value) {
+					return java.util.concurrent.CompletableFuture.completedFuture(java.util.List.of(
+							new com.vingame.glswing.ui.GLCodeInlayHint(4, "Value"),
+							new com.vingame.glswing.ui.GLCodeInlayHint(9, "End")));
+				}
+				@Override public java.util.concurrent.CompletionStage<java.util.List<
+						com.vingame.glswing.ui.GLCodeColor>> documentColors(
+							GLCodeDocument value) {
+					return java.util.concurrent.CompletableFuture.completedFuture(java.util.List.of(
+							new com.vingame.glswing.ui.GLCodeColor(4, 9,
+									new java.awt.Color(20, 40, 60))));
 				}
 				@Override public void close() { closed[0] = true; }
 			};
@@ -209,17 +239,36 @@ public final class GLCodeEditorSelfTest {
 		check(semanticRequested[0] && semanticAvailable[0]
 				&& editor.getSemanticTokens().size() == 1,
 				"Code editor did not retain provider semantic tokens");
+		check(editor.getInlayHints().size() == 2,
+				"Code editor did not retain provider inlay hints");
+		check(editor.getDocumentColors().size() == 1,
+				"Code editor did not retain provider document colors");
 		editor.getDocument().insert(editor.getText().length(), " ");
 		check(editor.getSemanticTokens().size() == 1
 				&& editor.getSemanticTokens().get(0).start() == 4,
 				"An edit after a semantic token discarded an unaffected classification");
+		check(editor.getInlayHints().size() == 2
+				&& editor.getInlayHints().get(0).offset() == 4,
+				"An edit after inlay hints discarded their pending snapshot");
+		check(editor.getDocumentColors().get(0).start() == 4
+				&& editor.getDocumentColors().get(0).end() == 9,
+				"An edit after a color field discarded its pending preview");
 		editor.getDocument().insert(0, " ");
 		check(editor.getSemanticTokens().size() == 1
 				&& editor.getSemanticTokens().get(0).start() == 5,
 				"An edit before a semantic token did not translate its source range");
+		check(editor.getInlayHints().get(0).offset() == 5
+				&& editor.getInlayHints().get(1).offset() == 10,
+				"An edit before inlay hints did not translate their anchors");
+		check(editor.getDocumentColors().get(0).start() == 5
+				&& editor.getDocumentColors().get(0).end() == 10,
+				"An edit before a color field did not translate its preview range");
 		editor.getDocument().insert(7, "x");
 		check(editor.getSemanticTokens().isEmpty(),
 				"An edit inside a semantic token retained a stale classification");
+		check(editor.getDocumentColors().get(0).start() == 5
+				&& editor.getDocumentColors().get(0).end() == 11,
+				"Editing a color field discarded its last valid preview during debounce");
 		int initialVersion = latest[0].version();
 		editor.setText("int changed;");
 		publish[0].accept(new GLCodeDiagnosticProvider.Result(initialVersion,
@@ -247,6 +296,21 @@ public final class GLCodeEditorSelfTest {
 		check(closed[0] && editor.getDiagnostics().stream()
 				.noneMatch(value -> value.message().equals("server warning")),
 				"Code editor did not close and clear its external diagnostic session");
+		GLCodeEditor emptyCall = new GLCodeEditor("call");
+		try {
+			EventQueue.invokeAndWait(() -> {
+				emptyCall.setBounds(0, 0, 400, 160);
+				emptyCall.setDiagnosticProvider(provider,
+						URI.create("file:///project/EmptyCall.java"));
+				emptyCall.setCaretPosition(emptyCall.getText().length());
+				type(emptyCall, '(');
+			});
+		} catch (Exception failure) { throw new AssertionError(failure); }
+		flushEvents();
+		check(emptyCall.getInlayHints().stream().anyMatch(hint -> hint.offset() == 5
+				&& hint.label().equals("value:")),
+				"A common overload parameter was not shown for an empty Java argument");
+		emptyCall.clearDiagnosticProvider();
 	}
 	private static void flushEvents() {
 		try { EventQueue.invokeAndWait(() -> { }); }

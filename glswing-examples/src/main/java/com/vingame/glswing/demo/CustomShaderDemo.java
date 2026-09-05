@@ -126,7 +126,7 @@ public final class CustomShaderDemo {
 				"Separate Filled-, Texture- und Text-Shader mit eigenen Uniforms",
 				SwingConstants.CENTER);
 
-		JFrame frame = new JFrame("GLSwingNext - Custom Shader");
+		JFrame frame = new JFrame("GLSwing - Custom Shader");
 		frame.setLayout(new BorderLayout());
 		frame.add(panel, BorderLayout.CENTER);
 		frame.add(status, BorderLayout.SOUTH);

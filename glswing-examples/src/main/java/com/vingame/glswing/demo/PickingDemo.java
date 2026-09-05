@@ -41,7 +41,7 @@ public final class PickingDemo {
 		panel.setPreferredSize(new Dimension(1000, 620));
 		JLabel status = new JLabel("Maus über ein Objekt bewegen", SwingConstants.CENTER);
 
-		JFrame frame = new JFrame("GLSwingNext - direkte Maus-Targets");
+		JFrame frame = new JFrame("GLSwing - Direct Mouse Targets");
 		frame.setLayout(new BorderLayout());
 		frame.add(panel, BorderLayout.CENTER);
 		frame.add(status, BorderLayout.SOUTH);

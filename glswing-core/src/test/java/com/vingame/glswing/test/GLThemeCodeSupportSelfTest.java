@@ -16,6 +16,7 @@ import com.vingame.glswing.ui.GLCodeDocument;
 import com.vingame.glswing.ui.GLCodeEditor;
 import com.vingame.glswing.ui.GLCodeLanguages;
 import com.vingame.glswing.ui.GLCodeLocation;
+import com.vingame.glswing.ui.GLCodeInlayHint;
 import com.vingame.glswing.ui.GLCodeSemanticToken;
 
 /** CPU checks for the built-in schema-aware .gltheme language. */
@@ -79,6 +80,21 @@ public final class GLThemeCodeSupportSelfTest {
 			check(semantic.stream().anyMatch(token -> "function".equals(token.type())
 					&& source.substring(token.start(), token.end()).equals("oklch")),
 					"OKLCH function was not semantically highlighted");
+			List<GLCodeInlayHint> hints = session.inlayHints(document)
+					.toCompletableFuture().join();
+			int colorStart = source.indexOf("0.65");
+			check(hints.size() == 4 && hints.get(0).offset() == colorStart
+					&& hints.stream().map(GLCodeInlayHint::label).toList()
+							.equals(List.of("Lightness", "Chroma", "Hue", "Alpha")),
+					"GLTheme color functions did not expose parameter inlay hints");
+			String incompleteColor = "custom.brand=oklch(0.65, , 145deg, 75%)\n";
+			List<GLCodeInlayHint> incompleteHints = session.inlayHints(new GLCodeDocument(
+					uri, "gltheme", 1, incompleteColor)).toCompletableFuture().join();
+			int emptySlot = incompleteColor.indexOf(',', incompleteColor.indexOf(',') + 1);
+			check(incompleteHints.size() == 4
+					&& incompleteHints.get(1).label().equals("Chroma")
+					&& incompleteHints.get(1).offset() == emptySlot,
+					"An empty color argument lost its structurally known inlay hint");
 		}
 
 		check(!GLCodeLanguages.GLTHEME.diagnose(

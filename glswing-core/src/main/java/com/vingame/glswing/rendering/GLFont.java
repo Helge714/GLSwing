@@ -184,6 +184,18 @@ public final class GLFont {
 		return lineHeight;
 	}
 
+	/**
+	 * Returns whether this font's atlas repertoire contains the code point and
+	 * the selected AWT font can display it.
+	 */
+	public boolean canRender(int codePoint) {
+		requireNotDisposed();
+		if (!Character.isValidCodePoint(codePoint))
+			throw new IllegalArgumentException("Invalid Unicode code point: " + codePoint);
+		return font.canDisplay(codePoint)
+				&& characters.codePoints().anyMatch(value -> value == codePoint);
+	}
+
 	/** Measures the largest line advance using fractional font metrics. */
 	public float measureText(String text) {
 		requireNotDisposed();
@@ -314,6 +326,11 @@ public final class GLFont {
 		float rasterScale = Math.max(1f, MSDF_EM_RESOLUTION / font.getSize2D());
 		Map<Integer, GlyphRaster> rastersByCode = collectGlyphs(
 				font, characters, missingGlyphCode, rasterScale);
+		return prepareAtlas(rastersByCode, rasterScale, maximumTextureSize);
+	}
+
+	private static PreparedAtlas prepareAtlas(Map<Integer, GlyphRaster> rastersByCode,
+			float rasterScale, int maximumTextureSize) {
 		List<GlyphRaster> visibleRasters = rastersByCode.values().stream()
 				.filter(GlyphRaster::hasPixels)
 				.sorted(Comparator.comparingInt(GlyphRaster::cellHeight).reversed())
@@ -403,7 +420,8 @@ public final class GLFont {
 		StringBuilder characters = new StringBuilder();
 		for (int codePoint = 32; codePoint <= 255; codePoint++)
 			characters.append((char) codePoint);
-		characters.append('\u2026');
+		// Non-Latin-1 symbols used by built-in UI and diagnostic presentation.
+		characters.append("Δ–—…›←→✓");
 		characters.append('\ufffd');
 		return characters.toString();
 	}

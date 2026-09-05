@@ -11,6 +11,7 @@ import java.util.Set;
 import com.vingame.glswing.component.GLContainer;
 import com.vingame.glswing.input.GLMouseEvent;
 import com.vingame.glswing.layout.GLSize;
+import com.vingame.glswing.rendering.GLColorInterpolation;
 import com.vingame.glswing.rendering.GLContext2D;
 import com.vingame.glswing.rendering.GLCornerRadii;
 import com.vingame.glswing.rendering.GLStroke;
@@ -19,7 +20,7 @@ import com.vingame.glswing.rendering.GLStroke;
  * A vertical stack of compatible sliders with one shared outline. Dragging
  * vertically across another row links that slider for the current gesture.
  */
-public final class GLSliderGroup extends GLContainer {
+public class GLSliderGroup extends GLContainer {
 	private static final float DIRECTION_DOMINANCE = 1.25f;
 
 	private final List<GLSlider> sliders = new ArrayList<>();
@@ -32,6 +33,7 @@ public final class GLSliderGroup extends GLContainer {
 	private boolean gestureSliding;
 	private boolean changingGroupRange;
 	private LinkedEditorSession linkedEditorSession;
+	private boolean sharedFrameVisible = true;
 
 	public GLSliderGroup(GLSlider... sliders) {
 		if (sliders != null)
@@ -64,6 +66,16 @@ public final class GLSliderGroup extends GLContainer {
 	public List<GLSlider> getSliders() {
 		return List.copyOf(sliders);
 	}
+
+	/** Controls the legacy shared frame. Disable it when this group is nested in
+	 * a {@link GLLayoutGroup}, which supplies the common outline instead. */
+	public void setSharedFrameVisible(boolean visible) {
+		if (sharedFrameVisible == visible) return;
+		sharedFrameVisible = visible;
+		invalidateRecording();
+	}
+
+	public boolean isSharedFrameVisible() { return sharedFrameVisible; }
 
 	/** Changes the common range of every grouped FIXED slider atomically. */
 	public void setRange(double minimum, double maximum) {
@@ -170,6 +182,10 @@ public final class GLSliderGroup extends GLContainer {
 			boolean horizontalIntent = horizontal > 0
 					&& horizontal >= vertical * DIRECTION_DOMINANCE;
 			if (verticalIntent && localX >= 0 && localX <= getWidth()) {
+				Double startValue = gestureStartValues.get(source);
+				if (startValue != null
+						&& Double.compare(source.getValue(), startValue) != 0)
+					source.setValue(startValue);
 				updateGestureSelection(currentY);
 				gestureHorizontalDistance = 0;
 			} else if (horizontalIntent) {
@@ -208,8 +224,13 @@ public final class GLSliderGroup extends GLContainer {
 			addGestureSlider(slider);
 	}
 
-	boolean usesProgressGradient(GLSlider slider) {
-		return sliders.indexOf(slider) == 0;
+	Color progressColor(GLSlider slider, Color light, Color dark,
+			boolean bottomEdge) {
+		if (!sliders.contains(slider) || getHeight() <= 0)
+			return bottomEdge ? dark : light;
+		float y = slider.getY() + (bottomEdge ? slider.getHeight() : 0);
+		float amount = Math.max(0, Math.min(1, y / getHeight()));
+		return GLColorInterpolation.SRGB.interpolate(light, dark, amount);
 	}
 
 	void synchronizeGestureValue(GLSlider source) {
@@ -224,13 +245,15 @@ public final class GLSliderGroup extends GLContainer {
 	void pointerReleased(GLSlider source, boolean startEditing) {
 		if (gestureSource != source)
 			return;
-		boolean editSelection = startEditing && !gestureSliding;
 		List<GLSlider> selected = List.copyOf(gestureSliders);
 		Map<GLSlider, Double> before = new LinkedHashMap<>(gestureStartValues);
-		boolean changedValues = gestureSliding;
+		Map<GLSlider, Double> after = currentValues(before.keySet());
+		boolean changedValues = before.entrySet().stream().anyMatch(entry ->
+				Double.compare(entry.getValue(), after.get(entry.getKey())) != 0);
+		boolean editSelection = startEditing && !gestureSliding && !changedValues;
 		clearGesture();
 		if (changedValues)
-			recordValues("Drag slider group", before, currentValues(before.keySet()));
+			recordValues("Drag slider group", before, after);
 		if (editSelection && !selected.isEmpty())
 			startLinkedEditing(source, selected);
 	}
@@ -336,7 +359,7 @@ public final class GLSliderGroup extends GLContainer {
 		return values;
 	}
 
-	private void recordValues(String name, Map<GLSlider, Double> before,
+	protected void recordValues(String name, Map<GLSlider, Double> before,
 			Map<GLSlider, Double> after) {
 		boolean changed = before.entrySet().stream().anyMatch(entry ->
 				Double.compare(entry.getValue(), after.get(entry.getKey())) != 0);
@@ -389,7 +412,7 @@ public final class GLSliderGroup extends GLContainer {
 	}
 
 	private void drawSharedFrame(GLContext2D context) {
-		if (sliders.isEmpty() || getWidth() <= 0 || getHeight() <= 0)
+		if (!sharedFrameVisible || sliders.isEmpty() || getWidth() <= 0 || getHeight() <= 0)
 			return;
 		GLSliderStyle first = sliders.get(0).getGLStyle();
 		float borderWidth = first.borderWidth();
@@ -397,12 +420,6 @@ public final class GLSliderGroup extends GLContainer {
 			return;
 		GLTextEditorStyle editorStyle = getGLTheme().textEditorStyle();
 		Color borderColor = first.borderColor();
-		for (GLSlider slider : sliders)
-			if (slider.isValidationFeedbackActive()) {
-				borderColor = editorStyle.invalidBorderColor();
-				break;
-			} else if (slider.isValueEditorFocused())
-				borderColor = editorStyle.focusedBorderColor();
 		context.setStroke(new GLStroke(borderWidth)
 				.withCap(GLStroke.Cap.BUTT)
 				.withWidthSpace(GLStroke.WidthSpace.SCREEN));
@@ -415,6 +432,35 @@ public final class GLSliderGroup extends GLContainer {
 		GLCornerRadii radii = GLCornerRadii.all(radius);
 		context.drawUIRoundRect(0, 0, getWidth(), getHeight(), radii,
 				borderWidth, borderColor, GLStroke.WidthSpace.SCREEN);
+		drawSelectedRuns(context,borderWidth,editorStyle.invalidBorderColor(),
+				GLSlider::isValidationFeedbackActive);
+		drawSelectedRuns(context,Math.max(1.5f,borderWidth),editorStyle.focusedBorderColor(),
+					GLSlider::isValueEditing);
+	}
+
+	private void drawSelectedRuns(GLContext2D context,float width,Color color,
+			java.util.function.Predicate<GLSlider> selected) {
+		GLStroke previous=context.getStroke();
+		context.setStroke(new GLStroke(width).withCap(GLStroke.Cap.BUTT)
+				.withWidthSpace(GLStroke.WidthSpace.SCREEN));
+		try {
+		for(int index=0;index<sliders.size();) {
+			while(index<sliders.size()&&!selected.test(sliders.get(index)))index++;
+			if(index>=sliders.size())break;
+			int first=index,last=index;
+			while(last+1<sliders.size()&&selected.test(sliders.get(last+1)))last++;
+			float y=sliders.get(first).getY();
+			float bottom=sliders.get(last).getY()+sliders.get(last).getHeight();
+			float radius=sharedCornerRadius();
+			GLCornerRadii radii=new GLCornerRadii(first==0?radius:0,first==0?radius:0,
+					last==sliders.size()-1?radius:0,last==sliders.size()-1?radius:0);
+			context.drawUIRoundRect(0,y,getWidth(),bottom-y,radii,width,color,
+					GLStroke.WidthSpace.SCREEN);
+			for(int seam=first+1;seam<=last;seam++)
+				context.drawUILine(0,sliders.get(seam).getY(),getWidth(),sliders.get(seam).getY(),color);
+			index=last+1;
+		}
+		} finally {context.setStroke(previous);}
 	}
 
 	private float sharedCornerRadius() {

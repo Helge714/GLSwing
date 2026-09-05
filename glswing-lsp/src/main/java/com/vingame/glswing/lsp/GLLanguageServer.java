@@ -39,6 +39,10 @@ import org.eclipse.lsp4j.DidOpenTextDocumentParams;
 import org.eclipse.lsp4j.InitializeParams;
 import org.eclipse.lsp4j.ExecuteCommandParams;
 import org.eclipse.lsp4j.InsertTextFormat;
+import org.eclipse.lsp4j.InlayHint;
+import org.eclipse.lsp4j.InlayHintCapabilities;
+import org.eclipse.lsp4j.InlayHintKind;
+import org.eclipse.lsp4j.InlayHintParams;
 import org.eclipse.lsp4j.Hover;
 import org.eclipse.lsp4j.HoverParams;
 import org.eclipse.lsp4j.ImplementationCapabilities;
@@ -80,6 +84,7 @@ import com.vingame.glswing.ui.GLCodeCompletion;
 import com.vingame.glswing.ui.GLCodeTextEdit;
 import com.vingame.glswing.ui.GLCodeDocument;
 import com.vingame.glswing.ui.GLCodeHover;
+import com.vingame.glswing.ui.GLCodeInlayHint;
 import com.vingame.glswing.ui.GLCodeLocation;
 import com.vingame.glswing.ui.GLCodeSignature;
 import com.vingame.glswing.ui.GLCodeSemanticToken;
@@ -105,6 +110,7 @@ public final class GLLanguageServer implements GLCodeDiagnosticProvider, AutoClo
 	private final List<String> semanticTokenTypes;
 	private final List<String> semanticTokenModifiers;
 	private final boolean semanticTokensFullSupported;
+	private final boolean inlayHintsSupported;
 	private volatile boolean closed;
 
 	/** Starts and initializes a language server in the supplied workspace. */
@@ -141,6 +147,7 @@ public final class GLLanguageServer implements GLCodeDiagnosticProvider, AutoClo
 		implementations.setLinkSupport(true);
 		textDocument.setImplementation(implementations);
 		textDocument.setCallHierarchy(new CallHierarchyCapabilities());
+		textDocument.setInlayHint(new InlayHintCapabilities(false));
 		SemanticTokensCapabilities semanticTokens = new SemanticTokensCapabilities();
 		SemanticTokensClientCapabilitiesRequests semanticRequests =
 				new SemanticTokensClientCapabilitiesRequests();
@@ -177,6 +184,9 @@ public final class GLLanguageServer implements GLCodeDiagnosticProvider, AutoClo
 		var semanticFull = semanticProvider == null ? null : semanticProvider.getFull();
 		semanticTokensFullSupported = semanticFull != null
 				&& (semanticFull.isRight() || Boolean.TRUE.equals(semanticFull.getLeft()));
+		var inlayProvider = initialized.getCapabilities().getInlayHintProvider();
+		inlayHintsSupported = inlayProvider != null
+				&& (inlayProvider.isRight() || Boolean.TRUE.equals(inlayProvider.getLeft()));
 		server.initialized(new org.eclipse.lsp4j.InitializedParams());
 	}
 
@@ -465,6 +475,35 @@ public final class GLLanguageServer implements GLCodeDiagnosticProvider, AutoClo
 			// version, not only during the first project import.
 			return requestSemanticTokens(document, params, 8);
 		}
+		@Override public CompletionStage<List<GLCodeInlayHint>> inlayHints(
+				GLCodeDocument document) {
+			if (sessionClosed || !uri.equals(document.uri()) || !inlayHintsSupported)
+				return java.util.concurrent.CompletableFuture.completedFuture(List.of());
+			InlayHintParams params = new InlayHintParams(
+					new TextDocumentIdentifier(uri.toString()),
+					new org.eclipse.lsp4j.Range(new Position(0, 0),
+							position(document.text(), document.text().length())));
+			return requestInlayHints(document, params, 6);
+		}
+		private CompletionStage<List<GLCodeInlayHint>> requestInlayHints(
+				GLCodeDocument document, InlayHintParams params, int remainingAttempts) {
+			OpenDocument active = documents.get(uri);
+			if (sessionClosed || active == null
+					|| active.document().version() != document.version())
+				return java.util.concurrent.CompletableFuture.completedFuture(List.of());
+			return server.getTextDocumentService().inlayHint(params)
+					.orTimeout(30, TimeUnit.SECONDS)
+					.thenApply(hints -> decodeInlayHints(document.text(), hints))
+					.thenCompose(hints -> {
+						if (!hints.isEmpty() || remainingAttempts <= 1)
+							return java.util.concurrent.CompletableFuture.completedFuture(hints);
+						return java.util.concurrent.CompletableFuture.supplyAsync(() -> null,
+								java.util.concurrent.CompletableFuture.delayedExecutor(
+										500L << (6 - remainingAttempts), TimeUnit.MILLISECONDS))
+								.thenCompose(ignored -> requestInlayHints(document, params,
+										remainingAttempts - 1));
+					});
+		}
 		private CompletionStage<List<GLCodeSemanticToken>> requestSemanticTokens(
 				GLCodeDocument document, SemanticTokensParams params,
 				int remainingAttempts) {
@@ -650,6 +689,29 @@ public final class GLLanguageServer implements GLCodeDiagnosticProvider, AutoClo
 			result.add(new GLCodeSemanticToken(start, end,
 					tokenTypes.get(typeIndex), modifiers));
 		}
+		return List.copyOf(result);
+	}
+	static List<GLCodeInlayHint> decodeInlayHints(String source,
+			List<InlayHint> response) {
+		if (response == null || response.isEmpty()) return List.of();
+		ArrayList<GLCodeInlayHint> result = new ArrayList<>(response.size());
+		for (InlayHint hint : response) {
+			if (hint == null || hint.getPosition() == null || hint.getLabel() == null)
+				continue;
+			String label = hint.getLabel().isLeft() ? hint.getLabel().getLeft()
+					: hint.getLabel().getRight().stream()
+							.map(part -> part.getValue() == null ? "" : part.getValue())
+							.collect(java.util.stream.Collectors.joining());
+			if (label == null || label.isBlank()) continue;
+			int at = offset(source, hint.getPosition().getLine(),
+					hint.getPosition().getCharacter());
+			GLCodeInlayHint.Kind kind = hint.getKind() == InlayHintKind.Parameter
+					? GLCodeInlayHint.Kind.PARAMETER
+					: hint.getKind() == InlayHintKind.Type
+							? GLCodeInlayHint.Kind.TYPE : GLCodeInlayHint.Kind.OTHER;
+			result.add(new GLCodeInlayHint(at, label, kind));
+		}
+		result.sort(java.util.Comparator.comparingInt(GLCodeInlayHint::offset));
 		return List.copyOf(result);
 	}
 	private static List<GLCodeTextEdit> workspaceEdits(String source, URI uri,

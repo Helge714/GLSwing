@@ -127,7 +127,7 @@ public final class GLScrollBar extends GLControl {
 		float trackY = padding;
 		float trackWidth = Math.max(0, width - padding * 2);
 		float trackHeight = Math.max(0, height - padding * 2);
-		float trackRadius = Math.min(style.cornerRadius(),
+		float trackRadius = Math.min(layoutCornerRadius(style.cornerRadius()),
 				Math.min(trackWidth, trackHeight) * 0.5f);
 		context.fillUIRoundRect(trackX, trackY, trackWidth, trackHeight,
 				trackRadius, style.track());

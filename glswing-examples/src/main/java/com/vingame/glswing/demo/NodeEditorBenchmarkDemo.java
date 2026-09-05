@@ -27,7 +27,7 @@ public final class NodeEditorBenchmarkDemo {
 	}
 
 	private static void show() {
-		GLFrame frame = new GLFrame("GLSwingNext - Node Editor Benchmark / Canvas",
+		GLFrame frame = new GLFrame("GLSwing - Node Editor Benchmark / Canvas",
 				GLFrame.RenderingSettings.DEFAULT.withVSync(false).withTargetFps(1_000));
 		frame.setGLClearColor(new Color(18, 21, 28));
 		frame.setMinimumSize(new Dimension(960, 620));

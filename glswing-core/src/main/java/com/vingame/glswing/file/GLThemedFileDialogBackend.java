@@ -26,6 +26,7 @@ import com.vingame.glswing.rendering.GLIcon;
 import com.vingame.glswing.input.GLInputActions;
 import com.vingame.glswing.input.GLMouseEvent;
 import com.vingame.glswing.ui.GLButton;
+import com.vingame.glswing.ui.GLDialogButtonBar;
 import com.vingame.glswing.ui.GLCheckBox;
 import com.vingame.glswing.ui.GLComboBox;
 import com.vingame.glswing.ui.GLLabel;
@@ -79,6 +80,7 @@ public final class GLThemedFileDialogBackend implements GLFileDialogBackend {
 		private final GLComboBox<GLFileFilter> filters;
 		private final GLButton approve;
 		private final GLButton cancel = new GLButton("Cancel");
+		private final GLDialogButtonBar actions = new GLDialogButtonBar();
 		private final GLButton selectFolder = new GLButton("Select current folder");
 		private final List<Path> selected = new ArrayList<>();
 		private Path directory;
@@ -110,6 +112,7 @@ public final class GLThemedFileDialogBackend implements GLFileDialogBackend {
 			filters.setItemTextProvider(GLFileFilter::description);
 			filters.addActionListener(event -> refresh());
 			approve = new GLButton(request.mode() == GLFileDialogMode.SAVE ? "Save" : "Open");
+			actions.addButton(approve).addButton(cancel);
 			history.add(directory);
 			fileName.setText(request.suggestedFileName() == null ? "" : request.suggestedFileName());
 			up.addActionListener(event -> {
@@ -137,8 +140,7 @@ public final class GLThemedFileDialogBackend implements GLFileDialogBackend {
 			pane.addGL(browser);
 			pane.addGL(fileNameLabel); pane.addGL(filterLabel);
 			pane.addGL(status); pane.addGL(fileName);
-			pane.addGL(filters); pane.addGL(approve);
-			pane.addGL(cancel);
+			pane.addGL(filters); pane.addGL(actions);
 			selectFolder.setVisible(false);
 			applyLocalization();
 			organizeMenu.addItem(text("newFolder"), event -> createFolder());
@@ -470,17 +472,18 @@ public final class GLThemedFileDialogBackend implements GLFileDialogBackend {
 				float contentH = Math.max(1, height - contentY - bottomArea);
 				browser.setBounds(0, contentY, width, contentH);
 
-				float formY = height - 92, labelW = 92, actionW = 112, rightW = 250;
+				float formY = height - 92, labelW = 92, rightW = 250;
 				fileNameLabel.setBounds(margin + 2, formY + 5, labelW, 28);
 				fileName.setBounds(margin + labelW, formY,
 						Math.max(1, width - margin * 3 - labelW - rightW), 32);
 				filterLabel.setVisible(false);
 				filters.setBounds(width - margin - rightW, formY, rightW, 32);
+				float actionWidth = Math.min(Math.max(1, width - margin * 2),
+						actions.getPreferredGLSize().width());
+				actions.setBounds(width - margin - actionWidth, formY + 42,
+						actionWidth, 34);
 				status.setBounds(margin + labelW, formY + 42,
-						Math.max(1, width - margin * 3 - labelW - rightW), 26);
-				approve.setBounds(width - margin - actionW * 2 - 10,
-						formY + 42, actionW, 34);
-				cancel.setBounds(width - margin - actionW, formY + 42, actionW, 34);
+						Math.max(1, width - margin * 3 - labelW - actionWidth), 26);
 			}
 		}
 		private void fileItemClicked(GLList.ItemEvent<GLFileBrowser.Entry> event) {
@@ -635,44 +638,47 @@ public final class GLThemedFileDialogBackend implements GLFileDialogBackend {
 			private final GLLabel message = new GLLabel(text("extensionMessage"));
 			private final GLButton change = new GLButton(text("extensionChange"));
 			private final GLButton cancel = new GLButton(text("cancel"));
+			private final GLDialogButtonBar actions = new GLDialogButtonBar()
+					.addButton(cancel).addButton(change);
 			private ExtensionWarningPane() {
-				addGL(message); addGL(change); addGL(cancel);
+				addGL(message); addGL(actions);
 			}
 			@Override protected void record(GLContext2D context) { }
 			@Override protected void resized(float width, float height) {
 				message.setBounds(18, 22, Math.max(1, width - 36), 46);
-				cancel.setBounds(width - 202, height - 47, 86, 30);
-				change.setBounds(width - 106, height - 47, 88, 30);
+				actions.setBounds(18, height - 47, Math.max(1, width - 36), 30);
 			}
 		}
 		private final class DeletePane extends GLContainer {
 			private final GLLabel message;
 			private final GLButton delete = new GLButton(text("contextDelete"));
 			private final GLButton cancel = new GLButton(text("cancel"));
+			private final GLDialogButtonBar actions = new GLDialogButtonBar()
+					.addButton(cancel).addButton(delete);
 			private DeletePane(Path path) {
 				message = new GLLabel(text("deleteMessage", path.getFileName()));
-				addGL(message); addGL(delete); addGL(cancel);
+				addGL(message); addGL(actions);
 			}
 			@Override protected void record(GLContext2D context) { }
 			@Override protected void resized(float width, float height) {
 				message.setBounds(18, 24, Math.max(1, width - 36), 35);
-				cancel.setBounds(width - 202, height - 47, 86, 30);
-				delete.setBounds(width - 106, height - 47, 88, 30);
+				actions.setBounds(18, height - 47, Math.max(1, width - 36), 30);
 			}
 		}
 		private final class ConfirmPane extends GLContainer {
 			private final GLLabel message;
 			private final GLButton replace = new GLButton(text("replace"));
 			private final GLButton cancel = new GLButton(text("cancel"));
+			private final GLDialogButtonBar actions = new GLDialogButtonBar()
+					.addButton(cancel).addButton(replace);
 			private ConfirmPane(Path path) {
 				message = new GLLabel(text("replaceMessage", path.getFileName()));
-				addGL(message); addGL(replace); addGL(cancel);
+				addGL(message); addGL(actions);
 			}
 			@Override protected void record(GLContext2D context) { }
 			@Override protected void resized(float width, float height) {
 				message.setBounds(18, 20, Math.max(1, width - 36), 30);
-				cancel.setBounds(width - 188, height - 48, 80, 30);
-				replace.setBounds(width - 98, height - 48, 80, 30);
+				actions.setBounds(18, height - 48, Math.max(1, width - 36), 30);
 			}
 		}
 	}

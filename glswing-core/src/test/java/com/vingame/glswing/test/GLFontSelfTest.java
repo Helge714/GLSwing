@@ -13,6 +13,9 @@ public final class GLFontSelfTest {
 		check(font.getStyle() == GLFont.BOLD, "Font style must be retained");
 		check(font.getSize() == 18, "Font size must be retained");
 		check(font.measureText("GLSwing") > 0, "Text must be measurable before GL initialization");
+		"Δ–—…›←→✓".codePoints().forEach(codePoint -> check(font.canRender(codePoint),
+				"Built-in UI symbol is missing from the default atlas: U+"
+						+ Integer.toHexString(codePoint).toUpperCase()));
 		check(!font.isInitialized(), "Constructor must not require a GL context");
 		check(!font.isDisposed(), "New font must be live");
 
@@ -23,6 +26,8 @@ public final class GLFontSelfTest {
 				"Unsupported style must fail");
 		expectFailure(() -> new GLFont(GLFont.SERIF, GLFont.PLAIN, 0),
 				"Zero font size must fail");
+		expectFailure(() -> font.canRender(-1),
+				"Invalid Unicode code point must fail");
 
 		font.dispose(null); // Safe because a lazy font has no GPU resource yet.
 		check(font.isDisposed(), "Disposed font must report its state");

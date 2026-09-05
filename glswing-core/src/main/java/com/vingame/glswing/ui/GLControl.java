@@ -30,6 +30,19 @@ public abstract class GLControl extends GLContainer implements GLKeyTarget {
 	protected GLControl(boolean focusable) {
 		this.focusable = focusable;
 	}
+	@Override protected void render(com.vingame.glswing.rendering.GLContext2D context) {
+		super.render(context);
+		if(isFocused() && getConnectedShape()!=null && !insideHighlightedLayoutGroup())
+			context.drawUIRoundRect(0,0,getWidth(),getHeight(),getConnectedShape(),1.5f,
+					getGLTheme().values().getColor("palette.accent",java.awt.Color.BLUE),
+					com.vingame.glswing.rendering.GLStroke.WidthSpace.SCREEN);
+	}
+	private boolean insideHighlightedLayoutGroup() {
+		for(GLParent parent=getGLParent();parent instanceof GLContainer container;
+				parent=container.getGLParent())
+			if(container instanceof GLLayoutGroup group && group.isHighlighted())return true;
+		return false;
+	}
 
 	public final boolean isEnabled() {
 		return enabled;

@@ -185,11 +185,13 @@ Useful starting points include:
 
 ## Building release artifacts
 
-The project is a Maven reactor with two modules:
+The project is a Maven reactor with four modules:
 
 | Module | Artifact |
 |---|---|
 | `glswing-core` | Runtime library, resources, and tests |
+| `glswing-lsp` | Optional Language Server Protocol integration |
+| `glswing-filedialogs-swt` | Optional native file-dialog backend |
 | `glswing-examples` | Demonstrations and benchmarks |
 
 Run the release profile to create the binary, source, and Javadoc JARs:
@@ -198,7 +200,9 @@ Run the release profile to create the binary, source, and Javadoc JARs:
 ./mvnw -Prelease clean verify
 ```
 
-Artifacts are written to `glswing-core/target`.
+Each module writes its artifacts to its own `target` directory. Applications
+need only `glswing-core`; add the LSP or SWT artifact when that integration is
+required. The examples module is not a runtime dependency.
 
 ## License
 

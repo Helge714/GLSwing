@@ -1,5 +1,10 @@
 # Text Editing
 
+[UI guide](../ui-framework.md) · [Controls](controls.md) ·
+[Documents](documents.md) · [Input configuration](input-configuration.md)
+
+## Contents
+
 - [Choosing a control](#choosing-a-control)
 - [Documents and text areas](#documents-and-text-areas)
 - [Selection and navigation](#selection-and-navigation)
@@ -268,12 +273,57 @@ Resolved color values are accompanied by a compact swatch after the source
 value. The preview supports hexadecimal, RGB, HSV, HSL, OKLab, OKLCH,
 references, and `derive(...)` expressions, including colors declared in
 imported theme fragments. Its checkerboard exposes transparency; hovering shows
-hexadecimal and RGBA values, and clicking selects the represented source
-expression.
+hexadecimal and RGBA values. In an editable theme document, clicking opens the
+[color picker](controls.md#color-controls). Apply replaces the expression as one
+undoable edit; Cancel leaves it unchanged. Hex literals remain hex literals and
+functional colors initially use their original model. Changing a reference or
+`derive(...)` expression replaces it with a literal. Read-only documents and
+non-theme providers retain the selection-only behavior. Live previews remain
+inside the picker until Apply; external theme watchers update after saving.
 Other providers can expose the same presentation through
 `GLCodeDiagnosticProvider.Session.documentColors(...)`, which returns
 `GLCodeColor` ranges. The default implementation returns no colors, preserving
 compatibility with diagnostic-only and existing language-server adapters.
+Existing swatches and their source ranges are translated incrementally during
+the provider debounce. A normal edit therefore does not briefly remove every
+color preview; an invalid expression is removed once the refreshed provider
+snapshot confirms that it no longer resolves to a color.
+
+Parameter and type inlay hints are visual-only editor adornments. They occupy
+layout space before their source offset but never become part of the document,
+selection, clipboard contents, or saved file. The code editor exposes the
+current immutable snapshot through `getInlayHints()`. Applications can toggle
+the presentation with `setInlayHintsVisible(boolean)`; the standard code-editor
+context menu provides the same command and displays its selected state.
+
+```java
+editor.setInlayHintsVisible(true);
+```
+
+Providers supply hints through
+`GLCodeDiagnosticProvider.Session.inlayHints(GLCodeDocument)`. The built-in
+configuration provider labels channels in `rgb`, `rgba`, `hsv`, `hsl`,
+`oklab`, and `oklch` expressions and labels the base and adjustments of
+`derive(...)`. This makes unfamiliar color spaces self-describing in theme
+files without requiring an external process. Other languages can return
+parameter, type, or general `GLCodeInlayHint` instances through the same API.
+
+Inlay labels use compact rounded boxes modeled after conventional IDE inline
+hints. Their appearance is theme-controlled through
+`codeEditor.inlay.background`, `.border`, `.text`, `.fontScale`, `.padding`,
+`.gap`, `.radius`, and `.borderWidth`. While a provider computes a new snapshot,
+the editor keeps unaffected labels visible and translates their anchors across
+insertions and deletions. Only labels whose anchors are removed by the current
+edit disappear immediately. Built-in configuration languages derive parameter
+slots from their surrounding function and commas, so a temporarily empty color
+channel retains its label while the user enters a replacement value.
+
+For provider-backed languages, signature help can supply a provisional label
+before the first argument character exists. The editor displays it only when a
+single signature is available or every reported overload uses the same name at
+the active parameter position. Differing overloads remain unlabeled until the
+provider can resolve the call; this avoids presenting a guessed contract as
+fact. A later native inlay hint replaces the provisional label automatically.
 
 Applications can use the same infrastructure for their own UTF-8
 `key=value` formats. Define properties with `GLCodePropertySchema`, construct a
@@ -282,7 +332,7 @@ The schema controls exact and prefix-matched keys, value types, enum choices,
 unknown-key policy, and format-level validators.
 `GLCodeLanguage.codeIntelligenceProvider()` is the extension point for any
 other language that can provide in-process completion, hover, definitions,
-semantic tokens, and diagnostics.
+semantic tokens, inlay hints, and diagnostics.
 
 ### Language Server Protocol
 

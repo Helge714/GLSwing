@@ -34,7 +34,9 @@ public final class GLJdtLanguageServerProfile implements GLLanguageServerProfile
 	@Override public Map<String, ?> initializationOptions() {
 		return Map.of("extendedClientCapabilities", Map.of(
 				"executeClientCommandSupport", true, "classFileContentsSupport", true),
-				"settings", Map.of("java", Map.of("signatureHelp", Map.of("enabled", true))));
+				"settings", Map.of("java", Map.of(
+						"signatureHelp", Map.of("enabled", true),
+						"inlayHints", Map.of("parameterNames", Map.of("enabled", "all")))));
 	}
 	@Override public CompletionStage<String> loadSource(GLLanguageServer server, URI uri) {
 		if ("jdt".equalsIgnoreCase(uri.getScheme())) return server.classFileContents(uri);

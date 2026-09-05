@@ -6,6 +6,7 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -13,6 +14,8 @@ import java.util.zip.ZipFile;
 
 import com.vingame.glswing.component.GLContainer;
 import com.vingame.glswing.document.GLDocument;
+import com.vingame.glswing.document.GLDocumentAutosaveConfiguration;
+import com.vingame.glswing.document.GLDocumentAutosaveCoordinator;
 import com.vingame.glswing.document.GLDocumentBundle;
 import com.vingame.glswing.document.GLDocumentCodec;
 import com.vingame.glswing.document.GLDocumentCodecRegistry;
@@ -38,19 +41,70 @@ public final class GLDocumentSelfTest {
 		Path oldBundle = directory.resolve("old.glbundle");
 		Path upgradedBundle = directory.resolve("upgraded.glbundle");
 		Path preservedBundle = directory.resolve("preserved.glbundle");
+		Path recoveryDirectory = directory.resolve("recovery");
 		try {
 			documentStateAndPlainFiles(plain);
 			plainTextCodecMetadata();
 			documentHistoryRouting();
 			liveTextDirtyState();
-			documentCloseLifecycle();
+			documentCloseLifecycle(recoveryDirectory.resolve("lifecycle"));
+			documentAutosaveRecovery(recoveryDirectory);
 			lazyVersionedBundles(oldBundle, upgradedBundle, preservedBundle);
 			System.out.println("GL document self-test passed.");
 		} finally {
 			Files.deleteIfExists(plain); Files.deleteIfExists(oldBundle);
 			Files.deleteIfExists(upgradedBundle); Files.deleteIfExists(preservedBundle);
-			Files.deleteIfExists(directory);
+			Files.deleteIfExists(recoveryDirectory); Files.deleteIfExists(directory);
 		}
+	}
+	private static void documentAutosaveRecovery(Path recoveryDirectory) throws Exception {
+		GLDocumentCodecRegistry registry = new GLDocumentCodecRegistry();
+		StringCodecV2 codec = new StringCodecV2(); registry.register(codec);
+		GLDocumentAutosaveConfiguration configuration =
+				new GLDocumentAutosaveConfiguration(true, Duration.ofMillis(25),
+						Duration.ofDays(1));
+		Path preferences = recoveryDirectory.resolve("autosave.properties");
+		configuration.save(preferences);
+		check(configuration.equals(GLDocumentAutosaveConfiguration.load(preferences)),
+				"External autosave preferences did not round-trip");
+		try (GLDocumentManager manager = new GLDocumentManager(registry);
+				GLDocumentAutosaveCoordinator autosave =
+						new GLDocumentAutosaveCoordinator(manager, recoveryDirectory,
+								configuration)) {
+			GLDocument<String> document = manager.create("recover me", "Draft", codec);
+			autosave.track(document);
+			Path snapshot = recoveryDirectory.resolve(document.id() + ".glrecovery");
+			awaitPresent(snapshot);
+			var recovery = autosave.scan().toCompletableFuture().get(5, TimeUnit.SECONDS)
+					.get(0);
+			check(recovery != null && Files.isRegularFile(recovery.snapshotPath()),
+					"Autosave did not create an independent recovery snapshot");
+			check(autosave.scan().toCompletableFuture().get(5, TimeUnit.SECONDS)
+					.equals(java.util.List.of(recovery)),
+					"Autosave scan did not return the saved recovery metadata");
+			try (GLDocumentAutosaveCoordinator restarted =
+					new GLDocumentAutosaveCoordinator(manager, recoveryDirectory,
+							configuration)) {
+				GLDocument<String> recovered = restarted.recover(recovery, String.class)
+						.toCompletableFuture().get(5, TimeUnit.SECONDS);
+				check("recover me".equals(recovered.content()) && recovered.isModified()
+						&& recovered.id().equals(document.id()) && restarted.isTracked(recovered),
+						"Recovered document did not preserve content, identity and dirty state");
+				recovered.markPersisted();
+				awaitMissing(recovery.snapshotPath());
+			}
+		}
+		Files.deleteIfExists(preferences);
+	}
+	private static void awaitMissing(Path path) throws InterruptedException {
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+		while (Files.exists(path) && System.nanoTime() < deadline) Thread.sleep(10);
+		check(!Files.exists(path), "Persisted document retained its recovery snapshot");
+	}
+	private static void awaitPresent(Path path) throws InterruptedException {
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+		while (!Files.exists(path) && System.nanoTime() < deadline) Thread.sleep(10);
+		check(Files.isRegularFile(path), "Scheduled autosave did not create a snapshot");
 	}
 	private static void liveTextDirtyState() throws Exception {
 		GLTextDocument text = new GLTextDocument("saved");
@@ -88,7 +142,7 @@ public final class GLDocumentSelfTest {
 		check(codec.fileExtensions().equals(Set.of("java", "txt", "md")),
 				"Plain-text codec did not normalize its extensions");
 	}
-	private static void documentCloseLifecycle() throws Exception {
+	private static void documentCloseLifecycle(Path autosaveDirectory) throws Exception {
 		GLDocumentCodecRegistry registry = new GLDocumentCodecRegistry();
 		StringCodecV2 codec = new StringCodecV2(); registry.register(codec);
 		GLTabbedPane tabs = new GLTabbedPane(); tabs.setTabsClosable(true);
@@ -96,11 +150,18 @@ public final class GLDocumentSelfTest {
 		GLDocumentWorkspace workspace = new GLDocumentWorkspace();
 		GLFileDialogs dialogs = GLFileDialogs.themed();
 		try (GLDocumentManager manager = new GLDocumentManager(registry);
+				GLDocumentAutosaveCoordinator autosave =
+						new GLDocumentAutosaveCoordinator(manager, autosaveDirectory,
+								new GLDocumentAutosaveConfiguration(true,
+										Duration.ofDays(1), Duration.ofDays(1)));
 				GLDocumentTabController tabController =
 						new GLDocumentTabController(tabs, workspace);
 				GLDocumentLifecycle<String> lifecycle = new GLDocumentLifecycle<>(manager,
 						codec, tabController, dialogs, tabs, () -> "", ignored -> view())) {
+			lifecycle.setAutosaveCoordinator(autosave);
 			GLDocument<String> document = lifecycle.newDocument();
+			check(autosave.isTracked(document),
+					"Lifecycle did not register a new document for autosave");
 			check(document.isModified() && tabs.getTabCount() == 1 && lifecycle.canClose(),
 					"New command did not create a managed modified document");
 			check(lifecycle.canSave() && lifecycle.canSaveAs() && lifecycle.canSaveAll(),
@@ -123,6 +184,8 @@ public final class GLDocumentSelfTest {
 					"Discarded close did not remove the document tab");
 			check(!tabs.reopenLastClosedTab(),
 					"Discarded document remained in closed-tab history");
+			check(!autosave.isTracked(document),
+					"Discarded document remained registered for autosave");
 			lifecycle.newDocument();
 			lifecycle.setCloseRequestHandler(ignored ->
 					java.util.concurrent.CompletableFuture.completedFuture(

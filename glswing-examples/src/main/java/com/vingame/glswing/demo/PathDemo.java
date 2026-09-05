@@ -31,7 +31,7 @@ public final class PathDemo {
 	}
 
 	private static void show() {
-		GLFrame frame = new GLFrame("GLSwingNext - Paths",
+		GLFrame frame = new GLFrame("GLSwing - Paths",
 				GLFrame.RenderingSettings.DEFAULT.withTargetFps(144));
 		frame.setGLClearColor(new Color(18, 23, 34));
 		frame.setMinimumSize(new Dimension(760, 520));

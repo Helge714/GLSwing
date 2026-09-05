@@ -45,8 +45,15 @@ import com.vingame.glswing.input.GLInputActions;
 import com.vingame.glswing.input.GLKeyEvent;
 import com.vingame.glswing.input.GLKeyTarget;
 import com.vingame.glswing.document.GLDocument;
+import com.vingame.glswing.document.GLDocumentAutosaveConfiguration;
+import com.vingame.glswing.document.GLDocumentAutosaveCoordinator;
+import com.vingame.glswing.document.GLDocumentAutosaveEvent;
 import com.vingame.glswing.document.GLDocumentCloseChoice;
+import com.vingame.glswing.document.GLDocumentConflictChoice;
+import com.vingame.glswing.document.GLDocumentConflictRequest;
 import com.vingame.glswing.document.GLDocumentCodecRegistry;
+import com.vingame.glswing.document.GLDocumentFileState;
+import com.vingame.glswing.document.GLDocumentFileWatcher;
 import com.vingame.glswing.document.GLDocumentLifecycle;
 import com.vingame.glswing.document.GLDocumentManager;
 import com.vingame.glswing.document.GLPlainTextDocumentCodec;
@@ -75,6 +82,7 @@ import com.vingame.glswing.ui.GLAction;
 import com.vingame.glswing.ui.GLActionMap;
 import com.vingame.glswing.ui.GLCheckBox;
 import com.vingame.glswing.ui.GLComboBox;
+import com.vingame.glswing.ui.GLDialogButtonBar;
 import com.vingame.glswing.ui.GLFontSpec;
 import com.vingame.glswing.ui.GLLabel;
 import com.vingame.glswing.ui.GLLabelStyle;
@@ -109,7 +117,7 @@ import com.vingame.glswing.ui.GLThemes;
 public final class GuiShowcaseDemo {
 
 	static final float DESIGN_WIDTH = 1180;
-	static final float DESIGN_HEIGHT = 760;
+	static final float DESIGN_HEIGHT = 660;
 	private static final Path THEME_RELATIVE_DIRECTORY = Path.of("resources",
 			"com", "vingame", "glswing", "themes");
 	private static List<String> lspCommand = List.of();
@@ -163,7 +171,7 @@ public final class GuiShowcaseDemo {
 		lspCommand = languageServerCommand(args);
 		AtomicReference<ShowcaseApplicationRoot> rootReference =
 				new AtomicReference<>();
-		return GLApplication.builder()
+		GLApplicationHandle handle = GLApplication.builder()
 				.title(title)
 				.backend(backend)
 				.size(1260, 800)
@@ -210,6 +218,8 @@ public final class GuiShowcaseDemo {
 					if (root != null) root.close();
 				})
 				.launch();
+		handle.closedFuture().thenRun(() -> System.exit(0));
+		return handle;
 	}
 	private static List<String> languageServerCommand(String[] args) {
 		for (int index = 0; index < args.length; index++)
@@ -226,7 +236,7 @@ public final class GuiShowcaseDemo {
 		Timer statistics = new Timer(1000,
 				event -> status.setText(panel.performanceText()));
 
-		JFrame frame = new JFrame("GLSwingNext - GUI Showcase");
+		JFrame frame = new JFrame("GLSwing - GUI Showcase");
 		frame.setLayout(new BorderLayout());
 		frame.add(panel, BorderLayout.CENTER);
 		frame.add(status, BorderLayout.SOUTH);
@@ -880,6 +890,7 @@ public final class GuiShowcaseDemo {
 		private GLMenuItem germanItem;
 		private GLMenuItem colorsMenuItem;
 		private GLMenuItem metricsMenuItem;
+		private GLMenuItem defaultColorsItem;
 		private GLMenuItem darkColorsItem;
 		private GLMenuItem lightColorsItem;
 		private GLMenuItem showcaseColorsItem;
@@ -903,6 +914,8 @@ public final class GuiShowcaseDemo {
 						"glinput", "properties", "txt", "md");
 		private final GLDocumentManager documentManager;
 		private final GLDocumentLifecycle<GLTextDocument> documentLifecycle;
+		private final GLDocumentAutosaveCoordinator documentAutosave;
+		private final GLDocumentFileWatcher documentFileWatcher;
 		private final Map<URI, GLCodeEditor> editorsByUri = new HashMap<>();
 		private GLLabel lspStatus;
 		private GLButton installLspButton;
@@ -923,11 +936,33 @@ public final class GuiShowcaseDemo {
 			codeDocuments = new GLDocumentTabController(codeTabs, documentWorkspace);
 			documentCodecs.register(sourceDocumentCodec);
 			documentManager = new GLDocumentManager(documentCodecs);
+			documentAutosave = new GLDocumentAutosaveCoordinator(documentManager,
+					showcaseApplicationData().resolve("recovery"),
+					loadAutosaveConfiguration());
+			try { documentFileWatcher = new GLDocumentFileWatcher(); }
+			catch (java.io.IOException failure) {
+				throw new IllegalStateException("Document file monitoring is unavailable", failure);
+			}
 			documentLifecycle = new GLDocumentLifecycle<>(documentManager,
 					sourceDocumentCodec, codeDocuments, fileDialogs, host.parent(),
 					() -> new GLTextDocument("public final class Untitled {\n\n}\n"),
 					this::createJavaDocumentView);
 			documentLifecycle.setCloseRequestHandler(this::confirmDocumentClose);
+			documentLifecycle.setAutosaveCoordinator(documentAutosave);
+			documentLifecycle.setFileWatcher(documentFileWatcher);
+			documentLifecycle.setConflictRequestHandler(this::confirmSaveConflict);
+			documentLifecycle.setAutoReloadCleanDocuments(true);
+			documentLifecycle.setReloadFailureHandler(failure -> SwingUtilities.invokeLater(() ->
+					host.report(host.localizer().text("showcase.document.reload.failed",
+							failure.getMessage()))));
+			documentFileWatcher.addListener(event -> {
+				if (event.state() == GLDocumentFileState.DELETED
+						|| event.state() == GLDocumentFileState.UNAVAILABLE)
+					SwingUtilities.invokeLater(() -> host.report(host.localizer().text(
+							"showcase.document.external." + event.state().name().toLowerCase(),
+							event.document().title())));
+			});
+			documentAutosave.addListener(this::reportAutosaveEvent);
 			configureDocumentDialogText();
 			headerLayer.setBounds(0, 0, DESIGN_WIDTH, 105);
 			addGL(headerLayer);
@@ -958,15 +993,20 @@ public final class GuiShowcaseDemo {
 			documentLifecycle.addListener(lifecycle -> updateDocumentActions());
 			updateHistoryActions();
 			updateDocumentActions();
+			discoverRecoveries();
 		}
 
 		private GLContainer createJavaDocumentView(GLDocument<GLTextDocument> document) {
 			GLCodeEditor editor = document.location() == null
 					? new GLCodeEditor(document.content())
 					: new GLCodeEditor(document.content(), document.location());
+			editor.setEditable(!document.isReadOnly());
 			if (editor.getLanguage() == GLCodeLanguages.JAVA) configureCodeEditor(editor);
 			else editor.setNavigationHandler(this::openDefinition);
-			if (document.location() != null) editorsByUri.put(document.location(), editor);
+			if (document.location() != null) {
+				GLCodeEditor previous = editorsByUri.put(document.location(), editor);
+				if (previous == codeEditor) codeEditor = editor;
+			}
 			return editor;
 		}
 
@@ -999,6 +1039,7 @@ public final class GuiShowcaseDemo {
 					"glswing-core/src/main/resources/com/vingame/glswing/input/default.glinput"));
 			addConfigurationEditor(showcaseWorkspace().resolve(
 					"glswing-core/src/main/resources/com/vingame/glswing/languages/Messages_de.properties"));
+			codeTabs.setSelectedIndex(0);
 			codeTabs.addSelectionListener((source, oldIndex, newIndex) ->
 					updateCodeTabStatus(newIndex));
 			codeTabs.setBounds(18, 50, 1110, 513);
@@ -1199,7 +1240,7 @@ public final class GuiShowcaseDemo {
 					editor.getDocument(), title, uri, new GLHistoryManager());
 			document.setReadOnly(!editor.isEditable());
 			documentManager.manage(document, sourceDocumentCodec);
-			return codeDocuments.addDocument(document, editor);
+			return documentLifecycle.addDocument(document, editor);
 		}
 
 		private static void moveTo(GLCodeEditor editor, int line, int character) {
@@ -1301,9 +1342,31 @@ public final class GuiShowcaseDemo {
 			return Path.of("").toAbsolutePath().normalize();
 		}
 
+		private static Path showcaseApplicationData() {
+			String home = System.getProperty("user.home", "").strip();
+			Path base = home.isEmpty() ? showcaseWorkspace() : Path.of(home);
+			return base.resolve(".glswing").resolve("showcase")
+					.toAbsolutePath().normalize();
+		}
+
+		private GLDocumentAutosaveConfiguration loadAutosaveConfiguration() {
+			Path preferences = showcaseApplicationData().resolve("document.properties");
+			try {
+				if (Files.isRegularFile(preferences))
+					return GLDocumentAutosaveConfiguration.load(preferences);
+				GLDocumentAutosaveConfiguration.DEFAULT.save(preferences);
+				return GLDocumentAutosaveConfiguration.DEFAULT;
+			} catch (java.io.IOException | IllegalArgumentException failure) {
+				host.report("Autosave preferences: " + failure.getMessage());
+				return GLDocumentAutosaveConfiguration.DEFAULT;
+			}
+		}
+
 		void closeLanguageServer() {
 			languageServerClosing = true;
 			documentLifecycle.close();
+			documentAutosave.close();
+			documentFileWatcher.close();
 			codeDocuments.close();
 			documentWorkspace.close();
 			documentManager.close();
@@ -1315,9 +1378,7 @@ public final class GuiShowcaseDemo {
 			GLLanguageServer current = languageServer;
 			if (current == null) return;
 			languageServer = null;
-			Thread closer = new Thread(current::close, "glswing-showcase-lsp-close");
-			closer.setDaemon(true);
-			closer.start();
+			current.close();
 		}
 
 		java.util.concurrent.CompletionStage<Boolean> prepareClose() {
@@ -1325,7 +1386,7 @@ public final class GuiShowcaseDemo {
 		}
 
 		private void buildHeaderLayer() {
-			addLabel(headerLayer, "GLSwingNext GUI Showcase", TITLE_STYLE,
+			addLabel(headerLayer, "GLSwing GUI Showcase", TITLE_STYLE,
 					28, 43, 500, 34);
 			addLabel(headerLayer,
 					"Feste 1180 x 760 Designflaeche - alle Zustandswechsel sind interaktiv",
@@ -1451,7 +1512,7 @@ public final class GuiShowcaseDemo {
 					event -> host.setZoom(1.5f));
 			viewMenu.addItem("Zoom 75 %",
 					event -> host.setZoom(0.75f));
-			helpMenu.addItem("Ueber GLSwingNext",
+			helpMenu.addItem("About GLSwing",
 					event -> host.report("GPU-gerenderte Lightweight-GUI"));
 
 			menuBar.addMenu("Datei", fileMenu);
@@ -1465,6 +1526,10 @@ public final class GuiShowcaseDemo {
 			languageBarItem = menuBar.addMenu("Sprache", languageMenu);
 			languageBarItem.setIcon(ACTION_ICON);
 			GLPopupMenu colorsMenu = new GLPopupMenu();
+			defaultColorsItem = colorsMenu.addItem("Standard",
+					event -> host.selectShowcaseColors(
+						"showcase-default-colors.gltheme",
+						"showcase.theme.colors.default"));
 			darkColorsItem = colorsMenu.addItem("Dunkel",
 					event -> host.selectShowcaseColors(
 						"showcase-dark-colors.gltheme",
@@ -1514,6 +1579,108 @@ public final class GuiShowcaseDemo {
 					? operation + " completed" : operation + " failed: " + failure.getMessage()));
 		}
 
+		private void reportAutosaveEvent(GLDocumentAutosaveEvent event) {
+			if (event.state() == GLDocumentAutosaveEvent.State.SAVED)
+				host.report(host.localizer().text("showcase.autosave.saved",
+						event.document().title()));
+			else if (event.state() == GLDocumentAutosaveEvent.State.FAILED)
+				host.report(host.localizer().text("showcase.autosave.failed",
+						event.failure().getMessage()));
+		}
+
+		private void discoverRecoveries() {
+			documentAutosave.scan().whenComplete((recoveries, failure) ->
+					SwingUtilities.invokeLater(() -> {
+						if (languageServerClosing) return;
+						if (failure != null) {
+							host.report(host.localizer().text("showcase.autosave.failed",
+									failure.getMessage()));
+							return;
+						}
+						showRecovery(recoveries, 0);
+					}));
+		}
+
+		private void showRecovery(
+				List<com.vingame.glswing.document.GLDocumentRecovery> recoveries,
+				int index) {
+			if (languageServerClosing || index >= recoveries.size()) return;
+			if (!((Component) host.parent()).isShowing()) {
+				Timer retry = new Timer(50,
+						event -> showRecovery(recoveries, index));
+				retry.setRepeats(false);
+				retry.start();
+				return;
+			}
+			var recovery = recoveries.get(index);
+			GLLocalizer text = host.localizer();
+			AtomicReference<GLDialog> dialogReference = new AtomicReference<>();
+			GLContainer content = new GLContainer() {
+				private final GLLabel message = new GLLabel(text.text(
+						"showcase.autosave.recovery.message", recovery.title(),
+						java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+								.format(recovery.savedAt().atZone(
+										java.time.ZoneId.systemDefault()))));
+				private final GLButton restore = new GLButton(text.text(
+						"showcase.autosave.recovery.restore"));
+				private final GLButton discard = new GLButton(text.text(
+						"showcase.autosave.recovery.discard"));
+				private final GLButton keep = new GLButton(text.text(
+						"showcase.autosave.recovery.keep"));
+				private final GLDialogButtonBar actions = new GLDialogButtonBar()
+						.addButton(restore).addButton(discard).addButton(keep);
+				{
+					addGL(message); addGL(actions);
+					restore.addActionListener(event -> restoreRecovery());
+					discard.addActionListener(event -> discardRecovery());
+					keep.addActionListener(event -> finishAndContinue());
+				}
+				private void restoreRecovery() {
+					dialogReference.get().close();
+					documentAutosave.recover(recovery, GLTextDocument.class)
+							.whenComplete((document, failure) ->
+									SwingUtilities.invokeLater(() -> {
+										if (failure == null) {
+											documentLifecycle.addDocument(document);
+											showCodeWorkspace();
+											host.report(text.text(
+													"showcase.autosave.recovered",
+													document.title()));
+										} else host.report(text.text(
+												"showcase.autosave.failed",
+												failure.getMessage()));
+										showRecovery(recoveries, index + 1);
+									}));
+				}
+				private void discardRecovery() {
+					dialogReference.get().close();
+					documentAutosave.discard(recovery).whenComplete((deleted, failure) ->
+							SwingUtilities.invokeLater(() -> {
+								if (failure != null) host.report(text.text(
+										"showcase.autosave.failed", failure.getMessage()));
+								showRecovery(recoveries, index + 1);
+							}));
+				}
+				private void finishAndContinue() {
+					dialogReference.get().close();
+					showRecovery(recoveries, index + 1);
+				}
+				@Override protected void record(GLContext2D context) { }
+				@Override protected void resized(float width, float height) {
+					message.setBounds(22, 22, Math.max(1, width - 44), 42);
+					actions.setBounds(22, height - 48, Math.max(1, width - 44), 30);
+				}
+			};
+			GLDialog dialog = new GLDialog(text.text(
+					"showcase.autosave.recovery.title"), content);
+			dialog.setSize(560, 160);
+			dialogReference.set(dialog);
+			try { dialog.show(host.parent()); }
+			catch (RuntimeException failure) {
+				host.report(text.text("showcase.autosave.failed", failure.getMessage()));
+			}
+		}
+
 		private java.util.concurrent.CompletionStage<GLDocumentCloseChoice>
 				confirmDocumentClose(GLDocument<?> document) {
 			GLLocalizer text = host.localizer();
@@ -1529,8 +1696,10 @@ public final class GuiShowcaseDemo {
 						"showcase.document.close.discard"));
 				private final GLButton cancel = new GLButton(text.text(
 						"showcase.document.close.cancel"));
+				private final GLDialogButtonBar actions = new GLDialogButtonBar()
+						.addButton(save).addButton(discard).addButton(cancel);
 				{
-					addGL(message); addGL(save); addGL(discard); addGL(cancel);
+					addGL(message); addGL(actions);
 					save.addActionListener(event -> finish(GLDocumentCloseChoice.SAVE));
 					discard.addActionListener(event -> finish(GLDocumentCloseChoice.DISCARD));
 					cancel.addActionListener(event -> finish(GLDocumentCloseChoice.CANCEL));
@@ -1541,15 +1710,61 @@ public final class GuiShowcaseDemo {
 				@Override protected void record(GLContext2D context) { }
 				@Override protected void resized(float width, float height) {
 					message.setBounds(22, 24, Math.max(1, width - 44), 32);
-					cancel.setBounds(width - 104, height - 48, 82, 30);
-					discard.setBounds(width - 206, height - 48, 92, 30);
-					save.setBounds(width - 298, height - 48, 82, 30);
+					actions.setBounds(22, height - 48, Math.max(1, width - 44), 30);
 				}
 			};
 			GLDialog dialog = new GLDialog(text.text("showcase.document.close.title"), content);
 			dialog.setSize(470, 150); dialogReference.set(dialog);
 			dialog.closedFuture().whenComplete((unused, failure) ->
 					result.complete(GLDocumentCloseChoice.CANCEL));
+			try { dialog.show(host.parent()); }
+			catch (RuntimeException failure) { result.completeExceptionally(failure); }
+			return result;
+		}
+
+		private java.util.concurrent.CompletionStage<GLDocumentConflictChoice>
+				confirmSaveConflict(GLDocumentConflictRequest request) {
+			GLLocalizer text = host.localizer();
+			java.util.concurrent.CompletableFuture<GLDocumentConflictChoice> result =
+					new java.util.concurrent.CompletableFuture<>();
+			AtomicReference<GLDialog> dialogReference = new AtomicReference<>();
+			String stateKey = request.fileState() == GLDocumentFileState.DELETED
+					? "deleted" : request.fileState() == GLDocumentFileState.UNAVAILABLE
+							? "unavailable" : "modified";
+			GLContainer content = new GLContainer() {
+				private final GLLabel message = new GLLabel(text.text(
+						"showcase.document.conflict." + stateKey, request.document().title()));
+				private final GLButton reload = new GLButton(text.text(
+						"showcase.document.conflict.reload"));
+				private final GLButton overwrite = new GLButton(text.text(
+						"showcase.document.conflict.overwrite"));
+				private final GLButton saveAs = new GLButton(text.text(
+						"showcase.document.conflict.saveAs"));
+				private final GLButton cancel = new GLButton(text.text(
+						"showcase.document.close.cancel"));
+				private final GLDialogButtonBar actions = new GLDialogButtonBar()
+						.addButton(reload).addButton(overwrite).addButton(saveAs).addButton(cancel);
+				{
+					addGL(message); addGL(actions);
+					reload.setEnabled(request.fileState() == GLDocumentFileState.MODIFIED);
+					reload.addActionListener(event -> finish(GLDocumentConflictChoice.RELOAD));
+					overwrite.addActionListener(event -> finish(GLDocumentConflictChoice.OVERWRITE));
+					saveAs.addActionListener(event -> finish(GLDocumentConflictChoice.SAVE_AS));
+					cancel.addActionListener(event -> finish(GLDocumentConflictChoice.CANCEL));
+				}
+				private void finish(GLDocumentConflictChoice choice) {
+					if (result.complete(choice)) dialogReference.get().close();
+				}
+				@Override protected void record(GLContext2D context) { }
+				@Override protected void resized(float width, float height) {
+					message.setBounds(22, 20, Math.max(1, width - 44), 48);
+					actions.setBounds(22, height - 48, Math.max(1, width - 44), 30);
+				}
+			};
+			GLDialog dialog = new GLDialog(text.text("showcase.document.conflict.title"), content);
+			dialog.setSize(650, 165); dialogReference.set(dialog);
+			dialog.closedFuture().whenComplete((unused, failure) ->
+					result.complete(GLDocumentConflictChoice.CANCEL));
 			try { dialog.show(host.parent()); }
 			catch (RuntimeException failure) { result.completeExceptionally(failure); }
 			return result;
@@ -1607,6 +1822,8 @@ public final class GuiShowcaseDemo {
 			germanItem.setText(text.text("showcase.language.german"));
 			colorsMenuItem.setText(text.text("showcase.theme.colors"));
 			metricsMenuItem.setText(text.text("showcase.theme.metrics"));
+			defaultColorsItem.setText(
+					text.text("showcase.theme.colors.default"));
 			darkColorsItem.setText(text.text("showcase.theme.colors.dark"));
 			lightColorsItem.setText(text.text("showcase.theme.colors.light"));
 			showcaseColorsItem.setText(
@@ -1683,6 +1900,9 @@ public final class GuiShowcaseDemo {
 			action.addActionListener(event -> host.report(
 					"ActionCommand: " + event.getActionCommand()));
 			addControl(section, action, 18, 474, 210, 27);
+			caption(section, "Farbwahl / RGB, HSV, HSL, OKLab, OKLCH", 18, 516);
+			var colorChooser = new com.vingame.glswing.ui.GLColorChooser(new Color(84,120,181));
+			addControl(section, colorChooser, 18, 541, 120, 30);
 		}
 
 		private void buildValueLayer() {
@@ -1826,10 +2046,10 @@ public final class GuiShowcaseDemo {
 					24, 276);
 
 			GLDefaultTreeModel<String> documents = new GLDefaultTreeModel<>();
-			documents.addRoot("GLSwingNext");
-			documents.addChild("GLSwingNext", "glswing-core");
-			documents.addChild("GLSwingNext", "glswing-examples");
-			documents.addChild("GLSwingNext", "docs");
+			documents.addRoot("GLSwing");
+			documents.addChild("GLSwing", "glswing-core");
+			documents.addChild("GLSwing", "glswing-examples");
+			documents.addChild("GLSwing", "docs");
 			documents.addChild("glswing-core", "src/main/java");
 			documents.addChild("glswing-core", "src/main/resources");
 			documents.addChild("glswing-examples", "GuiShowcaseDemo.java");
@@ -1951,7 +2171,7 @@ public final class GuiShowcaseDemo {
 				GLDialog.Modality modality, int level) {
 			AtomicReference<GLDialog> self = new AtomicReference<>();
 			GLContainer content = dialogContent(level, self);
-			String title = level == 1 ? "GLSwingNext Dialog"
+			String title = level == 1 ? "GLSwing Dialog"
 					: "Verschachtelter Dialog - Ebene " + level;
 			GLDialog dialog = new GLDialog(title, content);
 			dialog.setSize(520, 300);

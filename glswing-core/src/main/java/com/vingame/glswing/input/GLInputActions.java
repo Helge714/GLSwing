@@ -65,6 +65,7 @@ public final class GLInputActions {
 	public static final String CODE_COMPLETE = "code.complete";
 	public static final String CODE_ORGANIZE_IMPORTS = "code.organizeImports";
 	public static final String CODE_GO_TO_DEFINITION = "code.goToDefinition";
+	public static final String CODE_TOGGLE_INLAY_HINTS = "code.toggle-inlay-hints";
 	public static final String TEXT_HISTORY_COALESCE_MILLIS =
 			"text.history-coalesce-millis";
 

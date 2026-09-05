@@ -90,7 +90,7 @@ public final class RecordingParameterDemo {
 		south.add(controls, BorderLayout.CENTER);
 		south.add(status, BorderLayout.SOUTH);
 
-		JFrame frame = new JFrame("GLSwingNext - Recording-Parameter");
+		JFrame frame = new JFrame("GLSwing - Recording Parameters");
 		frame.setLayout(new BorderLayout());
 		frame.add(panel, BorderLayout.CENTER);
 		frame.add(south, BorderLayout.SOUTH);

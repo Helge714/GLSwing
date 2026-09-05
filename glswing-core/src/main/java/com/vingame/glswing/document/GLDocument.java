@@ -14,7 +14,7 @@ public final class GLDocument<T> {
 	@FunctionalInterface public interface Listener<T> {
 		void documentChanged(GLDocument<T> document);
 	}
-	private final UUID id = UUID.randomUUID();
+	private final UUID id;
 	private final GLHistoryManager historyManager;
 	private final CopyOnWriteArrayList<Listener<T>> listeners = new CopyOnWriteArrayList<>();
 	private final java.util.Set<Object> transientModificationSources =
@@ -30,8 +30,14 @@ public final class GLDocument<T> {
 		this(content, title, null, new GLHistoryManager());
 	}
 	public GLDocument(T content, String title, URI location, GLHistoryManager historyManager) {
-		if (content == null || title == null || title.isBlank() || historyManager == null)
+		this(UUID.randomUUID(), content, title, location, historyManager);
+	}
+	GLDocument(UUID id, T content, String title, URI location,
+			GLHistoryManager historyManager) {
+		if (id == null || content == null || title == null || title.isBlank()
+				|| historyManager == null)
 			throw new IllegalArgumentException("Content, title, and history are required");
+		this.id = id;
 		this.content = content; this.title = title; this.location = location;
 		this.historyManager = historyManager;
 		historyManager.addListener(ignored -> fireChanged());
@@ -43,6 +49,16 @@ public final class GLDocument<T> {
 	public void setContent(T value) {
 		if (value == null) throw new IllegalArgumentException("Content required");
 		content = value; markModified();
+	}
+	/** Replaces the model with persisted content and discards the old edit history. */
+	void replacePersistedContent(T value) {
+		if (value == null) throw new IllegalArgumentException("Content required");
+		content = value;
+		contentRevision++;
+		persistedContentRevision = contentRevision;
+		transientModificationSources.clear();
+		historyManager.reset();
+		fireChanged();
 	}
 	public URI location() { return location; }
 	public void setLocation(URI value) {

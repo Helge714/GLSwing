@@ -93,7 +93,14 @@ g.drawUIText(font, "GLSwing", x, baselineY, Color.WHITE);
 
 Text coordinates use the baseline. Metrics include ascent, descent, line
 height, and measured width. `drawText` uses the text batch; `drawUIText` uses
-the UI batch. Host-managed fonts should not be disposed by application code.
+the UI batch. The default atlas covers Latin-1 and every non-Latin-1 symbol used
+by GLSwing's built-in UI and diagnostics. Applications that render additional
+scripts or symbols can supply their required character repertoire through a
+`GLFont` constructor or `fromFile(...)` overload that accepts `characters`.
+A character also requires a corresponding glyph in the selected AWT font;
+unsupported characters use that font's replacement glyph. Host-managed fonts
+should not be disposed by application code. `canRender(int)` checks both the
+configured atlas repertoire and the underlying font before rendering.
 
 ## Paths and shapes
 

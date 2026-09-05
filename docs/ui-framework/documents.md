@@ -1,10 +1,17 @@
-# Documents and serialization
+# Documents and Serialization
+
+[UI guide](../ui-framework.md) · [Undo and redo](history.md) ·
+[File dialogs](file-dialogs.md) · [Text editing](text-editing.md)
+
+## Contents
 
 - [Responsibility boundaries](#responsibility-boundaries)
 - [Documents and persisted state](#documents-and-persisted-state)
 - [Active documents and tabs](#active-documents-and-tabs)
 - [Document lifecycle and commands](#document-lifecycle-and-commands)
 - [Closing modified documents](#closing-modified-documents)
+- [Autosave and crash recovery](#autosave-and-crash-recovery)
+- [External file changes and save conflicts](#external-file-changes-and-save-conflicts)
 - [Codecs and schema migration](#codecs-and-schema-migration)
 - [Plain files](#plain-files)
 - [Compound document bundles](#compound-document-bundles)
@@ -29,6 +36,8 @@ particular serialization format.
 | `GLDocumentWorkspace` | Routes application-level undo/redo state and commands to the active document |
 | `GLDocumentTabController` | Associates tab content trees with documents and their history scopes |
 | `GLDocumentLifecycle<T>` | New, open, save, save-as, save-all, and close coordination for one document type |
+| `GLDocumentAutosaveCoordinator` | Idle and periodic crash-recovery snapshots for managed documents |
+| `GLDocumentFileWatcher` | External modification, deletion, and availability monitoring for file-backed documents |
 
 Views remain separate. An application may show the same `GLDocument<NodeGraph>`
 in a node editor, inspector, and minimap without coupling serialization to any
@@ -212,6 +221,137 @@ At the tab level, close buttons, middle-click, Close, and Close Others call
 own `GLTabCloseRequestHandler`. `removeTabAt(...)` deliberately remains an
 immediate programmatic removal operation for teardown and other cases that have
 already obtained approval. `GLTabCloseListener` remains a post-close notification.
+
+## Autosave and crash recovery
+
+`GLDocumentAutosaveCoordinator` is an opt-in safety layer for documents managed
+by a `GLDocumentManager`. It never writes to `document.location()`. Instead, it
+stores one atomic recovery snapshot per modified document in a separate
+application-owned directory. A successful manual save removes that snapshot
+when the document reaches its persisted checkpoint.
+
+```java
+Path preferences = applicationData.resolve("document.properties");
+GLDocumentAutosaveConfiguration autosaveSettings = Files.exists(preferences)
+        ? GLDocumentAutosaveConfiguration.load(preferences)
+        : GLDocumentAutosaveConfiguration.DEFAULT;
+
+GLDocumentAutosaveCoordinator autosave =
+        new GLDocumentAutosaveCoordinator(
+                manager,
+                applicationData.resolve("recovery"),
+                autosaveSettings);
+
+lifecycle.setAutosaveCoordinator(autosave);
+```
+
+Once attached, `GLDocumentLifecycle` tracks every document it creates or opens.
+Use `track(document)` directly only for managed documents that are displayed
+outside that lifecycle. `setAutosaveCoordinator(null)` detaches the service and
+removes recovery data for the lifecycle's registered documents.
+
+The default schedule writes ten seconds after the most recent document change
+and provides a two-minute periodic safety interval. An application can keep
+these settings in a normal Java properties file:
+
+```properties
+document.autosave.enabled=true
+document.autosave.idleMillis=10000
+document.autosave.periodicMillis=120000
+```
+
+Both intervals are independent. Set either interval to `0` to disable only that
+trigger; at least one must remain non-zero while autosave is enabled. Explicit
+`saveNow(document)` remains available for lifecycle checkpoints and tests.
+Repeated changes within the idle interval replace the pending task, and an
+unchanged document is not serialized again at every periodic tick.
+
+Scan the recovery directory during application startup, before opening the
+normal document views:
+
+```java
+autosave.scan().thenAccept(recoveries -> EventQueue.invokeLater(() ->
+        showRecoveryChoice(recoveries, recovery ->
+                autosave.recover(recovery, NodeGraph.class)
+                        .thenAccept(document -> EventQueue.invokeLater(() ->
+                                lifecycle.addDocument(document))))));
+```
+
+`GLDocumentRecovery` provides the title, original URI, stable document ID,
+codec IDs, schema version, and snapshot time needed by a recovery chooser.
+`recover(...)` resolves the registered codec, preserves the document identity
+and original location, and returns a modified document. Recovery therefore
+cannot silently replace the authoritative file: the user must still invoke
+Save or Save As. Use `discard(recovery)` when the user rejects a candidate.
+`GLDocumentLifecycle.addDocument(...)` is the corresponding entry point for
+placing a recovered, already managed document into its normal view and tab.
+The overload accepting both a document and an existing `GLContainer` is useful
+for views constructed during application startup. It enrolls those documents
+in the same autosave and file-monitoring services as documents created through
+`newDocument()` or `open()`; adding the view directly to the tab controller
+would intentionally bypass lifecycle services.
+
+## External file changes and save conflicts
+
+`GLDocumentFileWatcher` is an optional lifecycle service for files that may be
+edited, replaced, moved, or deleted by another application. It uses the Java
+file-system watch service and compares the current file metadata with the last
+opened, saved, or reloaded version. Its daemon thread does not keep an
+application alive.
+
+```java
+GLDocumentFileWatcher fileWatcher = new GLDocumentFileWatcher();
+lifecycle.setFileWatcher(fileWatcher);
+lifecycle.setAutoReloadCleanDocuments(true);
+lifecycle.setConflictRequestHandler(request ->
+        showSaveConflictDialog(request));
+```
+
+The lifecycle registers existing and subsequently opened file-backed documents
+automatically. Close the watcher with its owning application. Direct users can
+call `track`, `untrack`, `refresh`, `state`, and `acknowledge`; watcher listener
+callbacks run on the watcher thread and must be marshalled before updating a UI.
+
+`GLDocumentFileState` distinguishes `CURRENT`, `MODIFIED`, `DELETED`, and
+`UNAVAILABLE`. A synchronous `refresh` immediately precedes every in-place
+save, so correctness does not depend on the operating system delivering a watch
+event first. Successful GLSwing writes are acknowledged as part of the save
+operation and are not treated as external edits.
+
+If a clean document changes externally and automatic reload is enabled, the
+lifecycle reads the new model, resets the obsolete undo/redo history, and
+rebuilds the document view in its existing tab. The document identity, tab
+position, selection, file location, and manager binding remain intact. Configure
+`setReloadFailureHandler(...)` to present background reload failures.
+
+An externally changed document with local edits is never silently replaced.
+The conflict handler receives a `GLDocumentConflictRequest` immediately before
+the write and completes with one of these choices:
+
+| Choice | Result |
+|---|---|
+| `RELOAD` | Discard local edits, reload the external version, reset history, and rebuild the view |
+| `OVERWRITE` | Atomically replace the known file with the local document |
+| `SAVE_AS` | Preserve both versions by opening the normal save-as chooser |
+| `CANCEL` | Leave both the file and the document unchanged |
+
+Reload is unavailable when the file was deleted or cannot be read; applications
+should disable that dialog action for `DELETED` and `UNAVAILABLE`. `saveAll()`
+uses the same conflict policy for each document and stops when a conflict or
+save-as dialog is cancelled.
+
+Close the coordinator only after `prepareCloseAll()` has approved application
+shutdown. A normal `close()` removes snapshots for its tracked documents and
+stops its daemon scheduler. If the process terminates without that clean-close
+path, the atomic snapshots remain available to the next launch. Status UIs and
+logging can subscribe through `addListener(...)`. Callbacks are not marshalled
+to the AWT event dispatch thread, so UI listeners must do that explicitly.
+
+The GUI showcase enables this flow for its editable code tabs. Its generated
+preferences file is `${user.home}/.glswing/showcase/document.properties`, and
+recovery snapshots reside in the adjacent `recovery` directory. Stop the demo
+process after editing a document and restart it to exercise crash recovery;
+closing through the window's normal close workflow performs clean cleanup.
 
 ## Codecs and schema migration
 

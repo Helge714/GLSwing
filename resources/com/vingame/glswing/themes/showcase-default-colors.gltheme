@@ -1,0 +1,3 @@
+theme.type=colors
+
+# No overrides are required: theme bundles use GLThemes.DEFAULT as their base.

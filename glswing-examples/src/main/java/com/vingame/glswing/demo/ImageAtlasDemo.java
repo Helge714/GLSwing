@@ -40,7 +40,7 @@ public final class ImageAtlasDemo {
 		for (int index = 0; index < tiles.length; index++)
 			tiles[index] = checkerImage(index);
 
-		GLFrame frame = new GLFrame("GLSwingNext - Images, Icons und Atlanten",
+		GLFrame frame = new GLFrame("GLSwing - Images, Icons, and Atlases",
 				GLFrame.RenderingSettings.DEFAULT.withTargetFps(144));
 		frame.setGLClearColor(new Color(17, 22, 32));
 		frame.setMinimumSize(new Dimension(640, 480));

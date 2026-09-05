@@ -189,6 +189,7 @@ public abstract class GLSwingPanel extends GLJPanel
 		if (antialiasingSamples < 0)
 			throw new IllegalArgumentException("Antialiasing sample count must not be negative");
 		GLCapabilities capabilities = new GLCapabilities(GLProfile.get(GLProfile.GL3));
+		capabilities.setAlphaBits(8);
 		capabilities.setSampleBuffers(antialiasingSamples > 0);
 		if (antialiasingSamples > 0)
 			capabilities.setNumSamples(antialiasingSamples);
@@ -978,11 +979,21 @@ public abstract class GLSwingPanel extends GLJPanel
 		}
 		boolean sendMoved = pendingHoverMoved;
 		GLRenderer2D activeRenderer = renderer;
-		if (activeRenderer == null || event.getX() < 0 || event.getY() < 0
-				|| event.getX() >= getWidth() || event.getY() >= getHeight()) {
+		if (activeRenderer == null) {
 			hoverReadScheduled = false;
-			if (pendingHoverEvent != null)
-				startHoverRead();
+			// A newly shown GLJPanel can receive its first mouse event before its
+			// renderer exists. Keep the latest event pending; the first completed
+			// frame publishes it through publishPendingHoverIfReady(). Retrying here
+			// would recurse synchronously without changing either condition.
+			super.repaint();
+			return;
+		}
+		if (event.getX() < 0 || event.getY() < 0
+				|| event.getX() >= getWidth() || event.getY() >= getHeight()) {
+			pendingHoverEvent = null;
+			pendingHoverMoved = false;
+			hoverReadScheduled = false;
+			updateHover(event, GLPickResult.none(), sendMoved);
 			return;
 		}
 		if (damageTracker.isPickingDirty()

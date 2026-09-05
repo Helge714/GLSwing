@@ -2,6 +2,18 @@ package com.vingame.glswing.layout;
 
 /** Immutable placement and sizing rules for one child in a GL layout. */
 public final class GLConstraints {
+	/** Sides on which a layout group may connect a child to touching neighbors. */
+	public enum Connection { LEFT, RIGHT, TOP, BOTTOM }
+	private java.util.Set<Connection> connections = java.util.Set.of();
+
+	public java.util.Set<Connection> connections() { return connections; }
+	public GLConstraints connect(Connection... sides) {
+		GLConstraints result = copy(gridX, gridY, columnSpan, rowSpan, weightX, weightY,
+				fill, alignX, alignY, margin);
+		result.connections = java.util.Set.copyOf(java.util.List.of(sides));
+		return result;
+	}
+	public GLConstraints connectAll() { return connect(Connection.values()); }
 
 	public enum Fill {
 		NONE,
@@ -169,7 +181,9 @@ public final class GLConstraints {
 	private GLConstraints copy(int gridX, int gridY,
 			int columnSpan, int rowSpan, float weightX, float weightY,
 			Fill fill, Alignment alignX, Alignment alignY, GLInsets margin) {
-		return new GLConstraints(gridX, gridY, columnSpan, rowSpan,
+		GLConstraints result = new GLConstraints(gridX, gridY, columnSpan, rowSpan,
 				weightX, weightY, fill, alignX, alignY, margin, layoutManaged);
+		result.connections = connections;
+		return result;
 	}
 }

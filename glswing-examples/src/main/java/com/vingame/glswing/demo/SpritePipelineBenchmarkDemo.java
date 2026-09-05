@@ -34,7 +34,7 @@ public final class SpritePipelineBenchmarkDemo {
     private static void show() {
         GLFrame.RenderingSettings settings = GLFrame.RenderingSettings.DEFAULT
                 .withVSync(false).withTargetFps(1_000);
-        GLFrame frame = new GLFrame("GLSwingNext - Sprite Pipeline Benchmark",
+        GLFrame frame = new GLFrame("GLSwing - Sprite Pipeline Benchmark",
                 settings);
         frame.setGLClearColor(new Color(12, 17, 27));
         frame.setMinimumSize(new Dimension(900, 560));

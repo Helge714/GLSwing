@@ -166,24 +166,24 @@ public class GLCheckBox extends GLControl {
 		float contentHeight = Math.max(style.boxSize(), font.getLineHeight());
 		float boxX = padding.left();
 		float boxY = padding.top() + (contentHeight - style.boxSize()) * 0.5f;
-		float border = style.borderWidth();
+		float border = layoutBorderWidth(style.borderWidth());
 
 		if (border > 0) {
 			Color borderColor = isFocused()
 					? style.focusBorderColor() : style.borderColor();
 			context.withParameters(backgroundParameters, () ->
 					context.fillAndDrawUIRoundRect(boxX, boxY,
-							style.boxSize(), style.boxSize(), style.cornerRadius(),
+							style.boxSize(), style.boxSize(), layoutCornerRadius(style.cornerRadius()),
 							border, Color.WHITE, borderColor,
 							GLStroke.WidthSpace.SCREEN));
 		} else {
 			context.withParameters(backgroundParameters, () ->
 					context.fillUIRoundRect(boxX, boxY,
 							style.boxSize(), style.boxSize(),
-							style.cornerRadius(), Color.WHITE));
+							layoutCornerRadius(style.cornerRadius()), Color.WHITE));
 		}
 		
-		float checkInset = Math.min(style.boxSize() * 0.22f, style.borderWidth() + 1);
+		float checkInset = Math.min(style.boxSize() * 0.22f, layoutBorderWidth(style.borderWidth()) + 1);
 		float checkSize = style.boxSize() - checkInset * 2;
 		if (checkSize > 0) {
 			context.withParameters(checkParameters, () -> 

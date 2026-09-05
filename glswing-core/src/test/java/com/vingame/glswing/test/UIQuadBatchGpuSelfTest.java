@@ -58,6 +58,8 @@ public final class UIQuadBatchGpuSelfTest {
 				testHiDpiAndTransparency(gl, renderer);
 				testGroupedContours(gl, renderer);
 				testMixedRecordedInstances(gl, renderer, font);
+				testBuiltInUnicodeSymbols(gl, renderer);
+				testColorSlider(gl, renderer);
 				testAsymmetricRoundedFill(gl, renderer);
 				testScreenSpaceBorderUnderZoom(gl, renderer);
 				testMinimumProgressInsideBorder(gl, renderer);
@@ -81,6 +83,36 @@ public final class UIQuadBatchGpuSelfTest {
 				renderer.dispose(gl);
 			nativeContext.release();
 			drawable.destroy();
+		}
+	}
+
+	private static void testColorSlider(GL3 gl, GLRenderer2D renderer) {
+		class Ramp extends com.vingame.glswing.ui.GLColorSlider {
+			Ramp() { super("Red",0,1,0); }
+			void paint(GLContext2D context) { record(context); }
+		}
+		Ramp ramp=new Ramp(); ramp.setBounds(0,0,WIDTH,HEIGHT);
+		ramp.setColorSampler(value -> new Color((float)value,0,0));
+		GLContext2D context=renderer.beginFrame(gl,WIDTH,HEIGHT,
+				Projection2D.TOP_LEFT_PIXELS.create(WIDTH,HEIGHT));
+		context.clear(Color.BLACK); ramp.paint(context); renderer.endFrame();
+		int low=readPixel(gl,40,30).get(0)&255, high=readPixel(gl,140,30).get(0)&255;
+		if(high-low<100) throw new AssertionError("Color slider must preview the entire channel range");
+	}
+
+	private static void testBuiltInUnicodeSymbols(GL3 gl,
+			GLRenderer2D renderer) {
+		GLFont symbols = new GLFont(GLFont.SANS_SERIF, GLFont.PLAIN, 24);
+		try {
+			GLContext2D context = renderer.beginFrame(gl, WIDTH, HEIGHT,
+					Projection2D.TOP_LEFT_PIXELS.create(WIDTH, HEIGHT));
+			context.clear(Color.BLACK);
+			context.drawUIText(symbols, "Δ – — … › ← → ✓", 12, 48, Color.WHITE);
+			renderer.endFrame();
+			checkVisibleBrightPixels(gl, 8, 16, 100, 58,
+					"built-in Unicode UI symbols");
+		} finally {
+			symbols.dispose(gl);
 		}
 	}
 

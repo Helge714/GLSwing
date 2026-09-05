@@ -24,6 +24,7 @@ public final class GLDocumentManager implements AutoCloseable {
 	private final Executor executor;
 	private final ExecutorService ownedExecutor;
 	private final Map<UUID, GLDocumentCodec<?>> bindings = new ConcurrentHashMap<>();
+	private final Map<UUID, Integer> schemaBindings = new ConcurrentHashMap<>();
 	private final AtomicBoolean closed = new AtomicBoolean();
 
 	public GLDocumentManager(GLDocumentCodecRegistry codecs) {
@@ -48,9 +49,13 @@ public final class GLDocumentManager implements AutoCloseable {
 		if (document == null) throw new IllegalArgumentException("Document required");
 		validateRegistered(codec);
 		bindings.put(document.id(), codec);
+		schemaBindings.put(document.id(), codec.currentSchemaVersion());
 	}
 	public boolean isManaged(GLDocument<?> document) {
 		return document != null && bindings.containsKey(document.id());
+	}
+	GLDocumentCodec<?> codecFor(GLDocument<?> document) {
+		return document == null ? null : bindings.get(document.id());
 	}
 
 	/** Creates an unsaved document bound to a registered codec. */
@@ -58,7 +63,8 @@ public final class GLDocumentManager implements AutoCloseable {
 		ensureOpen();
 		validateRegistered(codec);
 		GLDocument<T> document = new GLDocument<>(content, title);
-		document.markModified(); bindings.put(document.id(), codec); return document;
+		document.markModified(); bindings.put(document.id(), codec);
+		schemaBindings.put(document.id(), codec.currentSchemaVersion()); return document;
 	}
 	/** Resolves a codec by extension and opens a current-schema plain document. */
 	public <T> CompletionStage<GLDocument<T>> open(Path path, Class<T> contentType) {
@@ -78,7 +84,8 @@ public final class GLDocumentManager implements AutoCloseable {
 				GLDocument<T> document = new GLDocument<>(content,
 						source.getFileName().toString(), source.toUri(),
 						new com.vingame.glswing.history.GLHistoryManager());
-				bindings.put(document.id(), codec); return document;
+				bindings.put(document.id(), codec);
+				schemaBindings.put(document.id(), schemaVersion); return document;
 			} catch (IOException failure) {
 				throw new CompletionException(failure);
 			}
@@ -109,14 +116,41 @@ public final class GLDocumentManager implements AutoCloseable {
 				if (destination.getFileName() != null)
 					document.setTitle(destination.getFileName().toString());
 				document.markPersisted();
+				schemaBindings.put(document.id(), codec.currentSchemaVersion());
 				return destination;
 			} catch (IOException failure) {
 				throw new CompletionException(failure);
 			}
 		}, executor);
 	}
+	/** Reloads a managed file-backed document and resets its persisted checkpoint. */
+	public <T> CompletionStage<GLDocument<T>> reload(GLDocument<T> document) {
+		ensureOpen();
+		if (document == null || document.location() == null
+				|| !"file".equalsIgnoreCase(document.location().getScheme()))
+			return CompletableFuture.failedFuture(
+					new IllegalStateException("Document has no readable file location"));
+		GLDocumentCodec<?> bound = bindings.get(document.id());
+		if (bound == null || !bound.contentType().isInstance(document.content()))
+			return CompletableFuture.failedFuture(
+					new IllegalStateException("Document is not managed by this manager"));
+		@SuppressWarnings("unchecked") GLDocumentCodec<T> codec = (GLDocumentCodec<T>) bound;
+		int schemaVersion = schemaBindings.getOrDefault(document.id(),
+				codec.currentSchemaVersion());
+		Path source = normalize(Path.of(document.location()));
+		return CompletableFuture.supplyAsync(() -> {
+			try (var input = new BufferedInputStream(Files.newInputStream(source))) {
+				document.replacePersistedContent(codec.read(input, schemaVersion));
+				return document;
+			} catch (IOException failure) {
+				throw new CompletionException(failure);
+			}
+		}, executor);
+	}
 	public boolean release(GLDocument<?> document) {
-		return document != null && bindings.remove(document.id()) != null;
+		if (document == null) return false;
+		schemaBindings.remove(document.id());
+		return bindings.remove(document.id()) != null;
 	}
 	public CompletionStage<GLDocumentBundle> openBundle(Path path) {
 		ensureOpen();
@@ -152,7 +186,7 @@ public final class GLDocumentManager implements AutoCloseable {
 	@Override public void close() {
 		if (!closed.compareAndSet(false, true)) return;
 		if (ownedExecutor != null) ownedExecutor.shutdown();
-		bindings.clear();
+		bindings.clear(); schemaBindings.clear();
 	}
 
 	private <T> void validateRegistered(GLDocumentCodec<T> codec) {

@@ -48,9 +48,10 @@ The editor tracks the active node separately from the selected node set;
 `isActiveSelected()` distinguishes the primary selection.
 
 Node content can be added and removed with `addContent(...)` and
-`removeContent(...)`. Input/output convenience methods create `GLNodeRow`
-structures. `getContents()`, `getPorts()`, `getInput()`, and `getOutput()` expose
-the current structure.
+`removeContent(...)`. Input/output convenience methods create the internal row
+structure while returning the public `GLNodePort` or `GLNodePorts` handles.
+`getContents()`, `getPorts()`, and `findPort(...)` expose the current structure
+without making row layout part of the public API.
 
 ## Rows, content, and ports
 

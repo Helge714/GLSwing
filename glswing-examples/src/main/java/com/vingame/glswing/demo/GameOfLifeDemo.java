@@ -56,7 +56,7 @@ public final class GameOfLifeDemo {
 		JLabel status = new JLabel("", SwingConstants.CENTER);
 		status.setPreferredSize(new Dimension(900, 28));
 
-		JFrame frame = new JFrame("GLSwingNext - GPU Game of Life");
+		JFrame frame = new JFrame("GLSwing - GPU Game of Life");
 		frame.setLayout(new BorderLayout());
 		frame.add(canvas, BorderLayout.CENTER);
 		frame.add(status, BorderLayout.SOUTH);

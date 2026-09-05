@@ -27,7 +27,7 @@ public final class DrawingApiDemo {
 		DrawingPanel panel = new DrawingPanel();
 		panel.setPreferredSize(new Dimension(1000, 600));
 
-		JFrame frame = new JFrame("GLSwingNext - drawing API");
+		JFrame frame = new JFrame("GLSwing - Drawing API");
 		frame.setLayout(new BorderLayout());
 		frame.add(panel, BorderLayout.CENTER);
 		frame.add(new JLabel("Filled and stroked shapes share one batched draw call", SwingConstants.CENTER),

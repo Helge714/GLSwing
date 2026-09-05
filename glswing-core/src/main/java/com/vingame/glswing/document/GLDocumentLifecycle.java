@@ -41,6 +41,15 @@ public final class GLDocumentLifecycle<T> implements AutoCloseable {
 	private final GLTabCloseRequestHandler installedCloseHandler = this::requestTabClose;
 	private final java.util.Set<GLContainer> discardedViews = java.util.Collections
 			.newSetFromMap(new java.util.IdentityHashMap<>());
+	private final java.util.Set<GLDocument<?>> autosavedDocuments = java.util.Collections
+			.newSetFromMap(new java.util.IdentityHashMap<>());
+	private final java.util.Set<GLDocument<?>> watchedDocuments =
+			java.util.concurrent.ConcurrentHashMap.newKeySet();
+	private final java.util.Set<GLDocument<?>> reloadsInFlight =
+			java.util.concurrent.ConcurrentHashMap.newKeySet();
+	private final java.util.Set<GLDocument<?>> writesInFlight =
+			java.util.concurrent.ConcurrentHashMap.newKeySet();
+	private final GLDocumentFileWatcher.Listener fileListener = this::fileStateChanged;
 	private final GLTabCloseListener closeListener = (source, index, title, content) ->
 			releaseDiscardedView(content);
 	private GLDocumentCloseRequestHandler closeHandler = document ->
@@ -50,6 +59,12 @@ public final class GLDocumentLifecycle<T> implements AutoCloseable {
 	private String saveDialogTitle = "Save document";
 	private String formatDescription;
 	private String allFilesDescription = "All files";
+	private GLDocumentAutosaveCoordinator autosaveCoordinator;
+	private GLDocumentFileWatcher fileWatcher;
+	private GLDocumentConflictRequestHandler conflictHandler = request ->
+			CompletableFuture.completedFuture(GLDocumentConflictChoice.CANCEL);
+	private java.util.function.Consumer<Throwable> reloadFailureHandler = ignored -> { };
+	private boolean autoReloadCleanDocuments;
 	private boolean closed;
 
 	public GLDocumentLifecycle(GLDocumentManager manager, GLDocumentCodec<T> codec,
@@ -100,6 +115,56 @@ public final class GLDocumentLifecycle<T> implements AutoCloseable {
 		if (handler == null) throw new IllegalArgumentException("Close handler required");
 		closeHandler = handler;
 	}
+	/**
+	 * Attaches an optional autosave service. Existing and subsequently opened
+	 * documents are registered automatically; passing {@code null} detaches it.
+	 */
+	public void setAutosaveCoordinator(GLDocumentAutosaveCoordinator coordinator) {
+		ensureOpen();
+		if (autosaveCoordinator == coordinator) return;
+		GLDocumentAutosaveCoordinator previous = autosaveCoordinator;
+		if (previous != null)
+			for (GLDocument<?> document : List.copyOf(autosavedDocuments))
+				previous.untrack(document);
+		autosavedDocuments.clear();
+		autosaveCoordinator = coordinator;
+		if (coordinator != null)
+			for (GLDocument<?> document : tabs.documents()) trackForAutosave(document);
+	}
+	public GLDocumentAutosaveCoordinator autosaveCoordinator() {
+		return autosaveCoordinator;
+	}
+	/** Attaches an optional external file-change watcher to this lifecycle. */
+	public void setFileWatcher(GLDocumentFileWatcher watcher) {
+		ensureOpen();
+		if (fileWatcher == watcher) return;
+		if (fileWatcher != null) {
+			fileWatcher.removeListener(fileListener);
+			for (GLDocument<?> document : List.copyOf(watchedDocuments))
+				fileWatcher.untrack(document);
+		}
+		watchedDocuments.clear();
+		fileWatcher = watcher;
+		if (watcher != null) {
+			watcher.addListener(fileListener);
+			for (GLDocument<?> document : tabs.documents()) trackFile(document);
+		}
+	}
+	public GLDocumentFileWatcher fileWatcher() { return fileWatcher; }
+	public void setConflictRequestHandler(GLDocumentConflictRequestHandler handler) {
+		if (handler == null) throw new IllegalArgumentException("Conflict handler required");
+		conflictHandler = handler;
+	}
+	/** Automatically reloads externally modified documents that have no local edits. */
+	public void setAutoReloadCleanDocuments(boolean value) {
+		autoReloadCleanDocuments = value;
+	}
+	public boolean isAutoReloadCleanDocuments() { return autoReloadCleanDocuments; }
+	/** Receives failures from automatic background reload attempts. */
+	public void setReloadFailureHandler(java.util.function.Consumer<Throwable> handler) {
+		if (handler == null) throw new IllegalArgumentException("Failure handler required");
+		reloadFailureHandler = handler;
+	}
 
 	/** Creates, manages and opens a new modified document tab. */
 	public GLDocument<T> newDocument() {
@@ -118,6 +183,20 @@ public final class GLDocumentLifecycle<T> implements AutoCloseable {
 		return manager.open(path, codec, codec.currentSchemaVersion())
 				.thenCompose(document -> onUi(() -> { addView(document); return document; }));
 	}
+	/** Adds an already managed document, including a recovered document, as a tab. */
+	public int addDocument(GLDocument<T> document) {
+		validateDocument(document);
+		return addView(document);
+	}
+	/**
+	 * Adds an already constructed document view and enrolls it in every lifecycle
+	 * service, including autosave and external file monitoring.
+	 */
+	public int addDocument(GLDocument<T> document, GLContainer view) {
+		validateDocument(document);
+		if (view == null) throw new IllegalArgumentException("Document view required");
+		return addView(document, view);
+	}
 	public CompletionStage<Path> save() {
 		GLDocument<?> document = activeDocument();
 		return document == null ? failed("No active document") : save(document);
@@ -129,6 +208,23 @@ public final class GLDocumentLifecycle<T> implements AutoCloseable {
 	public CompletionStage<List<Path>> saveAll() {
 		ensureOpen();
 		return saveAll(tabs.documents(), 0, new ArrayList<>());
+	}
+	/** Reloads a managed document, resets its history, and rebuilds its open view. */
+	public CompletionStage<GLDocument<T>> reload(GLDocument<T> document) {
+		ensureOpen();
+		if (document == null || !manager.isManaged(document))
+			return CompletableFuture.failedFuture(
+					new IllegalArgumentException("Managed document required"));
+		return manager.reload(document).thenCompose(reloaded -> onUi(() -> {
+			GLContainer replacement = viewFactory.apply(reloaded);
+			if (replacement == null)
+				throw new IllegalStateException("Document view factory returned null");
+			if (!tabs.replaceDocumentView(reloaded, replacement))
+				throw new IllegalStateException("Document has no open view");
+			if (fileWatcher != null) fileWatcher.acknowledge(reloaded);
+			fireChanged();
+			return reloaded;
+		}));
 	}
 	public CompletionStage<Boolean> closeActiveDocument() {
 		if (activeDocument() == null) return CompletableFuture.completedFuture(false);
@@ -160,6 +256,17 @@ public final class GLDocumentLifecycle<T> implements AutoCloseable {
 		if (tabs.tabs().getCloseRequestHandler() == installedCloseHandler)
 			tabs.tabs().setCloseRequestHandler(previousCloseHandler);
 		synchronized (discardedViews) { discardedViews.clear(); }
+		if (autosaveCoordinator != null)
+			for (GLDocument<?> document : List.copyOf(autosavedDocuments))
+				autosaveCoordinator.untrack(document);
+		autosavedDocuments.clear();
+		autosaveCoordinator = null;
+		if (fileWatcher != null) {
+			fileWatcher.removeListener(fileListener);
+			for (GLDocument<?> document : List.copyOf(watchedDocuments))
+				fileWatcher.untrack(document);
+		}
+		watchedDocuments.clear(); reloadsInFlight.clear(); writesInFlight.clear(); fileWatcher = null;
 		listeners.clear();
 	}
 
@@ -190,6 +297,9 @@ public final class GLDocumentLifecycle<T> implements AutoCloseable {
 		synchronized (discardedViews) {
 			if (!discardedViews.remove(content)) return;
 		}
+		GLDocument<?> document = tabs.documentFor(content);
+		untrackForAutosave(document);
+		untrackFile(document);
 		tabs.tabs().forgetClosedTab(content);
 		tabs.releaseClosedDocument(content);
 		fireChanged();
@@ -201,7 +311,29 @@ public final class GLDocumentLifecycle<T> implements AutoCloseable {
 			if (!committed) return CompletableFuture.completedFuture(null);
 			URI location = document.location();
 			return location != null && "file".equalsIgnoreCase(location.getScheme())
-					? notifyAfter(manager.save(document)) : saveAsCommitted(document);
+					? saveFileBacked(document) : saveAsCommitted(document);
+		});
+	}
+	private CompletionStage<Path> saveFileBacked(GLDocument<?> document) {
+		GLDocumentFileState state = fileWatcher == null
+				? GLDocumentFileState.CURRENT : fileWatcher.refresh(document);
+		if (state == GLDocumentFileState.CURRENT)
+			return performSave(document, () -> manager.save(document));
+		Path path = Path.of(document.location()).toAbsolutePath().normalize();
+		CompletionStage<GLDocumentConflictChoice> decision;
+		try {
+			decision = conflictHandler.requestResolution(
+					new GLDocumentConflictRequest(document, path, state));
+		} catch (RuntimeException failure) {
+			return CompletableFuture.failedFuture(failure);
+		}
+		if (decision == null) return CompletableFuture.completedFuture(null);
+		return decision.thenCompose(choice -> switch (
+				choice == null ? GLDocumentConflictChoice.CANCEL : choice) {
+			case OVERWRITE -> performSave(document, () -> manager.save(document));
+			case SAVE_AS -> saveAsCommitted(document);
+			case RELOAD -> reloadUnchecked(document).thenApply(ignored -> null);
+			case CANCEL -> CompletableFuture.completedFuture(null);
 		});
 	}
 	private CompletionStage<Path> saveAs(GLDocument<?> document) {
@@ -219,7 +351,7 @@ public final class GLDocumentLifecycle<T> implements AutoCloseable {
 		if (initialDirectory != null) request.initialDirectory(initialDirectory);
 		addCodecFilter(request);
 		return dialogs.show(request.build(), owner).thenCompose(result -> result.approved()
-				? notifyAfter(manager.saveAs(document, result.selectedPath()))
+				? performSave(document, () -> manager.saveAs(document, result.selectedPath()))
 				: CompletableFuture.completedFuture(null));
 	}
 	private CompletionStage<Boolean> commitPendingEdits(GLDocument<?> document) {
@@ -235,11 +367,71 @@ public final class GLDocumentLifecycle<T> implements AutoCloseable {
 				codec.fileExtensions().toArray(String[]::new));
 		request.filter(allFilesDescription);
 	}
-	private void addView(GLDocument<T> document) {
+	private int addView(GLDocument<T> document) {
 		GLContainer view = viewFactory.apply(document);
 		if (view == null) throw new IllegalStateException("Document view factory returned null");
+		return addView(document, view);
+	}
+	private int addView(GLDocument<T> document, GLContainer view) {
 		int index = tabs.addDocument(document, view);
-		tabs.tabs().setSelectedIndex(index); fireChanged();
+		try {
+			trackForAutosave(document);
+			trackFile(document);
+		}
+		catch (RuntimeException failure) {
+			untrackForAutosave(document);
+			untrackFile(document);
+			tabs.removeDocument(view);
+			throw failure;
+		}
+		tabs.tabs().setSelectedIndex(index); fireChanged(); return index;
+	}
+	private void validateDocument(GLDocument<T> document) {
+		ensureOpen();
+		if (document == null || !codec.contentType().isInstance(document.content())
+				|| !manager.isManaged(document))
+			throw new IllegalArgumentException(
+					"Document must be managed and compatible with this lifecycle");
+	}
+	private void trackForAutosave(GLDocument<?> document) {
+		if (autosaveCoordinator == null || autosavedDocuments.contains(document)) return;
+		autosaveCoordinator.track(document);
+		autosavedDocuments.add(document);
+	}
+	private void untrackForAutosave(GLDocument<?> document) {
+		if (autosaveCoordinator != null && document != null
+				&& autosavedDocuments.remove(document))
+			autosaveCoordinator.untrack(document);
+	}
+	private void trackFile(GLDocument<?> document) {
+		if (fileWatcher == null || watchedDocuments.contains(document)) return;
+		if (fileWatcher.track(document)) watchedDocuments.add(document);
+	}
+	private void untrackFile(GLDocument<?> document) {
+		if (fileWatcher != null && document != null && watchedDocuments.remove(document))
+			fileWatcher.untrack(document);
+	}
+	private void fileStateChanged(GLDocumentFileEvent event) {
+		if (closed || !watchedDocuments.contains(event.document())) return;
+		if (event.state() == GLDocumentFileState.MODIFIED
+				&& autoReloadCleanDocuments && !event.document().isModified()) {
+			synchronized (reloadsInFlight) {
+				synchronized (writesInFlight) {
+					if (writesInFlight.contains(event.document())) return;
+				}
+				if (!reloadsInFlight.add(event.document())) return;
+			}
+			reloadUnchecked(event.document()).whenComplete((document, failure) -> {
+				synchronized (reloadsInFlight) { reloadsInFlight.remove(event.document()); }
+				if (failure != null) reloadFailureHandler.accept(unwrap(failure));
+			});
+		}
+		if (EventQueue.isDispatchThread()) fireChanged();
+		else EventQueue.invokeLater(this::fireChanged);
+	}
+	@SuppressWarnings("unchecked")
+	private CompletionStage<GLDocument<T>> reloadUnchecked(GLDocument<?> document) {
+		return reload((GLDocument<T>) document);
 	}
 	private CompletionStage<List<Path>> saveAll(List<GLDocument<?>> documents,
 			int index, ArrayList<Path> paths) {
@@ -301,8 +493,29 @@ public final class GLDocumentLifecycle<T> implements AutoCloseable {
 		});
 		return result;
 	}
-	private CompletionStage<Path> notifyAfter(CompletionStage<Path> operation) {
-		return operation.thenCompose(path -> onUi(() -> { fireChanged(); return path; }));
+	private CompletionStage<Path> performSave(GLDocument<?> document,
+			Supplier<CompletionStage<Path>> operation) {
+		synchronized (writesInFlight) { writesInFlight.add(document); }
+		CompletionStage<Path> started;
+		try { started = operation.get(); }
+		catch (RuntimeException failure) {
+			synchronized (writesInFlight) { writesInFlight.remove(document); }
+			return CompletableFuture.failedFuture(failure);
+		}
+		return started.whenComplete((path, failure) -> {
+			if (failure == null && fileWatcher != null) {
+				fileWatcher.acknowledge(document);
+				watchedDocuments.add(document);
+			}
+			synchronized (writesInFlight) { writesInFlight.remove(document); }
+		}).thenCompose(path -> onUi(() -> { fireChanged(); return path; }));
+	}
+	private static Throwable unwrap(Throwable failure) {
+		Throwable result = failure;
+		while ((result instanceof java.util.concurrent.CompletionException
+				|| result instanceof java.util.concurrent.ExecutionException)
+				&& result.getCause() != null) result = result.getCause();
+		return result;
 	}
 	private static <R> CompletionStage<R> failed(String message) {
 		return CompletableFuture.failedFuture(new IllegalStateException(message));

@@ -34,6 +34,14 @@ public final class GLPropertiesCodeLanguage implements GLCodeLanguage {
 	private static final Pattern FUNCTION = Pattern.compile(
 			"\\b(?:rgb|rgba|hsv|hsl|oklab|oklch|derive)\\b(?=\\s*\\()",
 			Pattern.CASE_INSENSITIVE);
+	private static final Map<String, List<String>> FUNCTION_INLAY_LABELS = Map.of(
+			"rgb", List.of("Red", "Green", "Blue", "Alpha"),
+			"rgba", List.of("Red", "Green", "Blue", "Alpha"),
+			"hsv", List.of("Hue", "Saturation", "Value", "Alpha"),
+			"hsl", List.of("Hue", "Saturation", "Lightness", "Alpha"),
+			"oklab", List.of("Lightness", "A", "B", "Alpha"),
+			"oklch", List.of("Lightness", "Chroma", "Hue", "Alpha"),
+			"derive", List.of("Base", "Adjustment"));
 	private static final Set<String> BUILT_IN_REFERENCES = Set.of(
 			"default", "dark", "light");
 
@@ -275,7 +283,60 @@ public final class GLPropertiesCodeLanguage implements GLCodeLanguage {
 			return completed(documentColorsFor(document));
 		}
 
+		@Override public CompletionStage<List<GLCodeInlayHint>> inlayHints(
+				GLCodeDocument document) {
+			return completed(functionInlayHints(document.text()));
+		}
+
 		@Override public void close() { closed = true; }
+	}
+
+	private static List<GLCodeInlayHint> functionInlayHints(String source) {
+		ArrayList<GLCodeInlayHint> result = new ArrayList<>();
+		Matcher functions = FUNCTION.matcher(source);
+		while (functions.find()) {
+			String name = functions.group().toLowerCase(java.util.Locale.ROOT);
+			List<Integer> arguments = argumentStarts(source, functions.end());
+			List<String> names = FUNCTION_INLAY_LABELS.get(name);
+			for (int index = 0; index < arguments.size(); index++) {
+				String label = index < names.size() ? names.get(index)
+						: "Adjustment";
+				result.add(new GLCodeInlayHint(arguments.get(index), label));
+			}
+		}
+		return List.copyOf(result);
+	}
+
+	private static List<Integer> argumentStarts(String source, int afterName) {
+		int open = afterName;
+		while (open < source.length() && Character.isWhitespace(source.charAt(open)))
+			open++;
+		if (open >= source.length() || source.charAt(open) != '(') return List.of();
+		ArrayList<Integer> result = new ArrayList<>();
+		int candidate = open + 1;
+		int depth = 0;
+		char quote = 0;
+		for (int index = open + 1; index < source.length(); index++) {
+			char value = source.charAt(index);
+			if (quote != 0) {
+				if (value == '\\') index++;
+				else if (value == quote) quote = 0;
+				continue;
+			}
+			if (value == '\'' || value == '"') { quote = value; continue; }
+			if (value == '(') { depth++; continue; }
+			if (value == ')' && depth > 0) { depth--; continue; }
+			if ((value == ',' && depth == 0) || (value == ')' && depth == 0)) {
+				int start = candidate;
+				while (start < index && Character.isWhitespace(source.charAt(start))) start++;
+				// Preserve the parameter slot even while its value is temporarily
+				// empty. The surrounding commas still determine its meaning.
+				result.add(start);
+				if (value == ')') break;
+				candidate = index + 1;
+			}
+		}
+		return List.copyOf(result);
 	}
 
 	private List<GLCodeCompletion> completions(GLCodeDocument document, int offset) {

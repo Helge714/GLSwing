@@ -5,7 +5,31 @@
 First public preview of GLSwing. The API remains under active development and
 may change in subsequent `0.x` releases.
 
+- `GLDialog` now optionally provides theme-rendered or absent window chrome.
+  The themed title bar supports dragging and closing, while undecorated dialogs
+  support configurable, platform-dependent rounded native window shapes.
+
 ### Rendering
+
+- Added explicit visual layout connections through `GLLayoutGroup` and layout
+  constraints, including partial edges and nested non-rectangular arrangements.
+  `GLInputGroup` groups history transactions independently of visual placement.
+- Color channels now form a compact connected panel of grouped color sliders,
+  multi-select live numeric fields, and repeating up/down buttons. Alpha uses
+  the same columns in a visually separate group while remaining independent.
+  Linked fields mirror raw intermediate text, show one active
+  caret and one group focus outline, and atomically commit or discard on Enter.
+  Editing and output color models can be selected separately. Screen sampling
+  and its larger, keyboard-focusable flat action use the same dedicated
+  eyedropper icon/cursor where supported. The chooser dialog now packs to its
+  content and shows its status row only for actionable messages.
+- Themed dialogs now use a flat Windows-style close target with rounded outer
+  geometry, a full-surface hit target, antialiased translucent edges and a
+  configurable soft shadow. A cubic native contour remains the compatibility
+  fallback. Body borders use one gap-free analytic fill/border primitive, and
+  title separators no longer blend against the transparent window surface.
+- Grouped slider and color-field focus outlines now cover only linked rows;
+  reversing the selection gesture removes rows before editing begins.
 
 - Square UI borders now use an explicitly inset square inner contour, avoiding
   corner rounding and single-pixel fill leaks when the corner radius is zero.
@@ -26,6 +50,22 @@ may change in subsequent `0.x` releases.
 - 2.5D sprites with depth and normal maps, lighting, instancing, and resident buffers.
 
 ### UI
+
+- Added external document-file monitoring and save-conflict coordination.
+  Clean documents can reload automatically in place; locally modified documents
+  require an application-provided Reload, Overwrite, Save As, or Cancel choice.
+  Reload preserves document and tab identity while resetting stale history and
+  rebuilding the view. Successful atomic saves are acknowledged so they do not
+  trigger false external-change reports.
+- Existing document views created during application startup can now be added
+  through `GLDocumentLifecycle.addDocument(document, view)`, enrolling them in
+  autosave and external file monitoring instead of bypassing lifecycle services.
+
+- Added reusable `GLColorPicker`, `GLColorChooser`, and `GLColorSlider` controls
+  with RGB/HSV/HSL/OKLab/OKLCH editing, contextual channel ramps, alpha previews,
+  gamut warnings, numeric input, undoable color gestures, and a screen eyedropper.
+  Editable theme-document color swatches open the picker; applying replaces the
+  source expression as one committed undoable edit.
 
 - Declarative `GLApplication` startup with event-driven GLJPanel and GLCanvas backends,
   automatic theme/input/localization stages, weighted custom background/AWT/GL
@@ -114,11 +154,38 @@ may change in subsequent `0.x` releases.
   bidirectional Swing Action selection adaptation, and bindings for buttons,
   checkboxes, and popup-menu items. Text formatting, code-editor commands, and
   showcase document history now use the shared action model.
+- Added optional, themeable code inlay hints with visual-only layout space,
+  programmatic and context-menu visibility control, a language-neutral provider
+  API, LSP conversion, and built-in parameter labels for RGB, HSV, HSL, OKLab,
+  OKLCH, and derived theme colors. The Java LSP profile requests all parameter
+  name hints, and the showcase includes Java and theme examples.
+- Inlay hints outside the edited range now remain visible while asynchronous
+  language intelligence computes a replacement snapshot; following anchors are
+  translated by the text-edit delta instead of briefly clearing every label.
+  Configuration functions also retain labels for temporarily empty argument
+  slots identified by their commas. Theme color previews now remain stable and
+  track source-range edits while refreshed color data is pending.
+- Java signature help now supplies provisional parameter inlays for empty call
+  slots when the available overload is unique or all overloads agree on that
+  parameter name. Ambiguous overloads wait for normal language-server resolution.
+- Fixed slider groups now distribute one continuous progress gradient over all
+  rows instead of confining the light-to-dark transition to the first slider.
+- Default font atlases now include every non-Latin-1 symbol used by the built-in
+  UI and diagnostic presentation, including call-hierarchy arrows, typographic
+  punctuation, navigation chevrons, and status marks.
 - Bounded mnemonic-underline shadow softness to prevent oversized blur blobs at
   extreme text-shadow settings.
 - Added asynchronous, cancellable `GLApplication` close requests and
   `GLDocumentLifecycle.prepareCloseAll()` for save/discard/cancel processing
   before application teardown.
+- Added opt-in document autosave with externally loadable idle and periodic
+  scheduling, atomic recovery snapshots outside authoritative files, startup
+  discovery and restoration, observable status, automatic lifecycle tracking,
+  and clean-shutdown cleanup. The GUI showcase includes a localized recovery
+  chooser and an editable external autosave configuration.
+- Added `GLDialogButtonBar` for preferred-width localized dialog actions.
+  Recovery, unsaved-changes, color-picker, and themed file-dialog buttons now
+  expand to their complete labels before falling back to ellipses.
 - Conventional focus traversal for interactive controls, including safe focus
   release when a control subtree is hidden or removed.
 - Typed color and metrics theme fragments with conflict-free bundle slots,
@@ -164,7 +231,10 @@ may change in subsequent `0.x` releases.
 ### Build and platforms
 
 - Java 17 minimum runtime and API level.
-- Maven multi-module build with separate core and examples artifacts.
+- Maven multi-module build with a core artifact, optional LSP and native SWT
+  file-dialog integrations, and a separate examples artifact.
 - JOGL 2.6.0 and platform-specific native libraries from Maven Central.
-- Maven Wrapper, source and Javadoc JARs, and automated smoke tests.
+- Maven Wrapper, source and Javadoc JARs, and automated smoke tests. Javadoc
+  generation uses the class path explicitly because GLSwing publishes an
+  automatic-module name without requiring JPMS modular compilation.
 - Apache License 2.0.

@@ -63,6 +63,11 @@ public interface GLCodeDiagnosticProvider {
 				GLCodeDocument document) {
 			return CompletableFuture.completedFuture(List.of());
 		}
+		/** Requests visual-only inline hints for the current document snapshot. */
+		default CompletionStage<List<GLCodeInlayHint>> inlayHints(
+				GLCodeDocument document) {
+			return CompletableFuture.completedFuture(List.of());
+		}
 		/** Resolves colors represented by source ranges in the document. */
 		default CompletionStage<List<GLCodeColor>> documentColors(
 				GLCodeDocument document) {

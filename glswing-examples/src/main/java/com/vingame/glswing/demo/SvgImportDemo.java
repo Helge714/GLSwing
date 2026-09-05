@@ -30,7 +30,7 @@ public final class SvgImportDemo {
 
 	private static void show() {
 		GLSvgDocument document = GLSvgDocument.loadResource(ICON_RESOURCE);
-		GLFrame frame = new GLFrame("GLSwingNext - SVG Import",
+		GLFrame frame = new GLFrame("GLSwing - SVG Import",
 				GLFrame.RenderingSettings.DEFAULT.withTargetFps(144));
 		frame.setGLClearColor(new Color(18, 23, 34));
 		frame.setMinimumSize(new Dimension(620, 520));

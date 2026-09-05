@@ -32,7 +32,7 @@ public final class NodeEditorDemo {
 	}
 
 	private static void show() {
-		GLFrame frame = new GLFrame("GLSwingNext - Node Editor",
+		GLFrame frame = new GLFrame("GLSwing - Node Editor",
 				GLFrame.RenderingSettings.DEFAULT.withTargetFps(144));
 		frame.setMinimumSize(new Dimension(760, 520));
 		frame.setSize(1080, 720);

@@ -54,23 +54,7 @@ public final class GLDocumentTabController implements AutoCloseable {
 			throw new IllegalArgumentException("Document and content required");
 		if (documents.containsKey(content))
 			throw new IllegalArgumentException("Tab content is already bound to a document");
-		boolean explicit = content.hasExplicitGLHistoryManager();
-		GLHistoryManager previous = explicit ? content.getGLHistoryManager() : null;
-		com.vingame.glswing.ui.GLTextDocument.Listener textListener = null;
-		java.util.concurrent.atomic.AtomicReference<
-				com.vingame.glswing.ui.GLTextDocument.Snapshot> persistedText = null;
-		if (content instanceof com.vingame.glswing.ui.GLTextArea textArea
-				&& document.content() == textArea.getDocument()) {
-			persistedText = new java.util.concurrent.atomic.AtomicReference<>(
-					textArea.getDocument().snapshot());
-			var baseline = persistedText;
-			textListener = (model, change) -> document.setTransientModified(content,
-					!model.snapshot().equals(baseline.get()));
-			textArea.getDocument().addDocumentListener(textListener);
-		}
-		documents.put(content, new Binding(document, explicit, previous,
-				textListener, persistedText));
-		content.setGLHistoryManager(document.historyManager());
+		bind(document, content);
 		attach(document);
 		try {
 			int index = tabs.addTab(title(document), content);
@@ -78,6 +62,30 @@ public final class GLDocumentTabController implements AutoCloseable {
 		} catch (RuntimeException failure) {
 			Binding binding = documents.remove(content);
 			restoreHistory(content, binding); detachIfUnused(document); throw failure;
+		}
+	}
+	/** Replaces an open document view while preserving its tab and selection. */
+	public boolean replaceDocumentView(GLDocument<?> document, GLContainer replacement) {
+		ensureOpen();
+		if (document == null || replacement == null)
+			throw new IllegalArgumentException("Document and replacement view required");
+		GLContainer previous = contentFor(document);
+		if (previous == null) return false;
+		if (documents.containsKey(replacement))
+			throw new IllegalArgumentException("Replacement view is already bound");
+		int index = tabs.indexOfComponent(previous);
+		Binding previousBinding = documents.remove(previous);
+		Binding replacementBinding = bind(document, replacement);
+		try {
+			tabs.setComponentAt(index, replacement);
+			restoreHistory(previous, previousBinding);
+			selectionChanged();
+			return true;
+		} catch (RuntimeException failure) {
+			documents.remove(replacement);
+			restoreHistory(replacement, replacementBinding);
+			documents.put(previous, previousBinding);
+			throw failure;
 		}
 	}
 	public GLDocument<?> selectedDocument() {
@@ -212,6 +220,27 @@ public final class GLDocumentTabController implements AutoCloseable {
 		}
 		if (binding.explicitHistory()) content.setGLHistoryManager(binding.previousHistory());
 		else content.clearGLHistoryManager();
+	}
+	private Binding bind(GLDocument<?> document, GLContainer content) {
+		boolean explicit = content.hasExplicitGLHistoryManager();
+		GLHistoryManager previous = explicit ? content.getGLHistoryManager() : null;
+		com.vingame.glswing.ui.GLTextDocument.Listener textListener = null;
+		java.util.concurrent.atomic.AtomicReference<
+				com.vingame.glswing.ui.GLTextDocument.Snapshot> persistedText = null;
+		if (content instanceof com.vingame.glswing.ui.GLTextArea textArea
+				&& document.content() == textArea.getDocument()) {
+			persistedText = new java.util.concurrent.atomic.AtomicReference<>(
+					textArea.getDocument().snapshot());
+			var baseline = persistedText;
+			textListener = (model, change) -> document.setTransientModified(content,
+					!model.snapshot().equals(baseline.get()));
+			textArea.getDocument().addDocumentListener(textListener);
+		}
+		Binding binding = new Binding(document, explicit, previous,
+				textListener, persistedText);
+		documents.put(content, binding);
+		content.setGLHistoryManager(document.historyManager());
+		return binding;
 	}
 	private String title(GLDocument<?> document) {
 		return (document.isModified() ? modifiedPrefix : "") + document.title();

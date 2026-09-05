@@ -33,7 +33,7 @@ public final class LayerDemo {
 		LayerPanel panel = new LayerPanel(status);
 		panel.setPreferredSize(new Dimension(900, 780));
 
-		JFrame frame = new JFrame("GLSwingNext - verschachtelte Layer");
+		JFrame frame = new JFrame("GLSwing - Nested Layers");
 		frame.setLayout(new BorderLayout());
 		frame.add(panel, BorderLayout.CENTER);
 		frame.add(status, BorderLayout.SOUTH);

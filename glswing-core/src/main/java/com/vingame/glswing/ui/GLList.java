@@ -364,7 +364,7 @@ public final class GLList<T> extends GLControl implements GLVirtualViewportConte
 	}
 	@Override protected void renderChildren(GLContext2D context) {
 		GLListStyle style = getGLStyle();
-		float border = style.borderWidth();
+		float border = layoutBorderWidth(style.borderWidth());
 		float width = Math.max(0, getWidth() - border * 2);
 		float height = Math.max(0, getHeight() - border * 2);
 		if (width > 0 && height > 0) {
@@ -377,14 +377,14 @@ public final class GLList<T> extends GLControl implements GLVirtualViewportConte
 				context.endClip();
 			}
 		}
-		if (style.borderWidth() > 0)
+		if (layoutBorderWidth(style.borderWidth()) > 0)
 			context.drawUIRoundRect(0, 0, getWidth(), getHeight(),
-					contentCornerRadius(style), style.borderWidth(), style.borderColor(),
+					contentCornerRadius(style), layoutBorderWidth(style.borderWidth()), style.borderColor(),
 					GLStroke.WidthSpace.SCREEN);
 	}
 	private float contentCornerRadius(GLListStyle style) {
 		GLScrollPane pane = containingScrollPane();
-		return pane != null && pane.getContent() == this ? 0 : style.cornerRadius();
+		return pane != null && pane.getContent() == this ? 0 : layoutCornerRadius(style.cornerRadius());
 	}
 	@Override protected void controlMousePressed(GLMouseEvent event) {
 		if (event.getButton() == MouseEvent.BUTTON1 && event.hasLocalPosition()
@@ -509,9 +509,9 @@ public final class GLList<T> extends GLControl implements GLVirtualViewportConte
 	}
 	private void updatePreferredSize() {
 		GLListStyle style = getGLStyle();
-		float height = style.borderWidth() * 2 + model.getSize() * getRowHeight();
+		float height = layoutBorderWidth(style.borderWidth()) * 2 + model.getSize() * getRowHeight();
 		setIntrinsicPreferredGLSize(new GLSize(style.preferredWidth(),
-				Math.max(style.borderWidth() * 2, height)));
+				Math.max(layoutBorderWidth(style.borderWidth()) * 2, height)));
 	}
 	private void synchronizeVisibleCells() {
 		if (model == null) return;

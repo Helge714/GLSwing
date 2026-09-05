@@ -162,7 +162,7 @@ public final class GLScrollPane extends GLContainer {
 			return;
 		GLScrollPaneStyle style = getGLStyle();
 		context.fillAndDrawUIRoundRect(0, 0, width, height,
-				style.cornerRadius(), style.borderWidth(), style.background(),
+				layoutCornerRadius(style.cornerRadius()), layoutBorderWidth(style.borderWidth()), style.background(),
 				style.border(), GLStroke.WidthSpace.SCREEN);
 	}
 
@@ -243,9 +243,9 @@ public final class GLScrollPane extends GLContainer {
 		}
 	}
 
-	private static GLInsets contentInsets(GLScrollPaneStyle style) {
+	private GLInsets contentInsets(GLScrollPaneStyle style) {
 		GLInsets padding = style.padding();
-		float border = style.borderWidth();
+		float border = layoutBorderWidth(style.borderWidth());
 		return new GLInsets(Math.max(padding.top(), border),
 				Math.max(padding.left(), border),
 				Math.max(padding.bottom(), border),

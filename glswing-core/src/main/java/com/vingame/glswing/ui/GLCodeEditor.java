@@ -17,6 +17,7 @@ import com.vingame.glswing.input.GLPointerCursor;
 import com.vingame.glswing.layout.GLInsets;
 import com.vingame.glswing.rendering.GLContext2D;
 import com.vingame.glswing.rendering.GLFont;
+import com.vingame.glswing.rendering.GLStroke;
 
 /** Multiline source editor with code navigation and lexical or semantic colors. */
 public class GLCodeEditor extends GLTextArea {
@@ -24,6 +25,15 @@ public class GLCodeEditor extends GLTextArea {
 	private volatile List<GLCodeToken> tokens = List.of();
 	private volatile List<GLCodeSemanticToken> semanticTokens = List.of();
 	private volatile List<GLCodeColor> documentColors = List.of();
+	private GLPipettePreview colorPickerPipettePreview = GLPipettePreview.DEFAULT;
+
+	/** Configures the eyedropper preview in color pickers opened from this editor. */
+	public final void setColorPickerPipettePreview(GLPipettePreview preview) {
+		colorPickerPipettePreview = java.util.Objects.requireNonNull(preview);
+	}
+	public final GLPipettePreview getColorPickerPipettePreview() { return colorPickerPipettePreview; }
+	private volatile List<GLCodeInlayHint> inlayHints = List.of();
+	private List<GLCodeInlayHint> signatureInlayHints = List.of();
 	private volatile List<GLCodeDiagnostic> diagnostics = List.of();
 	private List<GLCodeDiagnostic> coreDiagnostics = List.of();
 	private final boolean coreDiagnosticsEnabled;
@@ -36,6 +46,7 @@ public class GLCodeEditor extends GLTextArea {
 	private final Timer diagnosticTimer;
 	private final Timer semanticTokenTimer;
 	private final Timer documentColorTimer;
+	private final Timer inlayHintTimer;
 	private final Timer hoverTimer;
 	private final Timer navigationDismissTimer;
 	private com.vingame.glswing.input.GLMouseEvent hoverEvent;
@@ -69,6 +80,9 @@ public class GLCodeEditor extends GLTextArea {
 	private java.util.concurrent.CompletableFuture<?> semanticTokenFuture;
 	private long documentColorRequest;
 	private java.util.concurrent.CompletableFuture<?> documentColorFuture;
+	private long inlayHintRequest;
+	private java.util.concurrent.CompletableFuture<?> inlayHintFuture;
+	private boolean inlayHintsVisible = true;
 	private GLCodeNavigationHandler navigationHandler = location -> { };
 	private java.util.function.Consumer<GLCodeNavigationStatus> navigationStatusListener = value -> { };
 	private java.util.function.Consumer<GLCodeCompletionStatus> completionStatusListener = value -> { };
@@ -114,6 +128,8 @@ public class GLCodeEditor extends GLTextArea {
 		semanticTokenTimer.setRepeats(false);
 		documentColorTimer = new Timer(180, event -> requestDocumentColors());
 		documentColorTimer.setRepeats(false);
+		inlayHintTimer = new Timer(220, event -> requestInlayHints());
+		inlayHintTimer.setRepeats(false);
 		hoverTimer = new Timer(250, event -> requestHover());
 		hoverTimer.setRepeats(false);
 		navigationDismissTimer = new Timer(500,
@@ -143,13 +159,17 @@ public class GLCodeEditor extends GLTextArea {
 			coreDiagnostics = List.of();
 			providerDiagnostics = List.of();
 			semanticTokens = retainUnaffectedSemanticTokens(semanticTokens, change);
-			documentColors = List.of();
+			documentColors = retainDocumentColors(documentColors, change);
+			inlayHints = retainInlayHints(inlayHints, change);
+			signatureInlayHints = retainInlayHints(signatureInlayHints, change);
+			invalidateRowLayout();
 			mergeDiagnostics();
 			retokenize();
 			diagnosticTimer.restart();
 			updateDiagnosticProvider();
 			semanticTokenTimer.restart();
 			documentColorTimer.restart();
+			if (inlayHintsVisible) inlayHintTimer.restart();
 		});
 		setTextColorProvider(this::syntaxColor);
 		GLAction formatAction = editableCodeAction(GLInputActions.CODE_FORMAT,
@@ -165,8 +185,13 @@ public class GLCodeEditor extends GLTextArea {
 				GLInputActions.CODE_GO_TO_DEFINITION)
 				.textKey(GLUiKeys.CODE_GO_TO_DEFINITION)
 				.onAction(this::goToDefinition).build();
+		GLAction inlayHintsAction = GLAction.builder(
+				GLInputActions.CODE_TOGGLE_INLAY_HINTS)
+				.textKey(GLUiKeys.CODE_SHOW_INLAY_HINTS)
+				.selectedWhen(this::isInlayHintsVisible)
+				.onAction(() -> setInlayHintsVisible(!isInlayHintsVisible())).build();
 		codeActions.add(formatAction).add(commentAction).add(uncommentAction)
-				.add(organizeImportsAction).add(definitionAction);
+				.add(organizeImportsAction).add(definitionAction).add(inlayHintsAction);
 		formatItem = codeMenu.addItem(formatAction);
 		codeMenu.addSeparator();
 		commentItem = codeMenu.addItem(commentAction);
@@ -175,6 +200,8 @@ public class GLCodeEditor extends GLTextArea {
 		organizeImportsItem = codeMenu.addItem(organizeImportsAction);
 		codeMenu.addSeparator();
 		definitionItem = codeMenu.addItem(definitionAction);
+		codeMenu.addSeparator();
+		codeMenu.addItem(inlayHintsAction);
 		updateCodeMenuText();
 		retokenize();
 		if (coreDiagnosticsEnabled) validateSource();
@@ -201,6 +228,20 @@ public class GLCodeEditor extends GLTextArea {
 	public final List<GLCodeSemanticToken> getSemanticTokens() { return semanticTokens; }
 	/** Returns the latest immutable source-color snapshot from the provider. */
 	public final List<GLCodeColor> getDocumentColors() { return documentColors; }
+	/** Returns the latest immutable visual-only hint snapshot. */
+	public final List<GLCodeInlayHint> getInlayHints() { return inlayHints; }
+	/** Returns whether visual-only parameter and type hints are displayed. */
+	public final boolean isInlayHintsVisible() { return inlayHintsVisible; }
+	/** Shows or hides parameter and type hints without changing document text. */
+	public final void setInlayHintsVisible(boolean value) {
+		if (inlayHintsVisible == value) return;
+		inlayHintsVisible = value;
+		if (value) requestInlayHints();
+		else inlayHintTimer.stop();
+		codeActions.refresh();
+		invalidateRowLayout();
+		invalidateRecording();
+	}
 	public final GLCodeDiagnosticProvider getDiagnosticProvider() { return diagnosticProvider; }
 	public final URI getDocumentUri() { return documentUri; }
 	/**
@@ -956,6 +997,26 @@ public class GLCodeEditor extends GLTextArea {
 		if (event.getButton() == java.awt.event.MouseEvent.BUTTON1 && sourceColor != null) {
 			super.controlMousePressed(event);
 			select(sourceColor.start(), sourceColor.end());
+			if (isEditable() && getLanguage() == GLCodeLanguages.GLTHEME) {
+				String before = getText();
+				String literal = before.substring(sourceColor.start(), sourceColor.end());
+				GLColorModel model = GLColorModel.RGB;
+				for (GLColorModel candidate : GLColorModel.values())
+					if (literal.toLowerCase(java.util.Locale.ROOT).startsWith(candidate.name().toLowerCase(java.util.Locale.ROOT)+"(")) model=candidate;
+				GLColorChooser.show(this, sourceColor.color(), model, colorPickerPipettePreview, picker -> {
+					if (!isEditable() || !before.equals(getText()) || picker.getColor().equals(sourceColor.color())) return;
+					select(sourceColor.start(), sourceColor.end());
+					String replacement=picker.getColorExpression();
+					if(literal.startsWith("#")) {
+						java.awt.Color c=picker.getColor();
+						replacement=String.format(java.util.Locale.ROOT,"#%02X%02X%02X",c.getRed(),c.getGreen(),c.getBlue());
+						if(c.getAlpha()!=255 || literal.length()==9) replacement+=String.format(java.util.Locale.ROOT,"%02X",c.getAlpha());
+					}
+					commitEditingSession();
+					replaceSelection(replacement);
+					commitEditingSession();
+				});
+			}
 			event.consume();
 			return;
 		}
@@ -1212,6 +1273,56 @@ public class GLCodeEditor extends GLTextArea {
 		}
 		return List.copyOf(retained);
 	}
+	/**
+	 * Keeps visual hints anchored while a replacement provider snapshot is
+	 * pending. Hints after an edit follow its offset delta; only anchors removed
+	 * by the edit disappear immediately.
+	 */
+	private static List<GLCodeInlayHint> retainInlayHints(
+			List<GLCodeInlayHint> current, GLTextDocument.Change change) {
+		if (current.isEmpty()) return current;
+		int editStart = change.offset();
+		int oldEnd = editStart + change.removedText().length();
+		int delta = change.insertedText().length() - change.removedText().length();
+		ArrayList<GLCodeInlayHint> retained = new ArrayList<>(current.size());
+		for (GLCodeInlayHint hint : current) {
+			if (hint.offset() <= editStart) {
+				retained.add(hint);
+			} else if (hint.offset() >= oldEnd) {
+				int offset = hint.offset() + delta;
+				if (offset >= 0)
+					retained.add(new GLCodeInlayHint(offset, hint.label(), hint.kind()));
+			}
+		}
+		return List.copyOf(retained);
+	}
+	/** Keeps the last valid color swatches stable during the provider debounce. */
+	private static List<GLCodeColor> retainDocumentColors(
+			List<GLCodeColor> current, GLTextDocument.Change change) {
+		if (current.isEmpty()) return current;
+		int editStart = change.offset();
+		int oldEnd = editStart + change.removedText().length();
+		int delta = change.insertedText().length() - change.removedText().length();
+		boolean insertion = change.removedText().isEmpty();
+		ArrayList<GLCodeColor> retained = new ArrayList<>(current.size());
+		for (GLCodeColor color : current) {
+			int start = color.start(), end = color.end();
+			if (insertion && editStart >= start && editStart <= end) {
+				end += delta;
+			} else if (end <= editStart) {
+				// Unchanged range before the edit.
+			} else if (start >= oldEnd) {
+				start += delta; end += delta;
+			} else if (editStart >= start && oldEnd <= end) {
+				end += delta;
+			} else {
+				continue;
+			}
+			if (start >= 0 && end > start)
+				retained.add(new GLCodeColor(start, end, color.color()));
+		}
+		return List.copyOf(retained);
+	}
 	private void validateSource() {
 		if (!coreDiagnosticsEnabled) return;
 		coreDiagnostics = language.diagnose(getText()).stream()
@@ -1237,6 +1348,7 @@ public class GLCodeEditor extends GLTextArea {
 		diagnosticSession = diagnosticProvider.open(snapshot, this::acceptProviderDiagnostics);
 		requestSemanticTokens();
 		requestDocumentColors();
+		requestInlayHints();
 	}
 	private void updateDiagnosticProvider() {
 		if (diagnosticSession != null) diagnosticSession.update(diagnosticDocument());
@@ -1273,6 +1385,13 @@ public class GLCodeEditor extends GLTextArea {
 		if (documentColorFuture != null) documentColorFuture.cancel(false);
 		documentColorFuture = null;
 		documentColors = List.of();
+		inlayHintTimer.stop();
+		inlayHintRequest++;
+		if (inlayHintFuture != null) inlayHintFuture.cancel(false);
+		inlayHintFuture = null;
+		inlayHints = List.of();
+		signatureInlayHints = List.of();
+		invalidateRowLayout();
 		definitionRequest++;
 		if (definitionFuture != null) definitionFuture.cancel(false);
 		definitionFuture = null;
@@ -1362,8 +1481,49 @@ public class GLCodeEditor extends GLTextArea {
 		stage.whenComplete((signatures, failure) -> EventQueue.invokeLater(() -> {
 			if (failure != null || request != signatureRequest || version != documentVersion
 					|| offset != getCaretPosition()) return;
-			showSignatureHelp(signatures == null ? List.of() : signatures);
+			List<GLCodeSignature> received = signatures == null ? List.of() : signatures;
+			installUnambiguousSignatureHint(received, offset);
+			showSignatureHelp(received);
 		}));
+	}
+	private void installUnambiguousSignatureHint(List<GLCodeSignature> signatures,
+			int offset) {
+		if (!inlayHintsVisible || signatures.isEmpty()) return;
+		int parameter = signatures.stream().mapToInt(GLCodeSignature::activeParameter)
+				.filter(value -> value >= 0).findFirst().orElse(-1);
+		if (parameter < 0) return;
+		String common = null;
+		for (GLCodeSignature signature : signatures) {
+			if (parameter >= signature.parameters().size()) return;
+			String name = javaParameterName(signature.parameters().get(parameter));
+			if (name == null) return;
+			if (common == null) common = name;
+			else if (!common.equals(name)) return;
+		}
+		GLCodeInlayHint hint = new GLCodeInlayHint(offset, common + ":");
+		ArrayList<GLCodeInlayHint> provisional = new ArrayList<>(signatureInlayHints);
+		provisional.removeIf(value -> value.offset() == offset);
+		provisional.add(hint);
+		provisional.sort(java.util.Comparator.comparingInt(GLCodeInlayHint::offset));
+		signatureInlayHints = List.copyOf(provisional);
+		inlayHints = mergeInlayHints(inlayHints, List.of(hint));
+		invalidateRowLayout();
+		invalidateRecording();
+	}
+	private static String javaParameterName(String label) {
+		if (label == null || label.isBlank()) return null;
+		java.util.regex.Matcher identifiers = java.util.regex.Pattern.compile(
+				"[\\p{javaJavaIdentifierStart}][\\p{javaJavaIdentifierPart}]*").matcher(label);
+		String last = null;
+		int count = 0;
+		while (identifiers.find()) { last = identifiers.group(); count++; }
+		if (last == null || (count == 1 && Character.isUpperCase(last.codePointAt(0))))
+			return null;
+		return switch (last) {
+		case "byte", "short", "int", "long", "float", "double", "boolean", "char",
+				"void", "this", "super" -> null;
+		default -> last;
+		};
 	}
 	private void showSignatureHelp(List<GLCodeSignature> signatures) {
 		signatureMenu.close();
@@ -1463,6 +1623,122 @@ public class GLCodeEditor extends GLTextArea {
 			invalidateRowLayout();
 			invalidateRecording();
 		}));
+	}
+	private void requestInlayHints() {
+		if (!inlayHintsVisible || diagnosticSession == null || documentUri == null)
+			return;
+		long request = ++inlayHintRequest;
+		int version = documentVersion;
+		if (inlayHintFuture != null) inlayHintFuture.cancel(false);
+		var stage = diagnosticSession.inlayHints(diagnosticDocument());
+		inlayHintFuture = stage.toCompletableFuture();
+		stage.whenComplete((result, failure) -> EventQueue.invokeLater(() -> {
+			if (request != inlayHintRequest || version != documentVersion) return;
+			inlayHintFuture = null;
+			if (failure != null) return;
+			List<GLCodeInlayHint> received = (result == null ? java.util.stream.Stream
+					.<GLCodeInlayHint>empty() : result.stream())
+					.filter(value -> value.offset() <= getDocument().length())
+					.sorted(java.util.Comparator.comparingInt(GLCodeInlayHint::offset))
+					.toList();
+			signatureInlayHints = signatureInlayHints.stream()
+					.filter(value -> validSignatureHintAnchor(getText(), value.offset()))
+					.filter(value -> received.stream().noneMatch(provider ->
+							provider.offset() == value.offset()))
+					.toList();
+			inlayHints = mergeInlayHints(received, signatureInlayHints);
+			invalidateRowLayout();
+			invalidateRecording();
+		}));
+	}
+	private static boolean validSignatureHintAnchor(String source, int offset) {
+		if (offset < 0 || offset > source.length()) return false;
+		int previous = offset - 1;
+		while (previous >= 0 && Character.isWhitespace(source.charAt(previous))) previous--;
+		return previous >= 0 && (source.charAt(previous) == '(' || source.charAt(previous) == ',');
+	}
+	private static List<GLCodeInlayHint> mergeInlayHints(List<GLCodeInlayHint> primary,
+			List<GLCodeInlayHint> additional) {
+		ArrayList<GLCodeInlayHint> merged = new ArrayList<>(primary);
+		for (GLCodeInlayHint hint : additional)
+			if (merged.stream().noneMatch(existing -> existing.offset() == hint.offset()))
+				merged.add(hint);
+		merged.sort(java.util.Comparator.comparingInt(GLCodeInlayHint::offset));
+		return List.copyOf(merged);
+	}
+	@Override protected int nextInlineDecorationOffset(int startInclusive,
+			int endExclusive) {
+		if (!inlayHintsVisible || startInclusive >= endExclusive) return -1;
+		int index = firstInlayAtOrAfter(startInclusive);
+		return index < inlayHints.size() && inlayHints.get(index).offset() < endExclusive
+				? inlayHints.get(index).offset() : -1;
+	}
+	@Override protected float inlineDecorationWidth(GLFont font, int offset) {
+		if (!inlayHintsVisible) return 0;
+		GLFont hintFont = inlayFont(font);
+		float padding = inlayMetric("padding", 4);
+		float gap = inlayMetric("gap", 3);
+		float width = 0;
+		for (int index = firstInlayAtOrAfter(offset); index < inlayHints.size()
+				&& inlayHints.get(index).offset() == offset; index++) {
+			GLCodeInlayHint hint = inlayHints.get(index);
+			width += gap + hintFont.measureText(hint.label()) + padding * 2;
+		}
+		return width;
+	}
+	@Override protected void drawInlineDecoration(GLContext2D context, GLFont font,
+			int offset, float x, float top, float baseline, float lineHeight) {
+		GLFont hintFont = inlayFont(font);
+		GLThemeValues values = getGLTheme().values();
+		Color background = values.getColor("codeEditor.inlay.background",
+				new Color(67, 69, 72));
+		Color border = values.getColor("codeEditor.inlay.border",
+				new Color(90, 93, 97));
+		Color text = values.getColor("codeEditor.inlay.text",
+				new Color(187, 191, 196));
+		float padding = inlayMetric("padding", 4);
+		float gap = inlayMetric("gap", 3);
+		float radius = inlayMetric("radius", 3);
+		float borderWidth = inlayMetric("borderWidth", 1);
+		float boxHeight = Math.min(Math.max(1, lineHeight - 4),
+				hintFont.getLineHeight() + 2);
+		float boxY = top + (lineHeight - boxHeight) * 0.5f;
+		float cursor = x;
+		for (int index = firstInlayAtOrAfter(offset); index < inlayHints.size()
+				&& inlayHints.get(index).offset() == offset; index++) {
+			GLCodeInlayHint hint = inlayHints.get(index);
+			float boxWidth = hintFont.measureText(hint.label()) + padding * 2;
+			float boxX = cursor + gap;
+			if (borderWidth > 0)
+				context.fillAndDrawUIRoundRect(boxX, boxY, boxWidth, boxHeight,
+						radius, borderWidth, background, border,
+						GLStroke.WidthSpace.SCREEN);
+			else context.fillUIRoundRect(boxX, boxY, boxWidth, boxHeight,
+					radius, background);
+			float textBaseline = boxY + (boxHeight - hintFont.getLineHeight()) * 0.5f
+					+ hintFont.getAscent();
+			context.drawUIText(hintFont, hint.label(), boxX + padding,
+					textBaseline, text);
+			cursor = boxX + boxWidth;
+		}
+	}
+	private int firstInlayAtOrAfter(int offset) {
+		int low = 0, high = inlayHints.size();
+		while (low < high) {
+			int middle = (low + high) >>> 1;
+			if (inlayHints.get(middle).offset() < offset) low = middle + 1;
+			else high = middle;
+		}
+		return low;
+	}
+	private GLFont inlayFont(GLFont base) {
+		float scale = Math.max(0.5f, Math.min(1, inlayMetric("fontScale", 0.78f)));
+		return getGLFont(new GLFontSpec(base.getFamily(), GLFont.PLAIN,
+				Math.max(6, base.getSize() * scale)));
+	}
+	private float inlayMetric(String suffix, float fallback) {
+		return Math.max(0, getGLTheme().values().getFloat(
+				"codeEditor.inlay." + suffix, fallback));
 	}
 	private Color syntaxColor(GLTextDocument document, int offset, Color fallback) {
 		if (offset >= navigationWordStart && offset < navigationWordEnd)

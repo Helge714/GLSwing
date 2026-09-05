@@ -103,6 +103,18 @@ public class GLSlider extends GLControl {
 		updatePresentation(true);
 	}
 
+	/** Constructor for specialized bounded slider presentations. */
+	protected GLSlider(String text, double minimum, double maximum, double value) {
+		this(text, Mode.FIXED, minimum, maximum, value);
+		requireFinite(minimum, "Minimum");
+		requireFinite(maximum, "Maximum");
+		requireFinite(value, "Value");
+		if (!(maximum > minimum))
+			throw new IllegalArgumentException("Slider maximum must exceed minimum");
+		this.value = clamp(value, minimum, maximum);
+		defaultValue = this.value;
+	}
+
 	public static GLSlider fixed(String text, double minimum,
 			double maximum, double value) {
 		requireFinite(minimum, "Minimum");
@@ -367,15 +379,15 @@ public class GLSlider extends GLControl {
 			return;
 
 		GLCornerRadii radii = sliderGroup == null
-				? GLCornerRadii.all(style.cornerRadius())
-				: sliderGroup.cornerRadii(this, style.cornerRadius());
-		float border = sliderGroup == null ? style.borderWidth() : 0;
+				? GLCornerRadii.all(layoutCornerRadius(style.cornerRadius()))
+				: sliderGroup.cornerRadii(this, layoutCornerRadius(style.cornerRadius()));
+		float border = sliderGroup == null ? layoutBorderWidth(style.borderWidth()) : 0;
 		boolean compositeFixed = sliderGroup == null && mode == Mode.FIXED
 				&& border > 0;
 		if (!compositeFixed) context.withParameters(backgroundParameters, () -> {
 			if (border > 0)
 				context.fillAndDrawUIRoundRect(0, 0, width, height,
-						style.cornerRadius(), border, Color.WHITE,
+						layoutCornerRadius(style.cornerRadius()), border, Color.WHITE,
 						style.borderColor(), GLStroke.WidthSpace.SCREEN);
 			else
 				context.fillUIRoundRect(0, 0, width, height, radii, Color.WHITE);
@@ -383,10 +395,12 @@ public class GLSlider extends GLControl {
 
 		if (mode == Mode.FIXED) {
 			float progress = (float) ((value - minimum) / (maximum - minimum));
-			Color progressDark = style.progressDarkColor();
-			Color progressLight = sliderGroup == null
-					|| sliderGroup.usesProgressGradient(this)
-					? style.progressLightColor() : progressDark;
+			Color progressLight = sliderGroup == null ? style.progressLightColor()
+					: sliderGroup.progressColor(this, style.progressLightColor(),
+							style.progressDarkColor(), false);
+			Color progressDark = sliderGroup == null ? style.progressDarkColor()
+					: sliderGroup.progressColor(this, style.progressLightColor(),
+							style.progressDarkColor(), true);
 			if (compositeFixed) {
 				GLControlState presentationState = groupGesturePressed && isEnabled()
 						? GLControlState.PRESSED : getControlState();
@@ -394,7 +408,7 @@ public class GLSlider extends GLControl {
 				Color borderColor = validationFeedbackActive
 						? getGLTheme().textEditorStyle().invalidBorderColor()
 						: style.borderColor();
-				context.fillUISlider(0, 0, width, height, style.cornerRadius(),
+				context.fillUISlider(0, 0, width, height, layoutCornerRadius(style.cornerRadius()),
 						progress, border, style.background(presentationState),
 						withOpacity(progressLight, progressOpacity),
 						withOpacity(progressDark, progressOpacity), borderColor,
@@ -409,7 +423,7 @@ public class GLSlider extends GLControl {
 							height - progressInset * 2);
 					context.fillUIInnerProgressRoundRect(progressInset, progressInset,
 							progressWidth, progressHeight,
-							Math.max(0, style.cornerRadius() - progressInset), progress,
+							Math.max(0, layoutCornerRadius(style.cornerRadius()) - progressInset), progress,
 							progressLight, progressDark);
 				} else
 					context.fillUIProgressRoundRect(0, 0, width, height,
@@ -425,7 +439,7 @@ public class GLSlider extends GLControl {
 				&& validationFeedbackActive)
 			context.withParameters(borderParameters, () ->
 					context.drawUIRoundRect(0, 0, width, height,
-							style.cornerRadius(), style.borderWidth(), Color.WHITE,
+							layoutCornerRadius(style.cornerRadius()), layoutBorderWidth(style.borderWidth()), Color.WHITE,
 							GLStroke.WidthSpace.SCREEN));
 
 		recordText(context, style, width, height);
@@ -444,7 +458,7 @@ public class GLSlider extends GLControl {
 		float buttonWidth = Math.min(style.arrowButtonWidth(),
 				availableHalfWidth);
 		float buttonHeight = Math.max(1, getHeight() - inset * 2);
-		float effectiveSliderRadius = Math.min(style.cornerRadius(),
+		float effectiveSliderRadius = Math.min(layoutCornerRadius(style.cornerRadius()),
 				Math.min(getWidth(), getHeight()) * 0.5f);
 		float outerRadius = Math.max(0,
 				Math.min(buttonHeight * 0.5f, effectiveSliderRadius - inset));
