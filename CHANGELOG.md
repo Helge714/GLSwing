@@ -232,9 +232,12 @@ may change in subsequent `0.x` releases.
 
 - Java 17 minimum runtime and API level.
 - Maven multi-module build with a core artifact, optional LSP and native SWT
-  file-dialog integrations, and a separate examples artifact.
+  file-dialog integrations, a separate examples artifact, and an isolated
+  packaged-artifact consumer test.
 - JOGL 2.6.0 and platform-specific native libraries from Maven Central.
 - Maven Wrapper, source and Javadoc JARs, and automated smoke tests. Javadoc
   generation uses the class path explicitly because GLSwing publishes an
   automatic-module name without requiring JPMS modular compilation.
+- Opt-in source and binary API compatibility checks for release candidates;
+  implementation-only rendering packages are excluded from the supported API.
 - Apache License 2.0.

@@ -185,7 +185,7 @@ Useful starting points include:
 
 ## Building release artifacts
 
-The project is a Maven reactor with four modules:
+The project is a Maven reactor with five modules:
 
 | Module | Artifact |
 |---|---|
@@ -193,6 +193,7 @@ The project is a Maven reactor with four modules:
 | `glswing-lsp` | Optional Language Server Protocol integration |
 | `glswing-filedialogs-swt` | Optional native file-dialog backend |
 | `glswing-examples` | Demonstrations and benchmarks |
+| `glswing-consumer-smoke` | Isolated verification of the packaged public artifacts |
 
 Run the release profile to create the binary, source, and Javadoc JARs:
 
@@ -202,7 +203,13 @@ Run the release profile to create the binary, source, and Javadoc JARs:
 
 Each module writes its artifacts to its own `target` directory. Applications
 need only `glswing-core`; add the LSP or SWT artifact when that integration is
-required. The examples module is not a runtime dependency.
+required. The examples and consumer-smoke modules are not runtime dependencies.
+The consumer smoke test installs the packaged artifacts into a temporary local
+repository, then compiles and runs an independent Maven project against them.
+
+For releases after `0.1.0`, run the optional compatibility profile against the
+intended published predecessor. See [Public API and compatibility](docs/api-compatibility.md)
+for the supported package boundary and command line.
 
 ## License
 

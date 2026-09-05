@@ -20,6 +20,7 @@ lifecycle, extension points, and the behavior of the standard controls.
 | Embed OpenGL rendering in Swing | [Components and hosts](ui-framework/components.md#hosts) |
 | Draw shapes, text, images, or SVG content | [Drawing commands](graphics-pipeline/drawing.md) |
 | Build an interface with standard controls | [Controls](ui-framework/controls.md) |
+| Understand the supported API and release compatibility rules | [Public API and compatibility](api-compatibility.md) |
 | Arrange components | [Layouts and sizing](ui-framework/layout.md) |
 | Apply blur, shadows, outlines, or group opacity | [Layers and effects](graphics-pipeline/layers-effects.md) |
 | Cache expensive geometry | [Recordings](graphics-pipeline/recording.md) |
