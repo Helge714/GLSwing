@@ -88,6 +88,16 @@ public final class GLThemeCodeSupport {
 			for (String source : List.of("source", "regular", "bold", "italic", "boldItalic"))
 				addIfMissing(builder, existing, prefix + "." + source, ValueType.PATH);
 		}
+
+		for (String key : List.of("button.cornerRadius", "button.borderWidth",
+				"button.height", "checkBox.cornerRadius", "checkBox.borderWidth",
+				"slider.cornerRadius", "slider.borderWidth", "slider.height",
+				"textEditor.borderWidth", "comboBox.cornerRadius",
+				"comboBox.borderWidth", "comboBox.height"))
+			addIfMissing(builder, existing, key, ValueType.NUMBER);
+		for (String key : List.of("button.padding", "slider.padding",
+				"comboBox.padding"))
+			addIfMissing(builder, existing, key, ValueType.INSETS);
 	}
 
 	private static void addIfMissing(GLCodePropertySchema.Builder builder,
@@ -110,8 +120,8 @@ public final class GLThemeCodeSupport {
 				if (values.containsKey(directive)) result.add(issue(directive,
 						"Theme fragments cannot inherit or import other themes"));
 			for (String key : values.keySet()) {
-				if ("theme.type".equals(key)) continue;
-				boolean color = isColorOrFontKey(key);
+				if ("theme.type".equals(key) || "theme.name".equals(key)) continue;
+				boolean color = GLThemeKeyClassifier.isColorOrFontKey(key);
 				if ("colors".equals(type) && !color)
 					result.add(issue(key, key + " is not permitted in a color theme"));
 				else if ("metrics".equals(type) && color)
@@ -123,18 +133,6 @@ public final class GLThemeCodeSupport {
 
 	private static ValidationIssue issue(String key, String message) {
 		return new ValidationIssue(key, GLCodeDiagnostic.Severity.ERROR, message);
-	}
-
-	private static boolean isColorOrFontKey(String key) {
-		String lower = key.toLowerCase(Locale.ROOT);
-		if (lower.startsWith("palette.") || lower.startsWith("state.")
-				|| lower.startsWith("font.") || lower.contains(".font.")) return true;
-		String leaf = lower.substring(lower.lastIndexOf('.') + 1);
-		if (leaf.matches(".*(width|height|radius|padding|gap|size|length|distance|"
-				+ "tolerance|factor|inset|offset|softness|thickness)$")) return false;
-		return leaf.matches(".*(background|foreground|text|border|focus|selection|"
-				+ "caret|invalid|separator|arrow|progress|track|thumb|shadow|accent|"
-				+ "color|disabled|hover|pressed|normal|surface|active|port|fill|tab).*");
 	}
 
 	private static ValueType inferType(String key, String value) {

@@ -27,7 +27,7 @@ public final class GLLocalizationThemeSelfTest {
 		testColors();
 		testBundledThemes();
 		testFileThemeAndReferences();
-		testMissingFilePolicy();
+			testMissingFilePolicy();
 		System.out.println("GL localization/theme self-test passed.");
 	}
 
@@ -209,10 +209,11 @@ public final class GLLocalizationThemeSelfTest {
 					custom.derivedFloat=derive(${custom.brand}, alpha=0.25f)
 					custom.relative=derive(${custom.brand}, alpha*=50%)
 					custom.shifted=derive(${custom.brand}, hue+=120deg, value*=90%)
+					custom.hex = #112233 # Inline comments do not consume hex colors
 					palette.accent=${custom.brand}
 					button.pressedLight=${custom.brand}
 					button.pressedDark=${custom.brand}
-					button.cornerRadius=11
+					button.cornerRadius=11 # Compact button geometry
 					textShadow.color=rgba(0, 0, 0, 160)
 					textShadow.offsetX=1.5
 					textShadow.offsetY=2
@@ -220,6 +221,7 @@ public final class GLLocalizationThemeSelfTest {
 					textShadow.offsetSpace=screen
 					button.textShadow.offsetY=3
 					button.textShadow.offsetSpace=local
+					label.textShadow.on=false
 					slider.pressed=${palette.accent}
 					nodeEditor.connectionCurveTolerance=0.08
 					nodeEditor.connectionHandleFactor=0.8
@@ -229,6 +231,9 @@ public final class GLLocalizationThemeSelfTest {
 			Color brand = new Color(1f, 0.5f, 0.5f, 0.75f);
 			check(brand.equals(loaded.values().getColor("custom.brand", Color.BLACK)),
 					"Custom theme token was not retained");
+			check(new Color(0x11, 0x22, 0x33).equals(
+					loaded.values().getColor("custom.hex", Color.BLACK)),
+					"Inline comment parsing consumed a hexadecimal color");
 			check(new Color(255, 128, 128, 64).equals(
 					loaded.values().getColor("custom.derived", Color.BLACK))
 					&& new Color(255, 128, 128, 64).equals(
@@ -248,12 +253,7 @@ public final class GLLocalizationThemeSelfTest {
 							+ loaded.sliderStyle().pressedBackground());
 			check(loaded.buttonStyle().cornerRadius() == 11,
 					"Component-specific corner radius was not applied");
-			check(loaded.textShadow("label").color().getAlpha() == 160
-					&& loaded.textShadow("label").offsetX() == 1.5f
-					&& loaded.textShadow("label").offsetY() == 2
-					&& loaded.textShadow("label").softness() == 1.25f
-					&& loaded.textShadow("label").offsetSpace()
-							== com.vingame.glswing.rendering.GLTextShadow.OffsetSpace.SCREEN
+			check(!loaded.textShadow("label").isVisible()
 					&& loaded.textShadow("button").offsetY() == 3
 					&& loaded.textShadow("button").offsetSpace()
 							== com.vingame.glswing.rendering.GLTextShadow.OffsetSpace.LOCAL,
@@ -282,11 +282,14 @@ public final class GLLocalizationThemeSelfTest {
 			Path bundle = directory.resolve("bundle.gltheme");
 			Files.writeString(colors, """
 					theme.type=colors
+					theme.name=Dark colors
 					palette.accent=#336699
+					codeEditor.keyword=#cc6c1d
 					button.background=#102030
 					""", StandardCharsets.UTF_8);
 			Files.writeString(metrics, """
 					theme.type=metrics
+					theme.name=Rounded metrics
 					metrics.cornerRadius=9
 					menu.itemCornerRadius=3
 					""", StandardCharsets.UTF_8);

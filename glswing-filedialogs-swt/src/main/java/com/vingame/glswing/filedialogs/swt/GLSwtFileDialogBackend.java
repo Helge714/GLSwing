@@ -2,8 +2,10 @@ package com.vingame.glswing.filedialogs.swt;
 
 import java.awt.BorderLayout;
 import java.awt.Canvas;
+import java.awt.Color;
 import java.awt.Component;
 import java.awt.EventQueue;
+import java.awt.IllegalComponentStateException;
 import java.awt.Window;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -131,11 +133,22 @@ public final class GLSwtFileDialogBackend implements GLFileDialogBackend {
 					: javax.swing.SwingUtilities.getWindowAncestor(component);
 			bridgeWindow = new Window(parent);
 			bridgeWindow.setLayout(new BorderLayout());
+			bridgeWindow.setFocusableWindowState(false);
+			bridgeWindow.setAutoRequestFocus(false);
+			bridgeWindow.setBackground(new Color(0, 0, 0, 0));
 			bridgeCanvas = new Canvas();
+			bridgeCanvas.setBackground(new Color(0, 0, 0, 0));
 			bridgeWindow.add(bridgeCanvas, BorderLayout.CENTER);
 			bridgeWindow.setSize(1, 1);
 			if (parent != null) bridgeWindow.setLocation(parent.getX() + parent.getWidth() / 2,
 					parent.getY() + parent.getHeight() / 2);
+			// SWT_AWT needs a visible native Canvas peer, but the bridge itself is
+			// not application UI. At HiDPI scale a visible 1x1 AWT window otherwise
+			// appears as a persistent 2x2 dot near the center of the screen.
+			try { bridgeWindow.setOpacity(0f); }
+			catch (UnsupportedOperationException | IllegalComponentStateException ignored) {
+				// The transparent background remains the best available fallback.
+			}
 			bridgeWindow.setVisible(true);
 		};
 		if (EventQueue.isDispatchThread()) create.run();

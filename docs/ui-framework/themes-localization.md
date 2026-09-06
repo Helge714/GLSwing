@@ -42,8 +42,22 @@ affected recordings and layout automatically.
 `.gltheme` files use key/value properties. A theme can inherit another file or
 built-in theme with `theme.extends=...`; child keys override parent values.
 
-References use `${key}` and resolve recursively. Custom keys remain available
-through `theme.values()` so application controls can share the same theme file.
+Comments may occupy a complete line or follow a value when separated by
+whitespace. A leading `#` remains part of hexadecimal color values:
+
+```properties
+# Complete-line comment
+button.cornerRadius=6 # Inline comment
+palette.accent = #4d90fe # Hex color followed by a comment
+```
+
+Use `\#` or `\!` when either character must occur literally after whitespace
+inside a value.
+
+References use `${key}` and resolve recursively. References between known
+properties are type-checked by the theme language; for example, an inset value
+cannot be assigned to a numeric height. Custom keys remain available through
+`theme.values()` so application controls can share the same theme file.
 
 ## Modular color and metrics themes
 
@@ -83,7 +97,9 @@ and finally bundle-local values. A bundle has at most one slot of each type;
 duplicate declarations are rejected instead of silently replacing one another.
 Color fragments reject geometry keys, metrics fragments reject color and font
 keys, fragment type mismatches are errors, and fragments cannot import or
-inherit other themes. Relative references resolve from the bundle directory.
+inherit other themes. In the code editor, property completion follows the
+declared fragment type and omits keys already declared in the current file.
+Relative references resolve from the bundle directory.
 Existing themes without `theme.type` remain supported through
 `theme.extends`.
 
@@ -283,6 +299,7 @@ disabled by default through a transparent color. Configure the global shadow
 with three theme values:
 
 ```properties
+textShadow.on=true
 textShadow.color=rgba(0, 0, 0, 140)
 textShadow.offsetX=1
 textShadow.offsetY=1
@@ -290,8 +307,10 @@ textShadow.softness=1.25
 textShadow.offsetSpace=screen
 ```
 
-Any control family can override individual values by prefixing them, for
-example `button.textShadow.color`, `menu.textShadow.offsetX`, or
+Set `textShadow.on=false` to disable all text shadows without discarding their
+other settings. Any control family can override individual values, including
+`on`, by prefixing them, for example `button.textShadow.on`,
+`button.textShadow.color`, `menu.textShadow.offsetX`, or
 `node.textShadow.offsetY`. Supported prefixes include `label`, `button`,
 `checkBox`, `slider`, `textEditor`, `menu`, `menuBar`, `comboBox`,
 `tabbedPane`, `node`, and `fileDialog`. Menu mnemonic underlines inherit the
@@ -348,7 +367,31 @@ overflow so damage tracking and clipping include the complete shadow.
 ComboBox press feedback uses `comboBox.pressedLight` and
 `comboBox.pressedDark`. The same gradient remains active while its popup is
 open and follows the flattened attachment edge. In typed code, use
-`GLComboBoxStyle.withPressedGradient(light, dark)`.
+`GLComboBoxStyle.withPressedGradient(light, dark)`. A ComboBox popup uses the
+ComboBox's resolved theme, including a theme assigned locally to that control;
+it does not fall back to an unrelated overlay-host theme.
+
+Frequently adjusted control geometry uses consistent logical-pixel keys:
+
+```properties
+button.height=28
+button.borderWidth=1
+button.padding=3, 8, 3, 8
+comboBox.height=28
+comboBox.arrowAreaWidth=24
+comboBox.padding=3, 8, 3, 8
+numberSpinner.height=28
+numberSpinner.preferredWidth=120
+numberSpinner.buttonWidth=24
+numberSpinner.arrowStrokeWidth=1.5
+numberSpinner.borderWidth=1
+numberSpinner.padding=3, 8, 3, 8
+```
+
+Insets are ordered top, left, bottom, right. ComboBox right padding also
+insets its chevron; it is not limited to the label. Checkbox mark thickness is
+named `checkBox.checkStrokeWidth`, consistently with the other stroke-width
+properties.
 
 ## Localization
 

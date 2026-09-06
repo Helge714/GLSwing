@@ -18,6 +18,7 @@ import com.vingame.glswing.ui.GLCodeLanguages;
 import com.vingame.glswing.ui.GLCodeLocation;
 import com.vingame.glswing.ui.GLCodeInlayHint;
 import com.vingame.glswing.ui.GLCodeSemanticToken;
+import com.vingame.glswing.ui.GLCodeToken;
 
 /** CPU checks for the built-in schema-aware .gltheme language. */
 public final class GLThemeCodeSupportSelfTest {
@@ -64,6 +65,49 @@ public final class GLThemeCodeSupportSelfTest {
 					keyPrefix.text().length(), null).toCompletableFuture().join();
 			check(keys.stream().anyMatch(item -> "button.background".equals(item.label())),
 					"Optional theme-key completion is missing");
+
+			String metricsSource = "theme.type=metrics\nmetrics.cornerRadius=4\n";
+			GLCodeDocument metricsDocument = new GLCodeDocument(uri, "gltheme", 1,
+					metricsSource);
+			List<GLCodeCompletion> metricKeys = session.complete(metricsDocument,
+					metricsSource.length(), null).toCompletableFuture().join();
+			check(metricKeys.stream().anyMatch(item ->
+					"button.cornerRadius".equals(item.label()))
+					&& metricKeys.stream().noneMatch(item ->
+							"metrics.cornerRadius".equals(item.label()))
+					&& metricKeys.stream().noneMatch(item ->
+							"palette.accent".equals(item.label()))
+					&& metricKeys.stream().noneMatch(item ->
+							"codeEditor.keyword".equals(item.label()))
+					&& metricKeys.stream().noneMatch(item ->
+							"node.titleGradientLight".equals(item.label()))
+					&& metricKeys.stream().noneMatch(item ->
+							"checkBox.check".equals(item.label()))
+					&& metricKeys.stream().noneMatch(item ->
+							"menu.accelerator".equals(item.label()))
+					&& metricKeys.stream().anyMatch(item ->
+							"theme.name".equals(item.label()))
+					&& metricKeys.stream().noneMatch(item ->
+							"theme.type".equals(item.label())),
+					"Metrics-fragment completion is not scoped or repeats declarations: "
+							+ metricKeys.stream().map(GLCodeCompletion::label).toList());
+
+			String colorsSource = "theme.type=colors\npalette.accent=#112233\n";
+			GLCodeDocument colorsDocument = new GLCodeDocument(uri, "gltheme", 2,
+					colorsSource);
+			List<GLCodeCompletion> colorKeys = session.complete(colorsDocument,
+					colorsSource.length(), null).toCompletableFuture().join();
+			check(colorKeys.stream().anyMatch(item ->
+					"button.background".equals(item.label()))
+					&& colorKeys.stream().anyMatch(item ->
+							"theme.name".equals(item.label()))
+					&& colorKeys.stream().anyMatch(item ->
+							"codeEditor.keyword".equals(item.label()))
+					&& colorKeys.stream().noneMatch(item ->
+							"palette.accent".equals(item.label()))
+					&& colorKeys.stream().noneMatch(item ->
+							"button.cornerRadius".equals(item.label())),
+					"Color-fragment completion is not scoped or repeats declarations");
 
 			int referenceOffset = source.indexOf("palette.accent") + 3;
 			List<GLCodeLocation> definitions = session.definitions(document,
@@ -116,10 +160,29 @@ public final class GLThemeCodeSupportSelfTest {
 				"theme.type=colors\nmetrics.cornerRadius=4\n").isEmpty(),
 				"Color fragment accepted a metrics property");
 		check(GLCodeLanguages.GLTHEME.diagnose(
+				"theme.type=colors\ntheme.name=Brand colors\ncodeEditor.keyword=#cc6c1d\n")
+				.isEmpty(), "Color fragment rejected its metadata or editor colors");
+		check(!GLCodeLanguages.GLTHEME.diagnose(
+				"theme.type=metrics\ncodeEditor.keyword=#cc6c1d\n").isEmpty(),
+				"Metrics fragment accepted a code-editor color");
+		check(GLCodeLanguages.GLTHEME.diagnose(
+				"button.height=${metrics.padding}\n").stream().anyMatch(diagnostic ->
+						diagnostic.message().contains("expects number")
+						&& diagnostic.message().contains("is insets")),
+				"A theme reference connected incompatible value types");
+		check(GLCodeLanguages.GLTHEME.diagnose(
 				"textShadow.offsetSpace=local\nfont.style=bold-italic\n").isEmpty(),
 				"Supported theme enum value was rejected");
 		check(!GLCodeLanguages.GLTHEME.diagnose("application.brand=${missing\n").isEmpty(),
 				"Malformed reference in a custom theme property was accepted");
+		String inlineComment = "metrics.cornerRadius=4 # Keep corners compact\n"
+				+ "palette.accent = #112233 ! Hex colors remain values\n";
+		check(GLCodeLanguages.GLTHEME.diagnose(inlineComment).isEmpty(),
+				"Valid inline theme comments were rejected");
+		List<GLCodeToken> inlineTokens = GLCodeLanguages.GLTHEME.tokenize(inlineComment);
+		check(inlineTokens.stream().filter(token ->
+				token.type() == GLCodeToken.Type.COMMENT).count() == 2,
+				"Inline theme comments were not highlighted as comments");
 
 		Path directory = Files.createTempDirectory("gltheme-code-");
 		try {

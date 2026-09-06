@@ -296,6 +296,11 @@ corresponds to its position instead of restarting the gradient per slider.
 The linked-editing focus outline covers only selected slider rows. Reversing the
 vertical selection gesture removes rows before the editor opens.
 
+Bar sliders use `slider.progressLight` and `slider.progressDark`. While a
+standalone slider owns keyboard focus, `slider.focusProgressLight` and
+`slider.focusProgressDark` replace those colors. Their defaults reference the
+normal progress colors, so themes opt into a visual difference explicitly.
+
 ## Numeric spinners
 
 Use `GLNumberSpinner` when a precise numeric setting does not benefit from a
@@ -321,7 +326,15 @@ The corresponding step button is disabled automatically at either range limit.
 Programmatic `setValue(...)`, `increment()`, and `decrement()` do not create
 history entries. Use `setValueFormatter(...)` for an application-specific
 display representation and `getEditor()` when local editor customization is
-needed.
+needed. The inline editor accepts a single finite number surrounded by a
+display prefix or suffix, so formatted values such as `64 %`, `12 €`, or
+`1.25 EV` can be edited directly. The decoration is presentational; applications
+that transform the numeric value while formatting should provide a dedicated
+editing control instead of relying on an inverse conversion.
+
+Spinner geometry is configurable with `numberSpinner.height`,
+`.preferredWidth`, `.buttonWidth`, `.arrowStrokeWidth`, `.cornerRadius`,
+`.borderWidth`, and `.padding`.
 
 ## Color controls
 
@@ -396,9 +409,10 @@ channel notation and rounding:
 
 ```java
 GLColorExpressionFormat format = new GLColorExpressionFormat(
-        GLColorExpressionFormat.ChannelNotation.PERCENT,
-        3,     // maximum fractional digits
-        true); // remove trailing zeros
+		GLColorExpressionFormat.ChannelNotation.PERCENT,
+		3,     // maximum fractional digits
+		true,  // remove trailing zeros
+		true); // omit fully opaque alpha
 
 picker.setOutputColorModel(GLColorModel.OKLCH);
 picker.setColorExpressionFormat(format);
@@ -409,8 +423,9 @@ String expression = picker.getColorExpression();
 `NORMALIZED_FLOAT` writes explicit `f`-suffixed values from 0 through 1, and
 `PERCENT` writes values from 0 through 100. Hue remains expressed in degrees;
 the signed OKLab axes and OKLCH chroma remain decimal quantities. The default
-uses normalized floats, at most four fractional digits, and no redundant
-trailing zeros.
+uses normalized floats, at most four fractional digits, no redundant trailing
+zeros, and retains alpha. Set `omitOpaqueAlpha` to `true` to omit alpha when it
+is fully opaque; this applies equally to `1`, `255`, and `100%` notation.
 
 ## Text editor
 
@@ -460,6 +475,8 @@ the popup, while `ELLIPSIS` truncates labels.
 The pressed gradient remains visible while the ComboBox popup is open. Its
 light and dark colors come from `comboBox.pressedLight` and
 `comboBox.pressedDark`; the gradient respects the attachment-side contour.
+The popup inherits the ComboBox's resolved theme, including a local theme set
+directly on the ComboBox. `comboBox.padding` insets both text and the chevron.
 
 `GLMenuItem` supports text, mnemonic keys, accelerator display text, action
 commands, listeners, `doClick()`, and an optional submenu. When backed by a

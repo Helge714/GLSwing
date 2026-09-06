@@ -736,7 +736,8 @@ public class GLCodeEditor extends GLTextArea {
 			}
 			if (value == '{') {
 				trimTrailingSpace(result);
-				if (!result.isEmpty()) result.append(' ');
+				if (!result.isEmpty() && result.charAt(result.length() - 1) != '$')
+					result.append(' ');
 				result.append('{');
 				continue;
 			}

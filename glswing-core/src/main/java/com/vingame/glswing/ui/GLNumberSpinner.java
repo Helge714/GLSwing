@@ -16,6 +16,7 @@ import com.vingame.glswing.input.GLInputActions;
 import com.vingame.glswing.input.GLKeyEvent;
 import com.vingame.glswing.input.GLMouseEvent;
 import com.vingame.glswing.layout.GLConstraints;
+import com.vingame.glswing.layout.GLInsets;
 import com.vingame.glswing.rendering.GLContext2D;
 import com.vingame.glswing.rendering.GLStroke;
 
@@ -71,6 +72,7 @@ public class GLNumberSpinner extends GLLayoutGroup {
 				.fillBoth().connectAll());
 		addGL(decrementButton, GLConstraints.at(1, 1)
 				.fillBoth().connectAll());
+		applyThemeMetrics();
 		updateEditorPolicy();
 		syncEditor();
 		updateEnabledState();
@@ -158,6 +160,36 @@ public class GLNumberSpinner extends GLLayoutGroup {
 	}
 
 	public final boolean isEnabled() { return enabled; }
+
+	@Override protected void themeChanged() {
+		super.themeChanged();
+		applyThemeMetrics();
+	}
+
+	private void applyThemeMetrics() {
+		GLThemeValues values = getGLTheme().values();
+		float height = values.getFloat("numberSpinner.height", DEFAULT_HEIGHT);
+		float width = values.getFloat("numberSpinner.preferredWidth", DEFAULT_WIDTH);
+		float buttonWidth = Math.min(width, values.getFloat(
+				"numberSpinner.buttonWidth", DEFAULT_BUTTON_WIDTH));
+		float radius = values.getFloat("numberSpinner.cornerRadius",
+				getGLTheme().buttonStyle().cornerRadius());
+		float border = values.getFloat("numberSpinner.borderWidth",
+				getGLTheme().buttonStyle().borderWidth());
+		GLInsets padding = values.getInsets("numberSpinner.padding",
+				getGLTheme().textEditorStyle().padding());
+		editor.setPreferredGLSize(Math.max(1, width - buttonWidth), height);
+		incrementButton.setPreferredGLSize(buttonWidth, height * 0.5f);
+		decrementButton.setPreferredGLSize(buttonWidth, height * 0.5f);
+		GLTextEditorStyle editorStyle = getGLTheme().textEditorStyle();
+		editor.setGLStyle(editorStyle.withGeometry(radius, border, height,
+				Math.max(1, width - buttonWidth), padding));
+		GLButtonStyle buttonStyle = getGLTheme().buttonStyle();
+		incrementButton.setGLStyle(buttonStyle.withCornerRadius(radius)
+				.withBorder(border, buttonStyle.borderColor()).withHeight(height * 0.5f));
+		decrementButton.setGLStyle(buttonStyle.withCornerRadius(radius)
+				.withBorder(border, buttonStyle.borderColor()).withHeight(height * 0.5f));
+	}
 
 	private void updateEditorPolicy() {
 		editor.setInputFilter(integerValuesOnly
@@ -359,7 +391,8 @@ public class GLNumberSpinner extends GLLayoutGroup {
 			float centerY = getHeight() * 0.5f;
 			GLStroke previous = context.getStroke();
 			try {
-				context.setStroke(new GLStroke(1.5f));
+				context.setStroke(new GLStroke(getGLTheme().values().getFloat(
+						"numberSpinner.arrowStrokeWidth", 1.5f)));
 				Color color = getGLStyle().text(getControlState());
 				context.drawUILine(centerX - 3, centerY + direction * 2,
 						centerX, centerY - direction * 2, color);

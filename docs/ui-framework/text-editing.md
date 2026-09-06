@@ -172,18 +172,22 @@ configurable expression policy:
 ```java
 editor.setPreferredColorOutputModel(GLColorModel.OKLCH); // null preserves the source model
 editor.setColorExpressionFormat(new GLColorExpressionFormat(
-        GLColorExpressionFormat.ChannelNotation.PERCENT, 3, true));
+		GLColorExpressionFormat.ChannelNotation.PERCENT,
+		3,     // maximum fractional digits
+		true,  // remove trailing zeros
+		true)); // omit fully opaque alpha
 ```
 
 Formatting then rounds direct functional color literals to the requested
-precision and removes redundant trailing zeros. Hex colors, references, and
-derived expressions are preserved. The same policy is used when a color is
+precision, removes redundant trailing zeros, and can omit a fully opaque alpha
+channel (`1`, `255`, or `100%`, depending on the notation). Hex colors,
+references, and derived expressions are preserved. The same policy is used when a color is
 replaced through the editor's color preview.
 
 The `.gltheme` context menu exposes **Color formatting…**, which opens a
 theme-aware settings dialog. It provides the output model and notation as
-combo boxes, a 0–12 decimal-place slider, trailing-zero control, and a live
-expression example. Applications may open it directly with
+combo boxes, a 0–12 decimal-place slider, controls for trailing zeros and
+opaque alpha, and a live expression example. Applications may open it directly with
 `editor.showColorFormattingDialog()`. The reusable
 `GLColorExpressionFormatDialog.show(...)` API is also available when the
 settings are managed outside a code editor.

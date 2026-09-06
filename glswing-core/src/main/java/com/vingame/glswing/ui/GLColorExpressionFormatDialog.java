@@ -51,15 +51,17 @@ public final class GLColorExpressionFormatDialog {
 		precision.setIntegerValuesOnly(true);
 		GLCheckBox trim = new GLCheckBox(owner.getGLLocalizer().text(
 				"glswing.code.trimTrailingZeros"), current.trimTrailingZeros());
+		GLCheckBox omitAlpha = new GLCheckBox(owner.getGLLocalizer().text(
+				"glswing.code.omitOpaqueAlpha"), current.omitOpaqueAlpha());
 		GLLabel example = new GLLabel("");
 		Runnable refreshExample = () -> {
 			GLColorExpressionFormat next = new GLColorExpressionFormat(
 					notations.getSelectedItem(), (int) Math.round(precision.getValue()),
-					trim.isSelected());
+					trim.isSelected(), omitAlpha.isSelected());
 			GLColorModel selected = models.getSelectedItem().model();
 			GLColorModel output = selected == null ? GLColorModel.RGB : selected;
 			String expression = output.format(output.channels(
-					new Color(84, 120, 181, 191)), 191 / 255d, next);
+					new Color(84, 120, 181)), 1d, next);
 			example.setText(owner.getGLLocalizer().text(
 					"glswing.code.colorExample", expression));
 		};
@@ -67,6 +69,7 @@ public final class GLColorExpressionFormatDialog {
 		notations.addActionListener(event -> refreshExample.run());
 		precision.addChangeListener(event -> refreshExample.run());
 		trim.addActionListener(event -> refreshExample.run());
+		omitAlpha.addActionListener(event -> refreshExample.run());
 		refreshExample.run();
 
 		GLButton apply = new GLButton(owner.getGLLocalizer().text("glswing.code.apply"));
@@ -90,26 +93,28 @@ public final class GLColorExpressionFormatDialog {
 				precisionLabel.setBounds(16, 98, fieldX - 28, 28);
 				precision.setBounds(fieldX, 98,
 						Math.max(1, width - fieldX - 16), 28);
-				trim.setBounds(16, 148, Math.max(1, width - 32), 28);
-				example.setBounds(16, 188, Math.max(1, width - 32), 28);
-				actions.setBounds(16, Math.max(224, height - 44),
+				trim.setBounds(16, 140, Math.max(1, width - 32), 28);
+				omitAlpha.setBounds(16, 176, Math.max(1, width - 32), 28);
+				example.setBounds(16, 216, Math.max(1, width - 32), 28);
+				actions.setBounds(16, Math.max(260, height - 44),
 						Math.max(1, width - 32), 28);
 			}
 		};
 		content.addGL(modelLabel); content.addGL(models);
 		content.addGL(notationLabel); content.addGL(notations);
 		content.addGL(precisionLabel); content.addGL(precision);
-		content.addGL(trim); content.addGL(example);
+		content.addGL(trim); content.addGL(omitAlpha); content.addGL(example);
 		content.addGL(actions);
 		GLDialog dialog = new GLDialog(owner.getGLLocalizer().text(
 				"glswing.code.colorFormattingTitle"), content);
 		dialog.setDecoration(GLDialog.Decoration.THEMED);
-		dialog.setSize(520, 304);
+		dialog.setSize(520, 344);
 		dialog.setResizable(false);
 		apply.addActionListener(event -> {
 			accepted.accept(new Selection(models.getSelectedItem().model(),
 					new GLColorExpressionFormat(notations.getSelectedItem(),
-							(int) Math.round(precision.getValue()), trim.isSelected())));
+							(int) Math.round(precision.getValue()), trim.isSelected(),
+							omitAlpha.isSelected())));
 			dialog.close();
 		});
 		cancel.addActionListener(event -> dialog.close());

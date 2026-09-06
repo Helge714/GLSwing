@@ -8,6 +8,8 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.DoubleFunction;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import javax.swing.Timer;
 import javax.swing.event.ChangeEvent;
@@ -31,6 +33,12 @@ import com.vingame.glswing.rendering.GLTextShadow;
 
 /** A numeric slider with independent value constraints and interaction style. */
 public class GLSlider extends GLControl {
+	private static final Pattern DECORATED_NUMBER = Pattern.compile(
+			"^[^\\d+\\-.,]*([+\\-]?(?:(?:\\d+(?:[.,]\\d*)?)|(?:[.,]\\d+))"
+			+ "(?:[eE][+\\-]?\\d+)?)[^\\d]*$");
+	private static final Pattern PARTIAL_DECORATED_NUMBER = Pattern.compile(
+			"^[^\\d+\\-.,]*[+\\-]?(?:(?:\\d+(?:[.,]\\d*)?)|(?:[.,]\\d+))"
+			+ "(?:[eE][+\\-]?\\d*)?[^\\d]*$");
 
 	public enum Mode {
 		FIXED,
@@ -509,6 +517,14 @@ public class GLSlider extends GLControl {
 			Color progressDark = sliderGroup == null ? style.progressDarkColor()
 					: sliderGroup.progressColor(this, style.progressLightColor(),
 							style.progressDarkColor(), true);
+			if (isFocused() && sliderGroup == null) {
+				progressLight = getGLTheme().values().getColor(
+						"slider.focusProgressLight", progressLight);
+				progressDark = getGLTheme().values().getColor(
+						"slider.focusProgressDark", progressDark);
+			}
+			Color resolvedProgressLight = progressLight;
+			Color resolvedProgressDark = progressDark;
 			if (compositeBar) {
 				GLControlState presentationState = groupGesturePressed && isEnabled()
 						? GLControlState.PRESSED : getControlState();
@@ -518,8 +534,8 @@ public class GLSlider extends GLControl {
 						: style.borderColor();
 				context.fillUISlider(0, 0, width, height, layoutCornerRadius(style.cornerRadius()),
 						progress, border, style.background(presentationState),
-						withOpacity(progressLight, progressOpacity),
-						withOpacity(progressDark, progressOpacity), borderColor,
+						withOpacity(resolvedProgressLight, progressOpacity),
+						withOpacity(resolvedProgressDark, progressOpacity), borderColor,
 						GLStroke.WidthSpace.SCREEN);
 			} else context.withParameters(progressParameters, () -> {
 				if (sliderGroup == null) {
@@ -532,11 +548,11 @@ public class GLSlider extends GLControl {
 					context.fillUIInnerProgressRoundRect(progressInset, progressInset,
 							progressWidth, progressHeight,
 							Math.max(0, layoutCornerRadius(style.cornerRadius()) - progressInset), progress,
-							progressLight, progressDark);
+							resolvedProgressLight, resolvedProgressDark);
 				} else
 					context.fillUIProgressRoundRect(0, 0, width, height,
 							radii.topLeft(), radii.bottomLeft(), progress,
-							progressLight, progressDark);
+							resolvedProgressLight, resolvedProgressDark);
 			});
 		} else {
 			recordArrowButton(context, style, radii, true);
@@ -975,8 +991,9 @@ public class GLSlider extends GLControl {
 					}
 				};
 		editor.setHistoryEnabled(false);
-		editor.setInputFilter(integerValuesOnly ? GLTextInputFormats.INTEGER_NUMBER
-				: GLTextInputFormats.DECIMAL_NUMBER);
+		// Formatted values may carry a unit or symbol (for example "64 %" or
+		// "12 €"). Final validation still requires exactly one finite number.
+		editor.setInputFilter(GLSlider::isPartialFormattedNumber);
 		editor.setInputVerifier(integerValuesOnly ? GLSlider::isValidInteger
 				: GLSlider::isValidNumber);
 		editor.setValidationFailureMode(
@@ -1243,6 +1260,13 @@ public class GLSlider extends GLControl {
 		return parseNumber(text) != null;
 	}
 
+	private static boolean isPartialFormattedNumber(String text) {
+		if (text == null) return false;
+		String value = text.trim();
+		return value.isEmpty() || value.equals("+") || value.equals("-")
+				|| PARTIAL_DECORATED_NUMBER.matcher(value).matches();
+	}
+
 	private static boolean isValidInteger(String text) {
 		Double parsed = parseNumber(text);
 		return parsed != null && parsed == Math.rint(parsed);
@@ -1251,8 +1275,10 @@ public class GLSlider extends GLControl {
 	private static Double parseNumber(String text) {
 		if (text == null)
 			return null;
+		Matcher decorated = DECORATED_NUMBER.matcher(text.trim());
+		if (!decorated.matches()) return null;
 		try {
-			double parsed = Double.parseDouble(text.trim().replace(',', '.'));
+			double parsed = Double.parseDouble(decorated.group(1).replace(',', '.'));
 			return Double.isFinite(parsed) ? parsed : null;
 		} catch (NumberFormatException ignored) {
 			return null;

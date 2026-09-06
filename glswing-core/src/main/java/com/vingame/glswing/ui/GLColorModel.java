@@ -87,19 +87,20 @@ public enum GLColorModel {
 			throw new IllegalArgumentException("Three channels and normalized alpha required");
 		for (double value : c) if (!Double.isFinite(value)) throw new IllegalArgumentException("Finite channels required");
 		if (format == null) throw new IllegalArgumentException("Color expression format required");
-		String a = format.bounded(alpha);
+		String alphaArgument = format.omitOpaqueAlpha() && alpha == 1d
+				? "" : ", " + format.bounded(alpha);
 		return switch (this) {
 		case RGB -> "rgb(" + rgb(c[0], format) + ", " + rgb(c[1], format)
-				+ ", " + rgb(c[2], format) + ", " + a + ")";
+				+ ", " + rgb(c[2], format) + alphaArgument + ")";
 		case HSV, HSL -> name().toLowerCase(java.util.Locale.ROOT) + "("
 				+ format.decimal(c[0]) + "deg, " + format.bounded(c[1]) + ", "
-				+ format.bounded(c[2]) + ", " + a + ")";
+				+ format.bounded(c[2]) + alphaArgument + ")";
 		case OKLAB -> "oklab(" + format.bounded(c[0]) + ", "
-				+ format.decimal(c[1]) + "f, " + format.decimal(c[2]) + "f, "
-				+ a + ")";
+				+ format.decimal(c[1]) + "f, " + format.decimal(c[2]) + "f"
+				+ alphaArgument + ")";
 		case OKLCH -> "oklch(" + format.bounded(c[0]) + ", "
-				+ format.decimal(c[1]) + "f, " + format.decimal(c[2]) + "deg, "
-				+ a + ")";
+				+ format.decimal(c[1]) + "f, " + format.decimal(c[2]) + "deg"
+				+ alphaArgument + ")";
 		};
 	}
 	private static String rgb(double value, GLColorExpressionFormat format) {

@@ -353,8 +353,17 @@ public class GLComboBox<T> extends GLControl
 		// popup menus may still place their title at either edge.
 		popupMenu.setTitlePosition(GLPopupTitlePosition.TOP);
 		GLParent host = overlayHost();
-		if (host != null)
+		if (host != null) {
+			applyPopupTheme(popupMenu, getGLTheme());
 			popupMenu.showFromComboBox(host, this, popupMatchesComboWidth);
+		}
+	}
+
+	private static void applyPopupTheme(GLPopupMenu menu, GLTheme theme) {
+		menu.setGLTheme(theme);
+		for (GLMenuItem item : menu.getItems())
+			if (item.getSubMenu() != null)
+				applyPopupTheme(item.getSubMenu(), theme);
 	}
 
 	public final void hidePopup() {
@@ -446,7 +455,7 @@ public class GLComboBox<T> extends GLControl
 		}
 
 		float arrowSize = Math.min(11, Math.max(4, height - 8));
-		float arrowX = width - style.arrowAreaWidth()
+		float arrowX = width - style.padding().right() - style.arrowAreaWidth()
 				+ (style.arrowAreaWidth() - arrowSize) * 0.5f;
 		float arrowY = (height - arrowSize) * 0.5f;
 		float angle = popupDirection == null ? (float) (Math.PI * 0.5)

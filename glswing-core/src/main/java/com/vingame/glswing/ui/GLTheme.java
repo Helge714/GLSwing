@@ -76,6 +76,13 @@ public record GLTheme(GLLabelStyle labelStyle, GLButtonStyle buttonStyle,
 	public GLTextShadow textShadow(String controlPrefix) {
 		String prefix = controlPrefix == null || controlPrefix.isBlank()
 				? "" : controlPrefix + ".";
+		String enabledText = values.get(prefix + "textShadow.on",
+				values.get("textShadow.on", "true"));
+		if (!"true".equalsIgnoreCase(enabledText.trim())
+				&& !"false".equalsIgnoreCase(enabledText.trim()))
+			throw new IllegalArgumentException(
+					"Text-shadow switch must be true or false: " + enabledText);
+		if (!Boolean.parseBoolean(enabledText.trim())) return GLTextShadow.NONE;
 		Color color = values.getColor(prefix + "textShadow.color",
 				values.getColor("textShadow.color", GLTextShadow.NONE.color()));
 		float offsetX = values.getFloat(prefix + "textShadow.offsetX",

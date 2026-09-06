@@ -9,7 +9,8 @@ import java.math.RoundingMode;
  * channels and alpha are represented and how decimal values are rounded.
  */
 public record GLColorExpressionFormat(ChannelNotation channelNotation,
-        int fractionDigits, boolean trimTrailingZeros) {
+        int fractionDigits, boolean trimTrailingZeros,
+        boolean omitOpaqueAlpha) {
 
     /** Representation used for channels whose logical range is zero to one. */
     public enum ChannelNotation {
@@ -23,7 +24,13 @@ public record GLColorExpressionFormat(ChannelNotation channelNotation,
 
     /** Compact default retaining four meaningful fractional digits. */
     public static final GLColorExpressionFormat DEFAULT =
-            new GLColorExpressionFormat(ChannelNotation.NORMALIZED_FLOAT, 4, true);
+            new GLColorExpressionFormat(ChannelNotation.NORMALIZED_FLOAT, 4, true, false);
+
+    /** Creates a policy that retains alpha for source compatibility. */
+    public GLColorExpressionFormat(ChannelNotation channelNotation,
+            int fractionDigits, boolean trimTrailingZeros) {
+        this(channelNotation, fractionDigits, trimTrailingZeros, false);
+    }
 
     public GLColorExpressionFormat {
         if (channelNotation == null)
@@ -34,15 +41,23 @@ public record GLColorExpressionFormat(ChannelNotation channelNotation,
     }
 
     public GLColorExpressionFormat withChannelNotation(ChannelNotation value) {
-        return new GLColorExpressionFormat(value, fractionDigits, trimTrailingZeros);
+        return new GLColorExpressionFormat(value, fractionDigits, trimTrailingZeros,
+                omitOpaqueAlpha);
     }
 
     public GLColorExpressionFormat withFractionDigits(int value) {
-        return new GLColorExpressionFormat(channelNotation, value, trimTrailingZeros);
+        return new GLColorExpressionFormat(channelNotation, value, trimTrailingZeros,
+                omitOpaqueAlpha);
     }
 
     public GLColorExpressionFormat withTrimTrailingZeros(boolean value) {
-        return new GLColorExpressionFormat(channelNotation, fractionDigits, value);
+        return new GLColorExpressionFormat(channelNotation, fractionDigits, value,
+                omitOpaqueAlpha);
+    }
+
+    public GLColorExpressionFormat withOmitOpaqueAlpha(boolean value) {
+        return new GLColorExpressionFormat(channelNotation, fractionDigits,
+                trimTrailingZeros, value);
     }
 
     String bounded(double value) {

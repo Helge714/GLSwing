@@ -110,6 +110,9 @@ public final class GLPropertiesCodeLanguage implements GLCodeLanguage {
 			tokens.add(new GLCodeToken(line.keyStart(), line.keyEnd(),
 					isDirective(line.key()) ? GLCodeToken.Type.KEYWORD : GLCodeToken.Type.TYPE));
 			addLexicalValueTokens(source, line, tokens);
+			if (line.inlineCommentStart() >= 0)
+				tokens.add(new GLCodeToken(line.inlineCommentStart(), line.end(),
+						GLCodeToken.Type.COMMENT));
 		}
 		return List.copyOf(tokens);
 	}
@@ -137,6 +140,7 @@ public final class GLPropertiesCodeLanguage implements GLCodeLanguage {
 			}
 			validateValue(line, property, result);
 		}
+		validateReferenceTypes(declarations, result);
 		addReferenceCycles(declarations, result);
 		Map<String, String> values = new LinkedHashMap<>();
 		declarations.forEach((key, line) -> values.put(key, line.value()));
@@ -148,6 +152,30 @@ public final class GLPropertiesCodeLanguage implements GLCodeLanguage {
 			}
 		result.sort(Comparator.comparingInt(GLCodeDiagnostic::start));
 		return List.copyOf(result);
+	}
+
+	private void validateReferenceTypes(Map<String, Line> declarations,
+			List<GLCodeDiagnostic> result) {
+		for (Line line : declarations.values()) {
+			Property owner = schema.property(line.key());
+			if (owner == null) continue;
+			List<Reference> found = references(line.value(), line.valueStart());
+			for (Reference reference : found) {
+				Property target = schema.property(reference.key());
+				if (target == null) continue;
+				boolean exact = line.value().trim().equals("${" + reference.key() + "}");
+				boolean compatible = owner.type() == ValueType.COLOR
+						? target.type() == ValueType.COLOR
+						: !exact || owner.type() == target.type();
+				if (!compatible)
+					result.add(diagnostic(reference.start(), reference.end(),
+							GLCodeDiagnostic.Severity.ERROR,
+							"Property '" + line.key() + "' expects "
+									+ owner.type().name().toLowerCase(java.util.Locale.ROOT)
+									+ " but '" + reference.key() + "' is "
+									+ target.type().name().toLowerCase(java.util.Locale.ROOT)));
+			}
+		}
 	}
 
 	private static void addLexicalValueTokens(String source, Line line,
@@ -379,7 +407,8 @@ public final class GLPropertiesCodeLanguage implements GLCodeLanguage {
 		if (offset < 0 || offset > document.text().length()) return List.of();
 		Document parsed = parse(document.text());
 		Line line = parsed.lineAt(offset);
-		if (line == null || line.comment()) return List.of();
+		if (line == null || line.comment() || line.isInlineCommentAt(offset))
+			return List.of();
 		Reference partial = partialReference(document.text(), line, offset);
 		if (partial != null)
 			return referenceCompletions(partial.key(), partial.keyStart(),
@@ -389,7 +418,7 @@ public final class GLPropertiesCodeLanguage implements GLCodeLanguage {
 			String prefix = document.text().substring(start, offset).trim();
 			start = offset - prefix.length();
 			return propertyCompletions(prefix, start, line != null && line.hasProperty()
-					? line.keyEnd() : offset, !line.hasProperty());
+					? line.keyEnd() : offset, !line.hasProperty(), parsed);
 		}
 		Property property = schema.property(line.key());
 		if (property == null) return List.of();
@@ -399,18 +428,35 @@ public final class GLPropertiesCodeLanguage implements GLCodeLanguage {
 	}
 
 	private List<GLCodeCompletion> propertyCompletions(String prefix, int start,
-			int end, boolean appendSeparator) {
+			int end, boolean appendSeparator, Document document) {
 		String lower = prefix.toLowerCase(java.util.Locale.ROOT);
+		Set<String> declared = document.lines().stream().filter(Line::hasProperty)
+				.map(Line::key).collect(java.util.stream.Collectors.toSet());
 		List<GLCodeCompletion> result = new ArrayList<>();
 		for (Property property : schema.properties().values().stream()
 				.sorted(Comparator.comparing(Property::key)).toList()) {
 			if (property.key().endsWith("*")) continue;
+			if (declared.contains(property.key())) continue;
+			if (!propertyAllowedInDocument(property, document)) continue;
 			if (!property.key().toLowerCase(java.util.Locale.ROOT).startsWith(lower)) continue;
 			String inserted = property.key() + (appendSeparator ? "=" : "");
 			result.add(new GLCodeCompletion(property.key(), detail(property), inserted,
 					start, end));
 		}
 		return List.copyOf(result);
+	}
+
+	private boolean propertyAllowedInDocument(Property property, Document document) {
+		if (!"gltheme".equals(schema.id())) return true;
+		Line declaration = document.first("theme.type");
+		if (declaration == null) return true;
+		String type = declaration.value().trim().toLowerCase(java.util.Locale.ROOT);
+		if (!"colors".equals(type) && !"metrics".equals(type)) return true;
+		String key = property.key();
+		if ("theme.type".equals(key) || "theme.name".equals(key)) return true;
+		boolean color = property.type() == ValueType.COLOR
+				|| GLThemeKeyClassifier.isColorOrFontKey(key);
+		return "colors".equals(type) ? color : !color && !key.startsWith("theme.");
 	}
 
 	private List<GLCodeCompletion> valueCompletions(URI uri, Property property,
@@ -500,7 +546,8 @@ public final class GLPropertiesCodeLanguage implements GLCodeLanguage {
 	private Optional<GLCodeHover> hoverAt(GLCodeDocument document, int offset) {
 		Document parsed = parse(document.text());
 		Line line = parsed.lineAt(offset);
-		if (line == null || !line.hasProperty()) return Optional.empty();
+		if (line == null || !line.hasProperty() || line.isInlineCommentAt(offset))
+			return Optional.empty();
 		for (Reference reference : references(line.value(), line.valueStart()))
 			if (offset >= reference.start() && offset < reference.end()) {
 				Property property = schema.property(reference.key());
@@ -532,7 +579,8 @@ public final class GLPropertiesCodeLanguage implements GLCodeLanguage {
 	private List<GLCodeLocation> definitionsAt(GLCodeDocument document, int offset) {
 		Document parsed = parse(document.text());
 		Line line = parsed.lineAt(offset);
-		if (line == null || !line.hasProperty()) return List.of();
+		if (line == null || !line.hasProperty() || line.isInlineCommentAt(offset))
+			return List.of();
 		for (Reference reference : references(line.value(), line.valueStart()))
 			if (offset >= reference.start() && offset < reference.end()) {
 				Line local = parsed.first(reference.key());
@@ -709,6 +757,8 @@ public final class GLPropertiesCodeLanguage implements GLCodeLanguage {
 				result.add(semantic(line.valueStart(), line.valueEnd(), "keyword"));
 			else if (result.size() == valueTokenStart && line.valueEnd() > line.valueStart())
 				result.add(semantic(line.valueStart(), line.valueEnd(), "string"));
+			if (line.inlineCommentStart() >= 0)
+				result.add(semantic(line.inlineCommentStart(), line.end(), "comment"));
 		}
 		result.sort(Comparator.comparingInt(GLCodeSemanticToken::start));
 		return result.stream().filter(new java.util.function.Predicate<>() {
@@ -798,7 +848,7 @@ public final class GLPropertiesCodeLanguage implements GLCodeLanguage {
 		return resolved.toString();
 	}
 
-	private static Document parse(String source) {
+	private Document parse(String source) {
 		List<Line> lines = new ArrayList<>();
 		List<GLCodeDiagnostic> diagnostics = new ArrayList<>();
 		int start = 0;
@@ -813,7 +863,7 @@ public final class GLPropertiesCodeLanguage implements GLCodeLanguage {
 					&& (source.charAt(contentStart) == '#' || source.charAt(contentStart) == '!');
 			if (contentStart >= physicalEnd || comment) {
 				lines.add(new Line(start, physicalEnd, contentStart, comment,
-						-1, -1, -1, -1, -1, "", ""));
+						-1, -1, -1, -1, -1, -1, "", ""));
 			} else {
 				int separator = separator(source, contentStart, physicalEnd);
 				if (separator < 0) {
@@ -821,13 +871,16 @@ public final class GLPropertiesCodeLanguage implements GLCodeLanguage {
 							GLCodeDiagnostic.Severity.ERROR,
 							"Configuration property requires '='"));
 					lines.add(new Line(start, physicalEnd, contentStart, false,
-							-1, -1, -1, -1, -1, "", ""));
+							-1, -1, -1, -1, -1, -1, "", ""));
 				} else {
 					int keyEnd = separator;
 					while (keyEnd > contentStart && Character.isWhitespace(source.charAt(keyEnd - 1))) keyEnd--;
 					int valueStart = separator + 1;
 					while (valueStart < physicalEnd && Character.isWhitespace(source.charAt(valueStart))) valueStart++;
-					int valueEnd = physicalEnd;
+					int inlineCommentStart = "gltheme".equals(schema.id())
+							? GLPropertiesSyntax.inlineCommentStart(source, valueStart,
+									physicalEnd) : -1;
+					int valueEnd = inlineCommentStart < 0 ? physicalEnd : inlineCommentStart;
 					while (valueEnd > valueStart && Character.isWhitespace(source.charAt(valueEnd - 1))) valueEnd--;
 					String key = source.substring(contentStart, keyEnd);
 					String value = source.substring(valueStart, valueEnd);
@@ -835,7 +888,8 @@ public final class GLPropertiesCodeLanguage implements GLCodeLanguage {
 							Math.max(contentStart + 1, separator), GLCodeDiagnostic.Severity.ERROR,
 							"Configuration property key must not be empty"));
 					lines.add(new Line(start, physicalEnd, contentStart, false,
-							contentStart, keyEnd, separator, valueStart, valueEnd, key, value));
+							contentStart, keyEnd, separator, valueStart, valueEnd,
+							inlineCommentStart, key, value));
 				}
 			}
 			if (newline < 0) break;
@@ -979,8 +1033,11 @@ public final class GLPropertiesCodeLanguage implements GLCodeLanguage {
 	private record Reference(int start, int end, int keyStart, int keyEnd, String key) { }
 	private record Line(int start, int end, int contentStart, boolean comment,
 			int keyStart, int keyEnd, int separator, int valueStart, int valueEnd,
-			String key, String value) {
+			int inlineCommentStart, String key, String value) {
 		boolean hasProperty() { return separator >= 0 && keyStart >= 0 && keyEnd > keyStart; }
+		boolean isInlineCommentAt(int offset) {
+			return inlineCommentStart >= 0 && offset >= inlineCommentStart;
+		}
 	}
 	private record Document(String source, List<Line> lines,
 			List<GLCodeDiagnostic> syntaxDiagnostics) {

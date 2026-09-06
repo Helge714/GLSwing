@@ -58,6 +58,7 @@ codeEditor.semantic.decorator=rgba(160, 160, 160, 255)
 codeEditor.semantic.*.deprecated=rgba(128, 128, 128, 255)
 
 textShadow.color=rgba(0, 0, 0, 0)
+textShadow.on=true
 textShadow.offsetX=1
 textShadow.offsetY=1
 textShadow.softness=0
@@ -91,6 +92,8 @@ slider.hover=${state.hover}
 slider.pressed=rgba(125, 125, 125, 255)
 slider.progressLight=rgba(105, 145, 210, 255)
 slider.progressDark=rgba(68, 104, 165, 255)
+slider.focusProgressLight=${slider.progressLight}
+slider.focusProgressDark=${slider.progressDark}
 slider.arrowBackground=${state.normal}
 slider.arrowHover=${state.hover}
 slider.arrowPressed=${palette.accent}
@@ -101,6 +104,14 @@ slider.preferredWidth=180
 slider.arrowButtonWidth=14
 slider.arrowInset=2
 slider.arrowStrokeWidth=1.5
+
+numberSpinner.height=28
+numberSpinner.preferredWidth=120
+numberSpinner.buttonWidth=24
+numberSpinner.arrowStrokeWidth=1.5
+numberSpinner.cornerRadius=${metrics.cornerRadius}
+numberSpinner.borderWidth=${metrics.borderWidth}
+numberSpinner.padding=${metrics.padding}
 
 textEditor.background=rgba(42, 42, 42, 255)
 textEditor.text=${palette.text}

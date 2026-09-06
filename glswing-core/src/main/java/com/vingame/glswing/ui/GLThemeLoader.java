@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
+import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -347,7 +348,8 @@ public final class GLThemeLoader {
 		if (type != ThemeType.COLORS && type != ThemeType.METRICS)
 			return;
 		for (String key : raw.keySet()) {
-			boolean color = isColorOrFontKey(key);
+			if ("theme.name".equals(key)) continue;
+			boolean color = GLThemeKeyClassifier.isColorOrFontKey(key);
 			if (type == ThemeType.COLORS && !color)
 				throw new GLThemeLoadException(identity + ": " + key
 						+ " is not permitted in a color theme");
@@ -355,21 +357,6 @@ public final class GLThemeLoader {
 				throw new GLThemeLoadException(identity + ": " + key
 						+ " is not permitted in a metrics theme");
 		}
-	}
-
-	private static boolean isColorOrFontKey(String key) {
-		String lower = key.toLowerCase();
-		if (lower.startsWith("palette.") || lower.startsWith("state.")
-				|| lower.startsWith("font.") || lower.contains(".font."))
-			return true;
-		String leaf = lower.substring(lower.lastIndexOf('.') + 1);
-		if (leaf.matches(".*(width|height|radius|padding|gap|size|length|distance|"
-				+ "tolerance|factor|inset|offset|softness|thickness)$"))
-			return false;
-		return leaf.matches(".*(background|foreground|text|border|focus|selection|"
-				+ "caret|invalid|separator|arrow|progress|track|thumb|shadow|"
-				+ "accent|color|disabled|hover|pressed|normal|surface|active|"
-				+ "port|fill|tab).*" );
 	}
 
 	private static Path resolvePath(Path owner, String reference) {
@@ -649,7 +636,12 @@ public final class GLThemeLoader {
 				return super.put(key, value);
 			}
 		};
-		properties.load(reader);
+		StringBuilder sourceText = new StringBuilder();
+		char[] buffer = new char[4096];
+		for (int read; (read = reader.read(buffer)) >= 0; )
+			sourceText.append(buffer, 0, read);
+		properties.load(new StringReader(GLPropertiesSyntax.removeInlineComments(
+				sourceText.toString())));
 		Map<String, String> values = new LinkedHashMap<>();
 		for (String key : properties.stringPropertyNames()) {
 			String value = properties.getProperty(key);

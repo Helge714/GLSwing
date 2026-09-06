@@ -78,6 +78,15 @@ public final class GLSliderSelfTest {
 		check(Math.abs(slider.getValue() - 4.5) < 0.0001
 				&& !slider.isValueEditing() && slider.getGLChildren().isEmpty(),
 				"Committed editor text did not update and close the slider editor");
+		slider.setValueFormatter(value -> String.format("%.1f %%", value));
+		slider.startValueEditing();
+		editor = (GLTextEditor) slider.getGLChildren().get(0);
+		check(editor.getInputFilter().test("6.5 %")
+				&& editor.getInputFilter().test("€ 6.5"),
+				"Slider editor rejected a decorated numeric value");
+		editor.setText("6.5 %");
+		check(editor.commit() && Math.abs(slider.getValue() - 6.5) < 0.0001,
+				"Slider editor did not accept its formatted unit suffix");
 	}
 
 	private static void testFreeDragRequestsRecentering() {

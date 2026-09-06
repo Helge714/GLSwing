@@ -90,17 +90,25 @@ class GLColorPickerTest {
 				GLColorExpressionFormat.ChannelNotation.PERCENT,2,true);
 		assertEquals("hsv(120deg, 100%, 100%, 100%)",
 				GLColorModel.HSV.format(GLColorModel.HSV.channels(Color.GREEN),1,percent));
+		GLColorExpressionFormat compactOpaque = bytes.withOmitOpaqueAlpha(true);
+		assertEquals("hsv(120deg, 255, 255)",
+				GLColorModel.HSV.format(GLColorModel.HSV.channels(Color.GREEN), 1,
+						compactOpaque));
+		assertEquals("oklab(255, 0f, 0f)", GLColorModel.OKLAB.format(
+				new double[] { 1, 0, 0 }, 1, compactOpaque));
 		assertThrows(IllegalArgumentException.class,()->new GLColorExpressionFormat(
 				GLColorExpressionFormat.ChannelNotation.PERCENT,13,true));
 	}
 	@Test void themeAutoFormatUsesTheConfiguredColorPolicy() {
 		GLCodeEditor editor=new GLCodeEditor(
-				"palette.sample=rgb(0.500000f, 1.000000f, 0.000000f, 1.000000f)");
+				"palette.sample=rgb(0.500000f, 1.000000f, 0.000000f, 1.000000f)\n"
+				+ "button.background=${palette.sample}");
 		editor.setLanguage(GLCodeLanguages.GLTHEME);
 		editor.setColorExpressionFormat(new GLColorExpressionFormat(
-				GLColorExpressionFormat.ChannelNotation.NORMALIZED_FLOAT,3,true));
+				GLColorExpressionFormat.ChannelNotation.NORMALIZED_FLOAT,3,true,true));
 		editor.formatCode();
-		assertEquals("palette.sample=rgb(0.502f, 1f, 0f, 1f)",editor.getText());
+		assertEquals("palette.sample=rgb(0.502f, 1f, 0f)\n"
+				+ "button.background=${palette.sample}",editor.getText());
 	}
 	@Test void validChannelTextUpdatesColorBeforeCommit() {
 		GLColorPicker picker=new GLColorPicker(Color.BLACK);picker.setBounds(0,0,480,226);
