@@ -87,7 +87,7 @@ public enum GLColorModel {
 			throw new IllegalArgumentException("Three channels and normalized alpha required");
 		for (double value : c) if (!Double.isFinite(value)) throw new IllegalArgumentException("Finite channels required");
 		if (format == null) throw new IllegalArgumentException("Color expression format required");
-		String alphaArgument = format.omitOpaqueAlpha() && alpha == 1d
+		String alphaArgument = format.omitOpaqueAlpha() && alpha >= 1d - 0.5d / 255d
 				? "" : ", " + format.bounded(alpha);
 		return switch (this) {
 		case RGB -> "rgb(" + rgb(c[0], format) + ", " + rgb(c[1], format)

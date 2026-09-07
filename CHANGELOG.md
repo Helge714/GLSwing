@@ -39,6 +39,9 @@ may change in subsequent `0.x` releases.
   antialiased without gaps or hard clipping.
 - Subpixel corner radii up to one logical pixel resolve to stable square
   corners instead of producing diagonal corner-pixel asymmetry.
+- Inner rounded-border coverage is constrained to its inset bounds and to the
+  outer contour. This prevents isolated fill pixels at the bottom-left and
+  top-right corners when border width consumes the inner corner radius.
 - Buttons, combo boxes, and text editors now compose fill and border from one
   analytic contour, including controls with asymmetric corner radii.
 
@@ -51,6 +54,38 @@ may change in subsequent `0.x` releases.
 
 ### UI
 
+- Added localized Find and Find/Replace dialogs to multiline text and code
+  editors, including configurable all-match highlighting, active/total result
+  counts, repeated-Enter navigation, keyboard and button navigation,
+  forward/backward wrapping search, case matching,
+  programmatic search operations, read-only Find, and atomic undo for Replace
+  All. Default shortcuts are `Ctrl/Cmd+F` and `Ctrl/Cmd+H`.
+- Theme formatting now normalizes the compatibility form `rgba(...)` to
+  `rgb(...)` and removes a redundant opaque alpha channel when requested by the
+  active color-expression format.
+- Connected layout groups now paint one opaque occupied-shape backing before
+  their independently clipped children, preventing transparent dialog content
+  below internal antialiased edges from revealing the owner window.
+- Root render targets now compose framebuffer alpha with the source-over rule
+  independently from RGB blending. Antialiased control and group edges drawn
+  over an opaque themed dialog therefore remain opaque to the native desktop.
+
+- Theme properties now use a packaged declarative `.glschema` contract instead
+  of name-based type heuristics. Theme bundles can add application properties
+  through `theme.schema`, using either one schema file or a directory of schema
+  fragments. The effective schema drives runtime validation, fragment
+  filtering, editor completion, diagnostics, hover descriptions, and inlay
+  hints. Missing `theme.extends` inherits the standard theme; unknown
+  properties remain available with a configurable warn, reject, or allow
+  policy.
+- Theme documents can declare document-local custom tokens with `@COLOR`,
+  `@NUMBER`, `@INSETS`, `@BOOLEAN`, `@TEXT`, `@PATH`, or an explicit
+  `@ENUM<value1, value2, ...>` list. The annotation supplies
+  predictable validation and editor tooling without becoming part of the
+  runtime property key; reusable contracts can remain in `.glschema` files.
+  The built-in `palette.*` and global `metrics.*` reference tokens now use
+  these declarations in `default.gltheme`; the central schema is reserved for
+  fixed control properties and constraints.
 - Added external document-file monitoring and save-conflict coordination.
   Clean documents can reload automatically in place; locally modified documents
   require an application-provided Reload, Overwrite, Save As, or Cancel choice.

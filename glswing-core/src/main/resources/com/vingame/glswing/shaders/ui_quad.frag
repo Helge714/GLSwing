@@ -121,6 +121,11 @@ float squareInsetCoverage(vec2 inset) {
 	return min(min(lower.x, lower.y), min(upper.x, upper.y));
 }
 
+float insetBoundsMask(vec2 inset) {
+	vec2 edgeDistance = min(vLocal - inset, vSize - vLocal - inset);
+	return step(0.0, min(edgeDistance.x, edgeDistance.y));
+}
+
 vec2 resolvedSquareStrokeInset() {
 	if (vParameters.w < 0.5)
 		return vec2(vParameters.z);
@@ -255,10 +260,12 @@ void main() {
         float distance = roundedDistance(vLocal, vSize, vParameters.y);
 		float strokeWidth = resolvedStrokeWidth(distance);
 		float outer = vParameters.y <= 1.0 ? 1.0 : edgeCoverage(distance);
-		float inner = vParameters.y <= 1.0
+		float inner = vParameters.y - strokeWidth <= 1.0
 				? squareInsetCoverage(resolvedSquareStrokeInset())
 				: edgeCoverage(insetRoundedDistance(
 						vLocal, vSize, vParameters.y, strokeWidth));
+		inner *= insetBoundsMask(resolvedSquareStrokeInset());
+		inner = min(inner, outer);
         coverage = max(0.0, outer - inner);
     } else if (mode == 2) {
         coverage = msdfCoverage();
@@ -272,10 +279,12 @@ void main() {
 		float distance = roundedDistance(vLocal, vSize, vParameters.y);
 		float strokeWidth = resolvedStrokeWidth(distance);
 		float outer = vParameters.y <= 1.0 ? 1.0 : edgeCoverage(distance);
-		float inner = vParameters.y <= 1.0
+		float inner = vParameters.y - strokeWidth <= 1.0
 				? squareInsetCoverage(resolvedSquareStrokeInset())
 				: edgeCoverage(insetRoundedDistance(
 						vLocal, vSize, vParameters.y, strokeWidth));
+		inner *= insetBoundsMask(resolvedSquareStrokeInset());
+		inner = min(inner, outer);
 		float borderCoverage = max(0.0, outer - inner);
 		float fillAlpha = vColor.a * inner;
 		float borderAlpha = vSecondaryColor.a * borderCoverage;
@@ -308,9 +317,13 @@ void main() {
 		bool square = asymmetricCornerRadius(
 				vLocal, vSize, vSecondaryColor) <= 1.0;
 		float outer = square ? 1.0 : edgeCoverage(distance);
-		float inner = square ? squareInsetCoverage(resolvedSquareStrokeInset())
+		bool squareInner = asymmetricCornerRadius(vLocal, vSize,
+				vSecondaryColor) - strokeWidth <= 1.0;
+		float inner = squareInner ? squareInsetCoverage(resolvedSquareStrokeInset())
 				: edgeCoverage(insetAsymmetricRoundedDistance(vLocal, vSize,
 						vSecondaryColor, strokeWidth));
+		inner *= insetBoundsMask(resolvedSquareStrokeInset());
+		inner = min(inner, outer);
 		coverage = max(0.0, outer - inner);
 	} else if (mode == 11) {
 		vec4 radii = vec4(vParameters.y, vParameters.y,
@@ -338,9 +351,13 @@ void main() {
 		bool square = asymmetricCornerRadius(vLocal, vSize, vAux) <= 1.0;
 		float outer = square ? 1.0 : edgeCoverage(distance);
 		float strokeWidth = resolvedStrokeWidth(distance);
-		float inner = square ? squareInsetCoverage(resolvedSquareStrokeInset())
+		bool squareInner = asymmetricCornerRadius(vLocal, vSize, vAux)
+				- strokeWidth <= 1.0;
+		float inner = squareInner ? squareInsetCoverage(resolvedSquareStrokeInset())
 				: edgeCoverage(insetAsymmetricRoundedDistance(
 						vLocal, vSize, vAux, strokeWidth));
+		inner *= insetBoundsMask(resolvedSquareStrokeInset());
+		inner = min(inner, outer);
 		float borderCoverage = max(0.0, outer - inner);
 		float fillAlpha = vColor.a * inner;
 		float borderAlpha = vSecondaryColor.a * borderCoverage;
@@ -371,9 +388,12 @@ void main() {
 				? requestedStroke * max(length(vec2(dFdx(distance), dFdy(distance))
 						* uDeviceScale), 0.0001)
 				: requestedStroke;
-		float inner = square ? squareInsetCoverage(
-				resolvedSquareStrokeInset(vParameters.w)) : edgeCoverage(
-				insetRoundedDistance(vLocal, vSize, vParameters.y, strokeWidth));
+		vec2 squareInset = resolvedSquareStrokeInset(vParameters.w);
+		float inner = vParameters.y - strokeWidth <= 1.0
+				? squareInsetCoverage(squareInset) : edgeCoverage(
+						insetRoundedDistance(vLocal, vSize, vParameters.y, strokeWidth));
+		inner *= insetBoundsMask(squareInset);
+		inner = min(inner, outer);
 		float progress = clamp(vParameters.z, 0.0, 1.0);
 		float progressCoverage = progress <= 0.0 ? 0.0
 				: progress >= 1.0 ? 1.0

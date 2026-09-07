@@ -11,6 +11,7 @@
 - [Wrapping, tabs, and scrolling](#wrapping-tabs-and-scrolling)
 - [Alignment](#alignment)
 - [Character formatting](#character-formatting)
+- [Find and replace](#find-and-replace)
 - [Code editing](#code-editing)
 - [Editing history](#editing-history)
 
@@ -136,6 +137,40 @@ All built-in context-menu labels use `GLUiKeys` and GLSwing's resource bundles.
 Changing the host `GLLocalizer` refreshes existing menus. Applications can
 override individual labels or supply their own localized bundle without
 rebuilding the editor menu.
+
+## Find and replace
+
+`GLTextArea` and `GLCodeEditor` provide a modeless, theme-aware search dialog.
+The default input map opens it with `Ctrl/Cmd+F`; editable documents display
+the replacement field and Replace/Replace All actions directly. `Ctrl/Cmd+H`
+opens the same full Find/Replace view explicitly. Both commands are also
+available from the editor context menu. Read-only documents use the compact
+Find-only view.
+Search can move forward or backward, wraps at document boundaries, and can be
+case-sensitive. Pressing Enter starts the search; each subsequent Enter moves to
+the next occurrence. Up/Down and the Previous/Next buttons provide the same
+navigation in either direction. The result counter reports the active and total
+match counts, and every occurrence remains highlighted while the dialog is open.
+The active occurrence uses the stronger highlight. Enter in the replacement
+field replaces the active match; Replace All is recorded as one local undo
+operation.
+
+Applications can use the same operations without opening the standard dialog:
+
+```java
+int matches = area.startSearch("accent", false);
+area.findNext("accent", false);
+area.findPrevious("accent", false);
+area.replaceCurrent("accent", "primary", false);
+int replacements = area.replaceAll("accent", "primary", false);
+area.clearSearch();
+```
+
+`showSearchDialog(false)` opens Find and `showSearchDialog(true)` includes the
+replacement controls. Search remains available in read-only editors; replace
+commands are disabled there. `textEditor.searchMatch` and
+`textEditor.searchActiveMatch` configure the two marker colors independently of
+`textEditor.selection`, so an ordinary text selection remains distinguishable.
 
 ## Code editing
 

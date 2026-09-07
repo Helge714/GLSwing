@@ -4,6 +4,8 @@ import java.awt.Color;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -11,6 +13,9 @@ import com.vingame.glswing.ui.GLLocalizer;
 import com.vingame.glswing.ui.GLTheme;
 import com.vingame.glswing.ui.GLThemeLoader;
 import com.vingame.glswing.ui.GLThemeLoadException;
+import com.vingame.glswing.ui.GLThemeLoadOptions;
+import com.vingame.glswing.ui.GLThemeLoadWarning;
+import com.vingame.glswing.ui.GLThemeUnknownPropertyPolicy;
 import com.vingame.glswing.ui.GLThemeValues;
 import com.vingame.glswing.ui.GLThemes;
 import com.vingame.glswing.ui.GLUiKeys;
@@ -158,6 +163,10 @@ public final class GLLocalizationThemeSelfTest {
 						.activeSelectedBorder()),
 				"Active node-selection border did not reach its style");
 		check(nodeEditor.connectionSnapDistance() == 18
+				&& nodeEditor.gridVisible()
+				&& nodeEditor.gridSpacing() == 24
+				&& nodeEditor.majorGridInterval() == 4
+				&& nodeEditor.gridLineWidth() == 1
 				&& nodeEditor.connectionColorInterpolator()
 						== GLColorInterpolation.SRGB
 				&& nodeEditor.connectionCurveTolerance() == 0.01f
@@ -204,16 +213,21 @@ public final class GLLocalizationThemeSelfTest {
 		try {
 			Files.writeString(file, """
 					theme.extends=light
-					custom.brand=rgba(1f, 0.5f, 0.5f, 0.75f)
-					custom.derived=derive(${custom.brand}, alpha=64)
-					custom.derivedFloat=derive(${custom.brand}, alpha=0.25f)
-					custom.relative=derive(${custom.brand}, alpha*=50%)
-					custom.shifted=derive(${custom.brand}, hue+=120deg, value*=90%)
-					custom.hex = #112233 # Inline comments do not consume hex colors
+					@COLOR custom.brand=rgba(1f, 0.5f, 0.5f, 0.75f)
+					@COLOR custom.derived=derive(${custom.brand}, alpha=64)
+					@COLOR custom.derivedFloat=derive(${custom.brand}, alpha=0.25f)
+					@COLOR custom.relative=derive(${custom.brand}, alpha*=50%)
+					@COLOR custom.shifted=derive(${custom.brand}, hue+=120deg, value*=90%)
+					@COLOR custom.hex = #112233 # Inline comments do not consume hex colors
+					@COLOR palette.applicationBrand=oklch(68%, 0.12, 250deg)
+					@NUMBER metrics.animationDuration=180
+					@ENUM<compact, comfortable> application.density=compact
 					palette.accent=${custom.brand}
 					button.pressedLight=${custom.brand}
 					button.pressedDark=${custom.brand}
 					button.cornerRadius=11 # Compact button geometry
+					button.borderWidth=${metrics.borderWidth} + 1
+					button.padding=12
 					textShadow.color=rgba(0, 0, 0, 160)
 					textShadow.offsetX=1.5
 					textShadow.offsetY=2
@@ -234,6 +248,25 @@ public final class GLLocalizationThemeSelfTest {
 			check(new Color(0x11, 0x22, 0x33).equals(
 					loaded.values().getColor("custom.hex", Color.BLACK)),
 					"Inline comment parsing consumed a hexadecimal color");
+			check(loaded.values().getColor("palette.applicationBrand", Color.BLACK)
+						.getBlue() > 0
+					&& loaded.values().getFloat("metrics.animationDuration", 0) == 180,
+					"Inline typed theme tokens were not retained");
+			check(!loaded.values().contains("@COLOR palette.applicationBrand")
+					&& !loaded.values().contains("@NUMBER metrics.animationDuration"),
+					"Inline type annotation leaked into the runtime property key");
+			check("compact".equals(loaded.values().get("application.density", "")),
+					"Inline enum was not retained as a runtime property");
+			Path invalidInline = directory.resolve("invalid-inline.gltheme");
+			Files.writeString(invalidInline, "@NUMBER application.speed=fast\n",
+					StandardCharsets.UTF_8);
+			try {
+				GLThemeLoader.load(invalidInline);
+				throw new AssertionError("Invalid inline numeric token was accepted");
+			} catch (IllegalArgumentException expected) {
+				check(expected.getMessage().contains("application.speed"),
+						"Inline token error did not identify its property");
+			}
 			check(new Color(255, 128, 128, 64).equals(
 					loaded.values().getColor("custom.derived", Color.BLACK))
 					&& new Color(255, 128, 128, 64).equals(
@@ -253,6 +286,13 @@ public final class GLLocalizationThemeSelfTest {
 							+ loaded.sliderStyle().pressedBackground());
 			check(loaded.buttonStyle().cornerRadius() == 11,
 					"Component-specific corner radius was not applied");
+			check(loaded.buttonStyle().borderWidth() == 2,
+					"Referenced metric expression was not evaluated");
+			check(loaded.buttonStyle().padding().top() == 12
+					&& loaded.buttonStyle().padding().left() == 12
+					&& loaded.buttonStyle().padding().bottom() == 12
+					&& loaded.buttonStyle().padding().right() == 12,
+					"Single-value inset shorthand was not expanded");
 			check(!loaded.textShadow("label").isVisible()
 					&& loaded.textShadow("button").offsetY() == 3
 					&& loaded.textShadow("button").offsetSpace()
@@ -266,8 +306,8 @@ public final class GLLocalizationThemeSelfTest {
 					"External node-editor curve tokens did not reach its style");
 
 			Files.writeString(cycle, """
-					token.a=${token.b}
-					token.b=${token.a}
+					@TEXT token.a=${token.b}
+					@TEXT token.b=${token.a}
 					""", StandardCharsets.UTF_8);
 			try {
 				GLThemeLoader.load(cycle);
@@ -285,6 +325,9 @@ public final class GLLocalizationThemeSelfTest {
 					theme.name=Dark colors
 					palette.accent=#336699
 					codeEditor.keyword=#cc6c1d
+					nodeEditor.gridMinor=#182028
+					nodeEditor.gridMajor=#283848
+					nodeEditor.connectionColorInterpolation=oklab
 					button.background=#102030
 					""", StandardCharsets.UTF_8);
 			Files.writeString(metrics, """
@@ -302,12 +345,92 @@ public final class GLLocalizationThemeSelfTest {
 			GLTheme combined = GLThemeLoader.load(bundle);
 			check(combined.values().getColor("palette.accent", Color.BLACK)
 					.equals(new Color(0x33, 0x66, 0x99))
+					&& combined.values().getColor("nodeEditor.gridMajor", Color.BLACK)
+							.equals(new Color(0x28, 0x38, 0x48))
 					&& combined.buttonStyle().background()
 							.equals(new Color(0x10, 0x20, 0x30)),
 					"Bundle did not import its color theme");
 			check(combined.menuStyle().itemCornerRadius() == 3
-					&& combined.buttonStyle().cornerRadius() == 7,
+					&& combined.buttonStyle().cornerRadius() == 7
+					&& GLNodeEditorStyle.fromTheme(combined).connectionColorInterpolator()
+							== GLColorInterpolation.OKLAB,
 					"Bundle metric import or local override order is wrong");
+			Path explicitNumericColors = directory.resolve("numeric-colors.gltheme");
+			Files.writeString(explicitNumericColors, """
+					theme.type=colors
+					@NUMBER button.cornerRadius=13
+					""", StandardCharsets.UTF_8);
+			check(GLThemeLoader.loadBundle(GLThemes.DEFAULT, explicitNumericColors, null)
+					.buttonStyle().cornerRadius() == 13,
+					"Explicit @NUMBER override was rejected by a color fragment");
+
+			Path schemaDirectory = Files.createDirectory(directory.resolve("schema"));
+			Files.writeString(schemaDirectory.resolve("application.glschema"), """
+					schema.name=Application theme values
+					application.tint=COLOR, "Application tint"
+					application.cellPadding=INSETS, "Top, left, bottom, and right", min=0
+					application.opacity=NUMBER, "Application opacity", min=0, max=1
+					application.mode=ENUM, "Application mode", values=compact|comfortable
+					""", StandardCharsets.UTF_8);
+			Path customColors = directory.resolve("application-colors.gltheme");
+			Files.writeString(customColors, """
+					theme.type=colors
+					application.tint=#123456
+					""", StandardCharsets.UTF_8);
+			Path customMetrics = directory.resolve("application-metrics.gltheme");
+			Files.writeString(customMetrics, """
+					theme.type=metrics
+					application.cellPadding=2, 4
+					application.opacity=0.75
+					application.mode=compact
+					""", StandardCharsets.UTF_8);
+			Path customBundle = directory.resolve("application.gltheme");
+			Files.writeString(customBundle, """
+					theme.type=bundle
+					theme.schema=schema
+					theme.colors=application-colors.gltheme
+					theme.metrics=application-metrics.gltheme
+					""", StandardCharsets.UTF_8);
+			List<GLThemeLoadWarning> warnings = new ArrayList<>();
+			GLTheme custom = GLThemeLoader.load(customBundle, new GLThemeLoadOptions(
+					GLThemeUnknownPropertyPolicy.WARNING, warnings::add));
+			check(warnings.isEmpty()
+					&& custom.values().getColor("application.tint", Color.BLACK)
+							.equals(new Color(0x12, 0x34, 0x56))
+					&& custom.values().getInsets("application.cellPadding", null).left() == 4,
+					"Bundle schema directory did not type its custom properties");
+
+			Path unknown = directory.resolve("unknown-property.gltheme");
+			Files.writeString(unknown, "application.unknownPadding=1,2,3,4\n",
+					StandardCharsets.UTF_8);
+			warnings.clear();
+			GLThemeLoader.load(unknown, new GLThemeLoadOptions(
+					GLThemeUnknownPropertyPolicy.WARNING, warnings::add));
+			check(warnings.size() == 1
+					&& warnings.get(0).property().equals("application.unknownPadding"),
+					"Unknown property did not produce a recoverable warning");
+			try {
+				GLThemeLoader.load(unknown,
+						GLThemeLoadOptions.of(GLThemeUnknownPropertyPolicy.ERROR));
+				throw new AssertionError("Strict loading accepted an unknown property");
+			} catch (GLThemeLoadException expected) {
+				check(expected.getMessage().contains("unknown theme property"),
+						"Strict unknown-property error lacked context");
+			}
+
+			Files.writeString(customMetrics, """
+					theme.type=metrics
+					application.opacity=1.5
+					""", StandardCharsets.UTF_8);
+			try {
+				GLThemeLoader.load(customBundle);
+				throw new AssertionError("Custom schema maximum was ignored");
+			} catch (IllegalArgumentException expected) {
+				check(expected.getMessage().contains("application.opacity"),
+						"Custom range error did not identify its property");
+			}
+			Files.deleteIfExists(schemaDirectory.resolve("application.glschema"));
+			Files.deleteIfExists(schemaDirectory);
 			GLTheme selectedFragments = GLThemeLoader.loadBundle(GLThemes.DEFAULT,
 					colors, metrics);
 			check(selectedFragments.values()
@@ -316,6 +439,34 @@ public final class GLLocalizationThemeSelfTest {
 					&& selectedFragments.menuStyle().itemCornerRadius() == 3
 					&& selectedFragments.buttonStyle().cornerRadius() == 9,
 					"Independently selected color and metrics fragments were not composed");
+
+			for (String invalidMetric : List.of(
+					"tabbedPane.tabGap=1.3+",
+					"nodeEditor.connectionCurveTolerance=#0.01",
+					"node.contentPadding=1, 2, 3, 4, 5")) {
+				String key = invalidMetric.substring(0, invalidMetric.indexOf('='));
+				Path invalidDeferredMetric = directory.resolve(
+						"invalid-" + key.replace('.', '-') + ".gltheme");
+				Files.writeString(invalidDeferredMetric,
+						"theme.extends=default\n" + invalidMetric + "\n",
+						StandardCharsets.UTF_8);
+				try {
+					GLThemeLoader.load(invalidDeferredMetric);
+					throw new AssertionError("Deferred metric was accepted: " + key);
+				} catch (GLThemeLoadException expected) {
+					check(expected.getMessage().contains(key),
+							"Deferred metric error did not identify " + key);
+				}
+			}
+			Path borderless = directory.resolve("borderless.gltheme");
+			Files.writeString(borderless, """
+					theme.extends=default
+					tabbedPane.borderWidth=0
+					layoutGroup.borderWidth=0
+					""", StandardCharsets.UTF_8);
+			check(GLThemeLoader.load(borderless).values()
+					.getFloat("tabbedPane.borderWidth", -1) == 0,
+					"A valid borderless theme was rejected");
 
 			Path invalidColors = directory.resolve("invalid-colors.gltheme");
 			Files.writeString(invalidColors, """

@@ -742,12 +742,52 @@ public class GLNodeEditor extends GLContainer
 	@Override
 	protected void render(GLContext2D context) {
 		super.render(context);
+		if (getWidth() <= 0 || getHeight() <= 0)
+			return;
+		context.beginClip(0, 0, getWidth(), getHeight());
 		GLTransform previous = context.getTransform();
 		try {
 			context.setTransform(viewTransform(previous));
+			drawGrid(context);
 			drawConnections(context);
 		} finally {
 			context.setTransform(previous);
+			context.endClip();
+		}
+	}
+
+	private void drawGrid(GLContext2D context) {
+		GLNodeEditorStyle style = getGLStyle();
+		if (!style.gridVisible()) return;
+		float spacing = style.gridSpacing();
+		float centerX = getWidth() * 0.5f;
+		float centerY = getHeight() * 0.5f;
+		float minX = centerX + (-centerX - panX) / zoom;
+		float maxX = centerX + (getWidth() - centerX - panX) / zoom;
+		float minY = centerY + (-centerY - panY) / zoom;
+		float maxY = centerY + (getHeight() - centerY - panY) / zoom;
+		int firstX = (int) Math.floor(minX / spacing);
+		int lastX = (int) Math.ceil(maxX / spacing);
+		int firstY = (int) Math.floor(minY / spacing);
+		int lastY = (int) Math.ceil(maxY / spacing);
+		GLStroke previous = context.getStroke();
+		try {
+			context.setStroke(new GLStroke(style.gridLineWidth())
+					.withWidthSpace(GLStroke.WidthSpace.SCREEN));
+			for (int column = firstX; column <= lastX; column++) {
+				Color color = Math.floorMod(column, style.majorGridInterval()) == 0
+						? style.majorGridColor() : style.minorGridColor();
+				float x = column * spacing;
+				context.drawUILine(x, minY, x, maxY, color);
+			}
+			for (int row = firstY; row <= lastY; row++) {
+				Color color = Math.floorMod(row, style.majorGridInterval()) == 0
+						? style.majorGridColor() : style.minorGridColor();
+				float y = row * spacing;
+				context.drawUILine(minX, y, maxX, y, color);
+			}
+		} finally {
+			context.setStroke(previous);
 		}
 	}
 

@@ -11,6 +11,8 @@ import com.vingame.glswing.rendering.GLContext2D;
 
 /** Compact color button opening an owner-modal, theme-aware color picker. */
 public class GLColorChooser extends GLButton {
+	private static volatile GLColorModel recentEditingModel;
+	private static volatile GLColorModel recentOutputModel;
 	private Color color;
 	private GLPipettePreview pipettePreview = GLPipettePreview.DEFAULT;
 	private final java.util.concurrent.CopyOnWriteArrayList<Consumer<Color>> listeners=new java.util.concurrent.CopyOnWriteArrayList<>();
@@ -62,8 +64,11 @@ public class GLColorChooser extends GLButton {
 			GLColorModel outputModel, GLColorExpressionFormat format,
 			GLPipettePreview preview, Consumer<GLColorPicker> accepted) {
 		Objects.requireNonNull(owner); Objects.requireNonNull(accepted);
-		GLColorPicker picker=new GLColorPicker(color); picker.setColorModel(model);
-		picker.setOutputColorModel(Objects.requireNonNull(outputModel));
+		GLColorPicker picker=new GLColorPicker(color);
+		picker.setColorModel(recentEditingModel == null
+				? Objects.requireNonNull(model) : recentEditingModel);
+		picker.setOutputColorModel(recentOutputModel == null
+				? Objects.requireNonNull(outputModel) : recentOutputModel);
 		picker.setColorExpressionFormat(Objects.requireNonNull(format));
 		picker.setPipettePreview(preview);
 		picker.setGLHistoryManager(new GLHistoryManager());
@@ -73,14 +78,18 @@ public class GLColorChooser extends GLButton {
 		GLContainer content=new GLContainer() {
 			@Override protected void record(GLContext2D context) { }
 			@Override protected void resized(float w,float h) {
-				picker.setBounds(0,0,w,230); actions.setBounds(12,238,Math.max(1,w-24),28);
+				picker.setBounds(0,0,w,258); actions.setBounds(12,266,Math.max(1,w-24),28);
 			}
 		};
 		content.addGL(picker); content.addGL(actions);
 		GLDialog dialog=new GLDialog(owner.getGLLocalizer().text("glswing.colorPicker.title"),content);
 		dialog.setDecoration(GLDialog.Decoration.THEMED);
-		dialog.setSize(480,282); dialog.setResizable(false);
-		apply.addActionListener(event->{accepted.accept(picker); dialog.close();});
+		dialog.setSize(480,310); dialog.setResizable(false);
+		apply.addActionListener(event->{
+			recentEditingModel=picker.getColorModel();
+			recentOutputModel=picker.getOutputColorModel();
+			accepted.accept(picker); dialog.close();
+		});
 		cancel.addActionListener(event->dialog.close());
 		dialog.show(owner); return dialog;
 	}

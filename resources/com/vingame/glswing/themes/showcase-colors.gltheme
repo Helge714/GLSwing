@@ -3,14 +3,14 @@ theme.type=colors
 font.source=fonts/VT323-Regular.ttf
 font.size=19
 
-palette.surface=rgba(27, 31, 42, 255)
-palette.text=rgba(240, 243, 250, 255)
-palette.textDisabled=rgba(145, 153, 171, 255)
-palette.textSecondary=rgba(181, 190, 210, 255)
-palette.border=rgba(78, 89, 112, 255)
-palette.accent=rgba(255, 174, 66, 255)
-palette.selection=rgba(181, 100, 30, 220)
-palette.invalid=rgba(235, 105, 120, 255)
+@COLOR palette.surface=rgba(27, 31, 42, 255)
+@COLOR palette.text=rgba(240, 243, 250, 255)
+@COLOR palette.textDisabled=rgba(145, 153, 171, 255)
+@COLOR palette.textSecondary=rgba(181, 190, 210, 255)
+@COLOR palette.border=rgba(78, 89, 112, 255)
+@COLOR palette.accent=rgba(255, 174, 66, 255)
+@COLOR palette.selection=rgba(181, 100, 30, 220)
+@COLOR palette.invalid=rgba(235, 105, 120, 255)
 
 textShadow.color=rgba(0, 0, 0, 180)
 

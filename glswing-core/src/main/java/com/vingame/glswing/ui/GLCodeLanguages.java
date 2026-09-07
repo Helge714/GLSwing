@@ -13,6 +13,8 @@ import com.vingame.glswing.input.GLInputCodeSupport;
 public final class GLCodeLanguages {
 	/** Native GLSwing theme language with in-process schema intelligence. */
 	public static final GLCodeLanguage GLTHEME = GLThemeCodeSupport.language();
+	/** Declarative GLSwing theme-property schema language. */
+	public static final GLCodeLanguage GLSCHEMA = GLThemeSchemaCodeSupport.language();
 	/** Native GLSwing input-map language with in-process schema intelligence. */
 	public static final GLCodeLanguage GLINPUT = GLInputCodeSupport.language();
 	/** Native UTF-8 ResourceBundle localization language. */
@@ -101,6 +103,7 @@ public final class GLCodeLanguages {
 		String extension = dot < 0 ? "" : lower.substring(dot + 1);
 		return Optional.ofNullable(switch (extension) {
 		case "gltheme" -> GLTHEME;
+		case "glschema" -> GLSCHEMA;
 		case "glinput" -> GLINPUT;
 		case "properties" -> LOCALIZATION;
 		case "java" -> JAVA;

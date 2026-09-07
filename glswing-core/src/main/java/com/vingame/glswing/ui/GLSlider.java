@@ -517,7 +517,10 @@ public class GLSlider extends GLControl {
 			Color progressDark = sliderGroup == null ? style.progressDarkColor()
 					: sliderGroup.progressColor(this, style.progressLightColor(),
 							style.progressDarkColor(), true);
-			if (isFocused() && sliderGroup == null) {
+			GLControlState state = getControlState();
+			if (sliderGroup == null && isEnabled()
+					&& (state == GLControlState.HOVERED
+							|| state == GLControlState.PRESSED)) {
 				progressLight = getGLTheme().values().getColor(
 						"slider.focusProgressLight", progressLight);
 				progressDark = getGLTheme().values().getColor(
@@ -684,14 +687,14 @@ public class GLSlider extends GLControl {
 
 	@Override
 	protected void controlMouseEntered(GLMouseEvent event) {
-		showResizeCursor(event);
 		updateHoverPart(event);
+		showResizeCursor(event);
 	}
 
 	@Override
 	protected void controlMouseMoved(GLMouseEvent event) {
-		showResizeCursor(event);
 		updateHoverPart(event);
+		showResizeCursor(event);
 	}
 
 	@Override
@@ -1134,7 +1137,8 @@ public class GLSlider extends GLControl {
 		if (presentation != Presentation.BUTTONS || !isEnabled() || relativeDragging)
 			return;
 		pointerController = event.getPointerController();
-		pointerController.setCursor(this, GLPointerCursor.HORIZONTAL_RESIZE);
+		pointerController.setCursor(this, hoverPart.isArrow()
+				? GLPointerCursor.DEFAULT : GLPointerCursor.HORIZONTAL_RESIZE);
 	}
 
 	private void restoreHoverCursor() {

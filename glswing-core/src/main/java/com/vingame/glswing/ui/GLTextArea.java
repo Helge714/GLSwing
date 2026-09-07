@@ -54,6 +54,12 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 	private final GLMenuItem justifiedItem;
 	private final GLMenuItem boldItem;
 	private final GLMenuItem italicItem;
+	private final GLAction findAction;
+	private final GLAction replaceAction;
+	private String searchQuery = "";
+	private boolean searchMatchCase;
+	private List<SearchMatch> searchMatches = List.of();
+	private int activeSearchMatch = -1;
 	private boolean historyEnabled = true;
 	private GLTextDocument.Snapshot editBaseline;
 	private GLTextStyle typingStyle = GLTextStyle.PLAIN;
@@ -94,8 +100,14 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 				GLUiKeys.TEXT_FORMAT_BOLD, true);
 		GLAction italicAction = characterStyleAction(GLInputActions.TEXT_TOGGLE_ITALIC,
 				GLUiKeys.TEXT_FORMAT_ITALIC, false);
+		findAction = GLAction.builder(GLInputActions.TEXT_FIND)
+				.textKey(GLUiKeys.TEXT_FIND).onAction(() -> showSearchDialog(isEditable())).build();
+		replaceAction = GLAction.builder(GLInputActions.TEXT_REPLACE)
+				.textKey(GLUiKeys.TEXT_REPLACE).enabledWhen(this::isEditable)
+				.onAction(() -> showSearchDialog(true)).build();
 		textActions.add(leftAction).add(centerAction).add(rightAction)
-				.add(justifiedAction).add(boldAction).add(italicAction);
+				.add(justifiedAction).add(boldAction).add(italicAction)
+				.add(findAction).add(replaceAction);
 		leftItem = alignmentSubMenu.addItem(leftAction);
 		centerItem = alignmentSubMenu.addItem(centerAction);
 		rightItem = alignmentSubMenu.addItem(rightAction);
@@ -104,6 +116,9 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 		italicItem = formatSubMenu.addItem(italicAction);
 		alignmentMenuItem = alignmentMenu.addSubMenu("", alignmentSubMenu);
 		formatMenuItem = alignmentMenu.addSubMenu("", formatSubMenu);
+		alignmentMenu.addSeparator();
+		alignmentMenu.addItem(findAction);
+		alignmentMenu.addItem(replaceAction);
 		updateContextMenuText();
 		setIntrinsicPreferredGLSize(new GLSize(420, 240));
 	}
@@ -114,6 +129,7 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 		if (value == null) throw new IllegalArgumentException("Document must not be null");
 		if (document != null) document.removeDocumentListener(documentListener);
 		document = value;
+		clearSearch();
 		document.addDocumentListener(documentListener);
 		invalidateRowLayout();
 		caret = anchor = Math.min(caret, document.length());
@@ -132,6 +148,152 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 		anchor = start; caret = end; contentChanged();
 	}
 	public final void selectAll() { anchor = 0; caret = document.length(); contentChanged(); }
+	/** Returns the selected document text, or an empty string at a bare caret. */
+	public final String getSelectedText() {
+		return document.getText(getSelectionStart(), getSelectionEnd());
+	}
+	/** Starts a search and activates the first occurrence at or after the caret. */
+	public final int startSearch(String query, boolean matchCase) {
+		setSearch(query, matchCase);
+		if (searchMatches.isEmpty()) return 0;
+		int origin = getSelectionStart();
+		activeSearchMatch = 0;
+		for (int index = 0; index < searchMatches.size(); index++)
+			if (searchMatches.get(index).start() >= origin) {
+				activeSearchMatch = index;
+				break;
+			}
+		activateSearchMatch();
+		return searchMatches.size();
+	}
+	/** Returns the number of matches in the active search. */
+	public final int getSearchMatchCount() { return searchMatches.size(); }
+	/** Returns the zero-based active match, or {@code -1} when none is active. */
+	public final int getActiveSearchMatchIndex() { return activeSearchMatch; }
+	/** Clears the active search and all visual search markers. */
+	public final void clearSearch() {
+		searchQuery = "";
+		searchMatches = List.of();
+		activeSearchMatch = -1;
+		invalidateRecording();
+		repaintGL();
+	}
+	/** Selects the next occurrence, wrapping at the document end. */
+	public final boolean findNext(String query, boolean matchCase) {
+		return find(query, matchCase, false);
+	}
+	/** Selects the previous occurrence, wrapping at the document start. */
+	public final boolean findPrevious(String query, boolean matchCase) {
+		return find(query, matchCase, true);
+	}
+	private boolean find(String query, boolean matchCase, boolean backwards) {
+		boolean changed = !sameSearch(query, matchCase);
+		if (changed) setSearch(query, matchCase);
+		if (searchMatches.isEmpty()) return false;
+		if (changed || activeSearchMatch < 0) {
+			int origin = backwards ? getSelectionStart() : getSelectionEnd();
+			activeSearchMatch = backwards ? searchMatches.size() - 1 : 0;
+			if (backwards) {
+				for (int index = searchMatches.size() - 1; index >= 0; index--)
+					if (searchMatches.get(index).end() <= origin) {
+						activeSearchMatch = index;
+						break;
+					}
+			} else {
+				for (int index = 0; index < searchMatches.size(); index++)
+					if (searchMatches.get(index).start() >= origin) {
+						activeSearchMatch = index;
+						break;
+					}
+			}
+		} else activeSearchMatch = Math.floorMod(activeSearchMatch
+				+ (backwards ? -1 : 1), searchMatches.size());
+		activateSearchMatch();
+		return true;
+	}
+	private boolean sameSearch(String query, boolean matchCase) {
+		return query != null && query.equals(searchQuery)
+				&& matchCase == searchMatchCase;
+	}
+	private void setSearch(String query, boolean matchCase) {
+		searchQuery = query == null ? "" : query;
+		searchMatchCase = matchCase;
+		searchMatches = collectMatches(document.getText(), searchQuery, matchCase);
+		activeSearchMatch = -1;
+		invalidateRecording();
+		repaintGL();
+	}
+	private static List<SearchMatch> collectMatches(String source, String query,
+			boolean matchCase) {
+		if (query.isEmpty() || query.length() > source.length()) return List.of();
+		List<SearchMatch> result = new ArrayList<>();
+		for (int offset = 0; offset <= source.length() - query.length();) {
+			int found = nextMatch(source, query, offset, matchCase);
+			if (found < 0) break;
+			result.add(new SearchMatch(found, found + query.length()));
+			offset = found + query.length();
+		}
+		return List.copyOf(result);
+	}
+	private void activateSearchMatch() {
+		if (activeSearchMatch < 0 || activeSearchMatch >= searchMatches.size()) return;
+		SearchMatch match = searchMatches.get(activeSearchMatch);
+		select(match.start(), match.end());
+	}
+	/** Replaces the selected match, or selects the next one when necessary. */
+	public final boolean replaceCurrent(String query, String replacement,
+			boolean matchCase) {
+		if (!editable || query == null || query.isEmpty() || replacement == null) return false;
+		if (!matches(getSelectedText(), 0, query, matchCase))
+			return findNext(query, matchCase);
+		replaceSelection(replacement);
+		findNext(query, matchCase);
+		return true;
+	}
+	/** Replaces every non-overlapping match as one undoable edit. */
+	public final int replaceAll(String query, String replacement, boolean matchCase) {
+		if (!editable || query == null || query.isEmpty() || replacement == null) return 0;
+		String source = document.getText();
+		List<TextReplacement> replacements = new ArrayList<>();
+		for (int offset = 0; offset <= source.length() - query.length();) {
+			int found = nextMatch(source, query, offset, matchCase);
+			if (found < 0) break;
+			replacements.add(new TextReplacement(found, found + query.length(), replacement));
+			offset = found + query.length();
+		}
+		if (replacements.isEmpty()) return 0;
+		int nextCaret = replacements.get(replacements.size() - 1).start()
+				+ replacement.length();
+		replaceTextAtomically(replacements, nextCaret, "Replace all");
+		return replacements.size();
+	}
+	private static int nextMatch(String source, String query, int start,
+			boolean matchCase) {
+		for (int index = Math.max(0, start); index <= source.length() - query.length(); index++)
+			if (matches(source, index, query, matchCase)) return index;
+		return -1;
+	}
+	private static int lastMatch(String source, String query, int start,
+			boolean matchCase) {
+		for (int index = Math.min(start, source.length() - query.length()); index >= 0; index--)
+			if (matches(source, index, query, matchCase)) return index;
+		return -1;
+	}
+	private static boolean matches(String source, int offset, String query,
+			boolean matchCase) {
+		return offset >= 0 && offset + query.length() <= source.length()
+				&& source.regionMatches(!matchCase, offset, query, 0, query.length());
+	}
+	private record SearchMatch(int start, int end) { }
+	/** Opens the standard modeless Find or Find/Replace dialog for this editor. */
+	public final void showSearchDialog(boolean replaceVisible) {
+		GLParent host = popupHost();
+		if (host != null) GLTextSearchDialog.show(host, this, replaceVisible);
+	}
+	/** Shared Find action for specialized editor context menus. */
+	protected final GLAction findAction() { return findAction; }
+	/** Shared Replace action for specialized editor context menus. */
+	protected final GLAction replaceAction() { return replaceAction; }
 	public final boolean isLineWrap() { return lineWrap; }
 	public final void setLineWrap(boolean value) { if (lineWrap != value) { lineWrap = value; scrollX = 0; invalidateRowLayout(); contentChanged(); } }
 	public final int getTabSize() { return tabSize; }
@@ -240,6 +402,8 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 			float x = padding.left() + leading - scrollX + rowOffset(font, row, available);
 			float top = padding.top() + index * lineHeight - scrollY;
 			float baseline = top + font.getAscent();
+			drawSearchMatches(context, font, row, x, top, lineHeight,
+					style.selectionColor());
 			if (isFocused())
 				drawSelection(context, font, row, x, top, lineHeight,
 						style.selectionColor());
@@ -283,6 +447,29 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 		float left = x + rowAdvance(font, row, start, available);
 		float right = x + rowAdvance(font, row, end, available);
 		context.fillRect(left, top, Math.max(1, right - left), height, color);
+	}
+	private void drawSearchMatches(GLContext2D context, GLFont font, Row row,
+			float x, float top, float height, Color selectionColor) {
+		if (searchMatches.isEmpty()) return;
+		Color passive = getGLTheme().values().getColor("textEditor.searchMatch",
+				withAlpha(selectionColor, Math.max(48, selectionColor.getAlpha() / 2)));
+		Color active = getGLTheme().values().getColor("textEditor.searchActiveMatch",
+				withAlpha(selectionColor, Math.max(144, selectionColor.getAlpha())));
+		float available = textViewportWidth();
+		for (int index = 0; index < searchMatches.size(); index++) {
+			SearchMatch match = searchMatches.get(index);
+			int start = Math.max(row.start, match.start());
+			int end = Math.min(row.end, match.end());
+			if (end <= start) continue;
+			float left = x + rowAdvance(font, row, start, available);
+			float right = x + rowAdvance(font, row, end, available);
+			context.fillRect(left, top, Math.max(1, right - left), height,
+					index == activeSearchMatch ? active : passive);
+		}
+	}
+	private static Color withAlpha(Color color, int alpha) {
+		return new Color(color.getRed(), color.getGreen(), color.getBlue(),
+				Math.max(0, Math.min(255, alpha)));
 	}
 
 	@Override protected void controlMousePressed(GLMouseEvent event) {
@@ -421,6 +608,11 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 	/** Applies non-overlapping replacements as one local undo/redo operation. */
 	protected final void replaceTextAtomically(List<TextReplacement> replacements,
 			int nextCaret) {
+		replaceTextAtomically(replacements, nextCaret, "Apply completion");
+	}
+	/** Applies non-overlapping replacements under a caller-supplied history name. */
+	protected final void replaceTextAtomically(List<TextReplacement> replacements,
+			int nextCaret, String historyName) {
 		if (replacements == null || replacements.isEmpty()) return;
 		List<TextReplacement> ordered = replacements.stream()
 				.sorted(java.util.Comparator.comparingInt(TextReplacement::start).reversed())
@@ -445,7 +637,7 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 		caret = anchor = Math.max(0, Math.min(nextCaret, document.length()));
 		GLTextDocument.Snapshot after = document.snapshot();
 		int afterCaret = caret;
-		editingHistory.record("Apply completion",
+		editingHistory.record(historyName,
 				() -> applyEdit(before, beforeCaret, beforeAnchor),
 				() -> applyEdit(after, afterCaret, afterCaret));
 		contentChanged();
@@ -737,6 +929,10 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 		}
 		caret = Math.min(caret, source.length());
 		anchor = Math.min(anchor, source.length());
+		if (!searchQuery.isEmpty()) {
+			searchMatches = collectMatches(source.getText(), searchQuery, searchMatchCase);
+			activeSearchMatch = -1;
+		}
 		contentChanged();
 	}
 	private static int translatedOffset(int offset, GLTextDocument.Change change) {

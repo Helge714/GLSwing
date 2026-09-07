@@ -76,16 +76,43 @@ public final class GLThemeValues {
 		return value == null ? fallback : parseFloat(value, key);
 	}
 
+	/** Returns a strict boolean theme value or the fallback when the key is absent. */
+	public boolean getBoolean(String key, boolean fallback) {
+		String value = values.get(key);
+		if (value == null) return fallback;
+		if ("true".equalsIgnoreCase(value.trim())) return true;
+		if ("false".equalsIgnoreCase(value.trim())) return false;
+		throw new IllegalArgumentException(
+				"Invalid boolean theme value for " + key + ": " + value);
+	}
+
 	public GLInsets getInsets(String key, GLInsets fallback) {
 		String value = values.get(key);
 		if (value == null)
 			return fallback;
-		String[] parts = value.split(",");
-		if (parts.length != 4)
-			throw new IllegalArgumentException(
-					"Theme inset " + key + " requires top,left,bottom,right");
-		return new GLInsets(parseFloat(parts[0], key), parseFloat(parts[1], key),
-				parseFloat(parts[2], key), parseFloat(parts[3], key));
+		String[] parts = value.split(",", -1);
+		float top, left, bottom, right;
+		switch (parts.length) {
+		case 1 -> top = left = bottom = right = parseFloat(parts[0], key);
+		case 2 -> {
+			top = bottom = parseFloat(parts[0], key);
+			left = right = parseFloat(parts[1], key);
+		}
+		case 3 -> {
+			top = parseFloat(parts[0], key);
+			left = right = parseFloat(parts[1], key);
+			bottom = parseFloat(parts[2], key);
+		}
+		case 4 -> {
+			top = parseFloat(parts[0], key);
+			left = parseFloat(parts[1], key);
+			bottom = parseFloat(parts[2], key);
+			right = parseFloat(parts[3], key);
+		}
+		default -> throw new IllegalArgumentException("Theme inset " + key
+				+ " requires one to four comma-separated values");
+		}
+		return new GLInsets(top, left, bottom, right);
 	}
 
 	/**
@@ -530,17 +557,96 @@ public final class GLThemeValues {
 	}
 
 	static float parseFloat(String text, String key) {
-		String value = text.trim();
-		if (hasFloatSuffix(value))
-			value = value.substring(0, value.length() - 1);
 		try {
-			float result = Float.parseFloat(value);
+			float result = (float) new NumericExpression(text).parse();
 			if (!Float.isFinite(result))
 				throw new NumberFormatException("not finite");
 			return result;
-		} catch (NumberFormatException error) {
+		} catch (RuntimeException error) {
 			throw new IllegalArgumentException(
 					"Invalid numeric theme value for " + key + ": " + text, error);
+		}
+	}
+
+	private static final class NumericExpression {
+		private final String source;
+		private int index;
+
+		NumericExpression(String source) {
+			this.source = source == null ? "" : source;
+		}
+
+		double parse() {
+			double value = expression();
+			space();
+			if (index != source.length()) throw error();
+			return value;
+		}
+
+		private double expression() {
+			double value = term();
+			while (true) {
+				space();
+				if (take('+')) value += term();
+				else if (take('-')) value -= term();
+				else return value;
+			}
+		}
+
+		private double term() {
+			double value = factor();
+			while (true) {
+				space();
+				if (take('*')) value *= factor();
+				else if (take('/')) {
+					double divisor = factor();
+					if (divisor == 0) throw new ArithmeticException("division by zero");
+					value /= divisor;
+				} else return value;
+			}
+		}
+
+		private double factor() {
+			space();
+			if (take('+')) return factor();
+			if (take('-')) return -factor();
+			if (take('(')) {
+				double value = expression();
+				space();
+				if (!take(')')) throw error();
+				return value;
+			}
+			int start = index;
+			boolean exponent = false;
+			while (index < source.length()) {
+				char value = source.charAt(index);
+				if (Character.isDigit(value) || value == '.') index++;
+				else if ((value == 'e' || value == 'E') && !exponent) {
+					exponent = true; index++;
+					if (index < source.length()
+							&& (source.charAt(index) == '+' || source.charAt(index) == '-')) index++;
+				} else break;
+			}
+			if (index == start) throw error();
+			double result = Double.parseDouble(source.substring(start, index));
+			if (index < source.length()
+					&& (source.charAt(index) == 'f' || source.charAt(index) == 'F')) index++;
+			if (!Double.isFinite(result)) throw error();
+			return result;
+		}
+
+		private boolean take(char expected) {
+			if (index >= source.length() || source.charAt(index) != expected) return false;
+			index++;
+			return true;
+		}
+
+		private void space() {
+			while (index < source.length() && Character.isWhitespace(source.charAt(index))) index++;
+		}
+
+		private IllegalArgumentException error() {
+			return new IllegalArgumentException("Invalid expression near character " + index);
 		}
 	}
 }

@@ -400,6 +400,9 @@ public class GLComboBox<T> extends GLControl
 		float radius = layoutCornerRadius(style.cornerRadius());
 		float topRadius = popupDirection == GLPopupDirection.ABOVE ? 0 : radius;
 		float bottomRadius = popupDirection == GLPopupDirection.BELOW ? 0 : radius;
+		float arrowSize = arrowSize(height);
+		float arrowX = width - style.padding().right() - style.arrowAreaWidth()
+				+ (style.arrowAreaWidth() - arrowSize) * 0.5f;
 		GLCornerRadii radii = new GLCornerRadii(topRadius, topRadius,
 				bottomRadius, bottomRadius);
 		context.withParameters(backgroundParameters, () -> {
@@ -454,9 +457,6 @@ public class GLComboBox<T> extends GLControl
 							renderedTextX, baseline, Color.WHITE));
 		}
 
-		float arrowSize = Math.min(11, Math.max(4, height - 8));
-		float arrowX = width - style.padding().right() - style.arrowAreaWidth()
-				+ (style.arrowAreaWidth() - arrowSize) * 0.5f;
 		float arrowY = (height - arrowSize) * 0.5f;
 		float angle = popupDirection == null ? (float) (Math.PI * 0.5)
 				: (float) (-Math.PI * 0.5);
@@ -465,7 +465,8 @@ public class GLComboBox<T> extends GLControl
 				arrowX + arrowSize * 0.5f, arrowY + arrowSize * 0.5f));
 		context.withParameters(arrowParameters, () ->
 				context.drawUIChevron(arrowX, arrowY, arrowSize, arrowSize,
-						true, 1.5f, Color.WHITE, GLStroke.WidthSpace.SCREEN));
+						true, style.arrowStrokeWidth(), Color.WHITE,
+						GLStroke.WidthSpace.SCREEN));
 		context.setTransform(previous);
 	}
 
@@ -593,6 +594,10 @@ public class GLComboBox<T> extends GLControl
 						+ style.arrowAreaWidth()), style.height()));
 		updateColors();
 		invalidateRecording();
+	}
+
+	private static float arrowSize(float height) {
+		return Math.min(11, Math.max(4, height - 8));
 	}
 
 	private void updateColors() {

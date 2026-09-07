@@ -59,6 +59,8 @@ public final class GLInputActions {
 	public static final String TEXT_ALIGN_CENTER = "text.align-center";
 	public static final String TEXT_ALIGN_RIGHT = "text.align-right";
 	public static final String TEXT_ALIGN_JUSTIFIED = "text.align-justified";
+	public static final String TEXT_FIND = "text.find";
+	public static final String TEXT_REPLACE = "text.replace";
 	public static final String CODE_FORMAT = "code.format";
 	public static final String CODE_COMMENT = "code.comment";
 	public static final String CODE_UNCOMMENT = "code.uncomment";

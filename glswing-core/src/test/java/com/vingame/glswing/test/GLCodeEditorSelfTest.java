@@ -125,9 +125,14 @@ public final class GLCodeEditorSelfTest {
 				"Enter did not expand a generated brace pair into an indented block");
 		editor.toggleLineComment();
 		check(editor.getText().contains("//"), "Line comment command did not add a prefix");
-		check(editor.getContextMenu().getItems().size() == 3
+		check(editor.getContextMenu().getItems().size() >= 5
 				&& editor.getContextMenu().getItems().stream()
-						.noneMatch(item -> item.getSubMenu() != null),
+						.noneMatch(item -> item.getSubMenu() != null)
+				&& editor.getContextMenu().getItems().stream()
+						.filter(item -> item.getAction() != null)
+						.map(item -> item.getAction().id())
+						.toList().containsAll(java.util.List.of(
+								"text.find", "text.replace")),
 				"Code editor exposed the inherited rich-text context menu");
 		GLCodeEditor themeEditor = new GLCodeEditor(
 				"palette.sample=rgb(10, 20, 30)", URI.create("untitled:/test.gltheme"));

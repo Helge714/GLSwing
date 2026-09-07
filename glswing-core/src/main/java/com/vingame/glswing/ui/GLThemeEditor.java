@@ -102,7 +102,9 @@ public final class GLThemeEditor {
 	public GLTheme getBase() { return base; }
 	public String getBaseReference() { return baseReference; }
 
-	public GLTheme build() { return GLThemeLoader.build(base, overrides); }
+	public GLTheme build() {
+		return GLThemeLoader.build(base, overrides, GLThemeCodeSupport.schema());
+	}
 
 	/** Atomically saves only the explicit overrides. */
 	public void save(Path path) {

@@ -112,6 +112,7 @@ final class GLThemeDefaults {
 				color("comboBox.disabled", "state.disabled"),
 				color("comboBox.text", "palette.text"), color("comboBox.textDisabled", "palette.textDisabled"),
 				color("comboBox.border", "palette.border"), color("comboBox.arrow", "palette.text"),
+				number("comboBox.arrowStrokeWidth"),
 				number("comboBox.cornerRadius", "metrics.cornerRadius"),
 				number("comboBox.borderWidth", "metrics.borderWidth"),
 				number("comboBox.height", "metrics.controlHeight"), number("comboBox.minimumWidth"),

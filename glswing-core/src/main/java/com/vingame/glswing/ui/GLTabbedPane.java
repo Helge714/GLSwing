@@ -71,6 +71,7 @@ public final class GLTabbedPane extends GLContainer {
 			closedTabs.addFirst(new ClosedTab(removed.title, removed.content, index));
 			while (closedTabs.size() > 10) closedTabs.removeLast();
 		}
+		removed.content.setConnectedShape(this, null);
 		contentHost.removeGL(removed.content);
 		tabHost.removeGL(removed.button);
 		int old = selectedIndex;
@@ -136,6 +137,7 @@ public final class GLTabbedPane extends GLContainer {
 	public void removeAllTabs() {
 		int old = selectedIndex;
 		for (Tab tab : List.copyOf(tabs)) {
+			tab.content.setConnectedShape(this, null);
 			contentHost.removeGL(tab.content);
 			tabHost.removeGL(tab.button);
 		}
@@ -204,6 +206,7 @@ public final class GLTabbedPane extends GLContainer {
 		if (content == null) throw new IllegalArgumentException("Tab content required");
 		Tab tab = tab(index);
 		if (tab.content == content) return;
+		tab.content.setConnectedShape(this, null);
 		contentHost.removeGL(tab.content);
 		tab.content = content;
 		contentHost.addGL(content);
@@ -310,11 +313,14 @@ public final class GLTabbedPane extends GLContainer {
 		if (width <= 0 || height <= 0)
 			return;
 		GLTabbedPaneStyle style = getGLStyle();
-		context.fillAndDrawUIRoundRect(0, 0, width, height,
-				layoutCornerRadius(style.cornerRadius()), layoutBorderWidth(style.borderWidth()), style.background(),
-				style.border(), GLStroke.WidthSpace.SCREEN);
-		context.fillUIRoundRect(layoutBorderWidth(style.borderWidth()), layoutBorderWidth(style.borderWidth()),
-				Math.max(0, width - layoutBorderWidth(style.borderWidth()) * 2), style.tabHeight(),
+		float border = layoutBorderWidth(style.borderWidth());
+		float radius = layoutCornerRadius(style.cornerRadius());
+		if (border > 0)
+			context.fillAndDrawUIRoundRect(0, 0, width, height, radius, border,
+					style.background(), style.border(), GLStroke.WidthSpace.SCREEN);
+		else context.fillUIRoundRect(0, 0, width, height, radius, style.background());
+		context.fillUIRoundRect(border, border,
+				Math.max(0, width - border * 2), style.tabHeight(),
 				new GLCornerRadii(layoutCornerRadius(style.cornerRadius()), layoutCornerRadius(style.cornerRadius()), 0, 0),
 				style.tabBarBackground());
 	}
@@ -401,6 +407,8 @@ public final class GLTabbedPane extends GLContainer {
 					editor.setContainerShape(contentRadii, false);
 				else if (tab.content instanceof GLTextEditor editor)
 					editor.setContainerShape(contentRadii, false);
+				else
+					tab.content.setConnectedShape(this, contentRadii);
 			}
 		} finally {
 			layingOut = false;

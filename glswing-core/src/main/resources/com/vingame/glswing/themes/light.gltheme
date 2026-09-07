@@ -1,14 +1,14 @@
 theme.name=Light
 theme.extends=default
 
-palette.surface=rgba(244, 245, 247, 255)
-palette.text=rgba(37, 39, 43, 255)
-palette.textDisabled=rgba(138, 143, 152, 255)
-palette.textSecondary=rgba(102, 108, 117, 255)
-palette.border=rgba(174, 180, 190, 255)
-palette.accent=rgba(66, 120, 199, 255)
-palette.selection=rgba(66, 120, 199, 77)
-palette.invalid=rgba(198, 69, 69, 255)
+@COLOR palette.surface=rgba(244, 245, 247, 255)
+@COLOR palette.text=rgba(37, 39, 43, 255)
+@COLOR palette.textDisabled=rgba(138, 143, 152, 255)
+@COLOR palette.textSecondary=rgba(102, 108, 117, 255)
+@COLOR palette.border=rgba(174, 180, 190, 255)
+@COLOR palette.accent=rgba(66, 120, 199, 255)
+@COLOR palette.selection=rgba(66, 120, 199, 77)
+@COLOR palette.invalid=rgba(198, 69, 69, 255)
 
 codeEditor.background=rgba(255, 255, 255, 255)
 codeEditor.text=rgba(37, 39, 43, 255)

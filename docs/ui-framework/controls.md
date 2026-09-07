@@ -377,7 +377,9 @@ The picker emits live color-change notifications. Pointer gestures become one
 color-history operation; numeric commits and keyboard steps are separate edits.
 The chooser keeps dialog edits local until **Apply**. **Cancel** leaves its caller
 unchanged. `GLColorChooser.show(owner, initial, model, accepted)` opens the dialog
-without adding a chooser button.
+without adding a chooser button. Picker dialogs remember their most recently
+accepted editing and output color models for the next opening in the same
+application process. The dedicated hex field accepts `#RRGGBB` and `#RRGGBBAA`.
 
 The enabled-by-default eyedropper captures the connected screens into temporary
 in-memory overlays. Move the pointer to preview a pixel and its hex value; click
@@ -477,6 +479,8 @@ light and dark colors come from `comboBox.pressedLight` and
 `comboBox.pressedDark`; the gradient respects the attachment-side contour.
 The popup inherits the ComboBox's resolved theme, including a local theme set
 directly on the ComboBox. `comboBox.padding` insets both text and the chevron.
+`comboBox.arrowAreaWidth` reserves the chevron column, while
+`comboBox.arrowStrokeWidth` independently controls the chevron line thickness.
 
 `GLMenuItem` supports text, mnemonic keys, accelerator display text, action
 commands, listeners, `doClick()`, and an optional submenu. When backed by a

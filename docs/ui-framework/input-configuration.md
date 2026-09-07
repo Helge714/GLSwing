@@ -194,6 +194,11 @@ Lists combine navigation bindings with `list.extend-selection` and
 `Shift+Down` or `shortcut+Down` key declarations. `list.select-all` is a normal
 key action and defaults to `shortcut+A`.
 
+Multiline text and code editors expose `text.find` and `text.replace`, mapped
+to `shortcut+F` and `shortcut+H` by default. Remap these semantic action IDs in
+the same way as history and document commands; context-menu actions resolve the
+same input-map labels.
+
 Trees inherit list navigation and use `tree.edit` to start inline editing of
 the selected node. The bundled map assigns F2, matching the accelerator shown
 by the standard localized **Rename** context-menu command.

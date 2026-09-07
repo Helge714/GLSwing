@@ -195,12 +195,17 @@ public final class GLSliderGroupSelfTest {
 
 	private static void testFreeSliderCursor() {
 		GLSlider slider = GLSlider.free("Free", 0);
+		slider.setBounds(0, 0, 240, 28);
 		JPanel source = new JPanel();
 		Cursor original = source.getCursor();
 		slider.mouseEntered(event(source, slider, MouseEvent.MOUSE_ENTERED,
-				MouseEvent.NOBUTTON, 10, 10, 0, 0));
+				MouseEvent.NOBUTTON, 120, 10, 0, 0));
 		check(source.getCursor().getType() == Cursor.E_RESIZE_CURSOR,
-				"FREE slider did not install a horizontal resize cursor");
+				"FREE slider center did not install a horizontal resize cursor");
+		slider.mouseMoved(event(source, slider, MouseEvent.MOUSE_MOVED,
+				MouseEvent.NOBUTTON, 10, 10, 0, 0));
+		check(source.getCursor().getType() == Cursor.DEFAULT_CURSOR,
+				"FREE slider arrow button retained the resize cursor");
 		slider.mouseExited(event(source, slider, MouseEvent.MOUSE_EXITED,
 				MouseEvent.NOBUTTON, 10, 10, 0, 0));
 		check(source.getCursor().equals(original),

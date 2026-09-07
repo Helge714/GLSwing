@@ -2,10 +2,10 @@ theme.type=metrics
 
 textShadow.softness=2
 
-metrics.cornerRadius=13
-metrics.borderWidth=3
-metrics.controlHeight=34
-metrics.padding=7,14,7,14
+@NUMBER metrics.cornerRadius=13
+@NUMBER metrics.borderWidth=3
+@NUMBER metrics.controlHeight=34
+@INSETS metrics.padding=7,14,7,14
 
 button.cornerRadius=13
 button.borderWidth=3
@@ -40,6 +40,7 @@ comboBox.borderWidth=3
 comboBox.height=34
 comboBox.minimumWidth=155
 comboBox.arrowAreaWidth=34
+comboBox.arrowStrokeWidth=2.5
 comboBox.padding=5,14,5,14
 
 scrollBar.thickness=14
@@ -54,3 +55,8 @@ tabbedPane.minimumTabWidth=90
 tabbedPane.tabGap=4
 tabbedPane.tabHorizontalPadding=16
 tabbedPane.contentPadding=8,8,8,8
+
+nodeEditor.gridVisible=true
+nodeEditor.gridSpacing=32
+nodeEditor.gridMajorInterval=4
+nodeEditor.gridLineWidth=1

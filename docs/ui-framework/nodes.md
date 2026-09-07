@@ -128,6 +128,11 @@ curve segments.
 canvas, connection, selection, snapping, and curve geometry. Apply local styles
 with `setGLStyle(...)` and return to theme inheritance with `clearGLStyle()`.
 
+The canvas can render a graph-coordinate grid that follows pan and zoom. Theme
+keys `nodeEditor.gridVisible`, `.gridSpacing`, `.gridMajorInterval`,
+`.gridLineWidth`, `.gridMinor`, and `.gridMajor` configure it. Typed styles can
+replace the same values with `GLNodeEditorStyle.withGrid(...)`.
+
 Connection customization includes normal and selected color, border color and
 width, main width, curve tolerance, handle length, and a
 `GLColorInterpolator`. `clearColor()`, `clearWidth()`, and related clear methods

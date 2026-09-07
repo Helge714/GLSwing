@@ -18,14 +18,26 @@ public final class GLCodePropertySchema {
 
 	/** Description and value contract for one known property. */
 	public record Property(String key, ValueType type, String description,
-			List<String> choices, String defaultValue) {
+			List<String> choices, String defaultValue, Double minimum,
+			Double maximum, boolean integer, String category) {
+		public Property(String key, ValueType type, String description,
+				List<String> choices, String defaultValue) {
+			this(key, type, description, choices, defaultValue,
+					null, null, false, "");
+		}
+
 		public Property {
 			if (key == null || key.isBlank() || type == null || description == null
-					|| description.isBlank() || choices == null)
+					|| description.isBlank() || choices == null || category == null)
 				throw new IllegalArgumentException("Invalid configuration property schema");
 			choices = List.copyOf(choices);
 			if (type != ValueType.ENUM && !choices.isEmpty())
 				throw new IllegalArgumentException("Only enum properties may declare choices");
+			if (minimum != null && maximum != null && minimum > maximum)
+				throw new IllegalArgumentException("Property minimum exceeds maximum: " + key);
+			if (integer && type != ValueType.NUMBER)
+				throw new IllegalArgumentException("Only numeric properties can require integers");
+			category = category.trim().toLowerCase(java.util.Locale.ROOT);
 		}
 	}
 
@@ -109,7 +121,8 @@ public final class GLCodePropertySchema {
 		}
 
 		public Builder property(String key, ValueType type, String description) {
-			return property(key, type, description, List.of(), null);
+			return property(key, type, description, List.of(), null,
+					null, null, false, "");
 		}
 
 		/** Defines a contract for every non-empty key beginning with a prefix. */
@@ -122,7 +135,8 @@ public final class GLCodePropertySchema {
 
 		public Builder property(String key, ValueType type, String description,
 				String defaultValue) {
-			return property(key, type, description, List.of(), defaultValue);
+			return property(key, type, description, List.of(), defaultValue,
+					null, null, false, "");
 		}
 
 		public Builder enumProperty(String key, String description,
@@ -130,15 +144,23 @@ public final class GLCodePropertySchema {
 			if (choices == null || choices.isEmpty())
 				throw new IllegalArgumentException("Enum choices must not be empty");
 			return property(key, ValueType.ENUM, description,
-					new ArrayList<>(choices), defaultValue);
+					new ArrayList<>(choices), defaultValue, null, null, false, "");
 		}
 
-		private Builder property(String key, ValueType type, String description,
-				List<String> choices, String defaultValue) {
-			Property property = new Property(key, type, description, choices, defaultValue);
-			if (properties.putIfAbsent(key, property) != null)
-				throw new IllegalArgumentException("Duplicate schema property " + key);
+		/** Adds a complete externally supplied property descriptor. */
+		public Builder property(Property property) {
+			if (property == null) throw new IllegalArgumentException("Property is required");
+			if (properties.putIfAbsent(property.key(), property) != null)
+				throw new IllegalArgumentException("Duplicate schema property " + property.key());
 			return this;
+		}
+
+		/** Defines a property including optional numeric constraints and category. */
+		public Builder property(String key, ValueType type, String description,
+				List<String> choices, String defaultValue, Double minimum,
+				Double maximum, boolean integer, String category) {
+			return property(new Property(key, type, description, choices, defaultValue,
+					minimum, maximum, integer, category));
 		}
 
 		public GLCodePropertySchema build() {

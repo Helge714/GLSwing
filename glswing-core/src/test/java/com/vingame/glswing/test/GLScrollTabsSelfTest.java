@@ -138,6 +138,8 @@ public final class GLScrollTabsSelfTest {
 		GLContainer second = empty();
 		tabs.addTab("First", first);
 		tabs.addTab("Second", second);
+		check(first.getConnectedShape() != null && second.getConnectedShape() != null,
+				"Generic tab content did not inherit the rounded content clip");
 		check(tabs.indexOfComponent(second) == 1,
 				"Tabbed pane did not locate a content component");
 		check(tabs.getSelectedIndex() == 0 && first.isVisible() && !second.isVisible(),
@@ -152,11 +154,15 @@ public final class GLScrollTabsSelfTest {
 				"Disabling the selected tab did not select an enabled replacement");
 		tabs.setClosedTabHistoryEnabled(true);
 		tabs.removeTabAt(0);
+		check(first.getConnectedShape() == null,
+				"Removed tab content retained its tab-owned clip");
 		check(tabs.getTabCount() == 1 && tabs.getComponentAt(0) == second,
 				"Removing a tab corrupted the tab list");
 		check(tabs.reopenLastClosedTab() && tabs.getTabCount() == 2
 				&& tabs.getComponentAt(0) == first && tabs.getSelectedIndex() == 0,
 				"Recently closed tab was not restored at its previous position");
+		check(first.getConnectedShape() != null,
+				"Reopened tab content did not recover its rounded content clip");
 		check(!tabs.reopenLastClosedTab(),
 				"Closed-tab history retained an already restored tab");
 	}

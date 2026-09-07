@@ -14,6 +14,8 @@ public final class GLUiKeys {
 	public static final String TEXT_ALIGN_JUSTIFIED = "glswing.text.align.justified";
 	public static final String TEXT_FORMAT_BOLD = "glswing.text.format.bold";
 	public static final String TEXT_FORMAT_ITALIC = "glswing.text.format.italic";
+	public static final String TEXT_FIND = "glswing.text.find";
+	public static final String TEXT_REPLACE = "glswing.text.replace";
 	public static final String CODE_FORMAT = "glswing.code.format";
 	public static final String CODE_COMMENT = "glswing.code.comment";
 	public static final String CODE_UNCOMMENT = "glswing.code.uncomment";

@@ -134,13 +134,17 @@ public class GLLayoutGroup extends GLContainer {
 	}
 	@Override protected void renderChildren(GLContext2D context) {
 		if(getGLParent() instanceof GLLayoutGroup) {super.renderChildren(context);return;}
-		refreshConnections(); super.renderChildren(context);
+		refreshConnections();
 		Color border=getGLTheme().values().getColor("layoutGroup.border",getGLTheme().buttonStyle().borderColor());
-		context.fillPath(borderPath,border);
-		GLStroke old=context.getStroke();
-		try { context.setStroke(new GLStroke(lastBorder));
-			if(lastBorder>0) for(Edge edge:seams) context.drawUILine(edge.x1,edge.y1,edge.x2,edge.y2,border);
-		} finally {context.setStroke(old);}
+		paintBorderUnderlay(context,border);
+		super.renderChildren(context);
+		if(lastBorder>0) {
+			context.fillPath(borderPath,border);
+			GLStroke old=context.getStroke();
+			try { context.setStroke(new GLStroke(lastBorder));
+				for(Edge edge:seams) context.drawUILine(edge.x1,edge.y1,edge.x2,edge.y2,border);
+			} finally {context.setStroke(old);}
+		}
 		Area selected=new Area(area);
 		if(!highlighted)selected.intersect(highlightShape);
 		if(selected.isEmpty())return;
@@ -149,9 +153,26 @@ public class GLLayoutGroup extends GLContainer {
 		float focusWidth=Math.max(1.5f,lastBorder);
 		Area focusOutline=new Area(new BasicStroke(focusWidth*2).createStrokedShape(selected));
 		focusOutline.intersect(selected);context.fillPath(path(focusOutline),focus);
+		GLStroke old=context.getStroke();
 		try {context.setStroke(new GLStroke(focusWidth));
 			for(Edge edge:seams)if(selectedCell(edge.first,selected)&&selectedCell(edge.second,selected))
 				context.drawUILine(edge.x1,edge.y1,edge.x2,edge.y2,focus);
+		} finally {context.setStroke(old);}
+	}
+	/* Connected controls are clipped separately. Their antialiased edge pixels
+	 * must blend against an opaque surface belonging to this group; otherwise a
+	 * transparent dialog lets the window below it show through between cells.
+	 * The controls cover this backing surface again, leaving only the border and
+	 * the subpixel support required by their edges visible. */
+	private void paintBorderUnderlay(GLContext2D context,Color border) {
+		if(lastBorder<=0)return;
+		context.fillPath(path(area),border);
+		GLStroke old=context.getStroke();
+		try {
+			context.setStroke(new GLStroke(Math.max(3,lastBorder+2))
+					.withWidthSpace(GLStroke.WidthSpace.SCREEN));
+			for(Edge edge:seams)
+				context.drawUILine(edge.x1,edge.y1,edge.x2,edge.y2,border);
 		} finally {context.setStroke(old);}
 	}
 	private static boolean selectedCell(Cell cell,Area selected) {

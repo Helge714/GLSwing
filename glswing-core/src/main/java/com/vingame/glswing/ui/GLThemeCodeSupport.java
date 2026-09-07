@@ -2,18 +2,17 @@ package com.vingame.glswing.ui;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 
-import com.vingame.glswing.ui.GLCodePropertySchema.ValueType;
 import com.vingame.glswing.ui.GLCodePropertySchema.ValidationIssue;
 
 /** Built-in schema and in-process editor intelligence for {@code .gltheme} files. */
 public final class GLThemeCodeSupport {
-	private static final GLCodePropertySchema SCHEMA = createSchema();
+	private static final GLCodePropertySchema SCHEMA = decorate(
+			GLThemeSchemaLoader.builtIn(), true);
 	private static final GLPropertiesCodeLanguage LANGUAGE =
-			new GLPropertiesCodeLanguage(SCHEMA);
+			new GLPropertiesCodeLanguage(SCHEMA, document -> decorate(
+					GLThemeSchemaLoader.forDocument(document.uri(), document.text()), false));
 
 	private GLThemeCodeSupport() { }
 
@@ -22,109 +21,47 @@ public final class GLThemeCodeSupport {
 	/** Returns the reusable built-in {@code .gltheme} language implementation. */
 	public static GLCodeLanguage language() { return LANGUAGE; }
 
-	private static GLCodePropertySchema createSchema() {
+	private static GLCodePropertySchema decorate(GLCodePropertySchema source,
+			boolean allowUnknown) {
 		GLCodePropertySchema.Builder builder = GLCodePropertySchema.builder("gltheme")
-				.allowUnknownKeys(true)
-				.property("theme.name", ValueType.TEXT,
-						"Human-readable theme name.", "Application theme")
-				.property("theme.extends", ValueType.PATH,
-						"Base preset or theme file inherited by this theme.", "default")
-				.enumProperty("theme.type", "Role of this theme file.",
-						List.of("colors", "metrics", "bundle"), null)
-				.property("theme.colors", ValueType.PATH,
-						"Color fragment imported by a bundle theme.")
-				.property("theme.metrics", ValueType.PATH,
-						"Metrics fragment imported by a bundle theme.")
-				.validator(GLThemeCodeSupport::validateTheme);
-
-		for (Map.Entry<String, String> entry : GLTheme.DEFAULT.values().asMap().entrySet()) {
-			String key = entry.getKey();
-			if (key.startsWith("theme.")) continue;
-			String value = entry.getValue();
-			ValueType type = inferType(key, value);
-			String description = description(key, type);
-			if (isFontStyle(key))
-				builder.enumProperty(key, description,
-						List.of("plain", "bold", "italic", "bolditalic",
-								"bold_italic", "bold-italic"), value);
-			else if (key.toLowerCase(Locale.ROOT).endsWith(".offsetspace"))
-				builder.enumProperty(key, description, List.of("screen", "local"), value);
-			else builder.property(key, type, description, value);
+				.allowUnknownKeys(allowUnknown);
+		Map<String, String> defaults = GLTheme.DEFAULT.values().asMap();
+		for (GLCodePropertySchema.Property property : source.properties().values()) {
+			String defaultValue = property.defaultValue() != null ? property.defaultValue()
+					: defaults.get(property.key());
+			builder.property(new GLCodePropertySchema.Property(property.key(),
+					property.type(), property.description(), property.choices(), defaultValue,
+					property.minimum(), property.maximum(), property.integer(),
+					property.category()));
 		}
-		addOptionalProperties(builder, GLTheme.DEFAULT.values().asMap().keySet());
+		builder.validator(values -> validateTheme(source, values));
 		return builder.build();
 	}
 
-	private static void addOptionalProperties(GLCodePropertySchema.Builder builder,
-			Set<String> existing) {
-		for (String key : List.of("button.background", "button.border", "button.disabled",
-				"button.focus", "button.hover", "button.text", "button.textDisabled",
-				"checkBox.background", "checkBox.border", "checkBox.check",
-				"checkBox.checkDisabled", "checkBox.disabled", "checkBox.focus",
-				"checkBox.hover", "checkBox.pressed", "checkBox.text",
-				"checkBox.textDisabled", "comboBox.arrow", "comboBox.background",
-				"comboBox.border", "comboBox.disabled", "comboBox.hover",
-				"comboBox.pressed", "comboBox.text", "comboBox.textDisabled",
-				"menu.accelerator", "menu.arrow", "menu.background", "menu.border",
-				"menu.hover", "menu.pressed", "menu.separator", "menu.text",
-				"menu.textDisabled", "menuBar.active", "menuBar.background",
-				"menuBar.border", "menuBar.hover", "menuBar.pressed", "menuBar.text",
-				"menuBar.textDisabled", "slider.background", "slider.border",
-				"slider.disabled", "slider.text", "slider.textDisabled",
-				"textEditor.background", "textEditor.border", "textEditor.caret",
-				"textEditor.focus", "textEditor.invalid", "textEditor.selection",
-				"textEditor.text", "textEditor.textDisabled"))
-			addIfMissing(builder, existing, key, ValueType.COLOR);
-
-		for (String prefix : List.of("font", "label.font", "button.font", "checkBox.font",
-				"slider.font", "textEditor.font", "menu.font", "menuBar.font",
-				"comboBox.font")) {
-			addIfMissing(builder, existing, prefix + ".family", ValueType.TEXT);
-			if (!existing.contains(prefix + ".style"))
-				builder.enumProperty(prefix + ".style", description(prefix + ".style",
-						ValueType.ENUM), List.of("plain", "bold", "italic", "bolditalic",
-								"bold_italic", "bold-italic"), null);
-			addIfMissing(builder, existing, prefix + ".size", ValueType.NUMBER);
-			for (String source : List.of("source", "regular", "bold", "italic", "boldItalic"))
-				addIfMissing(builder, existing, prefix + "." + source, ValueType.PATH);
-		}
-
-		for (String key : List.of("button.cornerRadius", "button.borderWidth",
-				"button.height", "checkBox.cornerRadius", "checkBox.borderWidth",
-				"slider.cornerRadius", "slider.borderWidth", "slider.height",
-				"textEditor.borderWidth", "comboBox.cornerRadius",
-				"comboBox.borderWidth", "comboBox.height"))
-			addIfMissing(builder, existing, key, ValueType.NUMBER);
-		for (String key : List.of("button.padding", "slider.padding",
-				"comboBox.padding"))
-			addIfMissing(builder, existing, key, ValueType.INSETS);
-	}
-
-	private static void addIfMissing(GLCodePropertySchema.Builder builder,
-			Set<String> existing, String key, ValueType type) {
-		if (!existing.contains(key)) builder.property(key, type, description(key, type));
-	}
-
-	private static List<ValidationIssue> validateTheme(Map<String, String> values) {
+	private static List<ValidationIssue> validateTheme(GLCodePropertySchema schema,
+			Map<String, String> values) {
 		List<ValidationIssue> result = new ArrayList<>();
 		String type = values.getOrDefault("theme.type", "legacy").trim()
-				.toLowerCase(Locale.ROOT);
+				.toLowerCase(java.util.Locale.ROOT);
 		if (!"bundle".equals(type)) {
 			if (values.containsKey("theme.colors")) result.add(issue("theme.colors",
 					"theme.colors requires theme.type=bundle"));
 			if (values.containsKey("theme.metrics")) result.add(issue("theme.metrics",
 					"theme.metrics requires theme.type=bundle"));
+			if (values.containsKey("theme.schema")) result.add(issue("theme.schema",
+					"theme.schema requires theme.type=bundle"));
 		}
 		if ("colors".equals(type) || "metrics".equals(type)) {
-			for (String directive : List.of("theme.extends", "theme.colors", "theme.metrics"))
+			for (String directive : List.of("theme.extends", "theme.colors",
+					"theme.metrics", "theme.schema"))
 				if (values.containsKey(directive)) result.add(issue(directive,
 						"Theme fragments cannot inherit or import other themes"));
 			for (String key : values.keySet()) {
-				if ("theme.type".equals(key) || "theme.name".equals(key)) continue;
-				boolean color = GLThemeKeyClassifier.isColorOrFontKey(key);
-				if ("colors".equals(type) && !color)
+				GLCodePropertySchema.Property property = schema.property(key);
+				if (property == null || "meta".equals(property.category())) continue;
+				if ("colors".equals(type) && !"colors".equals(property.category()))
 					result.add(issue(key, key + " is not permitted in a color theme"));
-				else if ("metrics".equals(type) && color)
+				else if ("metrics".equals(type) && !"metrics".equals(property.category()))
 					result.add(issue(key, key + " is not permitted in a metrics theme"));
 			}
 		}
@@ -135,46 +72,4 @@ public final class GLThemeCodeSupport {
 		return new ValidationIssue(key, GLCodeDiagnostic.Severity.ERROR, message);
 	}
 
-	private static ValueType inferType(String key, String value) {
-		String lower = key.toLowerCase(Locale.ROOT);
-		if (isFontPath(lower)) return ValueType.PATH;
-		if ("true".equalsIgnoreCase(value) || "false".equalsIgnoreCase(value))
-			return ValueType.BOOLEAN;
-		if (isFontStyle(lower) || lower.endsWith(".offsetspace")) return ValueType.ENUM;
-		if ((lower.endsWith(".padding") || lower.endsWith(".insets"))
-				&& value.split(",", -1).length == 4) return ValueType.INSETS;
-		try { GLThemeValues.parseColor(value); return ValueType.COLOR; }
-		catch (RuntimeException ignored) { }
-		try { Double.parseDouble(value); return ValueType.NUMBER; }
-		catch (RuntimeException ignored) { }
-		return ValueType.TEXT;
-	}
-
-	private static boolean isFontPath(String key) {
-		int separator = key.lastIndexOf('.');
-		if (separator < 0 || !key.substring(0, separator).endsWith("font")) return false;
-		return switch (key.substring(separator + 1)) {
-		case "source", "regular", "bold", "italic", "bolditalic" -> true;
-		default -> false;
-		};
-	}
-
-	private static boolean isFontStyle(String key) {
-		return key.toLowerCase(Locale.ROOT).endsWith("font.style");
-	}
-
-	private static String description(String key, ValueType type) {
-		String owner = key.substring(0, Math.max(0, key.lastIndexOf('.')))
-				.replace('.', ' ');
-		String subject = owner.isBlank() ? "theme" : owner;
-		return switch (type) {
-		case COLOR -> "Color used by " + subject + ".";
-		case NUMBER -> "Numeric metric used by " + subject + ".";
-		case BOOLEAN -> "Feature switch for " + subject + ".";
-		case INSETS -> "Top, left, bottom, and right insets for " + subject + ".";
-		case ENUM -> "Named option used by " + subject + ".";
-		case PATH -> "External resource used by " + subject + ".";
-		case TEXT -> "Text value used by " + subject + ".";
-		};
-	}
 }

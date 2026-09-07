@@ -17,6 +17,7 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -46,12 +47,19 @@ public final class GLPropertiesCodeLanguage implements GLCodeLanguage {
 			"default", "dark", "light");
 
 	private final GLCodePropertySchema schema;
+	private final Function<GLCodeDocument, GLCodePropertySchema> schemaResolver;
 	private final GLCodeDiagnosticProvider provider = new PropertyProvider();
 
 	/** Creates a configuration language backed by the supplied immutable schema. */
 	public GLPropertiesCodeLanguage(GLCodePropertySchema schema) {
+		this(schema, null);
+	}
+
+	GLPropertiesCodeLanguage(GLCodePropertySchema schema,
+			Function<GLCodeDocument, GLCodePropertySchema> schemaResolver) {
 		if (schema == null) throw new IllegalArgumentException("Property schema is required");
 		this.schema = schema;
+		this.schemaResolver = schemaResolver;
 	}
 
 	/** Returns the property schema exposed by this language. */
@@ -90,6 +98,7 @@ public final class GLPropertiesCodeLanguage implements GLCodeLanguage {
 
 	private static GLColorModel functionalColorModel(String value) {
 		String lower = value.stripLeading().toLowerCase(java.util.Locale.ROOT);
+		if (lower.startsWith("rgba(")) return GLColorModel.RGB;
 		for (GLColorModel model : GLColorModel.values())
 			if (lower.startsWith(model.name().toLowerCase(java.util.Locale.ROOT) + "("))
 				return model;
@@ -107,6 +116,15 @@ public final class GLPropertiesCodeLanguage implements GLCodeLanguage {
 				continue;
 			}
 			if (!line.hasProperty()) continue;
+			if (line.keyStart() > line.contentStart()
+					&& source.charAt(line.contentStart()) == '@') {
+				int annotationEnd = line.keyStart();
+				while (annotationEnd > line.contentStart()
+						&& Character.isWhitespace(source.charAt(annotationEnd - 1)))
+					annotationEnd--;
+				tokens.add(new GLCodeToken(line.contentStart(), annotationEnd,
+						GLCodeToken.Type.KEYWORD));
+			}
 			tokens.add(new GLCodeToken(line.keyStart(), line.keyEnd(),
 					isDirective(line.key()) ? GLCodeToken.Type.KEYWORD : GLCodeToken.Type.TYPE));
 			addLexicalValueTokens(source, line, tokens);
@@ -119,8 +137,17 @@ public final class GLPropertiesCodeLanguage implements GLCodeLanguage {
 
 	@Override
 	public List<GLCodeDiagnostic> diagnose(String source) {
+		if (schemaResolver != null) {
+			GLCodePropertySchema resolved = schemaResolver.apply(new GLCodeDocument(
+					URI.create("untitled:/source." + schema.id()), schema.id(), 0, source));
+			if (resolved != null && resolved != schema)
+				return new GLPropertiesCodeLanguage(resolved).diagnose(source);
+		}
 		Document document = parse(source);
 		List<GLCodeDiagnostic> result = new ArrayList<>(document.syntaxDiagnostics());
+		String documentType = document.first("theme.type") == null ? ""
+				: document.first("theme.type").value().trim().toLowerCase(
+						java.util.Locale.ROOT);
 		Map<String, Line> declarations = new LinkedHashMap<>();
 		for (Line line : document.lines()) {
 			if (!line.hasProperty()) continue;
@@ -138,6 +165,7 @@ public final class GLPropertiesCodeLanguage implements GLCodeLanguage {
 							"Unknown property '" + line.key() + "'"));
 				continue;
 			}
+			validateTypeAnnotation(source, line, property, documentType, result);
 			validateValue(line, property, result);
 		}
 		validateReferenceTypes(declarations, result);
@@ -152,6 +180,41 @@ public final class GLPropertiesCodeLanguage implements GLCodeLanguage {
 			}
 		result.sort(Comparator.comparingInt(GLCodeDiagnostic::start));
 		return List.copyOf(result);
+	}
+
+	private static void validateTypeAnnotation(String source, Line line,
+			Property property, String documentType,
+			List<GLCodeDiagnostic> result) {
+		GLPropertiesSyntax.TypeAnnotation annotation;
+		try {
+			annotation = GLPropertiesSyntax.typeAnnotation(source,
+					line.contentStart(), line.end());
+		} catch (IllegalArgumentException ignored) {
+			return; // The parser already reported malformed annotation syntax.
+		}
+		if (annotation == null) return;
+		String category = "colors".equals(documentType) ? "colors"
+				: "metrics".equals(documentType) ? "metrics"
+				: annotation.type() == ValueType.COLOR ? "colors" : "metrics";
+		if (annotation.type() != property.type())
+			result.add(diagnostic(annotation.start(), annotation.end(),
+					GLCodeDiagnostic.Severity.ERROR,
+					"Property '" + line.key() + "' is "
+							+ property.type().name().toLowerCase(java.util.Locale.ROOT)
+							+ " and cannot be declared as "
+							+ annotation.type().name().toLowerCase(java.util.Locale.ROOT)));
+		else if (annotation.type() == ValueType.ENUM
+				&& !annotation.choices().equals(property.choices()))
+			result.add(diagnostic(annotation.start(), annotation.end(),
+					GLCodeDiagnostic.Severity.ERROR,
+					"Property '" + line.key()
+							+ "' declares different enum values than its schema"));
+		else if (!property.category().isBlank()
+				&& !property.category().equals(category))
+			result.add(diagnostic(annotation.start(), annotation.end(),
+					GLCodeDiagnostic.Severity.ERROR,
+					"Property '" + line.key() + "' belongs to the "
+							+ property.category() + " fragment"));
 	}
 
 	private void validateReferenceTypes(Map<String, Line> declarations,
@@ -202,22 +265,34 @@ public final class GLPropertiesCodeLanguage implements GLCodeLanguage {
 	private static void validateValue(Line line, Property property,
 			List<GLCodeDiagnostic> result) {
 		String value = line.value();
+		boolean referenced = value.contains("${");
 		if (value.isBlank()) {
 			result.add(diagnostic(line.separator(), line.separator() + 1,
 					GLCodeDiagnostic.Severity.ERROR,
 					"Property '" + line.key() + "' requires a value"));
 			return;
 		}
-		if (value.contains("${")) return;
+		if (value.contains("${")) {
+			value = switch (property.type()) {
+			case NUMBER, INSETS -> REFERENCE.matcher(value).replaceAll("1");
+			case COLOR -> REFERENCE.matcher(value).replaceAll("rgb(0, 0, 0)");
+			case BOOLEAN, ENUM, TEXT, PATH -> value;
+			};
+			if (value.contains("${")) return;
+			if (property.type() != ValueType.NUMBER
+					&& property.type() != ValueType.INSETS
+					&& property.type() != ValueType.COLOR) return;
+		}
 		try {
 			switch (property.type()) {
-			case NUMBER -> Double.parseDouble(value);
+			case NUMBER -> validateNumber(GLThemeValues.parseFloat(value, property.key()),
+					property, referenced);
 			case BOOLEAN -> {
 				if (!"true".equalsIgnoreCase(value) && !"false".equalsIgnoreCase(value))
 					throw new IllegalArgumentException("Expected true or false");
 			}
 			case COLOR -> GLThemeValues.parseColor(value);
-			case INSETS -> parseInsets(value);
+			case INSETS -> parseInsets(value, property, referenced);
 			case ENUM -> {
 				if (property.choices().stream().noneMatch(value::equalsIgnoreCase))
 					throw new IllegalArgumentException("Expected one of "
@@ -231,11 +306,26 @@ public final class GLPropertiesCodeLanguage implements GLCodeLanguage {
 		}
 	}
 
-	private static void parseInsets(String value) {
+	private static void parseInsets(String value, Property property,
+			boolean referenced) {
 		String[] parts = value.split(",", -1);
-		if (parts.length != 4)
-			throw new IllegalArgumentException("Expected top, left, bottom, right");
-		for (String part : parts) Double.parseDouble(part.trim());
+		if (parts.length < 1 || parts.length > 4)
+			throw new IllegalArgumentException("Expected one to four inset values");
+		for (String part : parts) validateNumber(
+				GLThemeValues.parseFloat(part.trim(), "insets"), property, referenced);
+	}
+
+	private static void validateNumber(float value, Property property,
+			boolean referenced) {
+		if (referenced) return;
+		if (property.minimum() != null && value < property.minimum())
+			throw new IllegalArgumentException("Value must be at least "
+					+ property.minimum());
+		if (property.maximum() != null && value > property.maximum())
+			throw new IllegalArgumentException("Value must be at most "
+					+ property.maximum());
+		if (property.integer() && value != Math.rint(value))
+			throw new IllegalArgumentException("Value must be a whole number");
 	}
 
 	private static void validateReferenceSyntax(String source, Line line,
@@ -299,6 +389,13 @@ public final class GLPropertiesCodeLanguage implements GLCodeLanguage {
 		}
 	}
 
+	private GLPropertiesCodeLanguage effectiveLanguage(GLCodeDocument document) {
+		if (schemaResolver == null) return this;
+		GLCodePropertySchema resolved = schemaResolver.apply(document);
+		return resolved == null || resolved == schema ? this
+				: new GLPropertiesCodeLanguage(resolved);
+	}
+
 	private final class PropertySession implements GLCodeDiagnosticProvider.Session {
 		private GLCodeDocument current;
 		private final Consumer<GLCodeDiagnosticProvider.Result> listener;
@@ -318,41 +415,81 @@ public final class GLPropertiesCodeLanguage implements GLCodeLanguage {
 		}
 
 		private void publish() {
+			GLPropertiesCodeLanguage language = effectiveLanguage(current);
 			listener.accept(new GLCodeDiagnosticProvider.Result(
-					current.version(), externalDiagnostics(current)));
+					current.version(), language.externalDiagnostics(current)));
 		}
 
 		@Override public CompletionStage<List<GLCodeCompletion>> complete(
 				GLCodeDocument document, int offset, Character trigger) {
-			return completed(completions(document, offset));
+			return completed(effectiveLanguage(document).completions(document, offset));
 		}
 
 		@Override public CompletionStage<Optional<GLCodeHover>> hover(
 				GLCodeDocument document, int offset) {
-			return completed(hoverAt(document, offset));
+			return completed(effectiveLanguage(document).hoverAt(document, offset));
 		}
 
 		@Override public CompletionStage<List<GLCodeLocation>> definitions(
 				GLCodeDocument document, int offset) {
-			return completed(definitionsAt(document, offset));
+			return completed(effectiveLanguage(document).definitionsAt(document, offset));
 		}
 
 		@Override public CompletionStage<List<GLCodeSemanticToken>> semanticTokens(
 				GLCodeDocument document) {
-			return completed(semanticTokensFor(document.text()));
+			return completed(effectiveLanguage(document).semanticTokensFor(document.text()));
 		}
 
 		@Override public CompletionStage<List<GLCodeColor>> documentColors(
 				GLCodeDocument document) {
-			return completed(documentColorsFor(document));
+			return completed(effectiveLanguage(document).documentColorsFor(document));
 		}
 
 		@Override public CompletionStage<List<GLCodeInlayHint>> inlayHints(
 				GLCodeDocument document) {
-			return completed(functionInlayHints(document.text()));
+			return completed(effectiveLanguage(document).inlayHintsFor(document.text()));
 		}
 
 		@Override public void close() { closed = true; }
+	}
+
+	private List<GLCodeInlayHint> inlayHintsFor(String source) {
+		ArrayList<GLCodeInlayHint> result = new ArrayList<>(functionInlayHints(source));
+		Document document = parse(source);
+		for (Line line : document.lines()) {
+			if (!line.hasProperty()) continue;
+			Property property = schema.property(line.key());
+			if (property == null || property.type() != ValueType.INSETS
+					|| line.value().isBlank()) continue;
+			List<Integer> starts = commaSeparatedValueStarts(source,
+					line.valueStart(), line.valueEnd());
+			List<String> labels = switch (starts.size()) {
+			case 1 -> List.of("All");
+			case 2 -> List.of("Vertical", "Horizontal");
+			case 3 -> List.of("Top", "Horizontal", "Bottom");
+			case 4 -> List.of("Top", "Left", "Bottom", "Right");
+			default -> List.of();
+			};
+			for (int index = 0; index < labels.size(); index++)
+				result.add(new GLCodeInlayHint(starts.get(index), labels.get(index)));
+		}
+		result.sort(Comparator.comparingInt(GLCodeInlayHint::offset));
+		return List.copyOf(result);
+	}
+
+	private static List<Integer> commaSeparatedValueStarts(String source,
+			int start, int end) {
+		ArrayList<Integer> result = new ArrayList<>();
+		int candidate = start;
+		for (int index = start; index <= end; index++) {
+			if (index < end && source.charAt(index) != ',') continue;
+			int valueStart = candidate;
+			while (valueStart < index
+					&& Character.isWhitespace(source.charAt(valueStart))) valueStart++;
+			result.add(valueStart);
+			candidate = index + 1;
+		}
+		return List.copyOf(result);
 	}
 
 	private static List<GLCodeInlayHint> functionInlayHints(String source) {
@@ -414,9 +551,14 @@ public final class GLPropertiesCodeLanguage implements GLCodeLanguage {
 			return referenceCompletions(partial.key(), partial.keyStart(),
 					partial.keyEnd(), document.uri(), parsed);
 		if (!line.hasProperty() || offset <= line.separator()) {
-			int start = line == null ? offset : line.contentStart();
+			if (line != null && line.hasProperty() && offset < line.keyStart())
+				return List.of();
+			int start = line == null ? offset : line.hasProperty()
+					? line.keyStart() : line.contentStart();
 			String prefix = document.text().substring(start, offset).trim();
 			start = offset - prefix.length();
+			if ("gltheme".equals(schema.id()) && prefix.startsWith("@"))
+				return annotationCompletions(prefix, start, offset);
 			return propertyCompletions(prefix, start, line != null && line.hasProperty()
 					? line.keyEnd() : offset, !line.hasProperty(), parsed);
 		}
@@ -425,6 +567,22 @@ public final class GLPropertiesCodeLanguage implements GLCodeLanguage {
 		String prefix = document.text().substring(line.valueStart(), offset).trim();
 		int start = offset - prefix.length();
 		return valueCompletions(document.uri(), property, prefix, start, offset);
+	}
+
+	private static List<GLCodeCompletion> annotationCompletions(String prefix,
+			int start, int end) {
+		String lower = prefix.toLowerCase(java.util.Locale.ROOT);
+		List<GLCodeCompletion> result = new ArrayList<>();
+		for (ValueType type : ValueType.values()) {
+			String label = "@" + type.name();
+			if (label.toLowerCase(java.util.Locale.ROOT).startsWith(lower))
+				result.add(new GLCodeCompletion(label,
+						"Declare a document-local " + type.name().toLowerCase(
+								java.util.Locale.ROOT) + " theme token",
+						type == ValueType.ENUM ? label + "<value1, value2> "
+								: label + " ", start, end));
+		}
+		return List.copyOf(result);
 	}
 
 	private List<GLCodeCompletion> propertyCompletions(String prefix, int start,
@@ -454,9 +612,7 @@ public final class GLPropertiesCodeLanguage implements GLCodeLanguage {
 		if (!"colors".equals(type) && !"metrics".equals(type)) return true;
 		String key = property.key();
 		if ("theme.type".equals(key) || "theme.name".equals(key)) return true;
-		boolean color = property.type() == ValueType.COLOR
-				|| GLThemeKeyClassifier.isColorOrFontKey(key);
-		return "colors".equals(type) ? color : !color && !key.startsWith("theme.");
+		return type.equals(property.category());
 	}
 
 	private List<GLCodeCompletion> valueCompletions(URI uri, Property property,
@@ -468,7 +624,8 @@ public final class GLPropertiesCodeLanguage implements GLCodeLanguage {
 		case COLOR -> candidates.addAll(List.of("rgb(0, 0, 0)",
 				"rgb(0, 0, 0, 255)", "hsv(0deg, 0%, 0%)",
 				"hsl(0deg, 0%, 0%)", "oklab(0.0, 0, 0)",
-				"oklch(0.0, 0, 0deg)", "#000000", "${palette.text}"));
+				"oklch(0.0, 0, 0deg)", "#000000", "${palette.text}",
+				"derive(${palette.text}, alpha*=0.5)"));
 		case INSETS -> candidates.add("0, 0, 0, 0");
 		case NUMBER -> candidates.addAll(List.of("0", "1", "${metrics.controlHeight}"));
 		case PATH -> candidates.addAll(siblingCandidates(uri, property.key()));
@@ -491,7 +648,8 @@ public final class GLPropertiesCodeLanguage implements GLCodeLanguage {
 		String lower = prefix.toLowerCase(java.util.Locale.ROOT);
 		Map<String, String> details = new LinkedHashMap<>();
 		for (Property property : schema.properties().values())
-			details.put(property.key(), detail(property));
+			if (!property.key().endsWith("*"))
+				details.put(property.key(), detail(property));
 		for (Line line : document.lines()) if (line.hasProperty())
 			details.putIfAbsent(line.key(), "custom property");
 		Path owner = filePath(uri);
@@ -648,11 +806,20 @@ public final class GLPropertiesCodeLanguage implements GLCodeLanguage {
 						&& isConfigurationFile(target)) collectKeys(target, available, visited);
 			}
 		List<GLCodeDiagnostic> result = new ArrayList<>();
+		if (!schema.unknownKeysAllowed())
+			for (Line line : parsed.lines())
+				if (line.hasProperty() && schema.property(line.key()) == null)
+					result.add(diagnostic(line.keyStart(), line.keyEnd(),
+							GLCodeDiagnostic.Severity.WARNING,
+							"Unknown property '" + line.key()
+									+ "'; its value cannot be type-checked"));
 		if (owner != null)
 			for (Line line : parsed.pathProperties(schema)) {
 				if (isBuiltInReference(line) || line.value().contains("${")) continue;
 				Path target = resolvePath(document.uri(), line.value());
-				if (target == null || !Files.isRegularFile(target))
+				boolean exists = target != null && (Files.isRegularFile(target)
+						|| ("theme.schema".equals(line.key()) && Files.isDirectory(target)));
+				if (!exists)
 					result.add(diagnostic(line.valueStart(), line.valueEnd(),
 							GLCodeDiagnostic.Severity.ERROR,
 							"Referenced file does not exist: " + line.value()));
@@ -718,9 +885,10 @@ public final class GLPropertiesCodeLanguage implements GLCodeLanguage {
 	private static int importPriority(Line line) {
 		return switch (line.key()) {
 		case "theme.extends" -> 0;
-		case "theme.colors" -> 1;
-		case "theme.metrics" -> 2;
-		default -> 3;
+		case "theme.schema" -> 1;
+		case "theme.colors" -> 2;
+		case "theme.metrics" -> 3;
+		default -> 4;
 		};
 	}
 
@@ -865,7 +1033,21 @@ public final class GLPropertiesCodeLanguage implements GLCodeLanguage {
 				lines.add(new Line(start, physicalEnd, contentStart, comment,
 						-1, -1, -1, -1, -1, -1, "", ""));
 			} else {
-				int separator = separator(source, contentStart, physicalEnd);
+				int propertyStart = contentStart;
+				try {
+					GLPropertiesSyntax.TypeAnnotation annotation =
+							GLPropertiesSyntax.typeAnnotation(source, contentStart, physicalEnd);
+					if (annotation != null) propertyStart = annotation.end();
+				} catch (IllegalArgumentException error) {
+					diagnostics.add(diagnostic(contentStart, physicalEnd,
+							GLCodeDiagnostic.Severity.ERROR, error.getMessage()));
+					lines.add(new Line(start, physicalEnd, contentStart, false,
+							-1, -1, -1, -1, -1, -1, "", ""));
+					if (newline < 0) break;
+					start = newline + 1;
+					continue;
+				}
+				int separator = separator(source, propertyStart, physicalEnd);
 				if (separator < 0) {
 					diagnostics.add(diagnostic(contentStart, physicalEnd,
 							GLCodeDiagnostic.Severity.ERROR,
@@ -874,7 +1056,7 @@ public final class GLPropertiesCodeLanguage implements GLCodeLanguage {
 							-1, -1, -1, -1, -1, -1, "", ""));
 				} else {
 					int keyEnd = separator;
-					while (keyEnd > contentStart && Character.isWhitespace(source.charAt(keyEnd - 1))) keyEnd--;
+					while (keyEnd > propertyStart && Character.isWhitespace(source.charAt(keyEnd - 1))) keyEnd--;
 					int valueStart = separator + 1;
 					while (valueStart < physicalEnd && Character.isWhitespace(source.charAt(valueStart))) valueStart++;
 					int inlineCommentStart = "gltheme".equals(schema.id())
@@ -882,13 +1064,13 @@ public final class GLPropertiesCodeLanguage implements GLCodeLanguage {
 									physicalEnd) : -1;
 					int valueEnd = inlineCommentStart < 0 ? physicalEnd : inlineCommentStart;
 					while (valueEnd > valueStart && Character.isWhitespace(source.charAt(valueEnd - 1))) valueEnd--;
-					String key = source.substring(contentStart, keyEnd);
+					String key = source.substring(propertyStart, keyEnd);
 					String value = source.substring(valueStart, valueEnd);
 					if (key.isBlank()) diagnostics.add(diagnostic(contentStart,
 							Math.max(contentStart + 1, separator), GLCodeDiagnostic.Severity.ERROR,
 							"Configuration property key must not be empty"));
 					lines.add(new Line(start, physicalEnd, contentStart, false,
-							contentStart, keyEnd, separator, valueStart, valueEnd,
+							propertyStart, keyEnd, separator, valueStart, valueEnd,
 							inlineCommentStart, key, value));
 				}
 			}
@@ -919,9 +1101,14 @@ public final class GLPropertiesCodeLanguage implements GLCodeLanguage {
 	}
 
 	private static Reference partialReference(String source, Line line, int offset) {
-		if (line == null || !line.hasProperty() || offset < line.valueStart()) return null;
-		int open = source.lastIndexOf("${", offset);
+		if (line == null || !line.hasProperty() || offset < line.valueStart()
+				|| offset > line.valueEnd() || source.isEmpty()) return null;
+		int searchFrom = Math.min(source.length() - 1, Math.max(0, offset - 1));
+		int open = source.lastIndexOf("${", searchFrom);
 		if (open < line.valueStart()) return null;
+		// The caret can temporarily sit on '$' or between '$' and '{' while
+		// automatic completion is triggered by a key event.
+		if (open + 2 > offset) return null;
 		int close = source.indexOf('}', open + 2);
 		if (close >= 0 && close < offset) return null;
 		int end = close >= 0 && close <= line.valueEnd() ? close : offset;
@@ -997,6 +1184,13 @@ public final class GLPropertiesCodeLanguage implements GLCodeLanguage {
 				.append(property.type().name().toLowerCase(java.util.Locale.ROOT));
 		if (!property.choices().isEmpty())
 			text.append("\nValues: ").append(String.join(", ", property.choices()));
+		if (property.minimum() != null || property.maximum() != null) {
+			text.append("\nRange: ");
+			text.append(property.minimum() == null ? "unbounded" : property.minimum());
+			text.append(" … ");
+			text.append(property.maximum() == null ? "unbounded" : property.maximum());
+		}
+		if (property.integer()) text.append("\nWhole numbers only");
 		if (property.defaultValue() != null)
 			text.append("\nDefault: `").append(property.defaultValue()).append('`');
 		return text.toString();

@@ -50,6 +50,8 @@ key.text.delete=DELETE
 key.text.commit=ENTER
 key.text.toggle-bold=shortcut+B
 key.text.toggle-italic=shortcut+I
+key.text.find=shortcut+F
+key.text.replace=shortcut+H
 value.text.history-coalesce-millis=750
 
 key.code.format=shortcut+shift+F

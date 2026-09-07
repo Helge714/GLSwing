@@ -270,7 +270,11 @@ public class GLCodeEditor extends GLTextArea {
 		if (language.supportsInlayHints() && diagnosticSession != null) {
 			if (hasGroup) codeMenu.addSeparator();
 			codeMenu.addItem(inlayHintsAction);
+			hasGroup = true;
 		}
+		if (hasGroup) codeMenu.addSeparator();
+		codeMenu.addItem(findAction());
+		codeMenu.addItem(replaceAction());
 	}
 	private GLAction editableCodeAction(String id, String textKey, Runnable handler) {
 		return GLAction.builder(id).textKey(textKey).enabledWhen(this::isEditable)

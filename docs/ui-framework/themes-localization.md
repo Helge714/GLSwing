@@ -11,6 +11,7 @@ fallback chain.
 - [Theme inheritance](#theme-inheritance)
 - [Built-in and external themes](#built-in-and-external-themes)
 - [Modular color and metrics themes](#modular-color-and-metrics-themes)
+- [Declarative property schemas](#declarative-property-schemas)
 - [Loading and live reload](#loading-and-live-reload)
 - [Editable user overrides](#editable-user-overrides)
 - [Editing theme source](#editing-theme-source)
@@ -41,6 +42,8 @@ affected recordings and layout automatically.
 `GLThemes.DEFAULT`, `DARK`, and `LIGHT` load packaged theme resources. External
 `.gltheme` files use key/value properties. A theme can inherit another file or
 built-in theme with `theme.extends=...`; child keys override parent values.
+Omitting `theme.extends` means `default`, so every ordinary theme receives the
+complete GLSwing color and metrics baseline.
 
 Comments may occupy a complete line or follow a value when separated by
 whitespace. A leading `#` remains part of hexadecimal color values:
@@ -56,8 +59,8 @@ inside a value.
 
 References use `${key}` and resolve recursively. References between known
 properties are type-checked by the theme language; for example, an inset value
-cannot be assigned to a numeric height. Custom keys remain available through
-`theme.values()` so application controls can share the same theme file.
+cannot be assigned to a numeric height. Custom keys should be declared in the
+bundle schema described below.
 
 ## Modular color and metrics themes
 
@@ -68,16 +71,16 @@ complete theme.
 ```properties
 # colors/dark.gltheme
 theme.type=colors
-palette.surface=#181818
-palette.text=#f0f0f0
-palette.accent=#4d90fe
+@COLOR palette.surface=#181818
+@COLOR palette.text=#f0f0f0
+@COLOR palette.accent=#4d90fe
 ```
 
 ```properties
 # metrics/compact-rounded.gltheme
 theme.type=metrics
-metrics.cornerRadius=6
-metrics.padding=4,6,4,6
+@NUMBER metrics.cornerRadius=6
+@INSETS metrics.padding=4,6,4,6
 menu.itemCornerRadius=2
 menu.itemHeight=24
 ```
@@ -102,6 +105,96 @@ declared fragment type and omits keys already declared in the current file.
 Relative references resolve from the bundle directory.
 Existing themes without `theme.type` remain supported through
 `theme.extends`.
+
+## Declarative property schemas
+
+GLSwing defines control properties explicitly in its packaged
+`default.glschema`. Shared `palette.*` and `metrics.*` reference tokens are
+declared inline by `default.gltheme` and merged into the effective built-in
+schema. Types are never inferred from property names or current values. An
+application can extend that contract by assigning a schema file or directory
+to its bundle:
+
+```properties
+theme.type=bundle
+theme.schema=schema
+theme.colors=colors.gltheme
+theme.metrics=metrics.gltheme
+```
+
+A schema directory is treated as one ordered declaration. Its files are read in
+case-insensitive filename order and it contains
+one or more UTF-8 `.glschema` files:
+
+```properties
+schema.name=Application theme properties
+schema.version=1
+
+application.tint=COLOR, "Application tint"
+application.cellPadding=INSETS, "Cell content insets", min=0
+application.opacity=NUMBER, "Content opacity", min=0, max=1
+application.columnCount=NUMBER, "Column count", min=1, integer=true
+application.mode=ENUM, "Layout mode", values=compact|comfortable
+```
+
+Supported types are `TEXT`, `NUMBER`, `BOOLEAN`, `COLOR`, `INSETS`, `ENUM`, and
+`PATH`. A quoted English description is optional. `NUMBER` supports `min`,
+`max`, and `integer`; `INSETS` supports `min` and `max`; `ENUM` requires a
+pipe-separated `values` list. Color properties belong to color fragments and
+the other types to metrics fragments by default. Use `fragment=colors` for a
+non-color value that belongs to the visual resource layer, such as a font path.
+
+For a token used only by one theme document, declare its type directly before
+the property. The declaration is part of the `.gltheme` syntax and is removed
+before the value is exposed through `GLThemeValues`:
+
+```properties
+@COLOR palette.applicationBrand=oklch(68%, 0.12, 250deg)
+@NUMBER metrics.animationDuration=180
+@INSETS application.cardPadding=8, 12
+@ENUM<compact, comfortable, system> application.density=comfortable
+button.background=${palette.applicationBrand}
+```
+
+Inline declarations support `@TEXT`, `@NUMBER`, `@BOOLEAN`, `@COLOR`,
+`@INSETS`, `@PATH`, and `@ENUM<value1, value2, ...>`. Enum values are
+case-insensitively unique, and the assigned value must be one of them. Inline
+types drive value validation, reference compatibility,
+completion, previews, and inlay hints without assigning a meaning based on the
+property name. In a `colors` or `metrics` fragment, the token belongs to that
+fragment. In a bundle or legacy theme, colors belong to the color layer and the
+remaining types belong to the metrics layer.
+
+Use a `.glschema` when a property is shared by several theme files or needs a
+description or numeric constraints. It is also preferable for enums shared by
+multiple files, because their permitted values then have one authoritative
+declaration. An inline declaration may repeat a standard or schema-defined
+property only with the same type, enum values, and fragment category; a
+conflicting declaration is an error.
+
+The built-in schema is always loaded first. Schemas declared by inherited
+themes follow, then the current bundle schema. Duplicate property declarations
+are errors rather than silent overrides. The same effective schema drives the
+loader, completion, hover information, fragment filtering, color previews,
+inset hints, and Theme Studio source editing. The code editor recognizes
+`.glschema` separately from `.gltheme`, highlights schema declarations, and
+reports malformed descriptors without treating their type names as theme
+values.
+
+An unknown property remains in `GLThemeValues`, but produces a warning because
+its syntax and fragment role cannot be checked. Applications can select a
+different runtime policy:
+
+```java
+GLThemeLoadOptions options = new GLThemeLoadOptions(
+        GLThemeUnknownPropertyPolicy.WARNING,
+        warning -> diagnostics.add(warning));
+GLTheme theme = GLThemeLoader.load(path, options);
+```
+
+`WARNING` preserves and reports the value, `ERROR` rejects it, and `ALLOW`
+preserves it silently. The editor uses warning behavior so an undeclared value
+remains editable without pretending that it has a known type.
 
 ## Loading and live reload
 
@@ -155,15 +248,22 @@ GLCodeEditor sourceEditor = new GLCodeEditor(
         Files.readString(file), file.toUri());
 ```
 
-The editor highlights property declarations, references, functions, numbers,
-strings, and directives. `Ctrl/Cmd+Space` completes known theme properties,
-enum and boolean values, built-in base themes, sibling theme fragments, and
-font files. Hovering a known property shows its type, purpose, permitted values,
+The editor highlights property declarations, inline type annotations,
+references, functions, numbers, strings, and directives. `Ctrl/Cmd+Space`
+completes inline annotation names, known theme properties, enum and boolean
+values, color functions including `derive(...)`, built-in base
+themes, sibling theme fragments, and font files. Hovering a known property shows
+its type, purpose, permitted values,
 and default where available. Ctrl/Cmd-click and **Go to definition** navigate
 to local `${property}` declarations, imported fragment declarations, and theme
 files named by `theme.extends`, `theme.colors`, or `theme.metrics`. The built-in
 `default`, `dark`, and `light` inheritance targets resolve to their packaged,
 read-only `.gltheme` sources as well.
+
+Parameter inlay hints identify the channels of color functions and the sides of
+inset values. Insets use `All` for one value, `Vertical`/`Horizontal` for two,
+`Top`/`Horizontal`/`Bottom` for three, and
+`Top`/`Left`/`Bottom`/`Right` for four values.
 
 Diagnostics cover malformed or duplicate declarations, invalid typed values,
 unknown references, missing imported files, local reference cycles, import
@@ -187,11 +287,11 @@ references, and `derive(...)` expressions. Functional forms accept an optional
 final alpha component:
 
 ```properties
-palette.rgb=rgb(255, 0.5, 32, 75%)
-palette.hsv=hsv(210deg, 60%, 80%, 192)
-palette.hsl=hsl(210deg, 60%, 50%)
-palette.oklab=oklab(0.65, -0.08, 0.12, 0.75f)
-palette.oklch=oklch(65%, 0.14, 145deg)
+@COLOR palette.rgb=rgb(255, 0.5, 32, 75%)
+@COLOR palette.hsv=hsv(210deg, 60%, 80%, 192)
+@COLOR palette.hsl=hsl(210deg, 60%, 50%)
+@COLOR palette.oklab=oklab(0.65, -0.08, 0.12, 0.75f)
+@COLOR palette.oklch=oklch(65%, 0.14, 145deg)
 ```
 
 `rgba(r, g, b, a)` remains a compatibility alias; new themes can consistently
@@ -200,6 +300,9 @@ independently: an integer without a suffix uses `0..255`, a value containing a
 decimal point or ending in `f` uses normalized `0..1`, and `%` uses `0..100`.
 Formats may be mixed in one color. Consequently, an unsuffixed `1` means
 `1/255`; write `1.0`, `1f`, or `100%` for full intensity or opacity.
+The built-in formatter normalizes the compatibility spelling `rgba(...)` to
+`rgb(...)`. When the configured `GLColorExpressionFormat` omits opaque alpha,
+it also removes a redundant final `255`, `1f`, or `100%` value.
 
 HSV/HSL saturation, value, and lightness require a percentage or normalized
 decimal/`f` value. Hue accepts integer degrees, an explicit `deg` value,
@@ -379,6 +482,7 @@ button.borderWidth=1
 button.padding=3, 8, 3, 8
 comboBox.height=28
 comboBox.arrowAreaWidth=24
+comboBox.arrowStrokeWidth=1.5
 comboBox.padding=3, 8, 3, 8
 numberSpinner.height=28
 numberSpinner.preferredWidth=120
@@ -388,10 +492,20 @@ numberSpinner.borderWidth=1
 numberSpinner.padding=3, 8, 3, 8
 ```
 
-Insets are ordered top, left, bottom, right. ComboBox right padding also
+Insets accept one to four values. One value applies to every side; two values
+mean vertical and horizontal; three mean top, horizontal, and bottom; four are
+ordered top, left, bottom, right. Numeric metrics support `+`, `-`, `*`, `/`,
+parentheses, and resolved references, for example
+`button.borderWidth=${metrics.borderWidth} + 1`. ComboBox right padding also
 insets its chevron; it is not limited to the label. Checkbox mark thickness is
 named `checkBox.checkStrokeWidth`, consistently with the other stroke-width
 properties.
+
+Node-editor grids are enabled with `nodeEditor.gridVisible`. The
+`nodeEditor.gridSpacing`, `nodeEditor.gridMajorInterval`, and
+`nodeEditor.gridLineWidth` metrics control geometry; `nodeEditor.gridMinor` and
+`nodeEditor.gridMajor` control colors. The grid is anchored in graph coordinates
+and follows viewport pan and zoom.
 
 ## Localization
 

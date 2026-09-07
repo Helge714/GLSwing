@@ -248,7 +248,13 @@ public final class GLRenderer2D {
 
 		gl.glEnable(GL.GL_MULTISAMPLE);
 		gl.glEnable(GL.GL_BLEND);
-		gl.glBlendFunc(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA);
+		gl.glBlendEquationSeparate(GL.GL_FUNC_ADD, GL.GL_FUNC_ADD);
+		// Batch shaders emit straight-alpha colors. RGB therefore uses the usual
+		// source-alpha factors, while framebuffer alpha must use source-over.
+		// Reusing SRC_ALPHA for the alpha channel would make an antialiased edge
+		// transparent again even when it is drawn over an opaque dialog surface.
+		gl.glBlendFuncSeparate(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA,
+				GL.GL_ONE, GL.GL_ONE_MINUS_SRC_ALPHA);
 		gl.glClearDepth(0);
 		applyDepthState(depthState);
 		gl.glDepthRange(depth, depth);

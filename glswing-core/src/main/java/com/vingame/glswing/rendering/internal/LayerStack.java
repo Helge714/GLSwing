@@ -671,7 +671,8 @@ public final class LayerStack {
 		if (depth() > 0) {
 			configureLayerDrawing(gl);
 		} else {
-			gl.glBlendFunc(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA);
+			gl.glBlendFuncSeparate(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA,
+					GL.GL_ONE, GL.GL_ONE_MINUS_SRC_ALPHA);
 		}
 	}
 

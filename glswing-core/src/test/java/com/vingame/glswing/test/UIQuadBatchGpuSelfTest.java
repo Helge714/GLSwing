@@ -130,12 +130,13 @@ public final class UIQuadBatchGpuSelfTest {
 				renderer.endFrame();
 
 				String caseName = "radius=" + radius + ", border=" + border;
-				if (radius <= 1) {
-					checkRegionsEqual(gl, 20, 20, 97, 20, 3, 3, 3,
+				if (radius <= 1 || border > 1) {
+					int tolerance = radius <= 1 ? 3 : 15;
+					checkRegionsEqual(gl, 20, 20, 97, 20, 3, 3, tolerance,
 							caseName + " top-corner symmetry");
-					checkRegionsEqual(gl, 20, 57, 97, 57, 3, 3, 3,
+					checkRegionsEqual(gl, 20, 57, 97, 57, 3, 3, tolerance,
 							caseName + " bottom-corner symmetry");
-					checkRegionsEqual(gl, 20, 20, 20, 57, 3, 3, 3,
+					checkRegionsEqual(gl, 20, 20, 20, 57, 3, 3, tolerance,
 							caseName + " left-corner symmetry");
 				}
 				checkDominantColor(gl, 20, 40, Color.BLUE,
@@ -183,6 +184,11 @@ public final class UIQuadBatchGpuSelfTest {
 
 		checkDominantColor(gl, 20, 44, Color.BLUE,
 				"2x screen-space border");
+		ByteBuffer interior = readPixel(gl, 60, 44);
+		if ((interior.get(3) & 0xff) != 255)
+			throw new AssertionError(
+					"Drawing translucent UI over an opaque surface reduced framebuffer alpha: "
+							+ (interior.get(3) & 0xff));
 	}
 
 	private static void testGroupedContours(GL3 gl,
@@ -520,7 +526,9 @@ public final class UIQuadBatchGpuSelfTest {
 			long difference = Math.abs(first[channel] - second[channel]);
 			if (difference > (long) tolerance * samples)
 				throw new AssertionError(description + ": channel " + channel
-						+ " average differs by " + difference / (float) samples);
+						+ " average differs by " + difference / (float) samples
+						+ " (" + java.util.Arrays.toString(first) + " versus "
+						+ java.util.Arrays.toString(second) + ")");
 		}
 	}
 

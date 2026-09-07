@@ -41,6 +41,7 @@ public class GLColorPicker extends GLContainer {
 	private int editorSource = -1;
 	private final GLInputGroup<Color> channelInput = new GLInputGroup<>(this::getGLHistoryManager);
 	private final GLTextEditor expression = new GLTextEditor();
+	private final GLTextEditor hexExpression = new GLTextEditor();
 	private final EyedropperButton pipette = new EyedropperButton();
 	private final ComparisonSwatch comparison = new ComparisonSwatch();
 	private final GLLabel status = new GLLabel("");
@@ -49,9 +50,10 @@ public class GLColorPicker extends GLContainer {
 	public GLColorPicker() { this(Color.WHITE); }
 	/** Creates a picker initialized to the supplied color. */
 	public GLColorPicker(Color initial) {
-		setIntrinsicPreferredGLSize(new com.vingame.glswing.layout.GLSize(480,230));
+		setIntrinsicPreferredGLSize(new com.vingame.glswing.layout.GLSize(480,258));
 		color = original = Objects.requireNonNull(initial); channels=model.channels(color);
-		addGL(models); addGL(outputModels); addGL(expression); addGL(pipette); addGL(comparison); addGL(status);
+		addGL(models); addGL(outputModels); addGL(expression); addGL(hexExpression);
+		addGL(pipette); addGL(comparison); addGL(status);
 		addGL(channelLayout); addGL(alphaLayout);
 		channelSliders.setSharedFrameVisible(false);
 		channelLayout.addGL(channelSliders,com.vingame.glswing.layout.GLConstraints.at(0,0)
@@ -123,6 +125,10 @@ public class GLColorPicker extends GLContainer {
 		}
 		expression.addActionListener(e -> {
 			try { Color before=color; setColor(GLThemeValues.parseColor(expression.getText())); recordChange(before,color); }
+			catch (IllegalArgumentException failure) { setStatus(text("invalid")); }
+		});
+		hexExpression.addActionListener(e -> {
+			try { Color before=color; setColor(GLThemeValues.parseColor(hexExpression.getText())); recordChange(before,color); }
 			catch (IllegalArgumentException failure) { setStatus(text("invalid")); }
 		});
 		pipette.addActionListener(e -> GLScreenColorSampler.start(this, pipettePreview, sampled -> {
@@ -261,6 +267,7 @@ public class GLColorPicker extends GLContainer {
 	}
 	@Override protected void localizerChanged() {
 		pipette.setToolTipText(text("pipette"));
+		hexExpression.setToolTipText(text("hex"));
 		if(channels!=null) setStatus(model.isInGamut(channels)?null:text("outOfGamut"));
 	}
 	private void refresh() { refresh(java.util.Set.of()); }
@@ -294,7 +301,12 @@ public class GLColorPicker extends GLContainer {
 	}
 	private void refreshExpression() {
 		boolean previous=syncing;syncing=true;
-		try {expression.setText(getColorExpression());}
+		try {
+			expression.setText(getColorExpression());
+			hexExpression.setText(String.format(java.util.Locale.ROOT,
+					color.getAlpha() == 255 ? "#%02X%02X%02X" : "#%02X%02X%02X%02X",
+					color.getRed(), color.getGreen(), color.getBlue(), color.getAlpha()));
+		}
 		finally {syncing=previous;}
 	}
 	@Override protected void resized(float width,float height) {
@@ -313,7 +325,8 @@ public class GLColorPicker extends GLContainer {
 		alphaLayout.layoutGL();
 		expression.setBounds(sliderX,176,Math.max(40,fieldX-sliderX-4),28);
 		outputModels.setBounds(fieldX,176,Math.max(1,width-right-fieldX),28);
-		status.setBounds(sliderX,210,Math.max(1,width-right-sliderX),20);
+		hexExpression.setBounds(sliderX,210,Math.max(100,fieldX-sliderX-4),28);
+		status.setBounds(fieldX,214,Math.max(1,width-right-fieldX),20);
 	}
 	@Override protected void record(GLContext2D context) {
 		// Child controls render the complete picker.

@@ -21,8 +21,46 @@ public final class GLTextAreaSelfTest {
 		testTrailingSpaceDoesNotMoveFittingWord();
 		testAlignmentAndManualHyphenBreak();
 		testRichFormattingAndScrollBar();
+		testFindAndReplace();
 		testFocusSessionCommitsToOuterHistory();
 		System.out.println("GL text area self-test passed.");
+	}
+
+	private static void testFindAndReplace() {
+		GLTextArea area = new GLTextArea("Alpha beta ALPHA beta");
+		area.setCaretPosition(0);
+		check(area.startSearch("alpha", false) == 2
+				&& area.getSearchMatchCount() == 2
+				&& area.getActiveSearchMatchIndex() == 0,
+				"Starting Find did not index and activate all matches");
+		check(area.findNext("alpha", false)
+				&& area.getSelectionStart() == 11 && area.getSelectionEnd() == 16,
+				"Find did not advance to the next match");
+		check(area.findNext("alpha", false) && area.getSelectionStart() == 0,
+				"Find did not wrap at the document end");
+		check(area.findPrevious("beta", true)
+				&& area.getSelectionStart() == 17 && area.getSelectionEnd() == 21,
+				"Reverse Find did not wrap to the previous match");
+		check(area.replaceCurrent("beta", "value", true)
+				&& area.getText().equals("Alpha beta ALPHA value"),
+				"Replace did not update the selected match");
+		area.clearSearch();
+		check(area.getSearchMatchCount() == 0
+				&& area.getActiveSearchMatchIndex() == -1,
+				"Clearing Find retained search markers");
+
+		GLTextArea all = new GLTextArea("one ONE one");
+		check(all.replaceAll("one", "two", false) == 3
+				&& all.getText().equals("two two two"),
+				"Replace All did not replace every non-overlapping match");
+		check(all.getEditingHistoryManager().canUndo(),
+				"Replace All was not recorded as an undoable edit");
+		all.getEditingHistoryManager().undo();
+		check(all.getText().equals("one ONE one"),
+				"Undo did not restore the Replace All source text");
+		all.setEditable(false);
+		check(all.replaceAll("one", "blocked", false) == 0,
+				"Read-only text was modified by Replace All");
 	}
 
 	private static void testDocumentLinesAndNormalization() {
@@ -190,6 +228,7 @@ public final class GLTextAreaSelfTest {
 				"Alignment menu changes were not redoable");
 		historyArea.setEditable(false);
 		check(historyArea.getContextMenu().getItems().stream()
+				.filter(item -> item.getSubMenu() != null)
 				.flatMap(item -> item.getSubMenu().getItems().stream())
 				.noneMatch(com.vingame.glswing.ui.GLMenuItem::isEnabled),
 				"Read-only text area retained enabled formatting actions");

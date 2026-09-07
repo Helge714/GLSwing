@@ -17,6 +17,7 @@ public record GLComboBoxStyle(
 		Color disabledTextColor,
 		Color borderColor,
 		Color arrowColor,
+		float arrowStrokeWidth,
 		float cornerRadius,
 		float borderWidth,
 		float height,
@@ -34,7 +35,8 @@ public record GLComboBoxStyle(
 				|| borderColor == null || arrowColor == null || padding == null)
 			throw new IllegalArgumentException(
 					"Combo-box style values must not be null");
-		if (!nonNegative(cornerRadius) || !nonNegative(borderWidth)
+		if (!positive(arrowStrokeWidth) || !nonNegative(cornerRadius)
+				|| !nonNegative(borderWidth)
 				|| !positive(height) || !positive(minimumWidth)
 				|| !positive(arrowAreaWidth))
 			throw new IllegalArgumentException(
@@ -57,62 +59,64 @@ public record GLComboBoxStyle(
 	public GLComboBoxStyle withFont(GLFontSpec value) {
 		return copy(value, background, hoverBackground, pressedBackground,
 				pressedLightColor, pressedDarkColor, disabledBackground, textColor,
-				disabledTextColor, borderColor,
-				arrowColor, cornerRadius, borderWidth, height, minimumWidth,
-				arrowAreaWidth, padding);
+				disabledTextColor, borderColor, arrowColor, arrowStrokeWidth, cornerRadius,
+				borderWidth, height, minimumWidth, arrowAreaWidth, padding);
 	}
 
 	public GLComboBoxStyle withGeometry(float radius, float height,
 			float minimumWidth, float arrowAreaWidth) {
 		return copy(font, background, hoverBackground, pressedBackground,
 				pressedLightColor, pressedDarkColor, disabledBackground, textColor,
-				disabledTextColor, borderColor,
-				arrowColor, radius, borderWidth, height, minimumWidth,
-				arrowAreaWidth, padding);
+				disabledTextColor, borderColor, arrowColor, arrowStrokeWidth, radius, borderWidth,
+				height, minimumWidth, arrowAreaWidth, padding);
 	}
 
 	public GLComboBoxStyle withColors(Color background, Color hover,
 			Color pressed, Color disabled, Color text, Color disabledText,
 			Color arrow) {
 		return copy(font, background, hover, pressed, pressedLightColor,
-				pressedDarkColor, disabled, text, disabledText, borderColor,
-				arrow, cornerRadius, borderWidth,
-				height, minimumWidth, arrowAreaWidth, padding);
+				pressedDarkColor, disabled, text, disabledText, borderColor, arrow,
+				arrowStrokeWidth,
+				cornerRadius, borderWidth, height, minimumWidth, arrowAreaWidth, padding);
 	}
 
 	public GLComboBoxStyle withPressedGradient(Color light, Color dark) {
 		return copy(font, background, hoverBackground, pressedBackground,
 				light, dark, disabledBackground, textColor, disabledTextColor,
-				borderColor, arrowColor, cornerRadius, borderWidth, height,
+				borderColor, arrowColor, arrowStrokeWidth, cornerRadius, borderWidth, height,
 				minimumWidth, arrowAreaWidth, padding);
 	}
 
 	public GLComboBoxStyle withBorder(float width, Color color) {
 		return copy(font, background, hoverBackground, pressedBackground,
 				pressedLightColor, pressedDarkColor, disabledBackground, textColor,
-				disabledTextColor, color,
-				arrowColor, cornerRadius, width, height, minimumWidth,
-				arrowAreaWidth, padding);
+				disabledTextColor, color, arrowColor, arrowStrokeWidth, cornerRadius, width, height,
+				minimumWidth, arrowAreaWidth, padding);
 	}
 
 	public GLComboBoxStyle withPadding(GLInsets value) {
 		return copy(font, background, hoverBackground, pressedBackground,
 				pressedLightColor, pressedDarkColor, disabledBackground, textColor,
-				disabledTextColor, borderColor,
-				arrowColor, cornerRadius, borderWidth, height, minimumWidth,
-				arrowAreaWidth, value);
+				disabledTextColor, borderColor, arrowColor, arrowStrokeWidth, cornerRadius,
+				borderWidth, height, minimumWidth, arrowAreaWidth, value);
+	}
+
+	public GLComboBoxStyle withArrowStrokeWidth(float value) {
+		return copy(font, background, hoverBackground, pressedBackground,
+				pressedLightColor, pressedDarkColor, disabledBackground, textColor,
+				disabledTextColor, borderColor, arrowColor, value, cornerRadius,
+				borderWidth, height, minimumWidth, arrowAreaWidth, padding);
 	}
 
 	private static GLComboBoxStyle copy(GLFontSpec font, Color background,
 			Color hover, Color pressed, Color pressedLight, Color pressedDark,
-			Color disabled, Color text,
-			Color disabledText, Color border, Color arrow, float radius,
-			float borderWidth, float height, float minimumWidth,
-			float arrowAreaWidth, GLInsets padding) {
+			Color disabled, Color text, Color disabledText, Color border,
+			Color arrow, float arrowStrokeWidth, float radius, float borderWidth, float height,
+			float minimumWidth, float arrowAreaWidth, GLInsets padding) {
 		return new GLComboBoxStyle(font, background, hover, pressed, pressedLight,
-				pressedDark, disabled, text, disabledText, border, arrow, radius,
-				borderWidth, height,
-				minimumWidth, arrowAreaWidth, padding);
+				pressedDark, disabled, text, disabledText, border, arrow,
+				arrowStrokeWidth, radius,
+				borderWidth, height, minimumWidth, arrowAreaWidth, padding);
 	}
 
 	private static boolean positive(float value) {

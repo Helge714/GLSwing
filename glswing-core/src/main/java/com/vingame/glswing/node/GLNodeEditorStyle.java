@@ -9,7 +9,9 @@ import com.vingame.glswing.ui.GLTheme;
 import com.vingame.glswing.ui.GLThemeValues;
 
 /** Immutable appearance and interaction geometry for a {@link GLNodeEditor}. */
-public record GLNodeEditorStyle(Color background,
+public record GLNodeEditorStyle(Color background, Color minorGridColor,
+		Color majorGridColor, boolean gridVisible, float gridSpacing,
+		int majorGridInterval, float gridLineWidth,
 		Color connectionBorder, Color selectedConnectionBorder,
 		Color marqueeFill, Color marqueeBorder,
 		GLColorInterpolator connectionColorInterpolator,
@@ -19,12 +21,15 @@ public record GLNodeEditorStyle(Color background,
 		float marqueeBorderWidth) {
 
 	public GLNodeEditorStyle {
-		if (background == null || connectionBorder == null
+		if (background == null || minorGridColor == null || majorGridColor == null
+				|| connectionBorder == null
 				|| selectedConnectionBorder == null || marqueeFill == null
 				|| marqueeBorder == null || connectionColorInterpolator == null)
 			throw new IllegalArgumentException(
 					"Node editor colors and interpolation must not be null");
-		if (!nonNegative(connectionSnapDistance)
+		if (!positive(gridSpacing) || majorGridInterval < 1
+				|| !positive(gridLineWidth)
+				|| !nonNegative(connectionSnapDistance)
 				|| !positive(connectionCurveTolerance)
 				|| !nonNegative(connectionHandleFactor)
 				|| !nonNegative(minimumConnectionHandleLength)
@@ -43,6 +48,12 @@ public record GLNodeEditorStyle(Color background,
 				theme.menuStyle().background());
 		return new GLNodeEditorStyle(
 				values.getColor("nodeEditor.background", fallback),
+				values.getColor("nodeEditor.gridMinor", new Color(255, 255, 255, 12)),
+				values.getColor("nodeEditor.gridMajor", new Color(255, 255, 255, 25)),
+				values.getBoolean("nodeEditor.gridVisible", true),
+				values.getFloat("nodeEditor.gridSpacing", 24),
+				Math.max(1, Math.round(values.getFloat("nodeEditor.gridMajorInterval", 4))),
+				values.getFloat("nodeEditor.gridLineWidth", 1),
 				values.getColor("nodeEditor.connectionBorder",
 						values.getColor("palette.border", Color.DARK_GRAY)),
 				values.getColor("nodeEditor.selectedConnectionBorder",
@@ -65,7 +76,8 @@ public record GLNodeEditorStyle(Color background,
 	}
 
 	public GLNodeEditorStyle withBackground(Color color) {
-		return new GLNodeEditorStyle(color, connectionBorder,
+		return new GLNodeEditorStyle(color, minorGridColor, majorGridColor,
+				gridVisible, gridSpacing, majorGridInterval, gridLineWidth, connectionBorder,
 				selectedConnectionBorder, marqueeFill, marqueeBorder,
 				connectionColorInterpolator,
 				connectionSnapDistance,
@@ -77,7 +89,8 @@ public record GLNodeEditorStyle(Color background,
 	public GLNodeEditorStyle withConnectionGeometry(float snapDistance,
 			float curveTolerance, float handleFactor, float minimumHandleLength,
 			float width) {
-		return new GLNodeEditorStyle(background, connectionBorder,
+		return new GLNodeEditorStyle(background, minorGridColor, majorGridColor,
+				gridVisible, gridSpacing, majorGridInterval, gridLineWidth, connectionBorder,
 				selectedConnectionBorder, marqueeFill, marqueeBorder,
 				connectionColorInterpolator,
 				snapDistance, curveTolerance,
@@ -86,7 +99,8 @@ public record GLNodeEditorStyle(Color background,
 	}
 
 	public GLNodeEditorStyle withConnectionWidth(float width) {
-		return new GLNodeEditorStyle(background, connectionBorder,
+		return new GLNodeEditorStyle(background, minorGridColor, majorGridColor,
+				gridVisible, gridSpacing, majorGridInterval, gridLineWidth, connectionBorder,
 				selectedConnectionBorder, marqueeFill, marqueeBorder,
 				connectionColorInterpolator,
 				connectionSnapDistance,
@@ -97,7 +111,9 @@ public record GLNodeEditorStyle(Color background,
 
 	public GLNodeEditorStyle withConnectionBorders(Color border,
 			Color selectedBorder, float width) {
-		return new GLNodeEditorStyle(background, border, selectedBorder,
+		return new GLNodeEditorStyle(background, minorGridColor, majorGridColor,
+				gridVisible, gridSpacing, majorGridInterval, gridLineWidth,
+				border, selectedBorder,
 				marqueeFill, marqueeBorder, connectionColorInterpolator,
 				connectionSnapDistance,
 				connectionCurveTolerance,
@@ -107,7 +123,8 @@ public record GLNodeEditorStyle(Color background,
 
 	public GLNodeEditorStyle withMarquee(Color fill, Color border,
 			float borderWidth) {
-		return new GLNodeEditorStyle(background, connectionBorder,
+		return new GLNodeEditorStyle(background, minorGridColor, majorGridColor,
+				gridVisible, gridSpacing, majorGridInterval, gridLineWidth, connectionBorder,
 				selectedConnectionBorder, fill, border,
 				connectionColorInterpolator,
 				connectionSnapDistance, connectionCurveTolerance,
@@ -117,9 +134,21 @@ public record GLNodeEditorStyle(Color background,
 
 	public GLNodeEditorStyle withConnectionColorInterpolator(
 			GLColorInterpolator interpolation) {
-		return new GLNodeEditorStyle(background, connectionBorder,
+		return new GLNodeEditorStyle(background, minorGridColor, majorGridColor,
+				gridVisible, gridSpacing, majorGridInterval, gridLineWidth, connectionBorder,
 				selectedConnectionBorder, marqueeFill, marqueeBorder,
 				interpolation, connectionSnapDistance,
+				connectionCurveTolerance, connectionHandleFactor,
+				minimumConnectionHandleLength, connectionWidth,
+				connectionBorderWidth, marqueeBorderWidth);
+	}
+
+	public GLNodeEditorStyle withGrid(boolean visible, float spacing,
+			int majorInterval, float lineWidth, Color minorColor, Color majorColor) {
+		return new GLNodeEditorStyle(background, minorColor, majorColor, visible,
+				spacing, majorInterval, lineWidth, connectionBorder,
+				selectedConnectionBorder, marqueeFill, marqueeBorder,
+				connectionColorInterpolator, connectionSnapDistance,
 				connectionCurveTolerance, connectionHandleFactor,
 				minimumConnectionHandleLength, connectionWidth,
 				connectionBorderWidth, marqueeBorderWidth);

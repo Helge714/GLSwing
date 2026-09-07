@@ -4,14 +4,14 @@ font.family=SansSerif
 font.style=plain
 font.size=12
 
-palette.surface=rgba(57, 57, 57, 255)
-palette.text=rgba(224, 224, 224, 255)
-palette.textDisabled=rgba(136, 136, 136, 255)
-palette.textSecondary=rgba(170, 170, 170, 255)
-palette.border=rgba(37, 37, 37, 255)
-palette.accent=rgba(84, 120, 181, 255)
-palette.selection=rgba(69, 105, 166, 191)
-palette.invalid=rgba(190, 70, 70, 255)
+@COLOR palette.surface=rgba(57, 57, 57, 255)
+@COLOR palette.text=rgba(224, 224, 224, 255)
+@COLOR palette.textDisabled=rgba(136, 136, 136, 255)
+@COLOR palette.textSecondary=rgba(170, 170, 170, 255)
+@COLOR palette.border=rgba(37, 37, 37, 255)
+@COLOR palette.accent=rgba(84, 120, 181, 255)
+@COLOR palette.selection=rgba(69, 105, 166, 191)
+@COLOR palette.invalid=rgba(190, 70, 70, 255)
 
 codeEditor.background=rgba(47, 47, 47, 255)
 codeEditor.text=rgba(217, 232, 247, 255)
@@ -75,10 +75,10 @@ state.disabled=rgba(48, 48, 48, 255)
 button.pressedLight=rgba(105, 136, 190, 255)
 button.pressedDark=rgba(74, 106, 159, 255)
 
-metrics.cornerRadius=4
-metrics.borderWidth=1
-metrics.controlHeight=22
-metrics.padding=1,6,1,6
+@NUMBER metrics.cornerRadius=4
+@NUMBER metrics.borderWidth=1
+@NUMBER metrics.controlHeight=22
+@INSETS metrics.padding=1,6,1,6
 
 label.text=${palette.text}
 label.padding=0,0,0,0
@@ -117,6 +117,8 @@ textEditor.background=rgba(42, 42, 42, 255)
 textEditor.text=${palette.text}
 textEditor.textDisabled=${palette.textDisabled}
 textEditor.selection=${palette.selection}
+textEditor.searchMatch=rgba(255, 196, 64, 82)
+textEditor.searchActiveMatch=rgba(255, 164, 32, 160)
 textEditor.caret=${palette.text}
 textEditor.border=${palette.border}
 textEditor.focus=${palette.accent}
@@ -168,6 +170,7 @@ comboBox.pressedDark=${button.pressedDark}
 comboBox.cornerRadius=4
 comboBox.minimumWidth=120
 comboBox.arrowAreaWidth=22
+comboBox.arrowStrokeWidth=1.5
 comboBox.padding=1,7,1,7
 
 scrollBar.track=rgba(37, 37, 37, 160)
@@ -234,6 +237,12 @@ tabbedPane.tabHorizontalPadding=12
 tabbedPane.contentPadding=0,0,0,0
 
 nodeEditor.background=rgba(35, 35, 35, 255)
+nodeEditor.gridVisible=true
+nodeEditor.gridMinor=rgba(255, 255, 255, 10)
+nodeEditor.gridMajor=rgba(255, 255, 255, 24)
+nodeEditor.gridSpacing=24
+nodeEditor.gridMajorInterval=4
+nodeEditor.gridLineWidth=1
 nodeEditor.connectionSnapDistance=18
 nodeEditor.connectionCurveTolerance=0.01
 nodeEditor.connectionHandleFactor=0.55
