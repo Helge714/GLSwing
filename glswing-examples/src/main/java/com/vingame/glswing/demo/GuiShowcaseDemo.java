@@ -90,6 +90,9 @@ import com.vingame.glswing.ui.GLList;
 import com.vingame.glswing.ui.GLListSelectionModel;
 import com.vingame.glswing.ui.GLDefaultTreeModel;
 import com.vingame.glswing.ui.GLTree;
+import com.vingame.glswing.ui.GLCodeEditor;
+import com.vingame.glswing.ui.GLCodeLanguages;
+import com.vingame.glswing.ui.GLCodeWorkspace;
 import com.vingame.glswing.ui.GLItemPresentation;
 import com.vingame.glswing.ui.GLLocalizer;
 import com.vingame.glswing.ui.GLMenuBar;
@@ -104,8 +107,6 @@ import com.vingame.glswing.ui.GLTextEditor;
 import com.vingame.glswing.ui.GLTextArea;
 import com.vingame.glswing.ui.GLTextStyle;
 import com.vingame.glswing.ui.GLTextDocument;
-import com.vingame.glswing.ui.GLCodeEditor;
-import com.vingame.glswing.ui.GLCodeLanguages;
 import com.vingame.glswing.ui.GLTextInputFormats;
 import com.vingame.glswing.ui.GLTheme;
 import com.vingame.glswing.ui.GLThemeLoadException;
@@ -905,7 +906,8 @@ public final class GuiShowcaseDemo {
 		private GLAction closeDocumentAction;
 		private boolean syncingThemeRadius;
 		private GLCodeEditor codeEditor;
-		private final GLTabbedPane codeTabs = new GLTabbedPane();
+		private final GLCodeWorkspace codeWorkspace;
+		private final GLTabbedPane codeTabs;
 		private final GLDocumentWorkspace documentWorkspace;
 		private final GLDocumentTabController codeDocuments;
 		private final GLDocumentCodecRegistry documentCodecs = new GLDocumentCodecRegistry();
@@ -933,9 +935,36 @@ public final class GuiShowcaseDemo {
 		ShowcaseSurface(ShowcaseHost host) {
 			this.host = host;
 			documentWorkspace = new GLDocumentWorkspace(host.historyManager());
-			codeDocuments = new GLDocumentTabController(codeTabs, documentWorkspace);
+			codeWorkspace = new GLCodeWorkspace(documentWorkspace);
+			codeTabs = codeWorkspace.tabs();
+			codeDocuments = codeWorkspace.documentTabs();
 			documentCodecs.register(sourceDocumentCodec);
 			documentManager = new GLDocumentManager(documentCodecs);
+			codeWorkspace.setDocumentResolver(location -> {
+				URI uri = location.uri();
+				if (!"file".equalsIgnoreCase(uri.getScheme()))
+					return java.util.concurrent.CompletableFuture.failedFuture(
+							new java.io.IOException("Cannot edit non-file source: " + uri));
+				Path path;
+				try { path = Path.of(uri).toAbsolutePath().normalize(); }
+				catch (RuntimeException failure) {
+					return java.util.concurrent.CompletableFuture.failedFuture(failure);
+				}
+				if (!path.startsWith(showcaseWorkspace()))
+					return java.util.concurrent.CompletableFuture.failedFuture(
+							new java.io.IOException("Source is outside the showcase workspace: " + path));
+				return documentManager.open(path, GLTextDocument.class);
+			});
+			codeWorkspace.setEditorConfigurer(editor -> {
+				if (editor.getLanguage() == GLCodeLanguages.JAVA)
+					configureCodeEditor(editor);
+				if (editor.getDocumentUri() != null)
+					editorsByUri.put(editor.getDocumentUri(), editor);
+			});
+			codeWorkspace.setNavigationFailureHandler(failure ->
+					SwingUtilities.invokeLater(() -> lspStatus.setText(
+							"Java LSP · Cannot open workspace edit target: "
+									+ failure.getMessage())));
 			documentAutosave = new GLDocumentAutosaveCoordinator(documentManager,
 					showcaseApplicationData().resolve("recovery"),
 					loadAutosaveConfiguration());
@@ -1007,6 +1036,8 @@ public final class GuiShowcaseDemo {
 				GLCodeEditor previous = editorsByUri.put(document.location(), editor);
 				if (previous == codeEditor) codeEditor = editor;
 			}
+			codeWorkspace.configureEditor(editor);
+			editor.setNavigationHandler(this::openDefinition);
 			return editor;
 		}
 
@@ -1029,9 +1060,9 @@ public final class GuiShowcaseDemo {
 			catch (java.io.IOException failure) {
 				throw new IllegalStateException("Cannot load showcase source", failure);
 			}
-			codeEditor = new GLCodeEditor(initialSource);
-			configureCodeEditor(codeEditor);
 			URI initialUri = initialPath.toUri();
+			codeEditor = new GLCodeEditor(initialSource, initialUri);
+			configureCodeEditor(codeEditor);
 			addCodeDocumentTab("HelloGLSwing.java", initialUri, codeEditor);
 			editorsByUri.put(initialUri, codeEditor);
 			addThemeEditor(showcaseThemeDirectory().resolve("showcase-bundle.gltheme"));
@@ -1042,10 +1073,8 @@ public final class GuiShowcaseDemo {
 			codeTabs.setSelectedIndex(0);
 			codeTabs.addSelectionListener((source, oldIndex, newIndex) ->
 					updateCodeTabStatus(newIndex));
-			codeTabs.setBounds(18, 50, 1110, 513);
-			codeTabs.setTabsClosable(true);
-			codeTabs.setClosedTabHistoryEnabled(true);
-			codePage.addGL(codeTabs);
+			codeWorkspace.setBounds(18, 50, 1110, 513);
+			codePage.addGL(codeWorkspace);
 			if (!lspCommand.isEmpty()) startLanguageServer(lspCommand);
 			else languageServerProfile.findInstallation().ifPresentOrElse(installation -> {
 				try { startLanguageServer(languageServerProfile.command(
@@ -1090,6 +1119,11 @@ public final class GuiShowcaseDemo {
 
 		private void configureCodeEditor(GLCodeEditor editor) {
 			editor.setLanguage(GLCodeLanguages.JAVA);
+			GLLanguageServer current = languageServer;
+			if (current != null && editor.isEditable()
+					&& editor.getDocumentUri() != null
+					&& editor.getDiagnosticProvider() != current)
+				editor.setDiagnosticProvider(current, editor.getDocumentUri());
 			editor.setNavigationHandler(this::openDefinition);
 			editor.setNavigationStatusListener(status -> {
 				switch (status.state()) {
@@ -1122,6 +1156,23 @@ public final class GuiShowcaseDemo {
 								+ status.failure().getMessage());
 				case REQUESTING -> lspStatus.setText(
 						"Java LSP · Loading semantic classifications …");
+				}
+			});
+			editor.setOperationStatusListener(status -> {
+				String operation = switch (status.operation()) {
+				case REFERENCES -> "References";
+				case RENAME -> "Rename";
+				case CODE_ACTIONS -> "Code actions";
+				};
+				switch (status.state()) {
+				case REQUESTING -> lspStatus.setText("Java LSP · " + operation + " …");
+				case AVAILABLE -> lspStatus.setText("Java LSP · " + operation + " · "
+						+ status.resultCount() + " result"
+						+ (status.resultCount() == 1 ? "" : "s"));
+				case EMPTY -> lspStatus.setText("Java LSP · " + operation + " · no result");
+				case APPLIED -> lspStatus.setText("Java LSP · " + operation + " applied");
+				case FAILED -> lspStatus.setText("Java LSP · " + operation + " failed: "
+						+ status.failure().getMessage());
 				}
 			});
 		}
@@ -1253,7 +1304,9 @@ public final class GuiShowcaseDemo {
 					editor.getDocument(), title, uri, new GLHistoryManager());
 			document.setReadOnly(!editor.isEditable());
 			documentManager.manage(document, sourceDocumentCodec);
-			return documentLifecycle.addDocument(document, editor);
+			codeWorkspace.addDocument(document, editor);
+			editor.setNavigationHandler(this::openDefinition);
+			return codeTabs.indexOfComponent(editor);
 		}
 
 		private static void moveTo(GLCodeEditor editor, int line, int character) {
@@ -1279,11 +1332,13 @@ public final class GuiShowcaseDemo {
 					languageServer = started;
 					SwingUtilities.invokeLater(() -> {
 						if (languageServerClosing) return;
-						Path document = workspace.resolve("glswing-examples/src/main/java/"
-								+ "com/vingame/glswing/demo/HelloGLSwing.java");
 						lspStatus.setText("Core diagnostics active · LSP connected: "
 								+ Path.of(command.get(0)).getFileName());
-						codeEditor.setDiagnosticProvider(started, document.toUri());
+						editorsByUri.forEach((uri, editor) -> {
+							if (editor.isEditable()
+									&& editor.getLanguage() == GLCodeLanguages.JAVA)
+								editor.setDiagnosticProvider(started, uri);
+						});
 						host.report("Language server connected");
 					});
 				} catch (RuntimeException | java.io.IOException failure) { showLanguageServerFailure(failure); }
@@ -1380,7 +1435,7 @@ public final class GuiShowcaseDemo {
 			documentLifecycle.close();
 			documentAutosave.close();
 			documentFileWatcher.close();
-			codeDocuments.close();
+			codeWorkspace.close();
 			documentWorkspace.close();
 			documentManager.close();
 			fileDialogs.close();

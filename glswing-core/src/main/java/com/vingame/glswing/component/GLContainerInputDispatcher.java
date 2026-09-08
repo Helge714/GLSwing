@@ -39,17 +39,17 @@ final class GLContainerInputDispatcher {
 	private final GLPointerController pointerController;
 	private GLPickResult hoverPick = GLPickResult.none();
 	private GLPickResult capturedPick = GLPickResult.none();
-	private GLPickResult clickCandidate = GLPickResult.none();
 	private MouseEvent pendingHoverEvent;
 	private boolean pendingHoverMoved;
 	private boolean hoverReadScheduled;
 	private long hoverReadGeneration;
 	private volatile MouseEvent postWheelHoverEvent;
 	private volatile long postWheelHoverGeneration;
-	private int pointerTasksPending;
 	private int pressPicksPending;
 	private MouseEvent pendingDragEvent;
 	private MouseEvent pendingSettledPressEvent;
+	private MouseEvent pendingReleaseEvent;
+	private boolean settledPressDispatchScheduled;
 	private int lastDragX;
 	private int lastDragY;
 	private boolean pointerWarpRequested;
@@ -72,10 +72,11 @@ final class GLContainerInputDispatcher {
 		pendingHoverEvent = null;
 		pendingDragEvent = null;
 		pendingSettledPressEvent = null;
+		pendingReleaseEvent = null;
+		settledPressDispatchScheduled = false;
 		hoverReadScheduled = false;
 		hoverPick = GLPickResult.none();
 		capturedPick = GLPickResult.none();
-		clickCandidate = GLPickResult.none();
 		pointerWarpEventPending = false;
 	}
 
@@ -102,10 +103,7 @@ final class GLContainerInputDispatcher {
 
 			@Override
 			public void mousePressed(MouseEvent event) {
-				if (host.finishInteractiveRepaint()) {
-					pendingSettledPressEvent = event;
-					return;
-				}
+				host.finishInteractiveRepaint();
 				dispatchSettledMousePressed(event);
 			}
 
@@ -122,18 +120,16 @@ final class GLContainerInputDispatcher {
 			@Override
 			public void mouseReleased(MouseEvent event) {
 				cancelHoverRead();
+				if (pendingSettledPressEvent != null || pressPicksPending > 0) {
+					pendingReleaseEvent = event;
+					return;
+				}
 				// The captured press target must always receive release, but resolving
 				// the object below the pointer need not force a synchronous GL frame.
 				// display() from the AWT event thread can race the Canvas animator and,
 				// depending on the native driver, deadlock or terminate the process.
 				readPointerPick(event,
 						releaseHit -> dispatchMouseReleased(event, releaseHit));
-			}
-
-			@Override
-			public void mouseClicked(MouseEvent event) {
-				cancelHoverRead();
-				queuePointerBarrier(() -> dispatchMouseClicked(event));
 			}
 
 			@Override
@@ -157,8 +153,19 @@ final class GLContainerInputDispatcher {
 	private void dispatchSettledMousePressed(MouseEvent event) {
 		pointerWarpEventPending = false;
 		cancelHoverRead();
-		clickCandidate = GLPickResult.none();
 		host.requestFocusInWindow();
+		GLPickResult immediate = GLImmediateHoverRegistry.resolve(
+				host, event.getX(), event.getY());
+		if (immediate != null) {
+			dispatchResolvedMousePressed(event, attached(immediate));
+			return;
+		}
+		GLPickResult retained = GLPointerGesture.retainedPressPick(
+				hoverPick, event.getX(), event.getY());
+		if (retained.hasTarget() && host.isAttachedTarget(retained.getTarget())) {
+			dispatchResolvedMousePressed(event, retained);
+			return;
+		}
 		if (host.isPickingDirty() || !host.isLatestPickSnapshotReady()) {
 			pendingSettledPressEvent = event;
 			host.repaintColorOnly();
@@ -167,14 +174,24 @@ final class GLContainerInputDispatcher {
 		pressPicksPending++;
 		readPointerPick(event, result -> {
 			pressPicksPending--;
-			dispatchMousePressed(event, result);
-			if (pressPicksPending == 0) {
-				MouseEvent drag = pendingDragEvent;
-				pendingDragEvent = null;
-				if (drag != null)
-					dispatchMouseDragged(drag);
-			}
+			dispatchResolvedMousePressed(event, result);
 		});
+	}
+
+	private void dispatchResolvedMousePressed(MouseEvent event,
+			GLPickResult result) {
+		dispatchMousePressed(event, result);
+		if (pressPicksPending == 0) {
+			MouseEvent drag = pendingDragEvent;
+			pendingDragEvent = null;
+			if (drag != null)
+				dispatchMouseDragged(drag);
+		}
+		MouseEvent release = pendingReleaseEvent;
+		pendingReleaseEvent = null;
+		if (release != null)
+			readPointerPick(release,
+					releaseHit -> dispatchMouseReleased(release, releaseHit));
 	}
 
 	private static boolean hasPressedMouseButton(MouseEvent event) {
@@ -338,13 +355,12 @@ final class GLContainerInputDispatcher {
 		GLPickResult capturedAtRelease = capturedPick.at(
 				event.getX(), event.getY());
 		if (host.isAttachedTarget(capturedAtRelease.getTarget())) {
-			capturedAtRelease.getTarget().mouseReleased(
-					mouseEvent(event, capturedAtRelease, 0, 0));
-			clickCandidate = releaseHit.getTarget()
-					== capturedAtRelease.getTarget()
-							? releaseHit : GLPickResult.none();
-		} else {
-			clickCandidate = GLPickResult.none();
+			boolean completesClick = GLPointerGesture.completesClick(
+					capturedAtRelease, releaseHit);
+			var released = mouseEvent(event, capturedAtRelease, 0, 0);
+			capturedAtRelease.getTarget().mouseReleased(released);
+			if (completesClick && host.isAttachedTarget(capturedAtRelease.getTarget()))
+				capturedAtRelease.getTarget().mouseClicked(released);
 		}
 		capturedPick = GLPickResult.none();
 		updateHover(event, releaseHit, false);
@@ -356,7 +372,6 @@ final class GLContainerInputDispatcher {
 			return;
 		GLPickResult captured = capturedPick.at(event.getX(), event.getY());
 		capturedPick = GLPickResult.none();
-		clickCandidate = GLPickResult.none();
 		pointerWarpRequested = false;
 		pointerWarpEventPending = false;
 		if (host.isAttachedTarget(captured.getTarget()))
@@ -365,28 +380,12 @@ final class GLContainerInputDispatcher {
 		host.repaintColorOnly();
 	}
 
-	private void dispatchMouseClicked(MouseEvent event) {
-		if (clickCandidate.hasTarget()
-				&& host.isAttachedTarget(clickCandidate.getTarget())) {
-			GLPickResult current = clickCandidate.at(
-					event.getX(), event.getY());
-			current.getTarget().mouseClicked(mouseEvent(event, current, 0, 0));
-		}
-		clickCandidate = GLPickResult.none();
-		host.repaintColorOnly();
-	}
-
 	private void readPointerPick(MouseEvent event,
 			Consumer<GLPickResult> completion) {
-		pointerTasksPending++;
 		GLPickResult immediate = GLImmediateHoverRegistry.resolve(
 				host, event.getX(), event.getY());
 		if (immediate != null) {
-			try {
-				completion.accept(attached(immediate));
-			} finally {
-				pointerTasksPending--;
-			}
+			completion.accept(attached(immediate));
 			return;
 		}
 		// Never call display()/invoke() from the AWT input thread. The Canvas
@@ -394,18 +393,10 @@ final class GLContainerInputDispatcher {
 		// can deadlock with JAWT or the graphics driver. A completed snapshot may
 		// trail geometry by one frame, which is preferable and deterministic.
 		GLPickResult result = host.latestPickResult(event.getX(), event.getY());
-		try {
-			completion.accept(result == null
-					? GLPickResult.none() : attached(result));
-		} finally {
-			pointerTasksPending--;
-		}
+		completion.accept(result == null
+				? GLPickResult.none() : attached(result));
 		if (result == null)
 			host.repaintColorOnly();
-	}
-
-	private void queuePointerBarrier(Runnable completion) {
-		completion.run();
 	}
 
 	private void queueHoverRead(MouseEvent event, boolean sendMoved) {
@@ -474,12 +465,15 @@ final class GLContainerInputDispatcher {
 
 	void pickSnapshotsUpdated() {
 		MouseEvent press = pendingSettledPressEvent;
-		if (press != null && !host.isPickingDirty()
+		if (press != null && !settledPressDispatchScheduled && !host.isPickingDirty()
 				&& host.isLatestPickSnapshotReady()) {
-			pendingSettledPressEvent = null;
+			settledPressDispatchScheduled = true;
 			javax.swing.SwingUtilities.invokeLater(() -> {
-				if (host.isDisplayable())
+				settledPressDispatchScheduled = false;
+				if (pendingSettledPressEvent == press && host.isDisplayable()) {
+					pendingSettledPressEvent = null;
 					dispatchSettledMousePressed(press);
+				}
 			});
 		}
 		if (pendingHoverEvent != null && !hoverReadScheduled

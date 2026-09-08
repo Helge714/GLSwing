@@ -82,6 +82,11 @@ final class MavenSmokeTest {
 	}
 
 	@Test
+	void codeWorkspace() {
+		GLCodeWorkspaceSelfTest.main(NO_ARGS);
+	}
+
+	@Test
 	void themeCodeSupport() throws Exception {
 		GLThemeCodeSupportSelfTest.main(NO_ARGS);
 	}

@@ -50,6 +50,9 @@ import org.eclipse.lsp4j.ImplementationParams;
 import org.eclipse.lsp4j.MessageActionItem;
 import org.eclipse.lsp4j.MessageParams;
 import org.eclipse.lsp4j.PublishDiagnosticsParams;
+import org.eclipse.lsp4j.ReferenceContext;
+import org.eclipse.lsp4j.ReferenceParams;
+import org.eclipse.lsp4j.RenameParams;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.ShowMessageRequestParams;
 import org.eclipse.lsp4j.SignatureHelpCapabilities;
@@ -77,15 +80,18 @@ import org.eclipse.lsp4j.services.LanguageClient;
 import org.eclipse.lsp4j.services.LanguageServer;
 
 import com.vingame.glswing.ui.GLCodeDiagnostic;
+import com.vingame.glswing.ui.GLCodeAction;
 import com.vingame.glswing.ui.GLCodeDiagnosticProvider;
 import com.vingame.glswing.ui.GLCodeCall;
 import com.vingame.glswing.ui.GLCodeCallHierarchy;
 import com.vingame.glswing.ui.GLCodeCompletion;
 import com.vingame.glswing.ui.GLCodeTextEdit;
+import com.vingame.glswing.ui.GLCodeWorkspaceEdit;
 import com.vingame.glswing.ui.GLCodeDocument;
 import com.vingame.glswing.ui.GLCodeHover;
 import com.vingame.glswing.ui.GLCodeInlayHint;
 import com.vingame.glswing.ui.GLCodeLocation;
+import com.vingame.glswing.ui.GLCodeReference;
 import com.vingame.glswing.ui.GLCodeSignature;
 import com.vingame.glswing.ui.GLCodeSemanticToken;
 
@@ -146,6 +152,8 @@ public final class GLLanguageServer implements GLCodeDiagnosticProvider, AutoClo
 		ImplementationCapabilities implementations = new ImplementationCapabilities();
 		implementations.setLinkSupport(true);
 		textDocument.setImplementation(implementations);
+		textDocument.setReferences(new org.eclipse.lsp4j.ReferencesCapabilities());
+		textDocument.setRename(new org.eclipse.lsp4j.RenameCapabilities());
 		textDocument.setCallHierarchy(new CallHierarchyCapabilities());
 		textDocument.setInlayHint(new InlayHintCapabilities(false));
 		SemanticTokensCapabilities semanticTokens = new SemanticTokensCapabilities();
@@ -406,6 +414,67 @@ public final class GLLanguageServer implements GLCodeDiagnosticProvider, AutoClo
 			return server.getTextDocumentService().implementation(params)
 					.orTimeout(4, TimeUnit.SECONDS)
 					.thenApply(GLLanguageServer::locations);
+		}
+		@Override public CompletionStage<List<GLCodeReference>> references(
+				GLCodeDocument document, int offset, boolean includeDeclaration) {
+			if (sessionClosed || !uri.equals(document.uri()) || offset < 0
+					|| offset > document.text().length())
+				return java.util.concurrent.CompletableFuture.completedFuture(List.of());
+			ReferenceParams params = new ReferenceParams(
+					new TextDocumentIdentifier(uri.toString()),
+					position(document.text(), offset), new ReferenceContext(includeDeclaration));
+			return server.getTextDocumentService().references(params)
+					.orTimeout(8, TimeUnit.SECONDS).thenApply(result -> result == null
+							? List.of() : result.stream().map(value -> new GLCodeReference(
+									URI.create(value.getUri()), value.getRange().getStart().getLine(),
+									value.getRange().getStart().getCharacter(),
+									value.getRange().getEnd().getLine(),
+									value.getRange().getEnd().getCharacter())).toList());
+		}
+		@Override public CompletionStage<List<GLCodeWorkspaceEdit>> rename(
+				GLCodeDocument document, int offset, String newName) {
+			if (sessionClosed || !uri.equals(document.uri()) || newName == null
+					|| newName.isBlank()) return java.util.concurrent.CompletableFuture
+							.completedFuture(List.of());
+			RenameParams params = new RenameParams(new TextDocumentIdentifier(uri.toString()),
+					position(document.text(), offset), newName);
+			return server.getTextDocumentService().rename(params).orTimeout(12, TimeUnit.SECONDS)
+					.thenApply(GLLanguageServer::workspaceLineEdits);
+		}
+		@Override public CompletionStage<List<GLCodeAction>> codeActions(
+				GLCodeDocument document, int start, int end) {
+			if (sessionClosed || !uri.equals(document.uri())) return java.util.concurrent
+					.CompletableFuture.completedFuture(List.of());
+			CodeActionContext context = new CodeActionContext();
+			context.setDiagnostics(latestDiagnostics.getOrDefault(uri, List.of()).stream()
+					.map(value -> {
+						Diagnostic diagnostic = new Diagnostic();
+						diagnostic.setRange(new org.eclipse.lsp4j.Range(
+								position(document.text(), value.start()),
+								position(document.text(), value.end())));
+						diagnostic.setSeverity(value.severity()
+								== GLCodeDiagnostic.Severity.ERROR
+										? DiagnosticSeverity.Error : DiagnosticSeverity.Warning);
+						diagnostic.setMessage(value.message());
+						return diagnostic;
+					}).toList());
+			CodeActionParams params = new CodeActionParams();
+			params.setTextDocument(new TextDocumentIdentifier(uri.toString()));
+			params.setRange(new org.eclipse.lsp4j.Range(position(document.text(), start),
+					position(document.text(), end)));
+			params.setContext(context);
+			return server.getTextDocumentService().codeAction(params).orTimeout(8, TimeUnit.SECONDS)
+					.thenApply(values -> {
+						ArrayList<GLCodeAction> result = new ArrayList<>();
+						if (values != null) for (var value : values) if (value.isRight()) {
+							CodeAction action = value.getRight();
+							if (action.getEdit() != null) result.add(new GLCodeAction(action.getTitle(),
+									action.getKind() == null ? "" : action.getKind(),
+									Boolean.TRUE.equals(action.getIsPreferred()),
+									workspaceLineEdits(action.getEdit())));
+						}
+						return List.copyOf(result);
+					});
 		}
 		@Override public CompletionStage<Optional<GLCodeCallHierarchy>> callHierarchy(
 				GLCodeDocument document, int offset) {
@@ -733,6 +802,27 @@ public final class GLLanguageServer implements GLCodeDiagnosticProvider, AutoClo
 						edit.getRange().getStart().getCharacter()),
 				offset(source, edit.getRange().getEnd().getLine(),
 						edit.getRange().getEnd().getCharacter()), edit.getNewText())).toList();
+	}
+	private static List<GLCodeWorkspaceEdit> workspaceLineEdits(WorkspaceEdit edit) {
+		if (edit == null) return List.of();
+		ArrayList<GLCodeWorkspaceEdit> result = new ArrayList<>();
+		if (edit.getChanges() != null) edit.getChanges().forEach((target, edits) -> {
+			URI targetUri = URI.create(target);
+			for (TextEdit value : edits) result.add(lineEdit(targetUri, value));
+		});
+		if (edit.getDocumentChanges() != null) for (var change : edit.getDocumentChanges())
+			if (change.isLeft()) {
+				URI targetUri = URI.create(change.getLeft().getTextDocument().getUri());
+				for (var value : change.getLeft().getEdits())
+					if (value.isLeft()) result.add(lineEdit(targetUri, value.getLeft()));
+			}
+		return List.copyOf(result);
+	}
+	private static GLCodeWorkspaceEdit lineEdit(URI uri, TextEdit edit) {
+		var start = edit.getRange().getStart();
+		var end = edit.getRange().getEnd();
+		return new GLCodeWorkspaceEdit(uri, start.getLine(), start.getCharacter(),
+				end.getLine(), end.getCharacter(), edit.getNewText());
 	}
 	private static GLCodeCompletion completion(String source, CompletionItem item,
 			int fallbackStart, int fallbackEnd) {

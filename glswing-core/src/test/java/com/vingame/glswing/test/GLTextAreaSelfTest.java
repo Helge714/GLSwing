@@ -9,6 +9,7 @@ import com.vingame.glswing.component.GLSwingPanel;
 import com.vingame.glswing.rendering.GLContext2D;
 import com.vingame.glswing.ui.GLTextArea;
 import com.vingame.glswing.ui.GLTextDocument;
+import com.vingame.glswing.ui.GLTextSearchOptions;
 
 /** CPU checks for multiline document structure and editing semantics. */
 public final class GLTextAreaSelfTest {
@@ -22,8 +23,27 @@ public final class GLTextAreaSelfTest {
 		testAlignmentAndManualHyphenBreak();
 		testRichFormattingAndScrollBar();
 		testFindAndReplace();
+		testLineNavigation();
+		testMultipleCaretsAndColumns();
 		testFocusSessionCommitsToOuterHistory();
 		System.out.println("GL text area self-test passed.");
+	}
+	private static void testMultipleCaretsAndColumns() {
+		GLTextArea area = new GLTextArea("one\ntwo\nthree");
+		area.setCaretPosition(0);
+		area.addCaret(4);
+		area.addCaret(8);
+		area.replaceCaretSelections(">");
+		check(area.getText().equals(">one\n>two\n>three")
+				&& area.getCarets().size() == 3,
+				"Multi-caret insertion did not edit every caret atomically");
+		area.selectColumns(0, 0, 2, 1);
+		check(area.getCarets().size() == 3
+				&& area.getCarets().stream().allMatch(caret -> caret.end() - caret.start() == 1),
+				"Rectangular selection did not create one range per line");
+		area.replaceCaretSelections("");
+		check(area.getText().equals("one\ntwo\nthree"),
+				"Rectangular replacement did not update every line");
 	}
 
 	private static void testFindAndReplace() {
@@ -44,6 +64,13 @@ public final class GLTextAreaSelfTest {
 		check(area.replaceCurrent("beta", "value", true)
 				&& area.getText().equals("Alpha beta ALPHA value"),
 				"Replace did not update the selected match");
+		try {
+			check(area.startSearchAsync("alpha", false).toCompletableFuture()
+					.get(2, java.util.concurrent.TimeUnit.SECONDS) == 2,
+					"Asynchronous Find did not publish its newest result");
+		} catch (Exception failure) {
+			throw new AssertionError("Asynchronous Find did not complete", failure);
+		}
 		area.clearSearch();
 		check(area.getSearchMatchCount() == 0
 				&& area.getActiveSearchMatchIndex() == -1,
@@ -61,6 +88,44 @@ public final class GLTextAreaSelfTest {
 		all.setEditable(false);
 		check(all.replaceAll("one", "blocked", false) == 0,
 				"Read-only text was modified by Replace All");
+
+		GLTextArea advanced = new GLTextArea("cat scatter cat_ cat");
+		GLTextSearchOptions words = new GLTextSearchOptions(false, true, false);
+		check(advanced.startSearch("cat", words) == 2,
+				"Whole-word Find included identifier or substring matches");
+		GLTextSearchOptions regex = new GLTextSearchOptions(true, false, true);
+		advanced.setText("Alpha beta Alpha beta");
+		check(advanced.replaceAll("(Alpha)\\s+(beta)", "$2-$1", regex) == 2
+				&& advanced.getText().equals("beta-Alpha beta-Alpha"),
+				"Regular-expression replacement did not expand capture groups");
+		advanced.startSearch("[", regex);
+		check(advanced.getSearchMatchCount() == 0
+				&& advanced.getSearchPatternError() != null,
+				"Invalid regular expression was not reported safely");
+	}
+
+	private static void testLineNavigation() {
+		GLTextArea area = new GLTextArea("one\ntwo\nthree\nfour\nfive\nsix");
+		area.setBounds(0, 0, 180, 45);
+		check(area.getLineCount() == 6, "Text area reported the wrong line count");
+		area.goToLine(5);
+		check(area.getCaretPosition() == area.getDocument().getLineStart(4)
+				&& area.getDocument().getLineOfOffset(area.getCaretPosition()) == 4,
+				"Go to Line did not move to the requested one-based line");
+		check(area.getVerticalScrollOffset() > 0,
+				"Go to Line did not reveal and center a distant line");
+		try {
+			area.goToLine(0);
+			throw new AssertionError("Go to Line accepted line zero");
+		} catch (IllegalArgumentException expected) { }
+		try {
+			area.goToLine(7);
+			throw new AssertionError("Go to Line accepted a line past the document");
+		} catch (IllegalArgumentException expected) { }
+		area.setEditable(false);
+		area.goToLine(2);
+		check(area.getDocument().getLineOfOffset(area.getCaretPosition()) == 1,
+				"Read-only text rejected line navigation");
 	}
 
 	private static void testDocumentLinesAndNormalization() {

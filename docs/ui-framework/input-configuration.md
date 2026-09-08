@@ -64,6 +64,12 @@ resolves to Control on Windows and Linux and Command/Meta on macOS.
 ```properties
 key.history.undo=shortcut+Z
 key.history.redo=shortcut+shift+Z, shortcut+Y
+key.text.go-to-line=shortcut+L
+key.code.navigate-back=ALT+LEFT
+key.code.navigate-forward=ALT+RIGHT
+key.code.find-references=SHIFT+F12
+key.code.rename=F2
+key.code.actions=ALT+ENTER
 key.application.save=shortcut+S
 modifier.menu.mnemonic=ALT
 ```
@@ -102,6 +108,13 @@ pointer press ends the period immediately and waits for current picking before
 dispatch. `node.interactive-curve-tolerance-factor` multiplies the node
 editor's normal Bezier tolerance during those updates; values above one reduce
 tessellation work, while the settled frame always restores full quality.
+
+Pointer gestures retain the target resolved on press. Releasing within that
+control completes the click even when the latest GPU picking snapshot trails
+the displayed frame; releasing outside its logical bounds cancels the action.
+A recently confirmed hover target at the same pointer position may resolve the
+press immediately while a new picking frame is pending. This rule is identical
+for `GLJPanel` and `GLCanvas` hosts.
 
 ## Inheritance and scopes
 

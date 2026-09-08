@@ -61,13 +61,19 @@ public final class GLInputActions {
 	public static final String TEXT_ALIGN_JUSTIFIED = "text.align-justified";
 	public static final String TEXT_FIND = "text.find";
 	public static final String TEXT_REPLACE = "text.replace";
+	public static final String TEXT_GO_TO_LINE = "text.go-to-line";
 	public static final String CODE_FORMAT = "code.format";
 	public static final String CODE_COMMENT = "code.comment";
 	public static final String CODE_UNCOMMENT = "code.uncomment";
 	public static final String CODE_COMPLETE = "code.complete";
 	public static final String CODE_ORGANIZE_IMPORTS = "code.organizeImports";
 	public static final String CODE_GO_TO_DEFINITION = "code.goToDefinition";
+	public static final String CODE_NAVIGATE_BACK = "code.navigate-back";
+	public static final String CODE_NAVIGATE_FORWARD = "code.navigate-forward";
 	public static final String CODE_TOGGLE_INLAY_HINTS = "code.toggle-inlay-hints";
+	public static final String CODE_FIND_REFERENCES = "code.find-references";
+	public static final String CODE_RENAME = "code.rename";
+	public static final String CODE_ACTIONS = "code.actions";
 	public static final String TEXT_HISTORY_COALESCE_MILLIS =
 			"text.history-coalesce-millis";
 

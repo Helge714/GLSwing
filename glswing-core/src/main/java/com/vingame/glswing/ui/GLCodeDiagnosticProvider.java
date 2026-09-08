@@ -48,6 +48,21 @@ public interface GLCodeDiagnosticProvider {
 				GLCodeDocument document, int offset) {
 			return CompletableFuture.completedFuture(List.of());
 		}
+		/** Resolves references for the symbol at a UTF-16 source offset. */
+		default CompletionStage<List<GLCodeReference>> references(
+				GLCodeDocument document, int offset, boolean includeDeclaration) {
+			return CompletableFuture.completedFuture(List.of());
+		}
+		/** Computes a workspace-wide rename without applying it. */
+		default CompletionStage<List<GLCodeWorkspaceEdit>> rename(
+				GLCodeDocument document, int offset, String newName) {
+			return CompletableFuture.completedFuture(List.of());
+		}
+		/** Returns source actions applicable to the supplied half-open range. */
+		default CompletionStage<List<GLCodeAction>> codeActions(
+				GLCodeDocument document, int start, int end) {
+			return CompletableFuture.completedFuture(List.of());
+		}
 		/** Reports whether a call hierarchy can be opened at a source offset. */
 		default CompletionStage<Boolean> canOpenCallHierarchy(
 				GLCodeDocument document, int offset) {

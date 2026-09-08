@@ -12,6 +12,9 @@
 - [Alignment](#alignment)
 - [Character formatting](#character-formatting)
 - [Find and replace](#find-and-replace)
+- [Go to line](#go-to-line)
+- [Navigation history](#navigation-history)
+- [Code workspaces](#code-workspaces)
 - [Code editing](#code-editing)
 - [Editing history](#editing-history)
 
@@ -141,13 +144,14 @@ rebuilding the editor menu.
 ## Find and replace
 
 `GLTextArea` and `GLCodeEditor` provide a modeless, theme-aware search dialog.
-The default input map opens it with `Ctrl/Cmd+F`; editable documents display
-the replacement field and Replace/Replace All actions directly. `Ctrl/Cmd+H`
-opens the same full Find/Replace view explicitly. Both commands are also
-available from the editor context menu. Read-only documents use the compact
-Find-only view.
-Search can move forward or backward, wraps at document boundaries, and can be
-case-sensitive. Pressing Enter starts the search; each subsequent Enter moves to
+The default input map opens its compact Find view with `Ctrl/Cmd+F`.
+`Ctrl/Cmd+H` opens the full Find/Replace view explicitly. Both commands are
+also available from the editor context menu. Read-only documents retain Find,
+while replacement actions remain unavailable.
+Search can move forward or backward, wraps at document boundaries, and supports
+case-sensitive, whole-word, and regular-expression matching. Invalid regular
+expressions are reported without changing the document. Pressing Enter starts
+the search; each subsequent Enter moves to
 the next occurrence. Up/Down and the Previous/Next buttons provide the same
 navigation in either direction. The result counter reports the active and total
 match counts, and every occurrence remains highlighted while the dialog is open.
@@ -166,11 +170,138 @@ int replacements = area.replaceAll("accent", "primary", false);
 area.clearSearch();
 ```
 
+Use `GLTextSearchOptions` for advanced matching. Regular-expression
+replacement strings may reference capture groups using Java's `$1` syntax.
+
+```java
+GLTextSearchOptions options = new GLTextSearchOptions(
+		false,  // match case
+		true,   // whole identifiers only
+		false); // regular expression
+area.startSearchAsync("accent", options);
+```
+
+For live search in a custom interface, `startSearchAsync(...)` indexes a text
+snapshot away from the UI thread. Starting a newer search, changing the
+document, or clearing the search invalidates the older generation so it cannot
+publish stale markers.
+
 `showSearchDialog(false)` opens Find and `showSearchDialog(true)` includes the
 replacement controls. Search remains available in read-only editors; replace
 commands are disabled there. `textEditor.searchMatch` and
 `textEditor.searchActiveMatch` configure the two marker colors independently of
 `textEditor.selection`, so an ordinary text selection remains distinguishable.
+
+## Go to line
+
+`Ctrl/Cmd+L` opens the localized, theme-aware line-navigation dialog in both
+`GLTextArea` and `GLCodeEditor`. The spinner is bounded by the document's
+logical line count and starts at the caret's current line. Confirming moves the
+caret to the beginning of the requested one-based line and centers that visual
+row when the viewport permits it. Navigation remains available for read-only
+documents.
+
+Applications can navigate directly without opening the dialog:
+
+```java
+int lines = area.getLineCount();
+area.goToLine(42);       // one-based; rejects values outside 1..lines
+area.showGoToLineDialog();
+```
+
+The shortcut is the semantic `text.go-to-line` action and can be replaced in an
+external `.glinput` file.
+
+## Navigation history
+
+Related `GLCodeEditor` instances can share a browser-style source-navigation
+history. Definition and line jumps record the precise URI, zero-based line, and
+character being left. `Alt+Left` returns to that position and `Alt+Right` moves
+forward again. This history is deliberately separate from text undo and redo.
+
+```java
+GLCodeNavigationHistory navigation = new GLCodeNavigationHistory();
+
+editor.setNavigationHandler(workspace::openLocation);
+editor.setNavigationHistory(navigation);
+```
+
+Install the same history on every editor in the workspace. The navigation
+handler remains responsible for activating or creating the tab identified by a
+`GLCodeLocation`; this also lets an application reopen a closed source tab.
+Same-document locations are applied directly before the handler is notified.
+Use `navigateBack()` and `navigateForward()` for toolbar commands. The default
+history retains 100 departures; pass a limit to the constructor or call
+`setLimit(...)` to change it.
+
+The semantic shortcuts are `code.navigate-back` and `code.navigate-forward`.
+Their default bindings can be replaced in an external `.glinput` file.
+
+## Code workspaces
+
+`GLCodeWorkspace` is the ready-to-use composition for an editor area. It
+combines closable document tabs, closed-tab recovery, shared source-navigation
+history, document undo/redo routing, a docked Find/Replace bar, and an active-
+editor status line. Individual
+`GLCodeEditor` and `GLTabbedPane` controls remain available when an application
+needs a different composition.
+
+```java
+GLDocumentWorkspace documents = new GLDocumentWorkspace(applicationHistory);
+GLCodeWorkspace workspace = new GLCodeWorkspace(documents);
+
+workspace.setEditorConfigurer(editor -> {
+	editor.setLanguage(GLCodeLanguages.JAVA);
+	connectLanguageTools(editor);
+});
+workspace.setDocumentResolver(location -> loadTextDocument(location.uri()));
+workspace.setNavigationFailureHandler(this::reportNavigationFailure);
+
+workspace.openDocument(mainDocument);
+root.addGL(workspace);
+```
+
+The document resolver is asynchronous. It is called when definition navigation
+targets a URI that has no open tab; returning a
+`CompletionStage<GLDocument<GLTextDocument>>` lets an application read local or
+remote sources without blocking rendering. Repeated requests for the same URI
+share the pending load. An already open document is activated instead, and a
+recently closed tab is reopened when possible.
+
+The editor configurer is applied to editors created by `openDocument(...)` and
+is the appropriate place to install a language, completion provider, semantic
+tokens, or an LSP session. Use `addDocument(...)` to supply an editor that the
+application has already created. `configureEditor(...)` installs the
+workspace's navigation and search integration without adding a tab; this is
+useful when `GLDocumentLifecycle` creates views through the shared
+`GLDocumentTabController`.
+
+`Ctrl/Cmd+F` and `Ctrl/Cmd+H` open the workspace's compact search bar directly
+below the tab strip instead of a separate dialog. Find uses one row; Replace
+expands a second aligned row. The leading chevron toggles that replacement row
+without closing the search. The first Find opens compactly; later openings
+retain the last chevron state, while `Ctrl/Cmd+H` explicitly expands it. Changes
+to the query and case-sensitivity option
+start a short-debounced asynchronous search automatically. A newer request
+cancels the previous generation before stale markers can be applied. Enter
+therefore advances to the next result, while Shift+Enter moves backwards.
+Search state follows the selected editor,
+replacement is disabled for read-only documents, and closing the bar clears
+its transient match highlights. Toolbar and menu actions can call `showFind()`,
+`showReplace()`, `findNext()`, `findPrevious()`, `replaceCurrent()`, and
+`replaceAll()` directly.
+
+The status line reports the one-based line and column, selection length,
+language ID, indentation width, error/warning totals, and whether external code
+intelligence or only Core analysis is active. It never guesses file encoding or
+line-ending metadata that is not retained by `GLTextDocument`. Use
+`statusBar()` to customize or replace its presentation.
+
+The accessors `tabs()`, `documents()`, `documentTabs()`, `statusBar()`, and
+`navigationHistory()` expose the composed services for application commands
+without duplicating ownership. Close the code workspace when its host closes.
+It closes its tab controller and, when constructed without an external
+`GLDocumentWorkspace`, also closes the internally owned document workspace.
 
 ## Code editing
 
@@ -245,6 +376,20 @@ Unicode navigation, focus-session history, and document APIs remain available.
 
 A double-click selects the Unicode word below the pointer in both `GLTextArea`
 and `GLCodeEditor`.
+
+`GLCodeEditor` discovers nested brace blocks and multiline comments as foldable
+ranges. Click a fold marker in the line-number gutter, or call
+`toggleFoldAtLine(...)`, `collapseAllFolds()`, and `expandAllFolds()`.
+`getFoldRanges()` exposes immutable, zero-based inclusive logical-line ranges.
+Collapsed lines are removed from visual layout, picking, and scroll extent;
+the document text itself is unchanged.
+
+Text areas also support multiple carets. Alt-click adds a caret and Alt+Shift-
+drag creates a rectangular selection. `addCaret(...)`, `getCarets()`,
+`clearSecondaryCarets()`, and `selectColumns(...)` provide the programmatic API.
+`replaceCaretSelections(...)` applies every non-overlapping selection as one
+undoable transaction. Only one primary caret participates in ordinary focus
+navigation; the remaining `GLTextCaret` values are secondary edit sites.
 
 Formatting normalizes indentation and common lexical spacing such as control
 statement parentheses, commas, and the space before an opening block brace.
@@ -531,6 +676,29 @@ actions. `GLLanguageServer` maps them to the standard
 `textDocument/implementation` and call-hierarchy requests. The Core does not
 assume Java symbol rules, so any LSP-backed language can expose the same UI.
 
+The same provider contract supports `references(...)`, `rename(...)`, and
+`codeActions(...)`. Their default shortcuts are Shift+F12, F2, and Alt+Enter.
+Find References highlights every returned range in the current editor; Escape
+clears the transient markers. F2 starts inline rename: all local references
+become synchronized caret selections, typing edits them together, Enter
+restores the provider snapshot and commits one semantic rename, and Escape
+cancels the session. References in other documents are applied by the provider
+rename when the session is committed.
+
+Code actions are context-sensitive fixes and refactorings supplied by the
+active provider for the caret or selection. Alt+Enter requests them and opens a
+small action menu; choosing an entry applies its workspace edits. With no
+provider, or when the provider has no applicable action, the editor does not
+invent language-specific transformations.
+
+Rename and code-action results use `GLCodeWorkspaceEdit`, whose URI and
+line/character coordinates allow one operation to span several files.
+`GLCodeWorkspace` resolves unopened targets and applies the edits to their
+managed documents; a standalone editor can install its own
+`GLCodeWorkspaceEditHandler`. The LSP adapter maps these calls to the standard
+references, rename, and code-action requests, so availability remains a
+capability of the selected language server rather than a Java-only assumption.
+
 When the server advertises full semantic-token support, the editor requests a
 versioned document snapshot after changes and applies the returned UTF-16
 ranges without modifying the document. `getSemanticTokens()` exposes the latest
@@ -587,7 +755,8 @@ remain inside the host surface, and do not participate in mouse picking.
 The default code commands are `Ctrl/Cmd+Shift+F` for formatting,
 `Ctrl/Cmd+Shift+C` for commenting, and `Ctrl/Cmd+Alt+C` for uncommenting. Their
 semantic input-map names are `code.format`, `code.comment`,
-`code.uncomment`, and `code.organizeImports`; completion uses `code.complete`. Menu accelerator labels
+`code.uncomment`, `code.organizeImports`, `code.find-references`, `code.rename`,
+and `code.actions`; completion uses `code.complete`. Menu accelerator labels
 reflect these bindings. Override any of them in the active `.glinput` file.
 
 Inside a text area, `Tab` inserts a tab character. Focus traversal uses

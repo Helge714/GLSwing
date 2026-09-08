@@ -1,6 +1,7 @@
 package com.vingame.glswing.ui;
 
 import java.awt.Color;
+import java.awt.EventQueue;
 import java.awt.Toolkit;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.StringSelection;
@@ -11,6 +12,14 @@ import java.text.BreakIterator;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.BooleanSupplier;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 
 import javax.swing.Timer;
 
@@ -36,6 +45,10 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 	private GLTextDocument document;
 	private final GLTextDocument.Listener documentListener = this::documentChanged;
 	private final GLHistoryManager editingHistory = new GLHistoryManager();
+	private final CopyOnWriteArrayList<GLTextCaretListener> caretListeners =
+			new CopyOnWriteArrayList<>();
+	private final List<GLTextCaret> secondaryCarets = new ArrayList<>();
+	private Integer columnAnchor;
 	private final Timer caretTimer;
 	private int caret, anchor;
 	private float scrollX, scrollY;
@@ -56,10 +69,13 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 	private final GLMenuItem italicItem;
 	private final GLAction findAction;
 	private final GLAction replaceAction;
+	private final GLAction goToLineAction;
 	private String searchQuery = "";
-	private boolean searchMatchCase;
+	private GLTextSearchOptions searchOptions = GLTextSearchOptions.DEFAULT;
+	private String searchPatternError;
 	private List<SearchMatch> searchMatches = List.of();
 	private int activeSearchMatch = -1;
+	private volatile long searchGeneration;
 	private boolean historyEnabled = true;
 	private GLTextDocument.Snapshot editBaseline;
 	private GLTextStyle typingStyle = GLTextStyle.PLAIN;
@@ -72,6 +88,7 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 	private GLPointerController pointerController = GLPointerController.NONE;
 	private GLTextEditorStyle localStyle;
 	private GLTextColorProvider textColorProvider;
+	private GLTextSearchPresenter searchPresenter;
 	private List<Row> cachedRows;
 	private float cachedRowsWidth = Float.NaN;
 	private float cachedMaximumRowWidth;
@@ -101,13 +118,16 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 		GLAction italicAction = characterStyleAction(GLInputActions.TEXT_TOGGLE_ITALIC,
 				GLUiKeys.TEXT_FORMAT_ITALIC, false);
 		findAction = GLAction.builder(GLInputActions.TEXT_FIND)
-				.textKey(GLUiKeys.TEXT_FIND).onAction(() -> showSearchDialog(isEditable())).build();
+				.textKey(GLUiKeys.TEXT_FIND).onAction(() -> showSearchDialog(false)).build();
 		replaceAction = GLAction.builder(GLInputActions.TEXT_REPLACE)
 				.textKey(GLUiKeys.TEXT_REPLACE).enabledWhen(this::isEditable)
 				.onAction(() -> showSearchDialog(true)).build();
+		goToLineAction = GLAction.builder(GLInputActions.TEXT_GO_TO_LINE)
+				.textKey(GLUiKeys.TEXT_GO_TO_LINE)
+				.onAction(this::showGoToLineDialog).build();
 		textActions.add(leftAction).add(centerAction).add(rightAction)
 				.add(justifiedAction).add(boldAction).add(italicAction)
-				.add(findAction).add(replaceAction);
+				.add(findAction).add(replaceAction).add(goToLineAction);
 		leftItem = alignmentSubMenu.addItem(leftAction);
 		centerItem = alignmentSubMenu.addItem(centerAction);
 		rightItem = alignmentSubMenu.addItem(rightAction);
@@ -117,6 +137,7 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 		alignmentMenuItem = alignmentMenu.addSubMenu("", alignmentSubMenu);
 		formatMenuItem = alignmentMenu.addSubMenu("", formatSubMenu);
 		alignmentMenu.addSeparator();
+		alignmentMenu.addItem(goToLineAction);
 		alignmentMenu.addItem(findAction);
 		alignmentMenu.addItem(replaceAction);
 		updateContextMenuText();
@@ -140,39 +161,169 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 	public final void setText(String text) { document.setText(text); }
 	public final int getCaretPosition() { return caret; }
 	public final void setCaretPosition(int value) { moveCaret(value, false); }
+	public final void addCaretListener(GLTextCaretListener listener) {
+		caretListeners.addIfAbsent(Objects.requireNonNull(listener, "Caret listener"));
+	}
+	public final void removeCaretListener(GLTextCaretListener listener) {
+		caretListeners.remove(listener);
+	}
+	/** Returns the primary caret followed by all secondary carets. */
+	public final List<GLTextCaret> getCarets() {
+		ArrayList<GLTextCaret> result = new ArrayList<>(secondaryCarets.size() + 1);
+		result.add(new GLTextCaret(anchor, caret)); result.addAll(secondaryCarets);
+		return List.copyOf(result);
+	}
+	/** Adds a bare secondary caret unless that position already has one. */
+	public final void addCaret(int position) {
+		if (position < 0 || position > document.length())
+			throw new IndexOutOfBoundsException("Caret position: " + position);
+		if (position == caret || secondaryCarets.stream().anyMatch(value ->
+				value.position() == position && value.anchor() == position)) return;
+		secondaryCarets.add(new GLTextCaret(position, position));
+		contentChanged();
+	}
+	public final void clearSecondaryCarets() {
+		if (secondaryCarets.isEmpty()) return;
+		secondaryCarets.clear(); contentChanged();
+	}
+	/** Replaces the complete primary/secondary caret set. */
+	public final void setCarets(List<GLTextCaret> values) {
+		if (values == null || values.isEmpty())
+			throw new IllegalArgumentException("At least one caret is required");
+		for (GLTextCaret value : values)
+			if (value == null || value.end() > document.length())
+				throw new IllegalArgumentException("Caret is outside the document");
+		GLTextCaret primary = values.get(0);
+		anchor = primary.anchor(); caret = primary.position();
+		secondaryCarets.clear(); secondaryCarets.addAll(values.subList(1, values.size()));
+		contentChanged();
+	}
+	/** Replaces every caret selection as one undoable edit. */
+	public final void replaceCaretSelections(String text) {
+		if (text == null) throw new IllegalArgumentException("Replacement text required");
+		if (!editable) return;
+		replaceSelection(text);
+	}
+	/** Creates one rectangular selection per logical line. Columns are UTF-16 offsets. */
+	public final void selectColumns(int anchorLine, int anchorColumn,
+			int targetLine, int targetColumn) {
+		int first = Math.max(0, Math.min(anchorLine, targetLine));
+		int last = Math.min(document.getLineCount() - 1, Math.max(anchorLine, targetLine));
+		if (first > last || anchorColumn < 0 || targetColumn < 0)
+			throw new IllegalArgumentException("Invalid column selection");
+		secondaryCarets.clear();
+		for (int line = first; line <= last; line++) {
+			int lineStart = document.getLineStart(line), lineEnd = document.getLineEnd(line);
+			int from = Math.min(lineEnd, lineStart + anchorColumn);
+			int to = Math.min(lineEnd, lineStart + targetColumn);
+			if (line == first) { anchor = from; caret = to; }
+			else secondaryCarets.add(new GLTextCaret(from, to));
+		}
+		contentChanged();
+	}
+	/** Returns the number of logical lines in the current document. */
+	public final int getLineCount() { return document.getLineCount(); }
+	/**
+	 * Moves the caret to a one-based logical line and centers its visual row when
+	 * the viewport permits it.
+	 */
+	public void goToLine(int lineNumber) {
+		if (lineNumber < 1 || lineNumber > document.getLineCount())
+			throw new IllegalArgumentException("Line must be between 1 and "
+					+ document.getLineCount() + ": " + lineNumber);
+		moveCaret(document.getLineStart(lineNumber - 1), false);
+		GLFont font = font();
+		List<Row> visualRows = rows(font);
+		int row = rowIndexForCaret(visualRows);
+		scrollY = row * font.getLineHeight()
+				- (textViewportHeight() - font.getLineHeight()) * 0.5f;
+		clampScroll();
+		invalidateRecording();
+		repaintGL();
+	}
 	public final int getSelectionStart() { return Math.min(anchor, caret); }
 	public final int getSelectionEnd() { return Math.max(anchor, caret); }
 	public final void select(int start, int end) {
 		if (start < 0 || end < start || end > document.length())
 			throw new IndexOutOfBoundsException("Text selection: " + start + ".." + end);
-		anchor = start; caret = end; contentChanged();
+		secondaryCarets.clear(); anchor = start; caret = end; contentChanged();
 	}
-	public final void selectAll() { anchor = 0; caret = document.length(); contentChanged(); }
+	public final void selectAll() { secondaryCarets.clear(); anchor = 0; caret = document.length(); contentChanged(); }
 	/** Returns the selected document text, or an empty string at a bare caret. */
 	public final String getSelectedText() {
 		return document.getText(getSelectionStart(), getSelectionEnd());
 	}
-	/** Starts a search and activates the first occurrence at or after the caret. */
+	/** Starts a literal search and activates the first occurrence after the caret. */
 	public final int startSearch(String query, boolean matchCase) {
-		setSearch(query, matchCase);
-		if (searchMatches.isEmpty()) return 0;
-		int origin = getSelectionStart();
-		activeSearchMatch = 0;
-		for (int index = 0; index < searchMatches.size(); index++)
-			if (searchMatches.get(index).start() >= origin) {
-				activeSearchMatch = index;
-				break;
-			}
+		return startSearch(query, new GLTextSearchOptions(matchCase, false, false));
+	}
+	/** Starts a configured search and activates the first occurrence after the caret. */
+	public final int startSearch(String query, GLTextSearchOptions options) {
+		setSearch(query, options);
+		activeSearchMatch = firstMatchAtOrAfter(searchMatches, getSelectionStart());
 		activateSearchMatch();
 		return searchMatches.size();
+	}
+	/**
+	 * Indexes a search away from the UI thread and applies only the newest result.
+	 * A newer search, a document change, or {@link #clearSearch()} cancels the
+	 * returned stage before stale markers can be installed.
+	 */
+	public final CompletionStage<Integer> startSearchAsync(String query,
+			boolean matchCase) {
+		return startSearchAsync(query,
+				new GLTextSearchOptions(matchCase, false, false));
+	}
+	/** Asynchronously indexes a search with the supplied matching policy. */
+	public final CompletionStage<Integer> startSearchAsync(String query,
+			GLTextSearchOptions options) {
+		String requestedQuery = query == null ? "" : query;
+		GLTextSearchOptions requestedOptions = Objects.requireNonNull(options,
+				"Search options");
+		if (requestedQuery.isEmpty()) {
+			clearSearch();
+			return CompletableFuture.completedFuture(0);
+		}
+		long generation = ++searchGeneration;
+		String source = document.getText();
+		int origin = getSelectionStart();
+		CompletableFuture<Integer> result = new CompletableFuture<>();
+		CompletableFuture.supplyAsync(() -> scanMatches(source,
+				requestedQuery, requestedOptions,
+				() -> generation != searchGeneration))
+				.whenComplete((scan, failure) -> EventQueue.invokeLater(() -> {
+					if (generation != searchGeneration) {
+						result.cancel(false);
+						return;
+					}
+					if (failure != null) {
+						result.completeExceptionally(failure);
+						return;
+					}
+					searchQuery = requestedQuery;
+					searchOptions = requestedOptions;
+					searchPatternError = scan.error();
+					searchMatches = scan.matches();
+					activeSearchMatch = firstMatchAtOrAfter(searchMatches, origin);
+					activateSearchMatch();
+					invalidateRecording();
+					repaintGL();
+					result.complete(searchMatches.size());
+				}));
+		return result;
 	}
 	/** Returns the number of matches in the active search. */
 	public final int getSearchMatchCount() { return searchMatches.size(); }
 	/** Returns the zero-based active match, or {@code -1} when none is active. */
 	public final int getActiveSearchMatchIndex() { return activeSearchMatch; }
+	/** Returns the current regular-expression error, or {@code null}. */
+	public final String getSearchPatternError() { return searchPatternError; }
 	/** Clears the active search and all visual search markers. */
 	public final void clearSearch() {
+		searchGeneration++;
 		searchQuery = "";
+		searchOptions = GLTextSearchOptions.DEFAULT;
+		searchPatternError = null;
 		searchMatches = List.of();
 		activeSearchMatch = -1;
 		invalidateRecording();
@@ -180,15 +331,23 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 	}
 	/** Selects the next occurrence, wrapping at the document end. */
 	public final boolean findNext(String query, boolean matchCase) {
-		return find(query, matchCase, false);
+		return findNext(query, new GLTextSearchOptions(matchCase, false, false));
+	}
+	public final boolean findNext(String query, GLTextSearchOptions options) {
+		return find(query, options, false);
 	}
 	/** Selects the previous occurrence, wrapping at the document start. */
 	public final boolean findPrevious(String query, boolean matchCase) {
-		return find(query, matchCase, true);
+		return findPrevious(query, new GLTextSearchOptions(matchCase, false, false));
 	}
-	private boolean find(String query, boolean matchCase, boolean backwards) {
-		boolean changed = !sameSearch(query, matchCase);
-		if (changed) setSearch(query, matchCase);
+	public final boolean findPrevious(String query, GLTextSearchOptions options) {
+		return find(query, options, true);
+	}
+	private boolean find(String query, GLTextSearchOptions options,
+			boolean backwards) {
+		Objects.requireNonNull(options, "Search options");
+		boolean changed = !sameSearch(query, options);
+		if (changed) setSearch(query, options);
 		if (searchMatches.isEmpty()) return false;
 		if (changed || activeSearchMatch < 0) {
 			int origin = backwards ? getSelectionStart() : getSelectionEnd();
@@ -211,29 +370,58 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 		activateSearchMatch();
 		return true;
 	}
-	private boolean sameSearch(String query, boolean matchCase) {
+	private boolean sameSearch(String query, GLTextSearchOptions options) {
 		return query != null && query.equals(searchQuery)
-				&& matchCase == searchMatchCase;
+				&& options.equals(searchOptions);
 	}
-	private void setSearch(String query, boolean matchCase) {
+	private void setSearch(String query, GLTextSearchOptions options) {
+		searchGeneration++;
 		searchQuery = query == null ? "" : query;
-		searchMatchCase = matchCase;
-		searchMatches = collectMatches(document.getText(), searchQuery, matchCase);
+		searchOptions = Objects.requireNonNull(options, "Search options");
+		SearchScan scan = scanMatches(document.getText(), searchQuery,
+				searchOptions, () -> false);
+		searchMatches = scan.matches();
+		searchPatternError = scan.error();
 		activeSearchMatch = -1;
 		invalidateRecording();
 		repaintGL();
 	}
-	private static List<SearchMatch> collectMatches(String source, String query,
-			boolean matchCase) {
-		if (query.isEmpty() || query.length() > source.length()) return List.of();
-		List<SearchMatch> result = new ArrayList<>();
-		for (int offset = 0; offset <= source.length() - query.length();) {
-			int found = nextMatch(source, query, offset, matchCase);
-			if (found < 0) break;
-			result.add(new SearchMatch(found, found + query.length()));
-			offset = found + query.length();
+	private static SearchScan scanMatches(String source, String query,
+			GLTextSearchOptions options, BooleanSupplier cancelled) {
+		if (query.isEmpty()) return new SearchScan(List.of(), null);
+		Pattern pattern;
+		try {
+			int flags = options.matchCase() ? 0
+					: Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE;
+			pattern = Pattern.compile(options.regularExpression()
+					? query : Pattern.quote(query), flags);
+		} catch (PatternSyntaxException failure) {
+			return new SearchScan(List.of(), failure.getDescription());
 		}
-		return List.copyOf(result);
+		List<SearchMatch> result = new ArrayList<>();
+		Matcher matcher = pattern.matcher(source);
+		while (matcher.find()) {
+			if (cancelled.getAsBoolean()) return new SearchScan(List.of(), null);
+			if (matcher.start() == matcher.end()) continue;
+			if (!options.wholeWord()
+					|| wholeWord(source, matcher.start(), matcher.end()))
+				result.add(new SearchMatch(matcher.start(), matcher.end()));
+		}
+		return new SearchScan(List.copyOf(result), null);
+	}
+	private static boolean wholeWord(String source, int start, int end) {
+		return (start == 0 || !isWordCharacter(source.codePointBefore(start)))
+				&& (end == source.length()
+						|| !isWordCharacter(source.codePointAt(end)));
+	}
+	private static boolean isWordCharacter(int codePoint) {
+		return Character.isLetterOrDigit(codePoint) || codePoint == '_';
+	}
+	private static int firstMatchAtOrAfter(List<SearchMatch> matches, int origin) {
+		if (matches.isEmpty()) return -1;
+		for (int index = 0; index < matches.size(); index++)
+			if (matches.get(index).start() >= origin) return index;
+		return 0;
 	}
 	private void activateSearchMatch() {
 		if (activeSearchMatch < 0 || activeSearchMatch >= searchMatches.size()) return;
@@ -243,57 +431,91 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 	/** Replaces the selected match, or selects the next one when necessary. */
 	public final boolean replaceCurrent(String query, String replacement,
 			boolean matchCase) {
+		return replaceCurrent(query, replacement,
+				new GLTextSearchOptions(matchCase, false, false));
+	}
+	public final boolean replaceCurrent(String query, String replacement,
+			GLTextSearchOptions options) {
 		if (!editable || query == null || query.isEmpty() || replacement == null) return false;
-		if (!matches(getSelectedText(), 0, query, matchCase))
-			return findNext(query, matchCase);
-		replaceSelection(replacement);
-		findNext(query, matchCase);
+		if (!sameSearch(query, options) || activeSearchMatch < 0
+				|| getSelectionStart() != searchMatches.get(activeSearchMatch).start()
+				|| getSelectionEnd() != searchMatches.get(activeSearchMatch).end())
+			return findNext(query, options);
+		String resolved = replacementForMatch(getSelectedText(), query,
+				replacement, options);
+		if (resolved == null) return false;
+		replaceSelection(resolved);
+		findNext(query, options);
 		return true;
 	}
 	/** Replaces every non-overlapping match as one undoable edit. */
 	public final int replaceAll(String query, String replacement, boolean matchCase) {
+		return replaceAll(query, replacement,
+				new GLTextSearchOptions(matchCase, false, false));
+	}
+	public final int replaceAll(String query, String replacement,
+			GLTextSearchOptions options) {
 		if (!editable || query == null || query.isEmpty() || replacement == null) return 0;
 		String source = document.getText();
+		SearchScan scan = scanMatches(source, query,
+				Objects.requireNonNull(options, "Search options"), () -> false);
+		if (scan.error() != null) return 0;
 		List<TextReplacement> replacements = new ArrayList<>();
-		for (int offset = 0; offset <= source.length() - query.length();) {
-			int found = nextMatch(source, query, offset, matchCase);
-			if (found < 0) break;
-			replacements.add(new TextReplacement(found, found + query.length(), replacement));
-			offset = found + query.length();
+		for (SearchMatch match : scan.matches()) {
+			String resolved = replacementForMatch(
+					source.substring(match.start(), match.end()), query,
+					replacement, options);
+			if (resolved == null) return 0;
+			replacements.add(new TextReplacement(match.start(), match.end(), resolved));
 		}
 		if (replacements.isEmpty()) return 0;
-		int nextCaret = replacements.get(replacements.size() - 1).start()
-				+ replacement.length();
+		TextReplacement last = replacements.get(replacements.size() - 1);
+		int nextCaret = last.start() + last.text().length();
 		replaceTextAtomically(replacements, nextCaret, "Replace all");
 		return replacements.size();
 	}
-	private static int nextMatch(String source, String query, int start,
-			boolean matchCase) {
-		for (int index = Math.max(0, start); index <= source.length() - query.length(); index++)
-			if (matches(source, index, query, matchCase)) return index;
-		return -1;
-	}
-	private static int lastMatch(String source, String query, int start,
-			boolean matchCase) {
-		for (int index = Math.min(start, source.length() - query.length()); index >= 0; index--)
-			if (matches(source, index, query, matchCase)) return index;
-		return -1;
-	}
-	private static boolean matches(String source, int offset, String query,
-			boolean matchCase) {
-		return offset >= 0 && offset + query.length() <= source.length()
-				&& source.regionMatches(!matchCase, offset, query, 0, query.length());
+	private static String replacementForMatch(String matched, String query,
+			String replacement, GLTextSearchOptions options) {
+		if (!options.regularExpression()) return replacement;
+		try {
+			int flags = options.matchCase() ? 0
+					: Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE;
+			Matcher matcher = Pattern.compile(query, flags).matcher(matched);
+			return matcher.matches() ? matcher.replaceFirst(replacement) : null;
+		} catch (IllegalArgumentException failure) {
+			return null;
+		}
 	}
 	private record SearchMatch(int start, int end) { }
+	private record SearchScan(List<SearchMatch> matches, String error) { }
 	/** Opens the standard modeless Find or Find/Replace dialog for this editor. */
 	public final void showSearchDialog(boolean replaceVisible) {
+		if (searchPresenter != null) {
+			searchPresenter.showSearch(this, replaceVisible);
+			return;
+		}
 		GLParent host = popupHost();
 		if (host != null) GLTextSearchDialog.show(host, this, replaceVisible);
+	}
+	/**
+	 * Replaces the standard modeless search dialog with an application presenter.
+	 * Passing {@code null} restores the built-in dialog.
+	 */
+	public final void setSearchPresenter(GLTextSearchPresenter value) {
+		searchPresenter = value;
+	}
+	public final GLTextSearchPresenter getSearchPresenter() { return searchPresenter; }
+	/** Opens the standard line-navigation dialog. */
+	public final void showGoToLineDialog() {
+		GLParent host = popupHost();
+		if (host != null) GLTextGoToLineDialog.show(host, this);
 	}
 	/** Shared Find action for specialized editor context menus. */
 	protected final GLAction findAction() { return findAction; }
 	/** Shared Replace action for specialized editor context menus. */
 	protected final GLAction replaceAction() { return replaceAction; }
+	/** Shared line-navigation action for specialized editor context menus. */
+	protected final GLAction goToLineAction() { return goToLineAction; }
 	public final boolean isLineWrap() { return lineWrap; }
 	public final void setLineWrap(boolean value) { if (lineWrap != value) { lineWrap = value; scrollX = 0; invalidateRowLayout(); contentChanged(); } }
 	public final int getTabSize() { return tabSize; }
@@ -402,11 +624,15 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 			float x = padding.left() + leading - scrollX + rowOffset(font, row, available);
 			float top = padding.top() + index * lineHeight - scrollY;
 			float baseline = top + font.getAscent();
+			drawRowBackgroundDecorations(context, font, row.start, row.end, x, top,
+					lineHeight, available);
 			drawSearchMatches(context, font, row, x, top, lineHeight,
 					style.selectionColor());
 			if (isFocused())
 				drawSelection(context, font, row, x, top, lineHeight,
 						style.selectionColor());
+			if (isFocused()) drawSecondarySelections(context, font, row, x, top,
+					lineHeight, style.selectionColor());
 			drawRow(context, font, row, x, top, baseline, available, style);
 			drawTextDecorations(context, font, row.start, row.end, x, baseline,
 					available);
@@ -414,6 +640,12 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 				float caretX = x + rowAdvance(font, row, caret, available);
 				context.fillRect(caretX, top, 1, lineHeight, style.caretColor());
 			}
+			if (isFocused() && caretVisible)
+				for (GLTextCaret extra : secondaryCarets)
+					if (extra.position() >= row.start && extra.position() <= row.end) {
+						float caretX = x + rowAdvance(font, row, extra.position(), available);
+						context.fillRect(caretX, top, 1, lineHeight, style.caretColor());
+					}
 		}
 		context.endClip();
 		drawTrailingDecoration(context, trailingDecorationX(),
@@ -426,6 +658,10 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 	}
 	protected void drawTextDecorations(GLContext2D context, GLFont font,
 			int rowStart, int rowEnd, float x, float baseline, float available) { }
+	/** Draws editor-specific row backgrounds before selection and source text. */
+	protected void drawRowBackgroundDecorations(GLContext2D context, GLFont font,
+			int rowStart, int rowEnd, float x, float top, float lineHeight,
+			float available) { }
 	/** Returns the next visual-only inline decoration in the half-open range. */
 	protected int nextInlineDecorationOffset(int startInclusive, int endExclusive) {
 		return -1;
@@ -447,6 +683,18 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 		float left = x + rowAdvance(font, row, start, available);
 		float right = x + rowAdvance(font, row, end, available);
 		context.fillRect(left, top, Math.max(1, right - left), height, color);
+	}
+	private void drawSecondarySelections(GLContext2D context, GLFont font, Row row,
+			float x, float top, float height, Color color) {
+		for (GLTextCaret caret : secondaryCarets) {
+			int start = Math.max(row.start, caret.start());
+			int end = Math.min(row.end, caret.end());
+			if (end <= start) continue;
+			float available = textViewportWidth();
+			float left = x + rowAdvance(font, row, start, available);
+			float right = x + rowAdvance(font, row, end, available);
+			context.fillRect(left, top, Math.max(1, right - left), height, color);
+		}
 	}
 	private void drawSearchMatches(GLContext2D context, GLFont font, Row row,
 			float x, float top, float height, Color selectionColor) {
@@ -474,6 +722,14 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 
 	@Override protected void controlMousePressed(GLMouseEvent event) {
 		if (event.getButton() == MouseEvent.BUTTON3) {
+			if (event.hasLocalPosition()) {
+				int position = positionAt(event.getLocalX(), event.getLocalY());
+				if (position < getSelectionStart() || position > getSelectionEnd()
+						|| getSelectionStart() == getSelectionEnd()) {
+					clearSecondaryCarets();
+					moveCaret(position, false);
+				}
+			}
 			GLParent host = popupHost();
 			if (host != null) getContextMenu().show(host,
 					event.getScreenX(), event.getScreenY());
@@ -493,8 +749,19 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 			event.consume();
 			return;
 		}
+		int position = positionAt(event.getLocalX(), event.getLocalY());
+		if ((event.getModifiersEx() & InputEvent.ALT_DOWN_MASK) != 0) {
+			if ((event.getModifiersEx() & InputEvent.SHIFT_DOWN_MASK) != 0) {
+				columnAnchor = caret;
+				updateColumnSelection(columnAnchor, position);
+				selecting = true;
+			} else addCaret(position);
+			event.consume();
+			return;
+		}
+		clearSecondaryCarets();
 		selecting = true;
-		moveCaret(positionAt(event.getLocalX(), event.getLocalY()),
+		moveCaret(position,
 				getGLInputMap().hasModifiers(GLInputActions.TEXT_EXTEND_SELECTION, event.getModifiersEx()));
 	}
 	@Override protected void controlMouseDragged(GLMouseEvent event) {
@@ -502,14 +769,18 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 			dragScrollBar(event.getLocalY());
 			return;
 		}
-		if (selecting && event.hasLocalPosition()) moveCaret(positionAt(event.getLocalX(), event.getLocalY()), true);
+		if (selecting && event.hasLocalPosition()) {
+			int position = positionAt(event.getLocalX(), event.getLocalY());
+			if (columnAnchor != null) updateColumnSelection(columnAnchor, position);
+			else moveCaret(position, true);
+		}
 	}
 	@Override protected void controlMouseMoved(GLMouseEvent event) {
 		if (!event.hasLocalPosition()) return;
 		pointerController.setCursor(this, event.getLocalX() >= trailingDecorationX()
 						? GLPointerCursor.DEFAULT : GLPointerCursor.TEXT);
 	}
-	@Override protected void controlMouseReleased(GLMouseEvent event) { selecting = false; draggingScrollBar = false; }
+	@Override protected void controlMouseReleased(GLMouseEvent event) { selecting = false; draggingScrollBar = false; columnAnchor = null; }
 	@Override protected void controlMouseClicked(GLMouseEvent event) {
 		if (event.getButton() == MouseEvent.BUTTON1 && event.completesDoubleClick()
 				&& event.hasLocalPosition())
@@ -586,6 +857,10 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 	@Override protected void inputMapChanged() { updateContextMenuText(); }
 
 	protected final void replaceSelection(String inserted) {
+		if (!secondaryCarets.isEmpty()) {
+			replaceMultipleSelections(inserted);
+			return;
+		}
 		int start = getSelectionStart(), end = getSelectionEnd();
 		String removed = document.getText(start, end);
 		if (removed.equals(inserted)) return;
@@ -603,6 +878,35 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 				() -> applyEdit(before, beforeCaret, beforeAnchor),
 				() -> applyEdit(after, afterCaret, afterCaret));
 		contentChanged();
+	}
+	private void replaceMultipleSelections(String inserted) {
+		ArrayList<GLTextCaret> ranges = new ArrayList<>(getCarets());
+		ranges.sort(java.util.Comparator.comparingInt(GLTextCaret::start));
+		ArrayList<TextReplacement> replacements = new ArrayList<>();
+		int shift = 0;
+		ArrayList<Integer> resultingCarets = new ArrayList<>();
+		int previousEnd = -1;
+		for (GLTextCaret range : ranges) {
+			if (range.start() < previousEnd) continue;
+			replacements.add(new TextReplacement(range.start(), range.end(), inserted));
+			resultingCarets.add(range.start() + shift + inserted.length());
+			shift += inserted.length() - (range.end() - range.start());
+			previousEnd = range.end();
+		}
+		if (replacements.isEmpty()) return;
+		replaceTextAtomically(replacements, resultingCarets.get(0), "Edit multiple carets");
+		secondaryCarets.clear();
+		for (int index = 1; index < resultingCarets.size(); index++) {
+			int at = resultingCarets.get(index);
+			secondaryCarets.add(new GLTextCaret(at, at));
+		}
+		contentChanged();
+	}
+	private void updateColumnSelection(int from, int to) {
+		int fromLine = document.getLineOfOffset(from);
+		int toLine = document.getLineOfOffset(to);
+		selectColumns(fromLine, from - document.getLineStart(fromLine), toLine,
+				to - document.getLineStart(toLine));
 	}
 	protected record TextReplacement(int start, int end, String text) { }
 	/** Applies non-overlapping replacements as one local undo/redo operation. */
@@ -738,14 +1042,35 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 		editingHistory.reset();
 		contentChanged();
 	}
-	private void backspace() { if (caret != anchor) replaceSelection(""); else if (caret > 0) { anchor = previousCharacter(caret); replaceSelection(""); } }
-	private void deleteForward() { if (caret != anchor) replaceSelection(""); else if (caret < document.length()) { anchor = nextCharacter(caret); replaceSelection(""); } }
+	private void backspace() {
+		if (!secondaryCarets.isEmpty()) { expandBareCaretsForDeletion(true); replaceMultipleSelections(""); }
+		else if (caret != anchor) replaceSelection("");
+		else if (caret > 0) { anchor = previousCharacter(caret); replaceSelection(""); }
+	}
+	private void deleteForward() {
+		if (!secondaryCarets.isEmpty()) { expandBareCaretsForDeletion(false); replaceMultipleSelections(""); }
+		else if (caret != anchor) replaceSelection("");
+		else if (caret < document.length()) { anchor = nextCharacter(caret); replaceSelection(""); }
+	}
+	private void expandBareCaretsForDeletion(boolean backward) {
+		if (caret == anchor) anchor = backward ? previousCharacter(caret)
+				: nextCharacter(caret);
+		for (int index = 0; index < secondaryCarets.size(); index++) {
+			GLTextCaret value = secondaryCarets.get(index);
+			if (value.start() != value.end()) continue;
+			int other = backward ? previousCharacter(value.position())
+					: nextCharacter(value.position());
+			secondaryCarets.set(index, new GLTextCaret(other, value.position()));
+		}
+	}
 	private void moveCaret(int value, boolean extend) { moveCaret(value, extend, false); }
 	private void moveCaret(int value, boolean extend, boolean preserveVerticalX) {
+		secondaryCarets.clear();
 		caret = Math.max(0, Math.min(document.length(), value));
 		if (!extend) anchor = caret;
 		if (!preserveVerticalX) verticalNavigationX = null;
 		caretVisible = true; ensureCaretVisible(); invalidateRecording();
+		fireCaretChanged();
 	}
 	private void moveVertical(int delta, boolean extend) {
 		GLFont font = font(); List<Row> visualRows = rows(font);
@@ -828,12 +1153,14 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 	}
 	private List<Row> rows(GLFont font) {
 		float available = textViewportWidth();
-		if (cachedRows != null && Float.compare(cachedRowsWidth, available) == 0)
-			return cachedRows;
+		List<Row> cached = cachedRows;
+		if (cached != null && Float.compare(cachedRowsWidth, available) == 0)
+			return cached;
 		List<Row> result = new ArrayList<>();
 		for (int line = 0; line < document.getLineCount(); line++) {
+			if (!isLogicalLineVisible(line)) continue;
 			int start = document.getLineStart(line), end = document.getLineEnd(line);
-			if (!lineWrap || start == end) { result.add(new Row(start, end, false)); continue; }
+			if (!lineWrap || start == end) { result.add(new Row(start, end, false, line)); continue; }
 			int rowStart = start;
 			while (rowStart < end) {
 				BreakIterator characters = BreakIterator.getCharacterInstance(Locale.getDefault());
@@ -866,21 +1193,32 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 					chosen = wordBreak > rowStart && lastFit < end ? wordBreak : lastFit;
 				}
 				chosen = Math.max(rowStart + 1, chosen);
-				result.add(new Row(rowStart, chosen, chosen < end)); rowStart = chosen;
+				result.add(new Row(rowStart, chosen, chosen < end, line)); rowStart = chosen;
 				if (trailingSeparatorWrap && chosen == end)
-					result.add(new Row(end, end, false));
+					result.add(new Row(end, end, false, line));
 			}
 		}
+		List<Row> built = List.copyOf(result);
 		cachedRowsWidth = available;
-		cachedRows = List.copyOf(result);
+		cachedRows = built;
 		cachedMaximumRowWidth = 0;
 		if (!lineWrap)
-			for (Row row : cachedRows)
+			for (Row row : built)
 				cachedMaximumRowWidth = Math.max(cachedMaximumRowWidth,
 						measureRange(row.start, row.end)
 								+ trailingRowDecorationWidth(row.start, row.end));
-		return cachedRows;
+		return built;
 	}
+	/** Controls whether a logical document line participates in visual layout. */
+	protected boolean isLogicalLineVisible(int logicalLine) { return true; }
+	/** Returns the logical line represented by a visible row, or {@code -1}. */
+	protected final int logicalLineAtVisualRow(int visualRow) {
+		List<Row> value = rows(font());
+		return visualRow < 0 || visualRow >= value.size() ? -1
+				: value.get(visualRow).logicalLine;
+	}
+	/** Returns the current number of laid-out visual rows. */
+	protected final int visualRowCount() { return rows(font()).size(); }
 	protected final void invalidateRowLayout() {
 		cachedRows = null;
 		cachedRowsWidth = Float.NaN;
@@ -921,6 +1259,7 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 		}
 	}
 	private void documentChanged(GLTextDocument source, GLTextDocument.Change change) {
+		searchGeneration++;
 		invalidateRowLayout();
 		if (!applyingHistory) {
 			caret = translatedOffset(caret, change);
@@ -930,7 +1269,10 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 		caret = Math.min(caret, source.length());
 		anchor = Math.min(anchor, source.length());
 		if (!searchQuery.isEmpty()) {
-			searchMatches = collectMatches(source.getText(), searchQuery, searchMatchCase);
+			SearchScan scan = scanMatches(source.getText(), searchQuery,
+					searchOptions, () -> false);
+			searchMatches = scan.matches();
+			searchPatternError = scan.error();
 			activeSearchMatch = -1;
 		}
 		contentChanged();
@@ -947,7 +1289,15 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 		ensureCaretVisible();
 		invalidateRecording();
 		repaintGL();
+		fireCaretChanged();
 	}
+	private void fireCaretChanged() {
+		caretSetChanged();
+		for (GLTextCaretListener listener : caretListeners)
+			listener.caretChanged(this, caret, getSelectionStart(), getSelectionEnd());
+	}
+	/** Called after primary or secondary caret state changes. */
+	protected void caretSetChanged() { }
 	private GLFont font() { try { return getGLFont(getGLStyle().font()); } catch (IllegalStateException error) { return getGLStyle().font().measurementFont(); } }
 	private float measure(GLFont font, String value) { return font.measureText(expand(value)); }
 	private float rowOffset(GLFont font, Row row, float available) {
@@ -1153,5 +1503,5 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 	private void copy() { if (caret == anchor) return; try { Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(document.getText(getSelectionStart(), getSelectionEnd())), null); } catch (RuntimeException ignored) { } }
 	private void paste() { try { Object value = Toolkit.getDefaultToolkit().getSystemClipboard().getData(DataFlavor.stringFlavor); if (value instanceof String text) replaceSelection(text.replace("\r\n", "\n").replace('\r', '\n')); } catch (Exception ignored) { } }
 	private void clearCursor() { pointerController.clearCursor(this); pointerController = GLPointerController.NONE; }
-	private record Row(int start, int end, boolean softWrapped) { }
+	private record Row(int start, int end, boolean softWrapped, int logicalLine) { }
 }

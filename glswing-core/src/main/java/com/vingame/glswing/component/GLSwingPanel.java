@@ -117,19 +117,18 @@ public abstract class GLSwingPanel extends GLJPanel
 	private int statisticsFrameCount;
 	private transient GLPickResult hoverPick = GLPickResult.none();
 	private transient GLPickResult capturedPick = GLPickResult.none();
-	private transient GLPickResult clickCandidate = GLPickResult.none();
 	private transient MouseEvent pendingHoverEvent;
 	private transient boolean pendingHoverMoved;
 	private transient boolean hoverReadScheduled;
 	private transient long hoverReadGeneration;
 	private transient volatile MouseEvent postWheelHoverEvent;
 	private transient volatile long postWheelHoverGeneration;
-	private transient int pointerTasksPending;
 	private final transient ArrayDeque<QueuedPointerTask> pointerTaskQueue =
 			new ArrayDeque<>();
 	private transient volatile boolean pointerTaskBatchScheduled;
 	private transient int pressPicksPending;
 	private transient MouseEvent pendingDragEvent;
+	private transient MouseEvent pendingReleaseEvent;
 	private transient GLKeyTarget focusedTarget;
 	private int lastDragX;
 	private int lastDragY;
@@ -594,18 +593,13 @@ public abstract class GLSwingPanel extends GLJPanel
 				finishInteractiveRepaint();
 				pointerWarpEventPending = false;
 				cancelHoverRead();
-				clickCandidate = GLPickResult.none();
+				pendingDragEvent = null;
+				pendingReleaseEvent = null;
 				requestFocusInWindow();
 				pressPicksPending++;
-				readPointerPick(event, true, result -> {
+				readPointerPress(event, result -> {
 					pressPicksPending--;
-					dispatchMousePressed(event, result);
-					if (pressPicksPending == 0) {
-						MouseEvent drag = pendingDragEvent;
-						pendingDragEvent = null;
-						if (drag != null)
-							dispatchMouseDragged(drag);
-					}
+					dispatchResolvedMousePressed(event, result);
 				});
 			}
 
@@ -622,14 +616,14 @@ public abstract class GLSwingPanel extends GLJPanel
 			@Override
 			public void mouseReleased(MouseEvent event) {
 				cancelHoverRead();
-				readPointerPick(event, true,
+				if (pressPicksPending > 0) {
+					pendingReleaseEvent = event;
+					return;
+				}
+				// Release is evaluated against the retained press target. A fresh GPU
+				// snapshot is useful for hover only and must not delay the action.
+				readPointerPick(event, false,
 						releaseHit -> dispatchMouseReleased(event, releaseHit));
-			}
-
-			@Override
-			public void mouseClicked(MouseEvent event) {
-				cancelHoverRead();
-				queuePointerBarrier(() -> dispatchMouseClicked(event));
 			}
 
 			@Override
@@ -647,6 +641,39 @@ public abstract class GLSwingPanel extends GLJPanel
 		addMouseListener(dispatcher);
 		addMouseMotionListener(dispatcher);
 		addMouseWheelListener(dispatcher);
+	}
+
+	private void dispatchResolvedMousePressed(MouseEvent event,
+			GLPickResult result) {
+		dispatchMousePressed(event, result);
+		if (pressPicksPending == 0) {
+			MouseEvent drag = pendingDragEvent;
+			pendingDragEvent = null;
+			if (drag != null)
+				dispatchMouseDragged(drag);
+		}
+		MouseEvent release = pendingReleaseEvent;
+		pendingReleaseEvent = null;
+		if (release != null)
+			readPointerPick(release, false,
+					releaseHit -> dispatchMouseReleased(release, releaseHit));
+	}
+
+	private void readPointerPress(MouseEvent event,
+			Consumer<GLPickResult> completion) {
+		GLPickResult immediate = GLImmediateHoverRegistry.resolve(
+				this, event.getX(), event.getY());
+		if (immediate != null) {
+			completePointerTask(completion, immediate);
+			return;
+		}
+		GLPickResult retained = GLPointerGesture.retainedPressPick(
+				hoverPick, event.getX(), event.getY());
+		if (retained.hasTarget() && isAttachedTarget(retained.getTarget())) {
+			completion.accept(retained);
+			return;
+		}
+		readPointerPick(event, true, completion);
 	}
 
 	private static boolean hasPressedMouseButton(MouseEvent event) {
@@ -805,12 +832,13 @@ public abstract class GLSwingPanel extends GLJPanel
 		}
 		GLPickResult capturedAtRelease = capturedPick.at(event.getX(), event.getY());
 		if (isAttachedTarget(capturedAtRelease.getTarget())) {
-			capturedAtRelease.getTarget().mouseReleased(
-					mouseEvent(event, capturedAtRelease, 0, 0));
-			clickCandidate = releaseHit.getTarget() == capturedAtRelease.getTarget()
-					? releaseHit : GLPickResult.none();
-		} else
-			clickCandidate = GLPickResult.none();
+			boolean completesClick = GLPointerGesture.completesClick(
+					capturedAtRelease, releaseHit);
+			var released = mouseEvent(event, capturedAtRelease, 0, 0);
+			capturedAtRelease.getTarget().mouseReleased(released);
+			if (completesClick && isAttachedTarget(capturedAtRelease.getTarget()))
+				capturedAtRelease.getTarget().mouseClicked(released);
+		}
 		capturedPick = GLPickResult.none();
 		updateHover(event, releaseHit, false);
 		repaintColorOnly();
@@ -821,7 +849,6 @@ public abstract class GLSwingPanel extends GLJPanel
 			return;
 		GLPickResult captured = capturedPick.at(event.getX(), event.getY());
 		capturedPick = GLPickResult.none();
-		clickCandidate = GLPickResult.none();
 		pointerWarpRequested = false;
 		pointerWarpEventPending = false;
 		if (isAttachedTarget(captured.getTarget()))
@@ -830,19 +857,8 @@ public abstract class GLSwingPanel extends GLJPanel
 		repaintColorOnly();
 	}
 
-	private void dispatchMouseClicked(MouseEvent event) {
-		if (clickCandidate.hasTarget()
-				&& isAttachedTarget(clickCandidate.getTarget())) {
-			GLPickResult current = clickCandidate.at(event.getX(), event.getY());
-			current.getTarget().mouseClicked(mouseEvent(event, current, 0, 0));
-		}
-		clickCandidate = GLPickResult.none();
-		repaintColorOnly();
-	}
-
 	private void readPointerPick(MouseEvent event, boolean requireCurrent,
 			Consumer<GLPickResult> completion) {
-		pointerTasksPending++;
 		GLPickResult immediate = GLImmediateHoverRegistry.resolve(
 				this, event.getX(), event.getY());
 		if (immediate != null) {
@@ -879,7 +895,7 @@ public abstract class GLSwingPanel extends GLJPanel
 					: activeRenderer.readPickSnapshot(x, y, width, height);
 			completePointerTask(completion,
 					result == null ? GLPickResult.none() : result);
-		}, false);
+		});
 		synchronized (pointerTaskQueue) {
 			pointerTaskQueue.addLast(task);
 		}
@@ -887,31 +903,14 @@ public abstract class GLSwingPanel extends GLJPanel
 
 	private void completePointerTask(Consumer<GLPickResult> completion,
 			GLPickResult result) {
-		try {
-			GLMouseTarget target = result.getTarget();
-			completion.accept(target instanceof GLContainer container
-					&& !belongsToPanel(container) ? GLPickResult.none() : result);
-		} finally {
-			pointerTasksPending--;
-		}
-	}
-
-	/** Enqueues a no-read marker so click delivery follows its release read. */
-	private void queuePointerBarrier(Runnable completion) {
-		synchronized (pointerTaskQueue) {
-			if (pointerTasksPending == 0 && pointerTaskQueue.isEmpty()
-					&& !pointerTaskBatchScheduled) {
-				completion.run();
-				return;
-			}
-			pointerTaskQueue.addLast(new QueuedPointerTask(completion, true));
-		}
-		super.repaint();
+		GLMouseTarget target = result.getTarget();
+		completion.accept(target instanceof GLContainer container
+				&& !belongsToPanel(container) ? GLPickResult.none() : result);
 	}
 
 	/**
-	 * Publishes one complete press/release/click group after a current asynchronous
-	 * pick snapshot exists. No OpenGL call is made from the AWT input callback.
+	 * Publishes queued pointer reads after a current asynchronous pick snapshot
+	 * exists. No OpenGL call is made from the AWT input callback.
 	 */
 	private void publishPointerTasksIfReady() {
 		GLRenderer2D activeRenderer = renderer;
@@ -923,12 +922,8 @@ public abstract class GLSwingPanel extends GLJPanel
 		synchronized (pointerTaskQueue) {
 			if (pointerTaskBatchScheduled || pointerTaskQueue.isEmpty())
 				return;
-			while (!pointerTaskQueue.isEmpty()) {
-				QueuedPointerTask task = pointerTaskQueue.removeFirst();
-				batch.add(task);
-				if (task.barrier())
-					break;
-			}
+			while (!pointerTaskQueue.isEmpty())
+				batch.add(pointerTaskQueue.removeFirst());
 			pointerTaskBatchScheduled = true;
 		}
 		SwingUtilities.invokeLater(() -> {
@@ -1227,7 +1222,7 @@ public abstract class GLSwingPanel extends GLJPanel
 		TYPED
 	}
 
-	private record QueuedPointerTask(Runnable action, boolean barrier) {
+	private record QueuedPointerTask(Runnable action) {
 	}
 
 	private void updateHover(MouseEvent event, GLPickResult next, boolean sendMoved) {
@@ -1403,9 +1398,10 @@ public abstract class GLSwingPanel extends GLJPanel
 		}
 		hoverPick = GLPickResult.none();
 		capturedPick = GLPickResult.none();
-		clickCandidate = GLPickResult.none();
 		hoverReadGeneration++;
 		pendingHoverEvent = null;
+		pendingDragEvent = null;
+		pendingReleaseEvent = null;
 		if (focusedTarget != null)
 			focusedTarget.focusLost();
 		focusedTarget = null;

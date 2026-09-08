@@ -54,12 +54,45 @@ may change in subsequent `0.x` releases.
 
 ### UI
 
+- Pointer clicks now complete directly from the retained press target when the
+  button is released within that control. This removes missed actions caused
+  by a one-frame-old picking snapshot while preserving drag-out cancellation
+  and double-click counts on both `GLJPanel` and `GLCanvas` hosts. A confirmed
+  hover hit at the same pointer position also starts the pressed state without
+  waiting for an unrelated pending picking rebuild; rapid releases remain
+  ordered behind an asynchronous press resolution.
+- Code workspaces now include an active-editor status line for caret position,
+  selection length, language, indentation, diagnostics, and tooling state.
+- Code editors now support structural folding, multiple carets, rectangular
+  selection, provider-backed references, workspace-wide rename edits, and
+  source code actions. The LSP adapter maps the corresponding standard
+  protocol requests without making these features Java-specific. Reference
+  ranges are highlighted in place, while inline rename synchronizes all local
+  occurrences until Enter commits or Escape cancels the provider transaction.
+  Provider-backed shortcuts are refreshed as soon as a language server is
+  attached, including servers connected asynchronously after editor creation.
+- Find/Replace now supports whole-word and regular-expression matching,
+  capture-group replacements, safe invalid-pattern reporting, and cancellable
+  background indexing through `GLTextSearchOptions`.
+- Added `GLCodeWorkspace`, a reusable code-editing surface that composes
+  closable document tabs, closed-tab recovery, shared source-navigation
+  history, document routing, asynchronous source resolution, and a docked
+  IDE-style Find/Replace bar below the tab strip. Applications can configure
+  language tooling and document loading while retaining access to each
+  composed service. Search queries and case changes update automatically through
+  debounced, cancellable background indexing.
 - Added localized Find and Find/Replace dialogs to multiline text and code
   editors, including configurable all-match highlighting, active/total result
   counts, repeated-Enter navigation, keyboard and button navigation,
   forward/backward wrapping search, case matching,
   programmatic search operations, read-only Find, and atomic undo for Replace
   All. Default shortcuts are `Ctrl/Cmd+F` and `Ctrl/Cmd+H`.
+- Added one-based line navigation for multiline text and code editors, including
+  a localized `GLNumberSpinner` dialog, context-menu action, read-only support,
+  viewport centering, and the configurable `text.go-to-line` shortcut.
+- Added a bounded source-navigation history for related code editors, with
+  precise cross-document locations, automatic recording for definitions and
+  line jumps, context-menu commands, and configurable Back/Forward shortcuts.
 - Theme formatting now normalizes the compatibility form `rgba(...)` to
   `rgb(...)` and removes a redundant opaque alpha channel when requested by the
   active color-expression format.

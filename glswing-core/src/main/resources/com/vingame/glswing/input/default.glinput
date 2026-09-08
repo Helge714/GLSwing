@@ -52,6 +52,7 @@ key.text.toggle-bold=shortcut+B
 key.text.toggle-italic=shortcut+I
 key.text.find=shortcut+F
 key.text.replace=shortcut+H
+key.text.go-to-line=shortcut+L
 value.text.history-coalesce-millis=750
 
 key.code.format=shortcut+shift+F
@@ -60,6 +61,11 @@ key.code.uncomment=shortcut+alt+C
 key.code.complete=shortcut+SPACE
 key.code.organizeImports=shortcut+shift+O
 key.code.goToDefinition=F3
+key.code.navigate-back=ALT+LEFT
+key.code.navigate-forward=ALT+RIGHT
+key.code.find-references=SHIFT+F12
+key.code.rename=F2
+key.code.actions=ALT+ENTER
 
 key.node.delete-selection=DELETE, BACK_SPACE
 modifier.node.toggle-selection=SHIFT

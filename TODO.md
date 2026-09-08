@@ -35,3 +35,8 @@ Items are removed when completed or intentionally rejected.
 ## Further investigation
 
 - Accessibility interfaces for GPU-rendered controls.
+
+## CodeEditor
+
+- Zeilennummern bleeden durch das Suchfeld durch (Zeichenreihenfolge denke ich)
+- die Aufklappchevrons für Codeblöcke sitzen noch in den Zeilennummern und in den Wahrnungs-/Fehlerzeichen, die Zeilennummerspalte muss sich entsprechend dynamisch vergrößern, wenn mehr Ziffern für Zeilen dazukommen und Chevrons

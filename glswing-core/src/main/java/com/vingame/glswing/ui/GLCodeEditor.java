@@ -5,8 +5,12 @@ import java.awt.EventQueue;
 import java.awt.event.KeyEvent;
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.ArrayDeque;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.CompletionStage;
 import javax.swing.Timer;
 
 import com.vingame.glswing.component.GLDialog;
@@ -26,6 +30,8 @@ public class GLCodeEditor extends GLTextArea {
 	private volatile List<GLCodeToken> tokens = List.of();
 	private volatile List<GLCodeSemanticToken> semanticTokens = List.of();
 	private volatile List<GLCodeColor> documentColors = List.of();
+	private List<GLCodeFoldRange> foldRanges = List.of();
+	private final Set<Integer> collapsedFoldLines = new HashSet<>();
 	private GLPipettePreview colorPickerPipettePreview = GLPipettePreview.DEFAULT;
 	private GLColorModel preferredColorOutputModel;
 	private GLColorExpressionFormat colorExpressionFormat =
@@ -116,13 +122,18 @@ public class GLCodeEditor extends GLTextArea {
 	private java.util.concurrent.CompletableFuture<?> inlayHintFuture;
 	private boolean inlayHintsVisible = true;
 	private GLCodeNavigationHandler navigationHandler = location -> { };
+	private GLCodeWorkspaceEditHandler workspaceEditHandler = this::applyLocalWorkspaceEdits;
+	private GLCodeNavigationHistory navigationHistory;
 	private java.util.function.Consumer<GLCodeNavigationStatus> navigationStatusListener = value -> { };
 	private java.util.function.Consumer<GLCodeCompletionStatus> completionStatusListener = value -> { };
 	private java.util.function.Consumer<GLCodeSemanticStatus> semanticStatusListener = value -> { };
+	private java.util.function.Consumer<GLCodeOperationStatus> operationStatusListener = value -> { };
 	private boolean insertSingleCompletion = true;
 	private int indentationSize = 4;
 	private Color keywordColor, stringColor, numberColor, commentColor, typeColor;
 	private Color navigationLinkColor;
+	private final java.util.concurrent.CopyOnWriteArrayList<Runnable> editorStateListeners =
+			new java.util.concurrent.CopyOnWriteArrayList<>();
 	private Map<String, Color> semanticColors = Map.of();
 	private final GLPopupMenu codeMenu = new GLPopupMenu();
 	private final GLActionMap codeActions = new GLActionMap();
@@ -131,8 +142,16 @@ public class GLCodeEditor extends GLTextArea {
 	private final GLAction uncommentAction;
 	private final GLAction organizeImportsAction;
 	private final GLAction definitionAction;
+	private final GLAction navigateBackAction;
+	private final GLAction navigateForwardAction;
 	private final GLAction inlayHintsAction;
 	private final GLAction colorFormattingAction;
+	private final GLAction referencesAction;
+	private final GLAction renameAction;
+	private final GLAction quickActionsAction;
+	private final GLPopupMenu quickActionsMenu = new GLPopupMenu();
+	private List<Range> referenceHighlights = List.of();
+	private InlineRenameSession inlineRename;
 
 	public GLCodeEditor() { this(new GLTextDocument(), true); }
 	public GLCodeEditor(String source) { this(new GLTextDocument(source), true); }
@@ -190,12 +209,14 @@ public class GLCodeEditor extends GLTextArea {
 			closeCompletion();
 			clearHover();
 			clearNavigationHover(true);
+			if (inlineRename == null) referenceHighlights = List.of();
 			coreDiagnostics = List.of();
 			providerDiagnostics = List.of();
 			semanticTokens = retainUnaffectedSemanticTokens(semanticTokens, change);
 			documentColors = retainDocumentColors(documentColors, change);
 			inlayHints = retainInlayHints(inlayHints, change);
 			signatureInlayHints = retainInlayHints(signatureInlayHints, change);
+			refreshFoldRanges();
 			invalidateRowLayout();
 			mergeDiagnostics();
 			retokenize();
@@ -219,6 +240,18 @@ public class GLCodeEditor extends GLTextArea {
 				GLInputActions.CODE_GO_TO_DEFINITION)
 				.textKey(GLUiKeys.CODE_GO_TO_DEFINITION)
 				.onAction(this::goToDefinition).build();
+		navigateBackAction = GLAction.builder(GLInputActions.CODE_NAVIGATE_BACK)
+				.textKey(GLUiKeys.CODE_NAVIGATE_BACK)
+				.enabledWhen(() -> navigationHistory != null
+						&& navigationHistory.canNavigateBack()
+						&& currentCodeLocation() != null)
+				.onAction(this::navigateBack).build();
+		navigateForwardAction = GLAction.builder(GLInputActions.CODE_NAVIGATE_FORWARD)
+				.textKey(GLUiKeys.CODE_NAVIGATE_FORWARD)
+				.enabledWhen(() -> navigationHistory != null
+						&& navigationHistory.canNavigateForward()
+						&& currentCodeLocation() != null)
+				.onAction(this::navigateForward).build();
 		inlayHintsAction = GLAction.builder(
 				GLInputActions.CODE_TOGGLE_INLAY_HINTS)
 				.textKey(GLUiKeys.CODE_SHOW_INLAY_HINTS)
@@ -227,11 +260,26 @@ public class GLCodeEditor extends GLTextArea {
 		colorFormattingAction = GLAction.builder("code.color-formatting")
 				.textKey(GLUiKeys.CODE_COLOR_FORMATTING)
 				.onAction(this::showColorFormattingDialog).build();
+		referencesAction = GLAction.builder(GLInputActions.CODE_FIND_REFERENCES)
+				.textKey(GLUiKeys.CODE_FIND_REFERENCES)
+				.enabledWhen(() -> diagnosticSession != null)
+				.onAction(this::findReferences).build();
+		renameAction = GLAction.builder(GLInputActions.CODE_RENAME)
+				.textKey(GLUiKeys.CODE_RENAME).enabledWhen(() -> isEditable()
+						&& diagnosticSession != null)
+				.onAction(this::beginInlineRename).build();
+		quickActionsAction = GLAction.builder(GLInputActions.CODE_ACTIONS)
+				.textKey(GLUiKeys.CODE_ACTIONS)
+				.enabledWhen(() -> diagnosticSession != null)
+				.onAction(this::showCodeActions).build();
 		codeActions.add(formatAction).add(commentAction).add(uncommentAction)
-				.add(organizeImportsAction).add(definitionAction).add(inlayHintsAction)
-				.add(colorFormattingAction);
+				.add(organizeImportsAction).add(definitionAction)
+				.add(navigateBackAction).add(navigateForwardAction).add(inlayHintsAction)
+				.add(colorFormattingAction).add(referencesAction).add(renameAction)
+				.add(quickActionsAction);
 		updateCodeMenuText();
 		retokenize();
+		refreshFoldRanges();
 		if (coreDiagnosticsEnabled) validateSource();
 	}
 	@Override public GLPopupMenu getContextMenu() {
@@ -265,6 +313,9 @@ public class GLCodeEditor extends GLTextArea {
 		if (language.supportsDefinitionNavigation() && diagnosticSession != null) {
 			if (hasGroup) codeMenu.addSeparator();
 			codeMenu.addItem(definitionAction);
+			codeMenu.addItem(referencesAction);
+			codeMenu.addItem(renameAction);
+			codeMenu.addItem(quickActionsAction);
 			hasGroup = true;
 		}
 		if (language.supportsInlayHints() && diagnosticSession != null) {
@@ -273,6 +324,12 @@ public class GLCodeEditor extends GLTextArea {
 			hasGroup = true;
 		}
 		if (hasGroup) codeMenu.addSeparator();
+		if (navigationHistory != null) {
+			codeMenu.addItem(navigateBackAction);
+			codeMenu.addItem(navigateForwardAction);
+			codeMenu.addSeparator();
+		}
+		codeMenu.addItem(goToLineAction());
 		codeMenu.addItem(findAction());
 		codeMenu.addItem(replaceAction());
 	}
@@ -288,8 +345,103 @@ public class GLCodeEditor extends GLTextArea {
 		if (coreDiagnosticsEnabled) validateSource();
 		if (automaticCodeIntelligence) installAutomaticCodeIntelligence();
 		else reopenDiagnosticProvider();
+		fireEditorStateChanged();
+	}
+	/** Adds a listener for language, indentation and diagnostic-state changes. */
+	public final void addEditorStateListener(Runnable listener) {
+		editorStateListeners.addIfAbsent(java.util.Objects.requireNonNull(listener,
+				"Editor state listener"));
+	}
+	public final void removeEditorStateListener(Runnable listener) {
+		editorStateListeners.remove(listener);
+	}
+	private void fireEditorStateChanged() {
+		for (Runnable listener : editorStateListeners) listener.run();
 	}
 	public final List<GLCodeDiagnostic> getDiagnostics() { return diagnostics; }
+	/** Returns structural ranges that can currently be folded. */
+	public final List<GLCodeFoldRange> getFoldRanges() { return foldRanges; }
+	public final boolean isFolded(int startLine) {
+		return collapsedFoldLines.contains(startLine);
+	}
+	/** Toggles the fold beginning at a zero-based logical line. */
+	public final boolean toggleFoldAtLine(int startLine) {
+		if (foldRangeAt(startLine) == null) return false;
+		if (!collapsedFoldLines.remove(startLine)) {
+			collapsedFoldLines.add(startLine);
+			GLCodeFoldRange range = foldRangeAt(startLine);
+			int caretLine = getDocument().getLineOfOffset(getCaretPosition());
+			if (range != null && range.containsHiddenLine(caretLine))
+				setCaretPosition(getDocument().getLineEnd(startLine));
+		}
+		invalidateRowLayout(); invalidateRecording(); repaintGL();
+		return true;
+	}
+	public final void collapseAllFolds() {
+		for (GLCodeFoldRange range : foldRanges) collapsedFoldLines.add(range.startLine());
+		invalidateRowLayout(); invalidateRecording(); repaintGL();
+	}
+	public final void expandAllFolds() {
+		if (collapsedFoldLines.isEmpty()) return;
+		collapsedFoldLines.clear(); invalidateRowLayout(); invalidateRecording(); repaintGL();
+	}
+	private GLCodeFoldRange foldRangeAt(int line) {
+		for (GLCodeFoldRange range : foldRanges) if (range.startLine() == line) return range;
+		return null;
+	}
+	@Override protected boolean isLogicalLineVisible(int logicalLine) {
+		for (GLCodeFoldRange range : foldRanges)
+			if (collapsedFoldLines.contains(range.startLine())
+					&& range.containsHiddenLine(logicalLine)) return false;
+		return true;
+	}
+	private void refreshFoldRanges() {
+		String source = getText();
+		ArrayList<GLCodeFoldRange> ranges = new ArrayList<>();
+		ArrayDeque<Integer> braces = new ArrayDeque<>();
+		boolean string = false, character = false, blockComment = false, escaped = false;
+		int blockCommentLine = -1;
+		int line = 0;
+		for (int index = 0; index < source.length(); index++) {
+			char current = source.charAt(index);
+			char next = index + 1 < source.length() ? source.charAt(index + 1) : 0;
+			if (current == '\n') { line++; escaped = false; continue; }
+			if (blockComment) {
+				if (current == '*' && next == '/') {
+					if (line > blockCommentLine) ranges.add(new GLCodeFoldRange(blockCommentLine, line));
+					blockComment = false; index++;
+				}
+				continue;
+			}
+			if (string || character) {
+				if (escaped) escaped = false;
+				else if (current == '\\') escaped = true;
+				else if (string && current == '"') string = false;
+				else if (character && current == '\'') character = false;
+				continue;
+			}
+			if (current == '/' && next == '/') {
+				while (index + 1 < source.length() && source.charAt(index + 1) != '\n') index++;
+				continue;
+			}
+			if (current == '/' && next == '*') {
+				blockComment = true; blockCommentLine = line; index++; continue;
+			}
+			if (current == '"') { string = true; continue; }
+			if (current == '\'') { character = true; continue; }
+			if (current == '{') braces.push(line);
+			else if (current == '}' && !braces.isEmpty()) {
+				int start = braces.pop();
+				if (line > start) ranges.add(new GLCodeFoldRange(start, line));
+			}
+		}
+		ranges.sort(java.util.Comparator.comparingInt(GLCodeFoldRange::startLine)
+				.thenComparingInt(GLCodeFoldRange::endLine));
+		foldRanges = List.copyOf(ranges);
+		collapsedFoldLines.retainAll(ranges.stream().map(GLCodeFoldRange::startLine)
+				.collect(java.util.stream.Collectors.toSet()));
+		invalidateRowLayout();
+	}
 	/** Returns the latest immutable semantic-token snapshot from the provider. */
 	public final List<GLCodeSemanticToken> getSemanticTokens() { return semanticTokens; }
 	/** Returns the latest immutable source-color snapshot from the provider. */
@@ -328,6 +480,58 @@ public class GLCodeEditor extends GLTextArea {
 		navigationHandler = handler == null ? location -> { } : handler;
 	}
 	public final GLCodeNavigationHandler getNavigationHandler() { return navigationHandler; }
+	public final void setWorkspaceEditHandler(GLCodeWorkspaceEditHandler handler) {
+		workspaceEditHandler = handler == null ? this::applyLocalWorkspaceEdits : handler;
+	}
+	public final GLCodeWorkspaceEditHandler getWorkspaceEditHandler() {
+		return workspaceEditHandler;
+	}
+	/**
+	 * Sets the workspace navigation history shared by related code editors.
+	 * Passing {@code null} disables navigation-history recording for this editor.
+	 */
+	public final void setNavigationHistory(GLCodeNavigationHistory value) {
+		if (navigationHistory == value) return;
+		navigationHistory = value;
+		refreshNavigationActions();
+	}
+	public final GLCodeNavigationHistory getNavigationHistory() {
+		return navigationHistory;
+	}
+	/** Navigates to the preceding recorded source location, if available. */
+	public final boolean navigateBack() {
+		GLCodeLocation current = currentCodeLocation();
+		if (navigationHistory == null || current == null) return false;
+		var target = navigationHistory.navigateBack(current);
+		if (target.isEmpty()) return false;
+		dispatchNavigation(target.get());
+		return true;
+	}
+	/** Navigates to the following recorded source location, if available. */
+	public final boolean navigateForward() {
+		GLCodeLocation current = currentCodeLocation();
+		if (navigationHistory == null || current == null) return false;
+		var target = navigationHistory.navigateForward(current);
+		if (target.isEmpty()) return false;
+		dispatchNavigation(target.get());
+		return true;
+	}
+	@Override public void goToLine(int lineNumber) {
+		if (lineNumber < 1 || lineNumber > getLineCount()) {
+			super.goToLine(lineNumber);
+			return;
+		}
+		GLCodeLocation before = currentCodeLocation();
+		int targetOffset = getDocument().getLineStart(lineNumber - 1);
+		if (before != null && getCaretPosition() != targetOffset
+				&& navigationHistory != null)
+			navigationHistory.recordDeparture(before);
+		super.goToLine(lineNumber);
+	}
+	private void refreshNavigationActions() {
+		navigateBackAction.refreshEnabled();
+		navigateForwardAction.refreshEnabled();
+	}
 	/** Receives request, result and failure states for definition navigation. */
 	public final void setNavigationStatusListener(
 			java.util.function.Consumer<GLCodeNavigationStatus> listener) {
@@ -349,6 +553,11 @@ public class GLCodeEditor extends GLTextArea {
 			java.util.function.Consumer<GLCodeSemanticStatus> listener) {
 		semanticStatusListener = listener == null ? value -> { } : listener;
 	}
+	/** Receives request, result and failure states for references, rename and code actions. */
+	public final void setOperationStatusListener(
+			java.util.function.Consumer<GLCodeOperationStatus> listener) {
+		operationStatusListener = listener == null ? value -> { } : listener;
+	}
 	/** Replaces automatic code intelligence with an explicit provider for one URI. */
 	public final void setDiagnosticProvider(GLCodeDiagnosticProvider provider, URI uri) {
 		if ((provider == null) != (uri == null))
@@ -360,13 +569,19 @@ public class GLCodeEditor extends GLTextArea {
 		providerDiagnostics = List.of();
 		mergeDiagnostics();
 		if (provider != null) openDiagnosticSession();
+		// Provider-backed actions are constructed before a provider is normally
+		// attached. Re-evaluate them here so their shortcuts work immediately;
+		// opening the context menu must not be required to enable them.
+		codeActions.refreshEnabled();
+		fireEditorStateChanged();
 	}
 	/** Disconnects the provider without closing a potentially shared provider. */
 	public final void clearDiagnosticProvider() { setDiagnosticProvider(null, null); }
 	public final int getIndentationSize() { return indentationSize; }
 	public final void setIndentationSize(int value) {
 		if (value < 1) throw new IllegalArgumentException("Indentation size must be positive");
-		indentationSize = value; setTabSize(value);
+		if (indentationSize == value) return;
+		indentationSize = value; setTabSize(value); fireEditorStateChanged();
 	}
 	public final void toggleLineComment() { commentSelection(); }
 	public final void commentSelection() { transformLines(true); }
@@ -403,11 +618,11 @@ public class GLCodeEditor extends GLTextArea {
 				}));
 	}
 	/** Resolves and navigates to the definition at the current caret. */
-	public final void goToDefinition() { requestDefinitions(getCaretPosition()); }
+	public final void goToDefinition() { requestDefinitions(symbolOffset()); }
 	/** Resolves and navigates to an implementation at the current caret. */
 	public final void goToImplementation() {
 		if (diagnosticSession == null || documentUri == null) return;
-		int offset = definitionOffset(getCaretPosition());
+		int offset = symbolOffset();
 		int version = documentVersion;
 		diagnosticSession.implementations(diagnosticDocument(), offset)
 				.whenComplete((locations, failure) -> EventQueue.invokeLater(() -> {
@@ -418,7 +633,293 @@ public class GLCodeEditor extends GLTextArea {
 	}
 	/** Opens the first-level incoming and outgoing call hierarchy at the caret. */
 	public final void openCallHierarchy() {
-		requestCallHierarchy(definitionOffset(getCaretPosition()));
+		requestCallHierarchy(symbolOffset());
+	}
+	/** Finds all provider-known references and opens the selected result. */
+	public final CompletionStage<List<GLCodeReference>> findReferences() {
+		if (diagnosticSession == null || documentUri == null) {
+			operationStatusListener.accept(GLCodeOperationStatus.completed(
+					GLCodeOperationStatus.Operation.REFERENCES, 0));
+			return java.util.concurrent.CompletableFuture.completedFuture(List.of());
+		}
+		operationStatusListener.accept(GLCodeOperationStatus.requesting(
+				GLCodeOperationStatus.Operation.REFERENCES));
+		int version = documentVersion;
+		var stage = diagnosticSession.references(diagnosticDocument(), symbolOffset(), true);
+		stage.whenComplete((references, failure) -> EventQueue.invokeLater(() -> {
+			if (failure != null) {
+				operationStatusListener.accept(GLCodeOperationStatus.failed(
+						GLCodeOperationStatus.Operation.REFERENCES, failure));
+				return;
+			}
+			if (version != documentVersion) return;
+			List<GLCodeReference> result = references == null ? List.of() : references;
+			showReferenceHighlights(result);
+			operationStatusListener.accept(GLCodeOperationStatus.completed(
+					GLCodeOperationStatus.Operation.REFERENCES, result.size()));
+		}));
+		return stage;
+	}
+	/** Requests source actions for the current selection or caret. */
+	public final CompletionStage<List<GLCodeAction>> requestCodeActions() {
+		if (diagnosticSession == null || documentUri == null)
+			return java.util.concurrent.CompletableFuture.completedFuture(List.of());
+		return diagnosticSession.codeActions(diagnosticDocument(), getSelectionStart(),
+				getSelectionEnd());
+	}
+	public final CompletionStage<Boolean> applyCodeAction(GLCodeAction action) {
+		if (action == null) throw new IllegalArgumentException("Code action required");
+		return workspaceEditHandler.apply(action.edits());
+	}
+	/** Requests and applies a language-server rename at the caret. */
+	public final CompletionStage<Boolean> renameSymbol(String newName) {
+		if (diagnosticSession == null || documentUri == null || newName == null
+				|| newName.isBlank()) return java.util.concurrent.CompletableFuture
+					.completedFuture(false);
+		operationStatusListener.accept(GLCodeOperationStatus.requesting(
+				GLCodeOperationStatus.Operation.RENAME));
+		return diagnosticSession.rename(diagnosticDocument(), symbolOffset(), newName)
+				.thenCompose(edits -> {
+			List<GLCodeWorkspaceEdit> result = edits == null ? List.of() : edits;
+			if (result.isEmpty()) {
+				operationStatusListener.accept(GLCodeOperationStatus.completed(
+						GLCodeOperationStatus.Operation.RENAME, 0));
+				return java.util.concurrent.CompletableFuture.completedFuture(false);
+			}
+			return workspaceEditHandler.apply(result).whenComplete((applied, failure) ->
+					EventQueue.invokeLater(() -> operationStatusListener.accept(failure == null
+							&& Boolean.TRUE.equals(applied)
+									? GLCodeOperationStatus.applied(
+											GLCodeOperationStatus.Operation.RENAME,
+											result.size())
+									: failure != null ? GLCodeOperationStatus.failed(
+											GLCodeOperationStatus.Operation.RENAME, failure)
+										: GLCodeOperationStatus.completed(
+											GLCodeOperationStatus.Operation.RENAME, 0))));
+		});
+	}
+	/** Starts a provider-backed inline rename session at the caret. */
+	public final CompletionStage<Boolean> beginInlineRename() {
+		if (!isEditable() || diagnosticSession == null || documentUri == null) {
+			operationStatusListener.accept(GLCodeOperationStatus.completed(
+					GLCodeOperationStatus.Operation.RENAME, 0));
+			return java.util.concurrent.CompletableFuture.completedFuture(false);
+		}
+		operationStatusListener.accept(GLCodeOperationStatus.requesting(
+				GLCodeOperationStatus.Operation.RENAME));
+		int version = documentVersion;
+		int offset = symbolOffset();
+		String originalName = identifierAt(offset);
+		if (originalName.isBlank()) {
+			operationStatusListener.accept(GLCodeOperationStatus.completed(
+					GLCodeOperationStatus.Operation.RENAME, 0));
+			return java.util.concurrent.CompletableFuture.completedFuture(false);
+		}
+		String probeName = originalName + "__GLSwingRenameProbe";
+		var result = new java.util.concurrent.CompletableFuture<Boolean>();
+		// A rename provider is authoritative about the locations it can rename.
+		// References are a separate optional LSP operation and may legitimately
+		// return no result even though textDocument/rename is supported.
+		diagnosticSession.rename(diagnosticDocument(), offset, probeName)
+				.whenComplete((edits, failure) -> EventQueue.invokeLater(() -> {
+					if (failure != null || version != documentVersion || edits == null) {
+						if (failure != null) {
+							operationStatusListener.accept(GLCodeOperationStatus.failed(
+									GLCodeOperationStatus.Operation.RENAME, failure));
+							result.completeExceptionally(failure);
+						}
+						else result.complete(false);
+						return;
+					}
+					List<Range> local = localRenameRanges(edits, originalName, probeName);
+					if (local.isEmpty()) {
+						operationStatusListener.accept(GLCodeOperationStatus.completed(
+								GLCodeOperationStatus.Operation.RENAME, 0));
+						result.complete(false); return;
+					}
+					Range primary = local.stream().filter(range -> offset >= range.start
+							&& offset <= range.end).findFirst().orElse(local.get(0));
+					ArrayList<Range> ordered = new ArrayList<>(); ordered.add(primary);
+					for (Range range : local) if (range != primary) ordered.add(range);
+					inlineRename = new InlineRenameSession(getDocument().snapshot(), primary.start,
+							originalName);
+					referenceHighlights = List.copyOf(local);
+					setCarets(ordered.stream().map(range ->
+							new GLTextCaret(range.start, range.end)).toList());
+					operationStatusListener.accept(GLCodeOperationStatus.completed(
+							GLCodeOperationStatus.Operation.RENAME, local.size()));
+					result.complete(true);
+				}));
+		return result;
+	}
+	public final boolean isInlineRenameActive() { return inlineRename != null; }
+	private void showReferenceHighlights(List<GLCodeReference> references) {
+		referenceHighlights = localReferenceRanges(references);
+		invalidateRecording(); repaintGL();
+	}
+	private List<Range> localReferenceRanges(List<GLCodeReference> references) {
+		if (documentUri == null) return List.of();
+		ArrayList<Range> result = new ArrayList<>();
+		for (GLCodeReference reference : references) {
+			if (!sameDocumentUri(documentUri, reference.uri())
+					|| reference.startLine() != reference.endLine()) continue;
+			int start = offsetAt(reference.startLine(), reference.startCharacter());
+			int end = offsetAt(reference.endLine(), reference.endCharacter());
+			if (end > start) result.add(new Range(start, end));
+		}
+		return result.stream().distinct().sorted(java.util.Comparator
+				.comparingInt(Range::start)).toList();
+	}
+	private List<Range> localRenameRanges(List<GLCodeWorkspaceEdit> edits,
+			String originalName, String probeName) {
+		if (documentUri == null) return List.of();
+		ArrayList<Range> result = new ArrayList<>();
+		for (GLCodeWorkspaceEdit edit : edits) {
+			if (!sameDocumentUri(documentUri, edit.uri())) continue;
+			int start = offsetAt(edit.startLine(), edit.startCharacter());
+			int end = offsetAt(edit.endLine(), edit.endCharacter());
+			if (end <= start) continue;
+			String replaced = getDocument().getText(start, end);
+			List<Integer> originalOccurrences = identifierOccurrences(replaced, originalName);
+			List<Integer> probeOccurrences = identifierOccurrences(edit.text(), probeName);
+			if (!originalOccurrences.isEmpty()
+					&& originalOccurrences.size() == probeOccurrences.size()) {
+				for (int occurrence : originalOccurrences)
+					result.add(new Range(start + occurrence,
+							start + occurrence + originalName.length()));
+			} else if (edit.startLine() == edit.endLine()) {
+				// Providers normally return one edit per occurrence. Preserve that
+				// representation when an unusual replacement cannot be decomposed.
+				result.add(new Range(start, end));
+			}
+		}
+		return result.stream().distinct().sorted(java.util.Comparator
+				.comparingInt(Range::start)).toList();
+	}
+	private static List<Integer> identifierOccurrences(String text, String identifier) {
+		if (identifier.isEmpty()) return List.of();
+		ArrayList<Integer> result = new ArrayList<>();
+		for (int from = 0; from <= text.length() - identifier.length();) {
+			int index = text.indexOf(identifier, from);
+			if (index < 0) break;
+			int end = index + identifier.length();
+			boolean leftBoundary = index == 0
+					|| !Character.isJavaIdentifierPart(text.charAt(index - 1));
+			boolean rightBoundary = end == text.length()
+					|| !Character.isJavaIdentifierPart(text.charAt(end));
+			if (leftBoundary && rightBoundary) result.add(index);
+			from = Math.max(index + 1, end);
+		}
+		return List.copyOf(result);
+	}
+	private static boolean sameDocumentUri(URI first, URI second) {
+		if (first.equals(second)) return true;
+		if (!"file".equalsIgnoreCase(first.getScheme())
+				|| !"file".equalsIgnoreCase(second.getScheme())) return false;
+		try {
+			return java.nio.file.Path.of(first).toAbsolutePath().normalize().equals(
+					java.nio.file.Path.of(second).toAbsolutePath().normalize());
+		} catch (RuntimeException ignored) { return false; }
+	}
+	private void commitInlineRename() {
+		InlineRenameSession session = inlineRename;
+		if (session == null) return;
+		String name = identifierAt(getCaretPosition());
+		inlineRename = null; referenceHighlights = List.of();
+		getDocument().restore(session.before());
+		getEditingHistoryManager().reset();
+		setCaretPosition(Math.min(session.offset(), getDocument().length()));
+		if (!name.isBlank() && !name.equals(session.originalName())) renameSymbol(name);
+	}
+	private void cancelInlineRename() {
+		InlineRenameSession session = inlineRename;
+		if (session == null) return;
+		inlineRename = null; referenceHighlights = List.of();
+		getDocument().restore(session.before());
+		getEditingHistoryManager().reset();
+		setCaretPosition(Math.min(session.offset(), getDocument().length()));
+	}
+	private String identifierAt(int offset) {
+		String source = getText();
+		if (source.isEmpty()) return "";
+		int probe = Math.max(0, Math.min(source.length() - 1,
+				offset == source.length() ? offset - 1 : offset));
+		if (!Character.isJavaIdentifierPart(source.charAt(probe)) && probe > 0) probe--;
+		if (!Character.isJavaIdentifierPart(source.charAt(probe))) return "";
+		int start = probe, end = probe + 1;
+		while (start > 0 && Character.isJavaIdentifierPart(source.charAt(start - 1))) start--;
+		while (end < source.length() && Character.isJavaIdentifierPart(source.charAt(end))) end++;
+		return source.substring(start, end);
+	}
+	private record InlineRenameSession(GLTextDocument.Snapshot before, int offset,
+			String originalName) { }
+	private void showCodeActions() {
+		operationStatusListener.accept(GLCodeOperationStatus.requesting(
+				GLCodeOperationStatus.Operation.CODE_ACTIONS));
+		int version = documentVersion;
+		requestCodeActions().whenComplete((actions, failure) -> EventQueue.invokeLater(() -> {
+			if (failure != null) {
+				operationStatusListener.accept(GLCodeOperationStatus.failed(
+						GLCodeOperationStatus.Operation.CODE_ACTIONS, failure));
+				return;
+			}
+			if (version != documentVersion) return;
+			List<GLCodeAction> availableActions = actions == null ? List.of() : actions;
+			operationStatusListener.accept(GLCodeOperationStatus.completed(
+					GLCodeOperationStatus.Operation.CODE_ACTIONS, availableActions.size()));
+			quickActionsMenu.close(); quickActionsMenu.removeAllItems();
+			for (GLCodeAction action : availableActions) {
+				GLMenuItem item = quickActionsMenu.addItem(action.title(), ignored ->
+						applyCodeAction(action));
+				item.setMnemonicEnabled(false);
+			}
+			if (availableActions.isEmpty()) {
+				GLMenuItem empty = quickActionsMenu.addItem(
+						getGLLocalizer().text("glswing.code.noActions"));
+				empty.setEnabled(false); empty.setMnemonicEnabled(false);
+			}
+			GLParent host = popupHost();
+			if (host != null) {
+				float[] bounds = getLastRenderedScreenBounds();
+				float screenX = lastMouseEvent == null
+						? (bounds == null ? 24 : bounds[0] + 24)
+						: lastMouseEvent.getScreenX();
+				float screenY = lastMouseEvent == null
+						? (bounds == null ? 24 : bounds[1] + 24)
+						: lastMouseEvent.getScreenY();
+				quickActionsMenu.show(host, screenX, screenY);
+			}
+		}));
+	}
+	private CompletionStage<Boolean> applyLocalWorkspaceEdits(
+			List<GLCodeWorkspaceEdit> edits) {
+		if (documentUri == null || edits.stream().anyMatch(edit ->
+				!documentUri.equals(edit.uri()))) return java.util.concurrent
+					.CompletableFuture.completedFuture(false);
+		if (!EventQueue.isDispatchThread()) {
+			java.util.concurrent.CompletableFuture<Boolean> result =
+					new java.util.concurrent.CompletableFuture<>();
+			EventQueue.invokeLater(() -> applyLocalWorkspaceEdits(edits)
+					.whenComplete((changed, failure) -> {
+						if (failure != null) result.completeExceptionally(failure);
+						else result.complete(changed);
+					}));
+			return result;
+		}
+		applyWorkspaceEditsForDocument(edits);
+		return java.util.concurrent.CompletableFuture.completedFuture(true);
+	}
+	void applyWorkspaceEditsForDocument(List<GLCodeWorkspaceEdit> edits) {
+		ArrayList<GLCodeTextEdit> local = new ArrayList<>();
+		for (GLCodeWorkspaceEdit edit : edits) local.add(new GLCodeTextEdit(
+				offsetAt(edit.startLine(), edit.startCharacter()),
+				offsetAt(edit.endLine(), edit.endCharacter()), edit.text()));
+		applyProviderEdits(local);
+	}
+	private int offsetAt(int line, int character) {
+		int boundedLine = Math.max(0, Math.min(getDocument().getLineCount() - 1, line));
+		return Math.min(getDocument().getLineEnd(boundedLine),
+				getDocument().getLineStart(boundedLine) + Math.max(0, character));
 	}
 	private void requestDefinitions(int offset) {
 		if (diagnosticSession == null || documentUri == null) {
@@ -451,6 +952,31 @@ public class GLCodeEditor extends GLTextArea {
 				|| !Character.isJavaIdentifierPart(source.charAt(offset)))
 				&& Character.isJavaIdentifierPart(source.charAt(offset - 1))) return offset - 1;
 		return offset;
+	}
+	/** Resolves a stable position inside the selected/caret identifier token. */
+	private int symbolOffset() {
+		String source = getText();
+		if (source.isEmpty()) return 0;
+		int start = getSelectionStart(), end = getSelectionEnd();
+		int probe = -1;
+		if (start < end) {
+			for (int offset = start; offset < end && offset < source.length(); offset++)
+				if (Character.isJavaIdentifierPart(source.charAt(offset))) {
+					probe = offset;
+					break;
+				}
+		}
+		if (probe < 0) probe = definitionOffset(getCaretPosition());
+		if (probe < 0 || probe >= source.length()
+				|| !Character.isJavaIdentifierPart(source.charAt(probe))) return probe;
+		int tokenStart = probe, tokenEnd = probe + 1;
+		while (tokenStart > 0
+				&& Character.isJavaIdentifierPart(source.charAt(tokenStart - 1))) tokenStart--;
+		while (tokenEnd < source.length()
+				&& Character.isJavaIdentifierPart(source.charAt(tokenEnd))) tokenEnd++;
+		// Some providers, including JDT LS for local-variable rename, treat the
+		// token's left boundary differently from a position within the token.
+		return tokenStart + (tokenEnd - tokenStart) / 2;
 	}
 	private boolean requestNavigationHover(
 			com.vingame.glswing.input.GLMouseEvent event) {
@@ -642,6 +1168,12 @@ public class GLCodeEditor extends GLTextArea {
 	}
 	private void navigateTo(GLCodeLocation location) {
 		definitionMenu.close();
+		GLCodeLocation current = currentCodeLocation();
+		if (navigationHistory != null && current != null && !current.equals(location))
+			navigationHistory.recordDeparture(current);
+		dispatchNavigation(location);
+	}
+	private void dispatchNavigation(GLCodeLocation location) {
 		if (documentUri != null && documentUri.equals(location.uri())
 				&& location.line() < getDocument().getLineCount()) {
 			int start = getDocument().getLineStart(location.line());
@@ -651,6 +1183,12 @@ public class GLCodeEditor extends GLTextArea {
 			return;
 		}
 		navigationHandler.navigate(location);
+	}
+	private GLCodeLocation currentCodeLocation() {
+		if (documentUri == null) return null;
+		int line = getDocument().getLineOfOffset(getCaretPosition());
+		return new GLCodeLocation(documentUri, line,
+				getCaretPosition() - getDocument().getLineStart(line));
 	}
 	private void applyProviderEdits(List<GLCodeTextEdit> edits) {
 		ArrayList<TextReplacement> replacements = new ArrayList<>();
@@ -770,6 +1308,19 @@ public class GLCodeEditor extends GLTextArea {
 	}
 
 	@Override protected void controlKeyPressed(GLKeyEvent event) {
+		if (inlineRename != null) {
+			if (event.getKeyCode() == KeyEvent.VK_ESCAPE) {
+				cancelInlineRename(); event.consume(); return;
+			}
+			if (event.getKeyCode() == KeyEvent.VK_ENTER) {
+				commitInlineRename(); event.consume(); return;
+			}
+		}
+		if (inlineRename == null && !referenceHighlights.isEmpty()
+				&& event.getKeyCode() == KeyEvent.VK_ESCAPE) {
+			referenceHighlights = List.of(); invalidateRecording();
+			event.consume(); return;
+		}
 		if ((event.getKeyCode() == KeyEvent.VK_CONTROL
 				|| event.getKeyCode() == KeyEvent.VK_META)
 				&& lastMouseEvent != null) {
@@ -799,6 +1350,7 @@ public class GLCodeEditor extends GLTextArea {
 			event.consume();
 			return;
 		}
+		refreshNavigationActions();
 		if (codeActions.handleKeyPressed(event, getGLInputMap(), this)) return;
 		if (event.getKeyCode() == KeyEvent.VK_ENTER && isEditable()) {
 			int caret = getCaretPosition();
@@ -878,6 +1430,33 @@ public class GLCodeEditor extends GLTextArea {
 		int digits = Integer.toString(Math.max(1, getDocument().getLineCount())).length();
 		return getGLStyle().font().measurementFont().measureText("9".repeat(digits)) + 18;
 	}
+	@Override protected void caretSetChanged() {
+		if (inlineRename == null) return;
+		referenceHighlights = getCarets().stream()
+				.map(value -> new Range(value.start(), Math.max(value.start() + 1,
+						value.end())))
+				.filter(value -> value.end <= getDocument().length()).toList();
+		invalidateRecording();
+	}
+	@Override protected void drawRowBackgroundDecorations(GLContext2D context,
+			GLFont font, int rowStart, int rowEnd, float x, float top,
+			float lineHeight, float available) {
+		if (referenceHighlights.isEmpty()) return;
+		Color color = getGLTheme().values().getColor(
+				inlineRename == null ? "codeEditor.referenceMatch"
+						: "codeEditor.renameMatch",
+				inlineRename == null ? new Color(72, 118, 168, 80)
+						: new Color(64, 132, 214, 105));
+		for (Range range : referenceHighlights) {
+			int start = Math.max(rowStart, range.start);
+			int end = Math.min(rowEnd, range.end);
+			if (end <= start) continue;
+			float left = x + measureRange(rowStart, start);
+			float right = x + measureRange(rowStart, end);
+			context.fillUIRoundRect(left, top + 1, Math.max(1, right - left),
+					Math.max(1, lineHeight - 2), 2, color);
+		}
+	}
 	@Override protected void selectWordAt(int offset) {
 		String source = getText();
 		if (source.isEmpty()) return;
@@ -912,10 +1491,12 @@ public class GLCodeEditor extends GLTextArea {
 				new Color(0, 0, 0, 28));
 		float lineHeight = font.getLineHeight();
 		int first = Math.max(0, (int) Math.floor(getVerticalScrollOffset() / lineHeight));
-		int last = Math.min(getDocument().getLineCount(), first
+		int last = Math.min(visualRowCount(), first
 				+ (int) Math.ceil(getHeight() / lineHeight) + 2);
-		for (int line = first; line < last; line++) {
-			float baseline = padding.top() + line * lineHeight - getVerticalScrollOffset() + font.getAscent();
+		for (int row = first; row < last; row++) {
+			int line = logicalLineAtVisualRow(row);
+			if (line < 0) continue;
+			float baseline = padding.top() + row * lineHeight - getVerticalScrollOffset() + font.getAscent();
 			if (baseline >= padding.top() && baseline <= getHeight() - padding.bottom() + lineHeight) {
 				GLCodeDiagnostic diagnostic = diagnosticForLine(line);
 				if (diagnostic != null)
@@ -927,7 +1508,23 @@ public class GLCodeEditor extends GLTextArea {
 				context.drawUIText(font, number,
 						padding.left() + width - font.measureText(number) - 5,
 						baseline, new Color(145, 145, 145));
+				GLCodeFoldRange fold = foldRangeAt(line);
+				if (fold != null) drawFoldMarker(context, padding.left() + 7,
+						baseline - font.getAscent() + lineHeight / 2,
+						collapsedFoldLines.contains(line));
 			}
+		}
+	}
+	private void drawFoldMarker(GLContext2D context, float x, float y,
+			boolean collapsed) {
+		Color color = getGLTheme().values().getColor("codeEditor.foldMarker",
+				new Color(150, 150, 150));
+		if (collapsed) {
+			context.drawUILine(x - 2, y - 3, x + 2, y, color);
+			context.drawUILine(x + 2, y, x - 2, y + 3, color);
+		} else {
+			context.drawUILine(x - 3, y - 2, x, y + 2, color);
+			context.drawUILine(x, y + 2, x + 3, y - 2, color);
 		}
 	}
 	@Override protected void drawTextDecorations(GLContext2D context, GLFont font,
@@ -1059,6 +1656,13 @@ public class GLCodeEditor extends GLTextArea {
 		return super.toolTipTextAt(event);
 	}
 	@Override protected void controlMousePressed(com.vingame.glswing.input.GLMouseEvent event) {
+		if (inlineRename != null) cancelInlineRename();
+		if (event.getButton() == java.awt.event.MouseEvent.BUTTON1
+				&& foldMarkerAt(event) >= 0) {
+			toggleFoldAtLine(foldMarkerAt(event));
+			event.consume();
+			return;
+		}
 		GLCodeColor sourceColor = colorPreviewAt(event);
 		if (event.getButton() == java.awt.event.MouseEvent.BUTTON1 && sourceColor != null) {
 			super.controlMousePressed(event);
@@ -1176,8 +1780,9 @@ public class GLCodeEditor extends GLTextArea {
 			return overviewDiagnosticAt(event.getLocalY(), true);
 		GLInsets padding = getGLStyle().padding();
 		if (event.getLocalX() < padding.left() + leadingTextInset()) {
-			int line = (int) Math.floor((event.getLocalY() - padding.top()
+			int row = (int) Math.floor((event.getLocalY() - padding.top()
 					+ getVerticalScrollOffset()) / fontLineHeight());
+			int line = logicalLineAtVisualRow(row);
 			return diagnosticForLine(line);
 		}
 		int offset = positionAt(event.getLocalX(), event.getLocalY());
@@ -1194,8 +1799,9 @@ public class GLCodeEditor extends GLTextArea {
 		GLInsets padding = getGLStyle().padding();
 		GLFont font = getGLStyle().font().measurementFont();
 		float lineHeight = font.getLineHeight();
-		int line = (int) Math.floor((event.getLocalY() - padding.top()
+		int row = (int) Math.floor((event.getLocalY() - padding.top()
 				+ getVerticalScrollOffset()) / lineHeight);
+		int line = logicalLineAtVisualRow(row);
 		if (line < 0 || line >= getDocument().getLineCount()) return null;
 		int lineStart = getDocument().getLineStart(line);
 		int lineEnd = getDocument().getLineEnd(line);
@@ -1210,6 +1816,16 @@ public class GLCodeEditor extends GLTextArea {
 					&& event.getLocalY() >= y && event.getLocalY() <= y + size) return color;
 		}
 		return null;
+	}
+	private int foldMarkerAt(com.vingame.glswing.input.GLMouseEvent event) {
+		if (!event.hasLocalPosition()) return -1;
+		GLInsets padding = getGLStyle().padding();
+		if (event.getLocalX() < padding.left() + 1
+				|| event.getLocalX() > padding.left() + 14) return -1;
+		int row = (int) Math.floor((event.getLocalY() - padding.top()
+				+ getVerticalScrollOffset()) / fontLineHeight());
+		int line = logicalLineAtVisualRow(row);
+		return foldRangeAt(line) == null ? -1 : line;
 	}
 	private static String colorDescription(Color color) {
 		String hex = color.getAlpha() == 255
@@ -1410,6 +2026,7 @@ public class GLCodeEditor extends GLTextArea {
 		providerDiagnostics = List.of();
 		mergeDiagnostics();
 		if (diagnosticProvider != null && documentUri != null) openDiagnosticSession();
+		codeActions.refreshEnabled();
 	}
 	private void openDiagnosticSession() {
 		GLCodeDocument snapshot = diagnosticDocument();
@@ -1647,6 +2264,7 @@ public class GLCodeEditor extends GLTextArea {
 		merged.sort(java.util.Comparator.comparingInt(GLCodeDiagnostic::start));
 		diagnostics = List.copyOf(merged);
 		invalidateRecording();
+		fireEditorStateChanged();
 	}
 	private void requestSemanticTokens() {
 		if (diagnosticSession == null || documentUri == null) return;

@@ -14,6 +14,7 @@ import com.vingame.glswing.ui.GLCodeDiagnosticProvider;
 import com.vingame.glswing.ui.GLCodeDocument;
 import com.vingame.glswing.ui.GLCodeLanguages;
 import com.vingame.glswing.ui.GLCodeLocation;
+import com.vingame.glswing.ui.GLCodeNavigationHistory;
 import com.vingame.glswing.ui.GLCodeSignature;
 import com.vingame.glswing.ui.GLCodeToken;
 import com.vingame.glswing.ui.GLThemes;
@@ -21,6 +22,7 @@ import com.vingame.glswing.ui.GLThemes;
 public final class GLCodeEditorSelfTest {
 	private GLCodeEditorSelfTest() { }
 	public static void main(String[] args) {
+		testNavigationHistory();
 		String largeSource = "public final class LibraryType { int value = 42; }\n".repeat(2_500);
 		long constructionStarted = System.nanoTime();
 		GLCodeEditor sourceViewer = new GLCodeEditor(largeSource, false);
@@ -39,6 +41,15 @@ public final class GLCodeEditorSelfTest {
 		GLCodeEditor invalid = new GLCodeEditor("if (ready] {");
 		check(!invalid.getDiagnostics().isEmpty(),
 				"Code editor did not publish structural language diagnostics");
+		GLCodeEditor folding = new GLCodeEditor(
+				"class Fold {\n  void run() {\n    call();\n  }\n}\n");
+		check(folding.getFoldRanges().stream()
+				.anyMatch(range -> range.startLine() == 1 && range.endLine() == 3),
+				"Code editor did not discover a nested structural fold");
+		check(folding.toggleFoldAtLine(1) && folding.isFolded(1),
+				"Code editor did not collapse a discovered fold");
+		folding.expandAllFolds();
+		check(!folding.isFolded(1), "Code editor did not expand folded ranges");
 		OverviewEditor overview = new OverviewEditor("// one\n// two\nif (ready] {");
 		overview.setBounds(0, 0, 400, 200);
 		int overviewTarget = overview.getDiagnostics().get(0).start();
@@ -169,6 +180,40 @@ public final class GLCodeEditorSelfTest {
 				"Code editor retained dark-theme control colors under the light theme");
 		System.out.println("GL code editor self-test passed.");
 	}
+	private static void testNavigationHistory() {
+		URI uri = URI.create("file:///Navigation.java");
+		GLCodeEditor editor = new GLCodeEditor("one\ntwo\nthree\nfour", uri);
+		GLCodeNavigationHistory history = new GLCodeNavigationHistory(3);
+		editor.setNavigationHistory(history);
+		editor.setCaretPosition(editor.getDocument().getLineStart(1) + 2);
+		editor.goToLine(4);
+		check(history.canNavigateBack(),
+				"Go to Line did not record the departed source position");
+		press(editor, KeyEvent.VK_LEFT, KeyEvent.CHAR_UNDEFINED,
+				InputEvent.ALT_DOWN_MASK);
+		check(editor.getDocument().getLineOfOffset(editor.getCaretPosition()) == 1
+				&& editor.getCaretPosition() - editor.getDocument().getLineStart(1) == 2,
+				"Backward shortcut did not restore the precise caret position");
+		press(editor, KeyEvent.VK_RIGHT, KeyEvent.CHAR_UNDEFINED,
+				InputEvent.ALT_DOWN_MASK);
+		check(editor.getDocument().getLineOfOffset(editor.getCaretPosition()) == 3,
+				"Forward shortcut did not restore the line-navigation target");
+		GLCodeLocation first = new GLCodeLocation(uri, 0, 0);
+		GLCodeLocation second = new GLCodeLocation(uri, 1, 0);
+		GLCodeLocation third = new GLCodeLocation(uri, 2, 0);
+		history.clear();
+		history.recordDeparture(first);
+		history.recordDeparture(second);
+		check(history.navigateBack(third).orElseThrow().equals(second),
+				"Navigation history returned the wrong preceding location");
+		check(history.navigateBack(second).orElseThrow().equals(first),
+				"Navigation history lost an older location");
+		check(history.navigateForward(first).orElseThrow().equals(second),
+				"Navigation history returned the wrong following location");
+		history.recordDeparture(third);
+		check(!history.canNavigateForward(),
+				"A new navigation did not clear the forward branch");
+	}
 	@SuppressWarnings("unchecked")
 	private static void testExternalDiagnostics() {
 		java.util.function.Consumer<GLCodeDiagnosticProvider.Result>[] publish = new java.util.function.Consumer[1];
@@ -196,6 +241,37 @@ public final class GLCodeEditorSelfTest {
 						definitions(GLCodeDocument value, int offset) {
 					return java.util.concurrent.CompletableFuture.completedFuture(java.util.List.of(
 							new GLCodeLocation(URI.create("file:///project/Target.java"), 2, 4)));
+				}
+				@Override public java.util.concurrent.CompletionStage<java.util.List<
+						com.vingame.glswing.ui.GLCodeReference>> references(
+						GLCodeDocument value, int offset, boolean includeDeclaration) {
+					java.util.ArrayList<com.vingame.glswing.ui.GLCodeReference> result =
+							new java.util.ArrayList<>();
+					int from = 0;
+					while ((from = value.text().indexOf("value", from)) >= 0) {
+						result.add(new com.vingame.glswing.ui.GLCodeReference(value.uri(), 0,
+								from, 0, from + 5));
+						from += 5;
+					}
+					return java.util.concurrent.CompletableFuture.completedFuture(result);
+				}
+				@Override public java.util.concurrent.CompletionStage<java.util.List<
+						com.vingame.glswing.ui.GLCodeWorkspaceEdit>> rename(
+						GLCodeDocument value, int offset, String newName) {
+					if (value.uri().getPath().endsWith("BundledRename.java"))
+						return java.util.concurrent.CompletableFuture.completedFuture(
+								java.util.List.of(new com.vingame.glswing.ui.GLCodeWorkspaceEdit(
+										value.uri(), 0, 4, 0, 17,
+										newName + " = " + newName)));
+					java.util.ArrayList<com.vingame.glswing.ui.GLCodeWorkspaceEdit> result =
+							new java.util.ArrayList<>();
+					int from = 0;
+					while ((from = value.text().indexOf("value", from)) >= 0) {
+						result.add(new com.vingame.glswing.ui.GLCodeWorkspaceEdit(value.uri(),
+								0, from, 0, from + 5, newName));
+						from += 5;
+					}
+					return java.util.concurrent.CompletableFuture.completedFuture(result);
 				}
 				@Override public java.util.concurrent.CompletionStage<java.util.List<GLCodeSignature>>
 						signatureHelp(GLCodeDocument value, int offset, Character trigger) {
@@ -235,11 +311,26 @@ public final class GLCodeEditorSelfTest {
 				status.state() == com.vingame.glswing.ui.GLCodeSemanticStatus.State.AVAILABLE
 				&& status.tokenCount() == 1);
 		editor.setDiagnosticProvider(provider, URI.create("file:///project/Test.java"));
+		java.util.function.Consumer<GLCodeDiagnosticProvider.Result> editorDiagnostics =
+				publish[0];
+		GLCodeEditor shortcutRename = new GLCodeEditor("int value = value;");
+		shortcutRename.setDiagnosticProvider(provider,
+				URI.create("file:///project/ShortcutRename.java"));
+		shortcutRename.setCaretPosition(6);
+		press(shortcutRename, KeyEvent.VK_F2, KeyEvent.CHAR_UNDEFINED);
+		flushEvents();
+		check(shortcutRename.isInlineRenameActive(),
+				"Rename shortcut stayed disabled after attaching a provider");
+		press(shortcutRename, KeyEvent.VK_ESCAPE, KeyEvent.CHAR_UNDEFINED);
+		shortcutRename.clearDiagnosticProvider();
 		var menuActions = editor.getContextMenu().getItems().stream()
 				.map(item -> item.getAction().id()).toList();
 		check(menuActions.contains(com.vingame.glswing.input.GLInputActions.CODE_ORGANIZE_IMPORTS)
 				&& menuActions.contains(com.vingame.glswing.input.GLInputActions.CODE_GO_TO_DEFINITION)
-				&& menuActions.contains(com.vingame.glswing.input.GLInputActions.CODE_TOGGLE_INLAY_HINTS),
+				&& menuActions.contains(com.vingame.glswing.input.GLInputActions.CODE_TOGGLE_INLAY_HINTS)
+				&& menuActions.contains(com.vingame.glswing.input.GLInputActions.CODE_FIND_REFERENCES)
+				&& menuActions.contains(com.vingame.glswing.input.GLInputActions.CODE_RENAME)
+				&& menuActions.contains(com.vingame.glswing.input.GLInputActions.CODE_ACTIONS),
 				"Provider-backed Java actions were not exposed: " + menuActions);
 		var hintsItem = editor.getContextMenu().getItems().stream()
 				.filter(item -> item.getAction().id().equals(
@@ -263,6 +354,31 @@ public final class GLCodeEditorSelfTest {
 				"Code editor did not retain provider inlay hints");
 		check(editor.getDocumentColors().size() == 1,
 				"Code editor did not retain provider document colors");
+		GLCodeEditor inlineRename = new GLCodeEditor("int value = value;");
+		inlineRename.setDiagnosticProvider(provider,
+				URI.create("file:///project/Rename.java"));
+		inlineRename.setCaretPosition(6);
+		inlineRename.beginInlineRename().toCompletableFuture().join();
+		check(inlineRename.isInlineRenameActive() && inlineRename.getCarets().size() == 2,
+				"Inline rename did not select every local reference");
+		type(inlineRename, 'n'); type(inlineRename, 'e');
+		check(inlineRename.getText().equals("int ne = ne;"),
+				"Inline rename did not mirror edits at every reference");
+		press(inlineRename, KeyEvent.VK_ENTER, '\n');
+		flushEvents();
+		check(!inlineRename.isInlineRenameActive()
+				&& inlineRename.getText().equals("int ne = ne;"),
+				"Inline rename did not commit the provider rename on Enter");
+		inlineRename.clearDiagnosticProvider();
+		GLCodeEditor bundledRename = new GLCodeEditor("int value = value;");
+		bundledRename.setDiagnosticProvider(provider,
+				URI.create("file:///project/BundledRename.java"));
+		bundledRename.setCaretPosition(6);
+		bundledRename.beginInlineRename().toCompletableFuture().join();
+		check(bundledRename.isInlineRenameActive()
+				&& bundledRename.getCarets().size() == 2,
+				"Inline rename did not split a provider's bundled multi-occurrence edit");
+		bundledRename.clearDiagnosticProvider();
 		editor.getDocument().insert(editor.getText().length(), " ");
 		check(editor.getSemanticTokens().size() == 1
 				&& editor.getSemanticTokens().get(0).start() == 4,
@@ -291,7 +407,7 @@ public final class GLCodeEditorSelfTest {
 				"Editing a color field discarded its last valid preview during debounce");
 		int initialVersion = latest[0].version();
 		editor.setText("int changed;");
-		publish[0].accept(new GLCodeDiagnosticProvider.Result(initialVersion,
+		editorDiagnostics.accept(new GLCodeDiagnosticProvider.Result(initialVersion,
 				java.util.List.of(new GLCodeDiagnostic(0, 3, GLCodeDiagnostic.Severity.ERROR,
 						"stale"))));
 		flushEvents();
@@ -306,7 +422,7 @@ public final class GLCodeEditorSelfTest {
 				"Undo did not revert the complete completion transaction");
 		check(editor.getDiagnostics().stream().noneMatch(value -> value.message().equals("stale")),
 				"Code editor accepted diagnostics for an obsolete document version");
-		publish[0].accept(new GLCodeDiagnosticProvider.Result(latest[0].version(),
+		editorDiagnostics.accept(new GLCodeDiagnosticProvider.Result(latest[0].version(),
 				java.util.List.of(new GLCodeDiagnostic(0, 3, GLCodeDiagnostic.Severity.WARNING,
 						"server warning"))));
 		flushEvents();

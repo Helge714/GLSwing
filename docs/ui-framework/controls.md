@@ -587,6 +587,12 @@ the surrounding border and clips its content; applications that need an inset
 should add a layout container as the tab content or override
 `tabbedPane.contentPadding` in the theme.
 
+`setContentHeader(...)` installs an optional shared component directly below
+the tab strip and above the selected content. Its preferred height is reserved
+automatically while it is visible. This is suitable for editor search bars,
+breadcrumbs, and other controls that belong to the complete tab set rather
+than to one document.
+
 Closable tabs are opt-in through `setTabsClosable(true)`. Closing a tab is a
 navigation operation and is deliberately separate from document undo/redo.
 Applications can enable a bounded recently-closed history with

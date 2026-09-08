@@ -27,6 +27,8 @@ public final class GLTabbedPane extends GLContainer {
 			new CopyOnWriteArrayList<>();
 	private final Host contentHost = new Host();
 	private final Host tabHost = new Host();
+	private GLContainer contentHeader;
+	private GLContainer contentFooter;
 	private final GLScrollBar tabScrollBar =
 			new GLScrollBar(GLScrollBar.Orientation.HORIZONTAL);
 	private GLTabbedPaneStyle localStyle;
@@ -55,6 +57,7 @@ public final class GLTabbedPane extends GLContainer {
 		Tab tab = new Tab(title, content);
 		tabs.add(tab);
 		contentHost.addGL(content);
+		bringContentChromeToFront();
 		tabHost.addGL(tab.button);
 		if (selectedIndex < 0)
 			selectedIndex = 0;
@@ -186,6 +189,7 @@ public final class GLTabbedPane extends GLContainer {
 		Tab tab = new Tab(closed.title, closed.content);
 		tabs.add(index, tab);
 		contentHost.addGL(tab.content);
+		bringContentChromeToFront();
 		tabHost.addGL(tab.button);
 		int old = selectedIndex;
 		selectedIndex = index;
@@ -200,6 +204,46 @@ public final class GLTabbedPane extends GLContainer {
 	public GLContainer getSelectedComponent() {
 		return selectedIndex < 0 ? null : tabs.get(selectedIndex).content;
 	}
+	/** Returns the optional component displayed above the selected tab content. */
+	public GLContainer getContentHeader() { return contentHeader; }
+	/**
+	 * Installs a shared component between the tab strip and selected content.
+	 * Its preferred height is reserved without changing tab identity.
+	 */
+	public void setContentHeader(GLContainer header) {
+		if (contentHeader != header) {
+			if (contentHeader != null) contentHost.removeGL(contentHeader);
+			contentHeader = header;
+			if (header != null) contentHost.addGL(header);
+		}
+		updatePreferredSize();
+		layoutTabs();
+	}
+	/** Returns the optional component displayed below the selected tab content. */
+	public GLContainer getContentFooter() { return contentFooter; }
+	/**
+	 * Installs a shared component below the selected tab content. Its preferred
+	 * height is reserved without changing tab identity.
+	 */
+	public void setContentFooter(GLContainer footer) {
+		if (contentFooter != footer) {
+			if (contentFooter != null) contentHost.removeGL(contentFooter);
+			contentFooter = footer;
+			if (footer != null) contentHost.addGL(footer);
+		}
+		updatePreferredSize();
+		layoutTabs();
+	}
+	private void bringContentChromeToFront() {
+		if (contentHeader != null) {
+			contentHost.removeGL(contentHeader);
+			contentHost.addGL(contentHeader);
+		}
+		if (contentFooter != null) {
+			contentHost.removeGL(contentFooter);
+			contentHost.addGL(contentFooter);
+		}
+	}
 	public GLContainer getComponentAt(int index) { return tab(index).content; }
 	/** Replaces a tab's content without changing its title, position, or selection. */
 	public void setComponentAt(int index, GLContainer content) {
@@ -210,6 +254,7 @@ public final class GLTabbedPane extends GLContainer {
 		contentHost.removeGL(tab.content);
 		tab.content = content;
 		contentHost.addGL(content);
+		bringContentChromeToFront();
 		updateVisibility();
 		updatePreferredSize();
 		layoutTabs();
@@ -395,10 +440,25 @@ public final class GLTabbedPane extends GLContainer {
 			contentHost.setBounds(border, contentY,
 					Math.max(0, getWidth() - border * 2), contentHeight);
 			GLInsets padding = style.contentPadding();
-			for (Tab tab : tabs)
-				tab.content.setBounds(padding.left(), padding.top(),
+			float headerHeight = contentHeader != null && contentHeader.isVisible()
+					? contentHeader.getPreferredGLSize().height() : 0;
+			float footerHeight = contentFooter != null && contentFooter.isVisible()
+					? contentFooter.getPreferredGLSize().height() : 0;
+			if (contentHeader != null)
+				contentHeader.setBounds(padding.left(), padding.top(),
 						Math.max(0, contentHost.getWidth() - padding.horizontal()),
-						Math.max(0, contentHost.getHeight() - padding.vertical()));
+						headerHeight);
+			if (contentFooter != null)
+				contentFooter.setBounds(padding.left(),
+						Math.max(padding.top() + headerHeight,
+								contentHost.getHeight() - padding.bottom() - footerHeight),
+						Math.max(0, contentHost.getWidth() - padding.horizontal()),
+						footerHeight);
+			for (Tab tab : tabs)
+				tab.content.setBounds(padding.left(), padding.top() + headerHeight,
+						Math.max(0, contentHost.getWidth() - padding.horizontal()),
+						Math.max(0, contentHost.getHeight() - padding.vertical()
+								- headerHeight - footerHeight));
 			float contentRadius = Math.max(0, layoutCornerRadius(style.cornerRadius()) - layoutBorderWidth(style.borderWidth()));
 			GLCornerRadii contentRadii = new GLCornerRadii(0, 0,
 					contentRadius, contentRadius);
@@ -472,7 +532,10 @@ public final class GLTabbedPane extends GLContainer {
 
 	private void updatePreferredSize() {
 		GLTabbedPaneStyle style = getGLStyle();
-		float width = 0;
+		float width = contentHeader == null || !contentHeader.isVisible() ? 0
+				: contentHeader.getPreferredGLSize().width();
+		if (contentFooter != null && contentFooter.isVisible())
+			width = Math.max(width, contentFooter.getPreferredGLSize().width());
 		float height = 0;
 		for (Tab tab : tabs) {
 			GLSize preferred = tab.content.getPreferredGLSize();
@@ -483,6 +546,10 @@ public final class GLTabbedPane extends GLContainer {
 				Math.max(240, width + style.contentPadding().horizontal()
 						+ layoutBorderWidth(style.borderWidth()) * 2),
 				Math.max(160, height + style.contentPadding().vertical()
+						+ (contentHeader != null && contentHeader.isVisible()
+								? contentHeader.getPreferredGLSize().height() : 0)
+						+ (contentFooter != null && contentFooter.isVisible()
+								? contentFooter.getPreferredGLSize().height() : 0)
 						+ style.tabHeight() + layoutBorderWidth(style.borderWidth()) * 2)));
 	}
 
