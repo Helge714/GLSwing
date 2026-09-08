@@ -291,6 +291,11 @@ its transient match highlights. Toolbar and menu actions can call `showFind()`,
 `showReplace()`, `findNext()`, `findPrevious()`, `replaceCurrent()`, and
 `replaceAll()` directly.
 
+The tabbed workspace clips each document, content header, and content footer to
+its allocated layout area. Editor rendering therefore cannot overlap the
+Find/Replace bar or status line, including during partial repaints and while
+scrolling.
+
 The status line reports the one-based line and column, selection length,
 language ID, indentation width, error/warning totals, and whether external code
 intelligence or only Core analysis is active. It never guesses file encoding or
@@ -309,6 +314,10 @@ It closes its tab controller and, when constructed without an external
 monospaced font, disables soft wrapping, displays line numbers, continues the
 current indentation on Enter, adds one indentation level after an opening
 brace, and inserts matching brackets and quotes around the caret.
+Its gutter uses separate columns for diagnostics, fold markers, and
+right-aligned line numbers. The line-number column expands automatically when
+the document crosses a decimal digit boundary, without allowing markers to
+overlap the numbers or one another.
 Typing a closing bracket or quote when the same automatically generated
 character is already at the caret advances over it instead of inserting a
 duplicate. Pressing Enter between a generated `{}` pair expands it into a

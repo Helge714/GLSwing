@@ -1427,9 +1427,21 @@ public class GLCodeEditor extends GLTextArea {
 		else if (event.getKeyChar() == ')') closeSignatureHelp();
 	}
 	@Override protected float leadingTextInset() {
-		int digits = Integer.toString(Math.max(1, getDocument().getLineCount())).length();
-		return getGLStyle().font().measurementFont().measureText("9".repeat(digits)) + 18;
+		return gutterLayout(getGLStyle().font().measurementFont()).width();
 	}
+	private GutterLayout gutterLayout(GLFont font) {
+		int digits = Integer.toString(
+				Math.max(1, getDocument().getLineCount())).length();
+		float numberWidth = font.measureText("9".repeat(digits));
+		float diagnosticX = 2;
+		float foldCenterX = 12;
+		float numberRight = 20 + numberWidth;
+		return new GutterLayout(numberRight + 6, diagnosticX, foldCenterX,
+				numberRight, foldCenterX - 5, foldCenterX + 5);
+	}
+	private record GutterLayout(float width, float diagnosticX,
+			float foldCenterX, float numberRight, float foldHitLeft,
+			float foldHitRight) { }
 	@Override protected void caretSetChanged() {
 		if (inlineRename == null) return;
 		referenceHighlights = getCarets().stream()
@@ -1483,7 +1495,8 @@ public class GLCodeEditor extends GLTextArea {
 		select(start, end);
 	}
 	@Override protected void drawLeadingDecoration(GLContext2D context, GLFont font, GLInsets padding) {
-		float width = leadingTextInset() - 6;
+		GutterLayout gutter = gutterLayout(font);
+		float width = gutter.width();
 		float height = Math.max(0, getHeight() - padding.vertical());
 		float bottomLeft = Math.max(0, containerRadii().bottomLeft() - padding.left());
 		context.fillUIRoundRect(padding.left(), padding.top(), width, height,
@@ -1500,16 +1513,18 @@ public class GLCodeEditor extends GLTextArea {
 			if (baseline >= padding.top() && baseline <= getHeight() - padding.bottom() + lineHeight) {
 				GLCodeDiagnostic diagnostic = diagnosticForLine(line);
 				if (diagnostic != null)
-					context.fillUIRoundRect(padding.left() + 2,
+					context.fillUIRoundRect(padding.left() + gutter.diagnosticX(),
 							baseline - font.getAscent() + 2, 3,
 							Math.max(3, lineHeight - 4), 1.5f,
 							diagnosticColor(diagnostic));
 				String number = Integer.toString(line + 1);
 				context.drawUIText(font, number,
-						padding.left() + width - font.measureText(number) - 5,
+						padding.left() + gutter.numberRight()
+								- font.measureText(number),
 						baseline, new Color(145, 145, 145));
 				GLCodeFoldRange fold = foldRangeAt(line);
-				if (fold != null) drawFoldMarker(context, padding.left() + 7,
+				if (fold != null) drawFoldMarker(context,
+						padding.left() + gutter.foldCenterX(),
 						baseline - font.getAscent() + lineHeight / 2,
 						collapsedFoldLines.contains(line));
 			}
@@ -1719,7 +1734,8 @@ public class GLCodeEditor extends GLTextArea {
 		navigationPointerController.clearCursor(colorPreviewCursorOwner);
 		if (diagnosticSession != null && event.hasLocalPosition()
 				&& navigationModifier(event.getModifiersEx())
-				&& !isOverviewRuler(event.getLocalX()) && diagnosticAt(event) == null) {
+				&& !isOverviewRuler(event.getLocalX()) && diagnosticAt(event) == null
+				&& foldMarkerAt(event) < 0) {
 			hoverTimer.stop();
 			GLToolTipManager.leave(this);
 			if (requestNavigationHover(event)) return;
@@ -1820,8 +1836,11 @@ public class GLCodeEditor extends GLTextArea {
 	private int foldMarkerAt(com.vingame.glswing.input.GLMouseEvent event) {
 		if (!event.hasLocalPosition()) return -1;
 		GLInsets padding = getGLStyle().padding();
-		if (event.getLocalX() < padding.left() + 1
-				|| event.getLocalX() > padding.left() + 14) return -1;
+		GutterLayout gutter = gutterLayout(
+				getGLStyle().font().measurementFont());
+		if (event.getLocalX() < padding.left() + gutter.foldHitLeft()
+				|| event.getLocalX() > padding.left() + gutter.foldHitRight())
+			return -1;
 		int row = (int) Math.floor((event.getLocalY() - padding.top()
 				+ getVerticalScrollOffset()) / fontLineHeight());
 		int line = logicalLineAtVisualRow(row);

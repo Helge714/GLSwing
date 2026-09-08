@@ -25,7 +25,7 @@ public final class GLTabbedPane extends GLContainer {
 			new CopyOnWriteArrayList<>();
 	private final CopyOnWriteArrayList<GLTabCloseListener> closeListeners =
 			new CopyOnWriteArrayList<>();
-	private final Host contentHost = new Host();
+	private final ContentHost contentHost = new ContentHost();
 	private final Host tabHost = new Host();
 	private GLContainer contentHeader;
 	private GLContainer contentFooter;
@@ -738,5 +738,24 @@ public final class GLTabbedPane extends GLContainer {
 	private static final class Host extends GLContainer {
 		@Override protected void record(GLContext2D context) { }
 		@Override protected boolean isMouseTargetEnabled() { return false; }
+	}
+
+	/** Keeps tab content, shared headers and footers inside their layout slots. */
+	private static final class ContentHost extends GLContainer {
+		@Override protected void record(GLContext2D context) { }
+		@Override protected boolean isMouseTargetEnabled() { return false; }
+		@Override protected void renderChildren(GLContext2D context) {
+			for (GLContainer child : getGLChildrenInPaintOrder()) {
+				if (!child.isVisible() || child.getWidth() <= 0 || child.getHeight() <= 0)
+					continue;
+				context.beginClip(child.getX(), child.getY(),
+						child.getWidth(), child.getHeight());
+				try {
+					child.renderComponent(context);
+				} finally {
+					context.endClip();
+				}
+			}
+		}
 	}
 }

@@ -63,6 +63,10 @@ may change in subsequent `0.x` releases.
   ordered behind an asynchronous press resolution.
 - Code workspaces now include an active-editor status line for caret position,
   selection length, language, indentation, diagnostics, and tooling state.
+- Code-editor gutters reserve independent diagnostic, folding, and right-aligned
+  line-number columns. The number column grows with the document's digit count,
+  while tab content is clipped to its assigned area so it cannot draw through
+  shared Find/Replace or status bars.
 - Code editors now support structural folding, multiple carets, rectangular
   selection, provider-backed references, workspace-wide rename edits, and
   source code actions. The LSP adapter maps the corresponding standard

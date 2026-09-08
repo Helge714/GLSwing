@@ -777,8 +777,11 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 	}
 	@Override protected void controlMouseMoved(GLMouseEvent event) {
 		if (!event.hasLocalPosition()) return;
-		pointerController.setCursor(this, event.getLocalX() >= trailingDecorationX()
-						? GLPointerCursor.DEFAULT : GLPointerCursor.TEXT);
+		float textStart = getGLStyle().padding().left() + leadingTextInset();
+		boolean outsideText = event.getLocalX() < textStart
+				|| event.getLocalX() >= trailingDecorationX();
+		pointerController.setCursor(this, outsideText
+				? GLPointerCursor.DEFAULT : GLPointerCursor.TEXT);
 	}
 	@Override protected void controlMouseReleased(GLMouseEvent event) { selecting = false; draggingScrollBar = false; columnAnchor = null; }
 	@Override protected void controlMouseClicked(GLMouseEvent event) {

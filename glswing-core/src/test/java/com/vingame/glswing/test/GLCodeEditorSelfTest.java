@@ -4,9 +4,14 @@ import java.awt.Canvas;
 import java.awt.EventQueue;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
+import java.awt.event.MouseEvent;
 import java.net.URI;
 
 import com.vingame.glswing.input.GLKeyEvent;
+import com.vingame.glswing.input.GLMouseEvent;
+import com.vingame.glswing.input.GLPickResult;
+import com.vingame.glswing.input.GLPointerController;
+import com.vingame.glswing.input.GLPointerCursor;
 import com.vingame.glswing.ui.GLCodeEditor;
 import com.vingame.glswing.ui.GLCodeCompletion;
 import com.vingame.glswing.ui.GLCodeDiagnostic;
@@ -50,6 +55,25 @@ public final class GLCodeEditorSelfTest {
 				"Code editor did not collapse a discovered fold");
 		folding.expandAllFolds();
 		check(!folding.isFolded(1), "Code editor did not expand folded ranges");
+		GutterEditor shortGutter = new GutterEditor("line");
+		GutterEditor longGutter = new GutterEditor("line\n".repeat(1_000));
+		float digitWidth = shortGutter.getGLStyle().font().measurementFont()
+				.measureText("9");
+		check(shortGutter.gutterWidth() > digitWidth + 24,
+				"Code gutter did not reserve separate diagnostic and folding columns");
+		check(longGutter.gutterWidth() > shortGutter.gutterWidth() + digitWidth * 2,
+				"Code gutter did not grow with the line-number digit count");
+		RecordingPointerController pointer = new RecordingPointerController();
+		shortGutter.setBounds(0, 0, 320, 120);
+		float contentLeft = shortGutter.getGLStyle().padding().left();
+		movePointer(shortGutter, pointer,
+				contentLeft + shortGutter.gutterWidth() / 2);
+		check(pointer.cursor == GLPointerCursor.DEFAULT,
+				"Code gutter exposed the text cursor over its folding controls");
+		movePointer(shortGutter, pointer,
+				contentLeft + shortGutter.gutterWidth() + 12);
+		check(pointer.cursor == GLPointerCursor.TEXT,
+				"Code text viewport did not restore the text cursor");
 		OverviewEditor overview = new OverviewEditor("// one\n// two\nif (ready] {");
 		overview.setBounds(0, 0, 400, 200);
 		int overviewTarget = overview.getDiagnostics().get(0).start();
@@ -471,6 +495,27 @@ public final class GLCodeEditorSelfTest {
 	private static final class OverviewEditor extends GLCodeEditor {
 		private OverviewEditor(String source) { super(source); }
 		private void jumpFromOverview(float y) { trailingDecorationPressed(y); }
+	}
+	private static final class GutterEditor extends GLCodeEditor {
+		private GutterEditor(String source) { super(source); }
+		private float gutterWidth() { return leadingTextInset(); }
+	}
+	private static void movePointer(GutterEditor editor,
+			RecordingPointerController pointer, float x) {
+		MouseEvent original = new MouseEvent(new Canvas(), MouseEvent.MOUSE_MOVED,
+				System.currentTimeMillis(), 0, Math.round(x), 12, 0, false);
+		GLPickResult pick = new GLPickResult(1, editor, x, 12, x, 12,
+				1, 0, 0, 1, 0, 0);
+		editor.mouseEntered(new GLMouseEvent(original, pick, 0, 0, null, pointer));
+	}
+	private static final class RecordingPointerController
+			implements GLPointerController {
+		private GLPointerCursor cursor;
+		@Override public boolean isAvailable() { return true; }
+		@Override public void setCursor(Object owner, GLPointerCursor value) {
+			cursor = value;
+		}
+		@Override public void clearCursor(Object owner) { cursor = null; }
 	}
 	private static void check(boolean condition, String message) {
 		if (!condition) throw new AssertionError(message);
