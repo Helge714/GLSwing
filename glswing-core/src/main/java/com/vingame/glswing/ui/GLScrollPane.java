@@ -3,6 +3,8 @@ package com.vingame.glswing.ui;
 import java.awt.event.InputEvent;
 import java.awt.event.MouseWheelEvent;
 
+import javax.accessibility.AccessibleRole;
+
 import com.vingame.glswing.component.GLContainer;
 import com.vingame.glswing.input.GLMouseWheelEvent;
 import com.vingame.glswing.input.GLInputActions;
@@ -38,6 +40,7 @@ public final class GLScrollPane extends GLContainer {
 	}
 
 	public GLScrollPane(GLContainer content) {
+		viewport.setAccessibilityTransparent(true);
 		addGL(viewport);
 		addGL(verticalBar);
 		addGL(horizontalBar);
@@ -47,6 +50,10 @@ public final class GLScrollPane extends GLContainer {
 				applyContentPosition());
 		setIntrinsicPreferredGLSize(new GLSize(280, 190));
 		setContent(content);
+	}
+
+	@Override protected AccessibleRole defaultAccessibleRole() {
+		return AccessibleRole.SCROLL_PANE;
 	}
 
 	public GLContainer getContent() { return content; }

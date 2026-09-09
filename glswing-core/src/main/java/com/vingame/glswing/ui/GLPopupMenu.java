@@ -15,6 +15,8 @@ import java.util.Set;
 import java.util.WeakHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+import javax.accessibility.AccessibleRole;
+
 import com.vingame.glswing.component.GLContainer;
 import com.vingame.glswing.component.GLParent;
 import com.vingame.glswing.input.GLMouseEvent;
@@ -93,6 +95,10 @@ public class GLPopupMenu extends GLContainer {
 		leftFade = new MenuHorizontalFadeOverlay(this, true);
 		rightFade = new MenuHorizontalFadeOverlay(this, false);
 		titleView = new MenuTitle(this);
+		topFade.setAccessibilityEnabled(false);
+		bottomFade.setAccessibilityEnabled(false);
+		leftFade.setAccessibilityEnabled(false);
+		rightFade.setAccessibilityEnabled(false);
 		addGL(scrollBar);
 		addGL(horizontalScrollBar);
 		addGL(topFade);
@@ -108,6 +114,22 @@ public class GLPopupMenu extends GLContainer {
 		rightFade.setVisible(false);
 		titleView.setVisible(false);
 		updateShadowOverflow();
+	}
+
+	@Override protected AccessibleRole defaultAccessibleRole() {
+		return AccessibleRole.POPUP_MENU;
+	}
+	@Override protected List<GLContainer> accessibleChildrenInOrder() {
+		List<GLContainer> result = new ArrayList<>();
+		if (titleView.isAccessibilityEnabled() && titleView.isVisible())
+			result.add(titleView);
+		for (GLContainer row : rows)
+			if (row.isAccessibilityEnabled() && row.isVisible()) result.add(row);
+		if (scrollBar.isAccessibilityEnabled() && scrollBar.isVisible())
+			result.add(scrollBar);
+		if (horizontalScrollBar.isAccessibilityEnabled()
+				&& horizontalScrollBar.isVisible()) result.add(horizontalScrollBar);
+		return result;
 	}
 
 	public final GLMenuItem addItem(String text) {
@@ -214,6 +236,7 @@ public class GLPopupMenu extends GLContainer {
 		if (isShowing())
 			throw new IllegalStateException("Close a menu before changing its rows");
 		MenuSeparator separator = new MenuSeparator(this);
+		separator.setAccessibilityEnabled(false);
 		rows.add(separator);
 		addGL(separator);
 		invalidateMenuLayout();
@@ -278,7 +301,9 @@ public class GLPopupMenu extends GLContainer {
 			throw new IllegalArgumentException("Popup title must not be null");
 		if (this.title.equals(title))
 			return;
+		String previous = this.title;
 		this.title = title;
+		titleView.fireTitleChanged(previous, title);
 		titleView.invalidateRecording();
 		invalidateMenuLayout();
 	}
@@ -1049,6 +1074,14 @@ public class GLPopupMenu extends GLContainer {
 			this.menu = menu;
 		}
 
+		@Override protected String defaultName() { return menu.title; }
+		@Override protected AccessibleRole defaultAccessibleRole() {
+			return AccessibleRole.LABEL;
+		}
+		private void fireTitleChanged(String oldTitle, String newTitle) {
+			fireAccessibleNameChange(oldTitle, newTitle);
+		}
+
 		@Override
 		protected void record(GLContext2D context) {
 			float width = getWidth();
@@ -1422,6 +1455,7 @@ public class GLPopupMenu extends GLContainer {
 
 		private DismissLayer(MenuSession session) {
 			this.session = session;
+			setAccessibilityEnabled(false);
 		}
 
 		@Override
@@ -1839,6 +1873,7 @@ public class GLPopupMenu extends GLContainer {
 
 	/** Cancels transforms left behind by the host before the popup tree begins. */
 	private static final class SessionOverlay extends GLContainer {
+		private SessionOverlay() { setAccessibilityTransparent(true); }
 		@Override
 		protected void record(GLContext2D context) {
 		}
@@ -1860,6 +1895,7 @@ public class GLPopupMenu extends GLContainer {
 
 		private MenuOverlay(ComboAnchor comboAnchor) {
 			this.comboAnchor = comboAnchor;
+			setAccessibilityTransparent(true);
 		}
 
 		@Override

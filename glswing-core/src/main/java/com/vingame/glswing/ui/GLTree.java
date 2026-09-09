@@ -80,7 +80,16 @@ public final class GLTree<T> extends GLContainer {
 		this(new GLDefaultTreeModel<>(roots));
 	}
 	public GLTree(GLTreeModel<T> model) {
+		scrollPane.setAccessibilityTransparent(true);
+		list.setAccessibilityTransparent(true);
 		list.setCellRenderer(this::renderRow);
+		list.setItemAccessibleRole(AccessibleRole.LIST_ITEM);
+		list.setItemAccessibleNameProvider(row -> itemTextProvider.apply(row.value()));
+		list.setItemAccessibleStateProvider((row, states) -> {
+			if (!row.leaf()) states.add(isExpanded(row.value())
+					? javax.accessibility.AccessibleState.EXPANDED
+					: javax.accessibility.AccessibleState.COLLAPSED);
+		});
 		list.setItemToolTipProvider((source, row, index, width) -> {
 			String text = itemTextProvider.apply(row.value());
 			GLListStyle style = list.getGLStyle();
@@ -161,7 +170,9 @@ public final class GLTree<T> extends GLContainer {
 	}
 	public void setItemTextProvider(Function<? super T, String> provider) {
 		if (provider == null) throw new IllegalArgumentException("Text provider required");
-		itemTextProvider = provider; list.setCellRenderer(this::renderRow);
+		itemTextProvider = provider;
+		list.setItemAccessibleNameProvider(row -> itemTextProvider.apply(row.value()));
+		list.setCellRenderer(this::renderRow);
 	}
 	/** Supplies an optional icon drawn between the disclosure and node text. */
 	public void setItemIconProvider(Function<? super T, GLIcon> provider) {

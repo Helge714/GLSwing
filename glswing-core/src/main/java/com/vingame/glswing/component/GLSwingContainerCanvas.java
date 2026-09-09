@@ -77,14 +77,10 @@ public abstract class GLSwingContainerCanvas extends GLSwingCanvas
 			return AccessibleRole.CANVAS;
 		}
 		@Override public int getAccessibleChildrenCount() {
-			return (int) glChildren.snapshot().stream()
-					.filter(child -> child.isAccessibilityEnabled()
-							&& child.isVisible()).count();
+			return accessibleRootChildren().size();
 		}
 		@Override public Accessible getAccessibleChild(int index) {
-			List<GLContainer> children = glChildren.snapshot().stream()
-					.filter(child -> child.isAccessibilityEnabled()
-							&& child.isVisible()).toList();
+			List<GLContainer> children = accessibleRootChildren();
 			return index < 0 || index >= children.size() ? null : children.get(index);
 		}
 		@Override public Accessible getAccessibleAt(Point point) {
@@ -95,10 +91,18 @@ public abstract class GLSwingContainerCanvas extends GLSwingCanvas
 				if (!child.isAccessibilityEnabled() || !child.isVisible()) continue;
 				if (point.x >= child.getX() && point.y >= child.getY()
 						&& point.x < child.getX() + child.getWidth()
-						&& point.y < child.getY() + child.getHeight())
-					return child;
+						&& point.y < child.getY() + child.getHeight()) {
+					if (!child.isAccessibilityTransparent()) return child;
+					Accessible descendant = child.accessibleAt(new Point(
+							Math.round(point.x - child.getX()),
+							Math.round(point.y - child.getY())));
+					if (descendant != null) return descendant;
+				}
 			}
 			return null;
+		}
+		private List<GLContainer> accessibleRootChildren() {
+			return GLContainer.accessibleChildrenOf(GLSwingContainerCanvas.this);
 		}
 	}
 

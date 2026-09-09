@@ -9,6 +9,11 @@ import java.awt.event.KeyEvent;
 import java.beans.PropertyChangeListener;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+import javax.accessibility.AccessibleAction;
+import javax.accessibility.AccessibleRole;
+import javax.accessibility.AccessibleState;
+import javax.accessibility.AccessibleStateSet;
+
 import com.vingame.glswing.input.GLMouseEvent;
 import com.vingame.glswing.input.GLMouseWheelEvent;
 import com.vingame.glswing.layout.GLSize;
@@ -81,6 +86,7 @@ public class GLMenuItem extends GLControl {
 			return;
 		String previous = this.text;
 		this.text = text;
+		fireAccessibleNameChange(previous, text);
 		if (ownerMenu != null)
 			ownerMenu.updateMnemonics();
 		else
@@ -259,6 +265,29 @@ public class GLMenuItem extends GLControl {
 			return;
 		}
 		activate();
+	}
+
+	@Override protected String defaultName() { return text; }
+	@Override protected AccessibleRole defaultAccessibleRole() {
+		return AccessibleRole.MENU_ITEM;
+	}
+	@Override protected void collectAccessibleStates(AccessibleStateSet states) {
+		if (keyboardSelected) states.add(AccessibleState.SELECTED);
+		if (action != null && action.isSelectable() && action.isSelected())
+			states.add(AccessibleState.CHECKED);
+		if (subMenu != null)
+			states.add(subMenu.isShowing() ? AccessibleState.EXPANDED
+					: AccessibleState.COLLAPSED);
+	}
+	@Override protected int accessibleActionCount() { return 1; }
+	@Override protected String accessibleActionDescription(int index) {
+		return index == 0 ? (subMenu == null ? AccessibleAction.CLICK
+				: AccessibleAction.TOGGLE_EXPAND) : null;
+	}
+	@Override protected boolean performAccessibleAction(int index) {
+		if (index != 0 || !isEnabled()) return false;
+		doClick();
+		return true;
 	}
 
 	@Override
@@ -507,6 +536,7 @@ public class GLMenuItem extends GLControl {
 	final void setKeyboardSelected(boolean selected) {
 		if (keyboardSelected == selected) return;
 		keyboardSelected = selected;
+		fireAccessibleStateChange(AccessibleState.SELECTED, selected);
 		updateColors();
 	}
 

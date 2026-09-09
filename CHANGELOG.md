@@ -60,6 +60,9 @@ may change in subsequent `0.x` releases.
   numeric values. Standard buttons, check boxes, combo boxes, sliders, text
   controls, lists, trees, labels, and tab panes provide appropriate defaults;
   custom controls can override the same semantic hooks.
+  Menus, individual tabs, virtualized list rows, tree branches, scroll panes,
+  and scroll bars expose their own semantics. Layout-only containers can be
+  flattened without hiding meaningful descendants.
 
 - Pointer clicks now complete directly from the retained press target when the
   button is released within that control. This removes missed actions caused

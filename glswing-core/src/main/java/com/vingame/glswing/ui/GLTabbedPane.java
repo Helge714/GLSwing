@@ -9,6 +9,9 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 
 import javax.accessibility.AccessibleRole;
+import javax.accessibility.AccessibleAction;
+import javax.accessibility.AccessibleState;
+import javax.accessibility.AccessibleStateSet;
 
 import com.vingame.glswing.component.GLContainer;
 import com.vingame.glswing.input.GLMouseEvent;
@@ -46,6 +49,8 @@ public final class GLTabbedPane extends GLContainer {
 	private GLTabCloseRequestHandler closeRequestHandler;
 
 	public GLTabbedPane() {
+		contentHost.setAccessibilityTransparent(true);
+		tabHost.setAccessibilityTransparent(true);
 		addGL(contentHost);
 		addGL(tabHost);
 		addGL(tabScrollBar);
@@ -54,6 +59,22 @@ public final class GLTabbedPane extends GLContainer {
 	}
 	@Override protected AccessibleRole defaultAccessibleRole() {
 		return AccessibleRole.PAGE_TAB_LIST;
+	}
+	@Override protected List<GLContainer> accessibleChildrenInOrder() {
+		List<GLContainer> result = new ArrayList<>();
+		for (Tab tab : tabs)
+			if (tab.button.isAccessibilityEnabled() && tab.button.isVisible())
+				result.add(tab.button);
+		if (tabScrollBar.isAccessibilityEnabled() && tabScrollBar.isVisible())
+			result.add(tabScrollBar);
+		if (contentHeader != null && contentHeader.isAccessibilityEnabled()
+				&& contentHeader.isVisible()) result.add(contentHeader);
+		GLContainer selected = getSelectedComponent();
+		if (selected != null && selected.isAccessibilityEnabled()
+				&& selected.isVisible()) result.add(selected);
+		if (contentFooter != null && contentFooter.isAccessibilityEnabled()
+				&& contentFooter.isVisible()) result.add(contentFooter);
+		return result;
 	}
 
 	public int addTab(String title, GLContainer content) {
@@ -74,6 +95,7 @@ public final class GLTabbedPane extends GLContainer {
 
 	public void removeTabAt(int index) {
 		checkIndex(index);
+		Tab previouslySelected = selectedIndex < 0 ? null : tabs.get(selectedIndex);
 		Tab removed = tabs.remove(index);
 		if (closedTabHistoryEnabled) {
 			closedTabs.addFirst(new ClosedTab(removed.title, removed.content, index));
@@ -93,7 +115,7 @@ public final class GLTabbedPane extends GLContainer {
 		updatePreferredSize();
 		layoutTabs();
 		if (old != selectedIndex || index == old)
-			fireSelectionChanged(old);
+			fireSelectionChanged(old, previouslySelected);
 		for (GLTabCloseListener listener : closeListeners)
 			listener.tabClosed(this, index, removed.title, removed.content);
 	}
@@ -144,6 +166,7 @@ public final class GLTabbedPane extends GLContainer {
 
 	public void removeAllTabs() {
 		int old = selectedIndex;
+		Tab previouslySelected = selectedIndex < 0 ? null : tabs.get(selectedIndex);
 		for (Tab tab : List.copyOf(tabs)) {
 			tab.content.setConnectedShape(this, null);
 			contentHost.removeGL(tab.content);
@@ -154,7 +177,7 @@ public final class GLTabbedPane extends GLContainer {
 		updatePreferredSize();
 		layoutTabs();
 		if (old != -1)
-			fireSelectionChanged(old);
+			fireSelectionChanged(old, previouslySelected);
 	}
 
 	public int getTabCount() { return tabs.size(); }
@@ -190,6 +213,7 @@ public final class GLTabbedPane extends GLContainer {
 		return false;
 	}
 	private boolean restore(ClosedTab closed) {
+		Tab previouslySelected = selectedIndex < 0 ? null : tabs.get(selectedIndex);
 		int index = Math.min(closed.index, tabs.size());
 		Tab tab = new Tab(closed.title, closed.content);
 		tabs.add(index, tab);
@@ -202,7 +226,7 @@ public final class GLTabbedPane extends GLContainer {
 		updatePreferredSize();
 		layoutTabs();
 		ensureSelectedTabVisible();
-		fireSelectionChanged(old);
+		fireSelectionChanged(old, previouslySelected);
 		return true;
 	}
 	public int getSelectedIndex() { return selectedIndex; }
@@ -278,7 +302,9 @@ public final class GLTabbedPane extends GLContainer {
 		Tab tab = tab(index);
 		if (tab.title.equals(title))
 			return;
+		String previous = tab.title;
 		tab.title = title;
+		tab.button.titleChanged(previous, title);
 		tab.button.invalidateRecording();
 		updatePreferredSize();
 		layoutTabs();
@@ -568,6 +594,16 @@ public final class GLTabbedPane extends GLContainer {
 	}
 
 	private void fireSelectionChanged(int oldIndex) {
+		Tab oldTab = oldIndex >= 0 && oldIndex < tabs.size()
+				? tabs.get(oldIndex) : null;
+		fireSelectionChanged(oldIndex, oldTab);
+	}
+
+	private void fireSelectionChanged(int oldIndex, Tab oldTab) {
+		if (oldTab != null)
+			oldTab.button.selectionChanged(false);
+		if (selectedIndex >= 0 && selectedIndex < tabs.size())
+			tabs.get(selectedIndex).button.selectionChanged(true);
 		for (GLTabSelectionListener listener : listeners)
 			listener.selectionChanged(this, oldIndex, selectedIndex);
 	}
@@ -612,6 +648,25 @@ public final class GLTabbedPane extends GLContainer {
 			closeOthersItem = closeMenu.addItem("", event -> closeOtherTabs());
 			closeMenu.addSeparator();
 			reopenClosedItem = closeMenu.addItem("", event -> reopenLastClosedTab());
+		}
+
+		@Override protected String defaultName() { return tab.title; }
+		@Override protected AccessibleRole defaultAccessibleRole() {
+			return AccessibleRole.PAGE_TAB;
+		}
+		@Override protected void collectAccessibleStates(AccessibleStateSet states) {
+			if (tabs.indexOf(tab) == selectedIndex)
+				states.add(AccessibleState.SELECTED);
+		}
+		@Override protected int accessibleActionCount() { return 1; }
+		@Override protected String accessibleActionDescription(int index) {
+			return index == 0 ? AccessibleAction.CLICK : null;
+		}
+		@Override protected boolean performAccessibleAction(int index) {
+			int tabIndex = tabs.indexOf(tab);
+			if (index != 0 || tabIndex < 0 || !isEnabled()) return false;
+			setSelectedIndex(tabIndex);
+			return true;
 		}
 
 		@Override
@@ -724,6 +779,12 @@ public final class GLTabbedPane extends GLContainer {
 		}
 		private void closeOtherTabs() {
 			closeNextOtherTab(tab);
+		}
+		private void titleChanged(String oldTitle, String newTitle) {
+			fireAccessibleNameChange(oldTitle, newTitle);
+		}
+		private void selectionChanged(boolean selected) {
+			fireAccessibleStateChange(AccessibleState.SELECTED, selected);
 		}
 		private void closeNextOtherTab(Tab retained) {
 			int target = -1;

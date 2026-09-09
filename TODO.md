@@ -31,3 +31,10 @@ Items are removed when completed or intentionally rejected.
 - Develop a reusable UI material system that preserves efficient batching.
 - Add and benchmark GPU interpolation in `SRGB`, `LINEAR_RGB`, `OKLAB`, `HSV`,
   and `OKLCH`, including gamut handling and custom-shader compatibility.
+
+## Release validation
+
+- Validate the complete accessibility workflow on Windows with Java Access
+  Walker and at least one production screen reader such as NVDA. Cover menu,
+  tab, list, tree, text, focus, selection, expansion, scrolling, and disabled
+  control behavior before the public release.

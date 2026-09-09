@@ -31,6 +31,12 @@ Standard controls publish roles and their relevant dynamic state:
 | `GLList<T>` | List, including multiselectable state where configured |
 | `GLTree<T>` | Tree |
 | `GLTabbedPane` | Page-tab list |
+| Menu controls | Menu bar, menu, popup menu, and actionable menu items |
+| `GLScrollPane` and `GLScrollBar` | Scroll pane plus oriented, readable, and writable scroll values |
+
+Individual tabs expose their title, selected state, and selection action.
+Visible virtualized list rows expose list-item names, selected state, and a
+selection action. Tree branches add their expanded or collapsed state.
 
 Enabled, visible, showing, focusable, and focused states are derived from the
 live component. Accessibility actions use the same public control operations as
@@ -61,6 +67,12 @@ their descendants:
 separator.setAccessibilityEnabled(false);
 ```
 
+For an implementation-only layout wrapper whose descendants must remain
+accessible, use `setAccessibilityTransparent(true)`. The wrapper is omitted
+and its semantic descendants are promoted to the nearest exposed ancestor.
+Their reported coordinates are adjusted accordingly. Standard tab hosts,
+scroll viewports, and popup overlays use this mechanism.
+
 Do not hide an interactive control solely because it has no visible text;
 provide an accessible name instead.
 
@@ -80,6 +92,10 @@ Reusable control subclasses can override `defaultAccessibleRole()`,
 numeric `accessible...Value()` hooks. State and value mutations should call
 `fireAccessibleStateChange(...)` or `fireAccessibleValueChange(...)` so active
 assistive technology receives an immediate update.
+
+Custom list renderers can use `setItemAccessibleNameProvider(...)`,
+`setItemAccessibleRole(...)`, and `setItemAccessibleStateProvider(...)` to keep
+row semantics independent of their visual renderer.
 
 ## Keyboard access
 

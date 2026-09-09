@@ -6,6 +6,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import javax.accessibility.AccessibleRole;
+
 import com.vingame.glswing.component.GLContainer;
 import com.vingame.glswing.component.GLParent;
 import com.vingame.glswing.input.GLPickResult;
@@ -22,6 +24,10 @@ public final class GLMenuBar extends GLContainer implements GLPopupMenuListener 
 
 	public GLMenuBar() {
 		updatePresentation();
+	}
+
+	@Override protected AccessibleRole defaultAccessibleRole() {
+		return AccessibleRole.MENU_BAR;
 	}
 
 	public GLMenuBarItem addMenu(String text, GLPopupMenu menu) {

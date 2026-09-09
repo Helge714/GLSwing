@@ -4,6 +4,11 @@ import java.awt.Color;
 import java.awt.event.MouseEvent;
 import java.awt.event.KeyEvent;
 
+import javax.accessibility.AccessibleAction;
+import javax.accessibility.AccessibleRole;
+import javax.accessibility.AccessibleState;
+import javax.accessibility.AccessibleStateSet;
+
 import com.vingame.glswing.input.GLMouseEvent;
 import com.vingame.glswing.layout.GLSize;
 import com.vingame.glswing.rendering.GLContext2D;
@@ -47,7 +52,9 @@ public final class GLMenuBarItem extends GLControl {
 		text = displayText(text);
 		if (this.text.equals(text))
 			return;
+		String previous = this.text;
 		this.text = text;
+		fireAccessibleNameChange(previous, text);
 		if (owner != null)
 			owner.updateMnemonics();
 		else
@@ -154,6 +161,23 @@ public final class GLMenuBarItem extends GLControl {
 		return active;
 	}
 
+	@Override protected String defaultName() { return text; }
+	@Override protected AccessibleRole defaultAccessibleRole() {
+		return AccessibleRole.MENU;
+	}
+	@Override protected void collectAccessibleStates(AccessibleStateSet states) {
+		states.add(active ? AccessibleState.EXPANDED : AccessibleState.COLLAPSED);
+	}
+	@Override protected int accessibleActionCount() { return 1; }
+	@Override protected String accessibleActionDescription(int index) {
+		return index == 0 ? AccessibleAction.TOGGLE_EXPAND : null;
+	}
+	@Override protected boolean performAccessibleAction(int index) {
+		if (index != 0 || !isEnabled()) return false;
+		doClick();
+		return true;
+	}
+
 	public void doClick() {
 		if (isEnabled() && owner != null)
 			owner.itemClicked(this);
@@ -248,6 +272,8 @@ public final class GLMenuBarItem extends GLControl {
 		if (this.active == active)
 			return;
 		this.active = active;
+		fireAccessibleStateChange(AccessibleState.EXPANDED, active);
+		fireAccessibleStateChange(AccessibleState.COLLAPSED, !active);
 		updateColors();
 	}
 

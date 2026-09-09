@@ -4,6 +4,10 @@ import java.awt.Color;
 import java.awt.event.MouseEvent;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+import javax.accessibility.AccessibleRole;
+import javax.accessibility.AccessibleState;
+import javax.accessibility.AccessibleStateSet;
+
 import com.vingame.glswing.input.GLMouseEvent;
 import com.vingame.glswing.input.GLMouseWheelEvent;
 import com.vingame.glswing.layout.GLSize;
@@ -33,6 +37,21 @@ public final class GLScrollBar extends GLControl {
 	}
 
 	public Orientation getOrientation() { return orientation; }
+	@Override protected AccessibleRole defaultAccessibleRole() {
+		return AccessibleRole.SCROLL_BAR;
+	}
+	@Override protected void collectAccessibleStates(AccessibleStateSet states) {
+		states.add(orientation == Orientation.HORIZONTAL
+				? AccessibleState.HORIZONTAL : AccessibleState.VERTICAL);
+	}
+	@Override protected Number accessibleCurrentValue() { return value; }
+	@Override protected boolean setAccessibleCurrentValue(Number next) {
+		if (next == null || !Float.isFinite(next.floatValue())) return false;
+		setValue(next.floatValue());
+		return true;
+	}
+	@Override protected Number accessibleMinimumValue() { return 0f; }
+	@Override protected Number accessibleMaximumValue() { return getMaximumValue(); }
 	public float getValue() { return value; }
 	public float getExtent() { return extent; }
 	public float getMaximum() { return maximum; }
@@ -54,8 +73,10 @@ public final class GLScrollBar extends GLControl {
 				&& Float.compare(oldMaximum, this.maximum) == 0)
 			return;
 		invalidateRecording();
-		if (Float.compare(oldValue, this.value) != 0)
+		if (Float.compare(oldValue, this.value) != 0) {
+			fireAccessibleValueChange(oldValue, this.value);
 			fireChanged(oldValue);
+		}
 	}
 
 	public void setValue(float value) {
@@ -67,6 +88,7 @@ public final class GLScrollBar extends GLControl {
 		float old = this.value;
 		this.value = next;
 		invalidateRecording();
+		fireAccessibleValueChange(old, next);
 		fireChanged(old);
 	}
 

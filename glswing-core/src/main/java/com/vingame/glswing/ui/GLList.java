@@ -11,7 +11,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Function;
+import java.util.function.BiConsumer;
 
+import javax.accessibility.AccessibleAction;
 import javax.accessibility.AccessibleRole;
 import javax.accessibility.AccessibleState;
 import javax.accessibility.AccessibleStateSet;
@@ -110,6 +112,9 @@ public final class GLList<T> extends GLControl implements GLVirtualViewportConte
 	private GLListSelectionModel selectionModel = new GLListSelectionModel();
 	private CellRenderer<T> cellRenderer = this::renderDefaultCell;
 	private Function<? super T, String> itemTextProvider = String::valueOf;
+	private Function<? super T, String> itemAccessibleNameProvider;
+	private AccessibleRole itemAccessibleRole = AccessibleRole.LIST_ITEM;
+	private BiConsumer<? super T, AccessibleStateSet> itemAccessibleStateProvider;
 	private ItemToolTipProvider<T> itemToolTipProvider;
 	private KeyHandler<T> keyHandler;
 	private GLListStyle localStyle;
@@ -147,6 +152,11 @@ public final class GLList<T> extends GLControl implements GLVirtualViewportConte
 		if (selectionModel.getSelectionMode()
 				!= GLListSelectionModel.SelectionMode.SINGLE)
 			states.add(AccessibleState.MULTISELECTABLE);
+	}
+	@Override protected List<GLContainer> accessibleChildrenInOrder() {
+		return visibleCells.entrySet().stream()
+				.sorted(Map.Entry.comparingByKey())
+				.map(entry -> (GLContainer) entry.getValue()).toList();
 	}
 	public void setModel(GLListModel<T> model) {
 		if (model == null)
@@ -211,6 +221,22 @@ public final class GLList<T> extends GLControl implements GLVirtualViewportConte
 	}
 	public Function<? super T, String> getItemTextProvider() {
 		return itemTextProvider;
+	}
+	/** Supplies names for virtual rows; the visible-text provider is the default. */
+	public void setItemAccessibleNameProvider(Function<? super T, String> provider) {
+		itemAccessibleNameProvider = provider;
+	}
+
+	/** Sets the role exposed by each virtual row. */
+	public void setItemAccessibleRole(AccessibleRole role) {
+		if (role == null) throw new IllegalArgumentException("Item role required");
+		itemAccessibleRole = role;
+	}
+
+	/** Adds application-specific states to each virtual row. */
+	public void setItemAccessibleStateProvider(
+			BiConsumer<? super T, AccessibleStateSet> provider) {
+		itemAccessibleStateProvider = provider;
 	}
 	public void setItemTextProvider(Function<? super T, String> provider) {
 		if (provider == null)
@@ -728,8 +754,33 @@ public final class GLList<T> extends GLControl implements GLVirtualViewportConte
 		private Cell() { super(false); }
 		private void setIndex(int index) {
 			if (this.index == index) return;
+			String oldName = accessibleItemName(this.index);
 			this.index = index;
+			fireAccessibleNameChange(oldName, accessibleItemName(index));
 			invalidateRecording();
+		}
+		@Override protected String defaultName() {
+			return accessibleItemName(index);
+		}
+		@Override protected AccessibleRole defaultAccessibleRole() {
+			return itemAccessibleRole;
+		}
+		@Override protected void collectAccessibleStates(AccessibleStateSet states) {
+			if (index < 0 || index >= model.getSize()) return;
+			if (selectionModel.isSelectedIndex(index))
+				states.add(AccessibleState.SELECTED);
+			if (itemAccessibleStateProvider != null)
+				itemAccessibleStateProvider.accept(model.getElementAt(index), states);
+		}
+		@Override protected int accessibleActionCount() { return 1; }
+		@Override protected String accessibleActionDescription(int actionIndex) {
+			return actionIndex == 0 ? AccessibleAction.CLICK : null;
+		}
+		@Override protected boolean performAccessibleAction(int actionIndex) {
+			if (actionIndex != 0 || index < 0 || index >= model.getSize()
+					|| !GLList.this.isEnabled()) return false;
+			setSelectedIndex(index);
+			return true;
 		}
 		@Override protected void record(GLContext2D context) {
 			if (index < 0 || index >= model.getSize()) return;
@@ -859,5 +910,14 @@ public final class GLList<T> extends GLControl implements GLVirtualViewportConte
 					text == null ? "" : text,
 					Math.max(0, getWidth() - style.cellPadding().horizontal()));
 		}
+	}
+
+	private String accessibleItemName(int index) {
+		if (index < 0 || model == null || index >= model.getSize()) return "List item";
+		T item = model.getElementAt(index);
+		Function<? super T, String> provider = itemAccessibleNameProvider != null
+				? itemAccessibleNameProvider : itemTextProvider;
+		String name = provider.apply(item);
+		return name == null || name.isBlank() ? "List item " + (index + 1) : name;
 	}
 }

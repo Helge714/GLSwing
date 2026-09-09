@@ -92,6 +92,7 @@ public abstract class GLContainer implements GLParent, GLMouseTarget, Accessible
 	private volatile String accessibleDescription;
 	private volatile AccessibleRole accessibleRole;
 	private volatile boolean accessibilityEnabled = true;
+	private volatile boolean accessibilityTransparent;
 
 	/** Records this node's own visual content in a local coordinate system. */
 	protected abstract void record(GLContext2D context);
@@ -327,6 +328,22 @@ public abstract class GLContainer implements GLParent, GLMouseTarget, Accessible
 
 	public final boolean isAccessibilityEnabled() {
 		return accessibilityEnabled;
+	}
+
+	/**
+	 * Controls whether this node is omitted while its accessible descendants are
+	 * promoted into the nearest semantic ancestor. This is intended for layout
+	 * hosts, viewports, and other implementation-only wrappers.
+	 */
+	public final void setAccessibilityTransparent(boolean transparent) {
+		if (accessibilityTransparent == transparent) return;
+		accessibilityTransparent = transparent;
+		fireAccessibleProperty(AccessibleContext.ACCESSIBLE_CHILD_PROPERTY,
+				null, this);
+	}
+
+	public final boolean isAccessibilityTransparent() {
+		return accessibilityTransparent;
 	}
 
 	/** Default role for custom containers; subclasses should refine it. */
@@ -909,10 +926,52 @@ public abstract class GLContainer implements GLParent, GLMouseTarget, Accessible
 			context.firePropertyChange(property, oldValue, newValue);
 	}
 
-	private List<GLContainer> accessibleChildren() {
-		return getGLChildren().stream()
-				.filter(child -> child.isAccessibilityEnabled() && child.isVisible())
-				.toList();
+	final List<GLContainer> accessibleChildren() {
+		return List.copyOf(accessibleChildrenInOrder());
+	}
+
+	/** Returns semantic children in assistive-technology navigation order. */
+	protected List<GLContainer> accessibleChildrenInOrder() {
+		List<GLContainer> result = new java.util.ArrayList<>();
+		for (GLContainer child : getGLChildren())
+			appendAccessibleChild(result, child);
+		return result;
+	}
+
+	static List<GLContainer> accessibleChildrenOf(GLParent parent) {
+		if (parent instanceof GLContainer container)
+			return container.accessibleChildren();
+		List<GLContainer> result = new java.util.ArrayList<>();
+		if (parent != null)
+			for (GLContainer child : parent.getGLChildren())
+				appendAccessibleChild(result, child);
+		return List.copyOf(result);
+	}
+
+	private static void appendAccessibleChild(List<GLContainer> result,
+			GLContainer child) {
+		if (!child.isAccessibilityEnabled() || !child.isVisible()) return;
+		if (child.isAccessibilityTransparent())
+			result.addAll(child.accessibleChildren());
+		else result.add(child);
+	}
+
+	final Accessible accessibleAt(Point point) {
+		if (point == null) return null;
+		List<GLContainer> children = getGLChildrenInPaintOrder();
+		for (int index = children.size() - 1; index >= 0; index--) {
+			GLContainer child = children.get(index);
+			if (!child.isAccessibilityEnabled() || !child.isVisible()
+					|| point.x < child.getX() || point.y < child.getY()
+					|| point.x >= child.getX() + child.getWidth()
+					|| point.y >= child.getY() + child.getHeight()) continue;
+			if (!child.isAccessibilityTransparent()) return child;
+			Accessible descendant = child.accessibleAt(new Point(
+					Math.round(point.x - child.getX()),
+					Math.round(point.y - child.getY())));
+			if (descendant != null) return descendant;
+		}
+		return null;
 	}
 
 	private Component accessibleHost() {
@@ -933,6 +992,19 @@ public abstract class GLContainer implements GLParent, GLMouseTarget, Accessible
 			rootY += container.getY();
 		}
 		return new Point(Math.round(rootX), Math.round(rootY));
+	}
+
+	private Point semanticLocation() {
+		float semanticX = x;
+		float semanticY = y;
+		GLParent parent = glParent;
+		while (parent instanceof GLContainer container
+				&& container.isAccessibilityTransparent()) {
+			semanticX += container.getX();
+			semanticY += container.getY();
+			parent = container.getGLParent();
+		}
+		return new Point(Math.round(semanticX), Math.round(semanticY));
 	}
 
 	private final class GLAccessibleContext extends AccessibleContext
@@ -967,16 +1039,22 @@ public abstract class GLContainer implements GLParent, GLMouseTarget, Accessible
 			return states;
 		}
 		@Override public Accessible getAccessibleParent() {
-			return glParent instanceof Accessible accessible ? accessible : null;
+			GLParent parent = glParent;
+			while (parent instanceof GLContainer container
+					&& container.isAccessibilityTransparent())
+				parent = container.getGLParent();
+			return parent instanceof Accessible accessible ? accessible : null;
 		}
 		@Override public void setAccessibleParent(Accessible parent) {
 			// Parentage follows the retained GL tree and cannot be reassigned here.
 		}
 		@Override public int getAccessibleIndexInParent() {
 			if (glParent == null) return -1;
-			List<GLContainer> siblings = glParent.getGLChildren().stream()
-					.filter(child -> child.isAccessibilityEnabled()
-							&& child.isVisible()).toList();
+			GLParent semanticParent = glParent;
+			while (semanticParent instanceof GLContainer container
+					&& container.isAccessibilityTransparent())
+				semanticParent = container.getGLParent();
+			List<GLContainer> siblings = accessibleChildrenOf(semanticParent);
 			return siblings.indexOf(GLContainer.this);
 		}
 		@Override public int getAccessibleChildrenCount() {
@@ -1048,13 +1126,14 @@ public abstract class GLContainer implements GLParent, GLMouseTarget, Accessible
 			return result;
 		}
 		@Override public Point getLocation() {
-			return new Point(Math.round(getX()), Math.round(getY()));
+			return semanticLocation();
 		}
 		@Override public void setLocation(Point point) {
 			if (point != null) GLContainer.this.setLocation(point.x, point.y);
 		}
 		@Override public Rectangle getBounds() {
-			return new Rectangle(Math.round(getX()), Math.round(getY()),
+			Point location = semanticLocation();
+			return new Rectangle(location.x, location.y,
 					Math.round(getWidth()), Math.round(getHeight()));
 		}
 		@Override public void setBounds(Rectangle bounds) {
@@ -1068,17 +1147,7 @@ public abstract class GLContainer implements GLParent, GLMouseTarget, Accessible
 			if (size != null) GLContainer.this.setSize(size.width, size.height);
 		}
 		@Override public Accessible getAccessibleAt(Point point) {
-			if (point == null) return null;
-			List<GLContainer> children = getGLChildrenInPaintOrder();
-			for (int i = children.size() - 1; i >= 0; i--) {
-				GLContainer child = children.get(i);
-				if (!child.isAccessibilityEnabled() || !child.isVisible()) continue;
-				if (point.x >= child.getX() && point.y >= child.getY()
-						&& point.x < child.getX() + child.getWidth()
-						&& point.y < child.getY() + child.getHeight())
-					return child;
-			}
-			return null;
+			return GLContainer.this.accessibleAt(point);
 		}
 		@Override public boolean isFocusTraversable() {
 			return GLContainer.this instanceof GLKeyTarget target

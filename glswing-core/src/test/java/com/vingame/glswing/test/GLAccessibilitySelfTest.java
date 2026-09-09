@@ -11,8 +11,15 @@ import com.vingame.glswing.component.GLContainer;
 import com.vingame.glswing.rendering.GLContext2D;
 import com.vingame.glswing.ui.GLButton;
 import com.vingame.glswing.ui.GLCheckBox;
+import com.vingame.glswing.ui.GLDefaultTreeModel;
+import com.vingame.glswing.ui.GLList;
+import com.vingame.glswing.ui.GLMenuBar;
+import com.vingame.glswing.ui.GLMenuItem;
+import com.vingame.glswing.ui.GLPopupMenu;
 import com.vingame.glswing.ui.GLSlider;
+import com.vingame.glswing.ui.GLTabbedPane;
 import com.vingame.glswing.ui.GLTextArea;
+import com.vingame.glswing.ui.GLTree;
 
 /** Platform-independent checks for the virtual Java accessibility tree. */
 public final class GLAccessibilitySelfTest {
@@ -75,6 +82,85 @@ public final class GLAccessibilitySelfTest {
 				"Text selection was not exposed");
 		check("alpha".equals(accessibleText.getAtIndex(
 				AccessibleText.WORD, 2)), "Word navigation was not exposed");
+
+		GLPopupMenu popup = new GLPopupMenu();
+		GLMenuItem menuItem = popup.addItem("Open");
+		check(popup.getAccessibleContext().getAccessibleRole()
+				== AccessibleRole.POPUP_MENU, "Popup-menu role was not exposed");
+		check(menuItem.getAccessibleContext().getAccessibleRole()
+				== AccessibleRole.MENU_ITEM, "Menu-item role was not exposed");
+		check("Open".equals(menuItem.getAccessibleContext().getAccessibleName()),
+				"Menu-item text was not exposed");
+
+		GLMenuBar menuBar = new GLMenuBar();
+		var menu = menuBar.addMenu("File", popup);
+		check(menuBar.getAccessibleContext().getAccessibleRole()
+				== AccessibleRole.MENU_BAR, "Menu-bar role was not exposed");
+		check(menu.getAccessibleContext().getAccessibleRole()
+				== AccessibleRole.MENU, "Top-level menu role was not exposed");
+
+		GLList<String> list = new GLList<>(java.util.List.of("Alpha", "Beta"));
+		list.setBounds(0, 0, 180, 80);
+		AccessibleContext listContext = list.getAccessibleContext();
+		check(listContext.getAccessibleChildrenCount() == 2,
+				"Visible list rows were not exposed");
+		AccessibleContext row = listContext.getAccessibleChild(0).getAccessibleContext();
+		check(row.getAccessibleRole() == AccessibleRole.LIST_ITEM
+				&& "Alpha".equals(row.getAccessibleName()),
+				"List-row semantics were not exposed");
+		row.getAccessibleAction().doAccessibleAction(0);
+		check(list.getSelectedIndex() == 0
+				&& row.getAccessibleStateSet().contains(AccessibleState.SELECTED),
+				"Accessible list-row selection failed");
+
+		GLTabbedPane tabs = new GLTabbedPane();
+		tabs.addTab("First", new Container());
+		tabs.addTab("Second", new Container());
+		tabs.setBounds(0, 0, 320, 200);
+		AccessibleContext tabsContext = tabs.getAccessibleContext();
+		AccessibleContext secondTab = null;
+		for (int index = 0; index < tabsContext.getAccessibleChildrenCount(); index++) {
+			AccessibleContext candidate = tabsContext.getAccessibleChild(index)
+					.getAccessibleContext();
+			if (candidate.getAccessibleRole() == AccessibleRole.PAGE_TAB
+					&& "Second".equals(candidate.getAccessibleName())) secondTab = candidate;
+		}
+		check(secondTab != null, "Individual tab semantics were not exposed");
+		secondTab.getAccessibleAction().doAccessibleAction(0);
+		check(tabs.getSelectedIndex() == 1
+				&& secondTab.getAccessibleStateSet().contains(AccessibleState.SELECTED),
+				"Accessible tab selection failed");
+
+		GLDefaultTreeModel<String> treeModel = new GLDefaultTreeModel<>(
+				java.util.List.of("Root"));
+		treeModel.addChild("Root", "Leaf");
+		GLTree<String> tree = new GLTree<>(treeModel);
+		tree.setBounds(0, 0, 200, 120);
+		AccessibleContext treeContext = tree.getAccessibleContext();
+		check(treeContext.getAccessibleChildrenCount() == 1,
+				"Visible tree nodes were not promoted through layout wrappers");
+		AccessibleContext branch = treeContext.getAccessibleChild(0)
+				.getAccessibleContext();
+		check("Root".equals(branch.getAccessibleName())
+				&& branch.getAccessibleStateSet().contains(AccessibleState.COLLAPSED),
+				"Tree-branch name or collapsed state was not exposed");
+		tree.setExpanded("Root", true);
+		check(branch.getAccessibleStateSet().contains(AccessibleState.EXPANDED),
+				"Expanded tree-branch state was not exposed");
+
+		Container wrapper = new Container();
+		wrapper.setAccessibilityTransparent(true);
+		wrapper.setLocation(7, 9);
+		GLButton nested = new GLButton("Nested");
+		nested.setBounds(3, 4, 40, 20);
+		wrapper.addGL(nested);
+		Container flattenedRoot = new Container();
+		flattenedRoot.addGL(wrapper);
+		check(flattenedRoot.getAccessibleContext().getAccessibleChild(0) == nested,
+				"Decorative wrapper was not flattened");
+		check(nested.getAccessibleContext().getAccessibleComponent().getLocation()
+				.equals(new java.awt.Point(10, 13)),
+				"Flattened child geometry was not relative to its semantic parent");
 
 		button.setAccessibilityEnabled(false);
 		check(rootContext.getAccessibleChildrenCount() == 0,
