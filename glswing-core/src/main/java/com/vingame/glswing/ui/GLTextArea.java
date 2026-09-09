@@ -22,6 +22,9 @@ import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
 import javax.swing.Timer;
+import javax.accessibility.AccessibleRole;
+import javax.accessibility.AccessibleState;
+import javax.accessibility.AccessibleStateSet;
 
 import com.vingame.glswing.component.GLParent;
 import com.vingame.glswing.history.GLHistoryManager;
@@ -145,6 +148,17 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 	}
 
 	private boolean caretVisible;
+	@Override protected AccessibleRole defaultAccessibleRole() {
+		return AccessibleRole.TEXT;
+	}
+	@Override protected void collectAccessibleStates(AccessibleStateSet states) {
+		states.add(AccessibleState.MULTI_LINE);
+		if (editable) states.add(AccessibleState.EDITABLE);
+	}
+	@Override protected String accessibleTextContent() { return getText(); }
+	@Override protected int accessibleCaretPosition() { return caret; }
+	@Override protected int accessibleSelectionStart() { return getSelectionStart(); }
+	@Override protected int accessibleSelectionEnd() { return getSelectionEnd(); }
 	public final GLTextDocument getDocument() { return document; }
 	public final void setDocument(GLTextDocument value) {
 		if (value == null) throw new IllegalArgumentException("Document must not be null");
@@ -524,6 +538,7 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 	public final void setEditable(boolean value) {
 		if (editable == value) return;
 		editable = value;
+		fireAccessibleStateChange(AccessibleState.EDITABLE, value);
 		textActions.refreshEnabled();
 		editableChanged();
 	}
@@ -1262,6 +1277,7 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 		}
 	}
 	private void documentChanged(GLTextDocument source, GLTextDocument.Change change) {
+		fireAccessibleTextChange(change.removedText(), change.insertedText());
 		searchGeneration++;
 		invalidateRowLayout();
 		if (!applyingHistory) {

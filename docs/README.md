@@ -28,6 +28,7 @@ lifecycle, extension points, and the behavior of the standard controls.
 | Respond to pointer input on custom geometry | [Picking](graphics-pipeline/picking.md) |
 | Customize appearance or language | [Themes and localization](ui-framework/themes-localization.md) |
 | Configure shortcuts and interaction modifiers | [Input configuration](ui-framework/input-configuration.md) |
+| Support screen readers and keyboard-only use | [Accessibility](ui-framework/accessibility.md) |
 | Load and save application documents | [Documents and serialization](ui-framework/documents.md) |
 | Create a node-based editor | [Node editor](ui-framework/nodes.md) |
 
@@ -64,6 +65,7 @@ an index of the retained-mode API.
 | [File dialogs](ui-framework/file-dialogs.md) | Native SWT dialogs, the themed fallback, and the embeddable filesystem browser |
 | [Themes and localization](ui-framework/themes-localization.md) | Theme files, style records, color expressions, locale fallback, and live reload |
 | [Input configuration](ui-framework/input-configuration.md) | Semantic actions, external `.glinput` files, platform shortcuts, modifiers, and scopes |
+| [Accessibility](ui-framework/accessibility.md) | Java Accessibility roles, names, states, actions, values, and keyboard access |
 | [Text editing](ui-framework/text-editing.md) | Single-line fields, multiline documents, selection, wrapping, scrolling, and editing history |
 | [Undo and redo](ui-framework/history.md) | Edits, transactions, keyboard shortcuts, and save state |
 | [Documents and serialization](ui-framework/documents.md) | Typed documents, codecs, migrations, lazy bundles, and atomic persistence |

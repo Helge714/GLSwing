@@ -1,9 +1,14 @@
 package com.vingame.glswing.component;
 
 import java.awt.Dimension;
+import java.awt.Point;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+
+import javax.accessibility.Accessible;
+import javax.accessibility.AccessibleContext;
+import javax.accessibility.AccessibleRole;
 
 import com.jogamp.opengl.GL3;
 import com.vingame.glswing.input.GLKeyTarget;
@@ -57,6 +62,44 @@ public abstract class GLSwingContainerCanvas extends GLSwingCanvas
 	protected GLSwingContainerCanvas(int antialiasingSamples, int swapInterval) {
 		super(antialiasingSamples, swapInterval);
 		inputDispatcher = new GLContainerInputDispatcher(this);
+	}
+
+	@Override
+	public AccessibleContext getAccessibleContext() {
+		if (accessibleContext == null)
+			accessibleContext = new AccessibleGLSwingContainerCanvas();
+		return accessibleContext;
+	}
+
+	protected class AccessibleGLSwingContainerCanvas extends AccessibleAWTCanvas {
+		private static final long serialVersionUID = 1L;
+		@Override public AccessibleRole getAccessibleRole() {
+			return AccessibleRole.CANVAS;
+		}
+		@Override public int getAccessibleChildrenCount() {
+			return (int) glChildren.snapshot().stream()
+					.filter(child -> child.isAccessibilityEnabled()
+							&& child.isVisible()).count();
+		}
+		@Override public Accessible getAccessibleChild(int index) {
+			List<GLContainer> children = glChildren.snapshot().stream()
+					.filter(child -> child.isAccessibilityEnabled()
+							&& child.isVisible()).toList();
+			return index < 0 || index >= children.size() ? null : children.get(index);
+		}
+		@Override public Accessible getAccessibleAt(Point point) {
+			if (point == null) return null;
+			List<GLContainer> children = glChildren.paintOrderSnapshot();
+			for (int index = children.size() - 1; index >= 0; index--) {
+				GLContainer child = children.get(index);
+				if (!child.isAccessibilityEnabled() || !child.isVisible()) continue;
+				if (point.x >= child.getX() && point.y >= child.getY()
+						&& point.x < child.getX() + child.getWidth()
+						&& point.y < child.getY() + child.getHeight())
+					return child;
+			}
+			return null;
+		}
 	}
 
 	@Override

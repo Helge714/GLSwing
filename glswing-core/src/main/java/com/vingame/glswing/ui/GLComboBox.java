@@ -12,6 +12,11 @@ import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Function;
 
+import javax.accessibility.AccessibleAction;
+import javax.accessibility.AccessibleRole;
+import javax.accessibility.AccessibleState;
+import javax.accessibility.AccessibleStateSet;
+
 import com.vingame.glswing.component.GLContainer;
 import com.vingame.glswing.component.GLParent;
 import com.vingame.glswing.input.GLKeyEvent;
@@ -243,14 +248,36 @@ public class GLComboBox<T> extends GLControl
 	public final T getSelectedItem() {
 		return selectedEntry == null ? null : selectedEntry.value;
 	}
+	@Override protected String defaultName() {
+		return selectedEntry == null ? super.defaultName()
+				: text(selectedEntry.value);
+	}
+	@Override protected AccessibleRole defaultAccessibleRole() {
+		return AccessibleRole.COMBO_BOX;
+	}
+	@Override protected void collectAccessibleStates(AccessibleStateSet states) {
+		states.add(isPopupVisible() ? AccessibleState.EXPANDED
+				: AccessibleState.COLLAPSED);
+	}
+	@Override protected int accessibleActionCount() { return 1; }
+	@Override protected String accessibleActionDescription(int index) {
+		return index == 0 ? AccessibleAction.TOGGLE_EXPAND : null;
+	}
+	@Override protected boolean performAccessibleAction(int index) {
+		if (index != 0 || !isEnabled()) return false;
+		if (isPopupVisible()) hidePopup(); else showPopup();
+		return true;
+	}
 
 	public final void setSelectedIndex(int index) {
 		if (index < -1 || index >= items.size())
 			throw new IndexOutOfBoundsException("Combo-box selection index: " + index);
+		String oldName = getAccessibleName();
 		ValueEntry<T> next = index < 0 ? null : items.get(index);
 		if (selectedEntry == next)
 			return;
 		selectedEntry = next;
+		fireAccessibleNameChange(oldName, getAccessibleName());
 		updatePresentation();
 		fireActionPerformed();
 	}
@@ -535,6 +562,8 @@ public class GLComboBox<T> extends GLControl
 	@Override
 	public void popupMenuOpened(GLPopupMenu menu) {
 		popupDirection = menu.getAttachedDirection();
+		fireAccessibleStateChange(AccessibleState.EXPANDED, true);
+		fireAccessibleStateChange(AccessibleState.COLLAPSED, false);
 		updateColors();
 		invalidateRecording();
 	}
@@ -542,6 +571,8 @@ public class GLComboBox<T> extends GLControl
 	@Override
 	public void popupMenuClosed(GLPopupMenu menu) {
 		popupDirection = null;
+		fireAccessibleStateChange(AccessibleState.EXPANDED, false);
+		fireAccessibleStateChange(AccessibleState.COLLAPSED, true);
 		updateColors();
 		invalidateRecording();
 	}

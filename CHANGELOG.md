@@ -54,6 +54,13 @@ may change in subsequent `0.x` releases.
 
 ### UI
 
+- Added a Java Accessibility bridge for `GLJPanel` and `GLCanvas` hosts.
+  Lightweight controls now expose a virtual accessible hierarchy with names,
+  descriptions, roles, live states, geometry, focus, standard actions, and
+  numeric values. Standard buttons, check boxes, combo boxes, sliders, text
+  controls, lists, trees, labels, and tab panes provide appropriate defaults;
+  custom controls can override the same semantic hooks.
+
 - Pointer clicks now complete directly from the retained press target when the
   button is released within that control. This removes missed actions caused
   by a one-frame-old picking snapshot while preserving drag-out cancellation

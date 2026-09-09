@@ -8,6 +8,9 @@ import java.awt.event.MouseEvent;
 import java.beans.PropertyChangeListener;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+import javax.accessibility.AccessibleAction;
+import javax.accessibility.AccessibleRole;
+
 import com.vingame.glswing.input.GLKeyEvent;
 import com.vingame.glswing.input.GLInputActions;
 import com.vingame.glswing.input.GLMouseEvent;
@@ -61,6 +64,18 @@ public class GLButton extends GLControl {
 	protected String defaultName() {
 		return text;
 	}
+	@Override protected AccessibleRole defaultAccessibleRole() {
+		return AccessibleRole.PUSH_BUTTON;
+	}
+	@Override protected int accessibleActionCount() { return 1; }
+	@Override protected String accessibleActionDescription(int index) {
+		return index == 0 ? AccessibleAction.CLICK : null;
+	}
+	@Override protected boolean performAccessibleAction(int index) {
+		if (index != 0 || !isEnabled()) return false;
+		doClick();
+		return true;
+	}
 
 	public final void setText(String text) {
 		text = requireText(text);
@@ -68,6 +83,7 @@ public class GLButton extends GLControl {
 			return;
 		String oldText = this.text;
 		this.text = text;
+		fireAccessibleNameChange(oldText, text);
 		if (actionCommand.equals(oldText))
 			actionCommand = text;
 		updatePresentation(true);

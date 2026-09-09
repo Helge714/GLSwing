@@ -112,6 +112,11 @@ final class MavenSmokeTest {
 	}
 
 	@Test
+	void accessibility() {
+		GLAccessibilitySelfTest.main(NO_ARGS);
+	}
+
+	@Test
 	void menus() {
 		GLMenuSelfTest.main(NO_ARGS);
 	}

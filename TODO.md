@@ -31,7 +31,3 @@ Items are removed when completed or intentionally rejected.
 - Develop a reusable UI material system that preserves efficient batching.
 - Add and benchmark GPU interpolation in `SRGB`, `LINEAR_RGB`, `OKLAB`, `HSV`,
   and `OKLCH`, including gamut handling and custom-shader compatibility.
-
-## Further investigation
-
-- Accessibility interfaces for GPU-rendered controls.

@@ -25,6 +25,9 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 import javax.swing.SwingUtilities;
+import javax.accessibility.Accessible;
+import javax.accessibility.AccessibleContext;
+import javax.accessibility.AccessibleRole;
 
 import com.jogamp.opengl.GL3;
 import com.jogamp.opengl.GLAutoDrawable;
@@ -161,6 +164,44 @@ public abstract class GLSwingPanel extends GLJPanel
 		addGLEventListener(this);
 		installMouseDispatch();
 		installKeyboardDispatch();
+	}
+
+	@Override
+	public AccessibleContext getAccessibleContext() {
+		if (accessibleContext == null)
+			accessibleContext = new AccessibleGLSwingPanel();
+		return accessibleContext;
+	}
+
+	protected class AccessibleGLSwingPanel extends AccessibleJPanel {
+		private static final long serialVersionUID = 1L;
+		@Override public AccessibleRole getAccessibleRole() {
+			return AccessibleRole.PANEL;
+		}
+		@Override public int getAccessibleChildrenCount() {
+			return (int) glChildren.snapshot().stream()
+					.filter(child -> child.isAccessibilityEnabled()
+							&& child.isVisible()).count();
+		}
+		@Override public Accessible getAccessibleChild(int index) {
+			List<GLContainer> children = glChildren.snapshot().stream()
+					.filter(child -> child.isAccessibilityEnabled()
+							&& child.isVisible()).toList();
+			return index < 0 || index >= children.size() ? null : children.get(index);
+		}
+		@Override public Accessible getAccessibleAt(Point point) {
+			if (point == null) return null;
+			List<GLContainer> children = glChildren.paintOrderSnapshot();
+			for (int index = children.size() - 1; index >= 0; index--) {
+				GLContainer child = children.get(index);
+				if (!child.isAccessibilityEnabled() || !child.isVisible()) continue;
+				if (point.x >= child.getX() && point.y >= child.getY()
+						&& point.x < child.getX() + child.getWidth()
+						&& point.y < child.getY() + child.getHeight())
+					return child;
+			}
+			return null;
+		}
 	}
 
 	@Override

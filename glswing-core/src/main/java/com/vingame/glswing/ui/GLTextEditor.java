@@ -14,6 +14,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 
 import javax.swing.Timer;
+import javax.accessibility.AccessibleRole;
+import javax.accessibility.AccessibleState;
+import javax.accessibility.AccessibleStateSet;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
 
@@ -114,6 +117,17 @@ public class GLTextEditor extends GLControl implements GLEditingHistoryTarget {
 	protected String defaultName() {
 		return text;
 	}
+	@Override protected AccessibleRole defaultAccessibleRole() {
+		return AccessibleRole.TEXT;
+	}
+	@Override protected void collectAccessibleStates(AccessibleStateSet states) {
+		states.add(AccessibleState.SINGLE_LINE);
+		states.add(AccessibleState.EDITABLE);
+	}
+	@Override protected String accessibleTextContent() { return text; }
+	@Override protected int accessibleCaretPosition() { return caret; }
+	@Override protected int accessibleSelectionStart() { return getSelectionStart(); }
+	@Override protected int accessibleSelectionEnd() { return getSelectionEnd(); }
 
 	public final void setText(String text) {
 		text = requireText(text);
@@ -811,6 +825,7 @@ public class GLTextEditor extends GLControl implements GLEditingHistoryTarget {
 	}
 
 	private void contentChanged() {
+		fireAccessibleTextChange(null, text);
 		ensureCaretVisible();
 		showCaret();
 		invalidateRecording();

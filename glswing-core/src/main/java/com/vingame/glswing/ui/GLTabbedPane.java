@@ -8,6 +8,8 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 
+import javax.accessibility.AccessibleRole;
+
 import com.vingame.glswing.component.GLContainer;
 import com.vingame.glswing.input.GLMouseEvent;
 import com.vingame.glswing.input.GLMouseWheelEvent;
@@ -49,6 +51,9 @@ public final class GLTabbedPane extends GLContainer {
 		addGL(tabScrollBar);
 		tabScrollBar.addScrollListener((source, oldValue, newValue) -> layoutTabs());
 		setIntrinsicPreferredGLSize(new GLSize(360, 240));
+	}
+	@Override protected AccessibleRole defaultAccessibleRole() {
+		return AccessibleRole.PAGE_TAB_LIST;
 	}
 
 	public int addTab(String title, GLContainer content) {

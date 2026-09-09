@@ -8,6 +8,11 @@ import java.awt.event.MouseEvent;
 import java.beans.PropertyChangeListener;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+import javax.accessibility.AccessibleAction;
+import javax.accessibility.AccessibleRole;
+import javax.accessibility.AccessibleState;
+import javax.accessibility.AccessibleStateSet;
+
 import com.vingame.glswing.input.GLKeyEvent;
 import com.vingame.glswing.input.GLInputActions;
 import com.vingame.glswing.input.GLMouseEvent;
@@ -63,6 +68,21 @@ public class GLCheckBox extends GLControl {
 	protected String defaultName() {
 		return text;
 	}
+	@Override protected AccessibleRole defaultAccessibleRole() {
+		return AccessibleRole.CHECK_BOX;
+	}
+	@Override protected void collectAccessibleStates(AccessibleStateSet states) {
+		if (selected) states.add(AccessibleState.CHECKED);
+	}
+	@Override protected int accessibleActionCount() { return 1; }
+	@Override protected String accessibleActionDescription(int index) {
+		return index == 0 ? AccessibleAction.CLICK : null;
+	}
+	@Override protected boolean performAccessibleAction(int index) {
+		if (index != 0 || !isEnabled()) return false;
+		doClick();
+		return true;
+	}
 
 	public final void setText(String text) {
 		text = requireText(text);
@@ -70,6 +90,7 @@ public class GLCheckBox extends GLControl {
 			return;
 		String oldText = this.text;
 		this.text = text;
+		fireAccessibleNameChange(oldText, text);
 		if (actionCommand.equals(oldText))
 			actionCommand = text;
 		updatePresentation(true);
@@ -88,6 +109,7 @@ public class GLCheckBox extends GLControl {
 		if (this.selected == selected)
 			return;
 		this.selected = selected;
+		fireAccessibleStateChange(AccessibleState.CHECKED, selected);
 		checkParameters.setOpacity(selected ? 1 : 0);
 		repaintGL();
 	}

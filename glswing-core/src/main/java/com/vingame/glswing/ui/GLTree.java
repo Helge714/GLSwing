@@ -12,6 +12,8 @@ import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Function;
 
+import javax.accessibility.AccessibleRole;
+
 import com.vingame.glswing.component.GLContainer;
 import com.vingame.glswing.component.GLParent;
 import com.vingame.glswing.input.GLInputActions;
@@ -107,6 +109,9 @@ public final class GLTree<T> extends GLContainer {
 	}
 
 	public GLTreeModel<T> getModel() { return model; }
+	@Override protected AccessibleRole defaultAccessibleRole() {
+		return AccessibleRole.TREE;
+	}
 	public void setModel(GLTreeModel<T> value) {
 		if (value == null) throw new IllegalArgumentException("Tree model required");
 		if (model == value) return;

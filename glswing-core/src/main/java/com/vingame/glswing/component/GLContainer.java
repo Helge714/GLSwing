@@ -1,7 +1,24 @@
 package com.vingame.glswing.component;
 
 import java.awt.Color;
+import java.awt.Component;
+import java.awt.Point;
+import java.awt.Rectangle;
+import java.awt.event.FocusListener;
+import java.text.BreakIterator;
+import java.util.Locale;
 import java.util.List;
+
+import javax.accessibility.Accessible;
+import javax.accessibility.AccessibleAction;
+import javax.accessibility.AccessibleComponent;
+import javax.accessibility.AccessibleContext;
+import javax.accessibility.AccessibleRole;
+import javax.accessibility.AccessibleState;
+import javax.accessibility.AccessibleStateSet;
+import javax.accessibility.AccessibleText;
+import javax.accessibility.AccessibleValue;
+import javax.swing.text.AttributeSet;
 
 import com.vingame.glswing.input.GLMouseTarget;
 import com.vingame.glswing.input.GLKeyTarget;
@@ -30,7 +47,7 @@ import com.vingame.glswing.ui.GLTheme;
  * children are rendered independently and are never captured in the parent's
  * recording.
  */
-public abstract class GLContainer implements GLParent, GLMouseTarget {
+public abstract class GLContainer implements GLParent, GLMouseTarget, Accessible {
 	private Object connectedShapeOwner;
 	private com.vingame.glswing.rendering.GLCornerRadii connectedShape;
 	/** Layout-owned clip; custom controls should use the layout metric helpers below. */
@@ -70,6 +87,11 @@ public abstract class GLContainer implements GLParent, GLMouseTarget {
 	private volatile float lastRenderedVisualHeight;
 	private volatile float lastRenderedOverflowLeft;
 	private volatile float lastRenderedOverflowTop;
+	private transient AccessibleContext accessibleContext;
+	private volatile String accessibleName;
+	private volatile String accessibleDescription;
+	private volatile AccessibleRole accessibleRole;
+	private volatile boolean accessibilityEnabled = true;
 
 	/** Records this node's own visual content in a local coordinate system. */
 	protected abstract void record(GLContext2D context);
@@ -233,7 +255,11 @@ public abstract class GLContainer implements GLParent, GLMouseTarget {
 					"Component name must not be blank");
 		if (java.util.Objects.equals(this.name, name))
 			return;
+		String oldAccessibleName = getAccessibleName();
 		this.name = name;
+		if (accessibleName == null)
+			fireAccessibleProperty(AccessibleContext.ACCESSIBLE_NAME_PROPERTY,
+					oldAccessibleName, getAccessibleName());
 		repaintGL();
 	}
 
@@ -243,6 +269,128 @@ public abstract class GLContainer implements GLParent, GLMouseTarget {
 
 	public final boolean hasExplicitName() {
 		return name != null;
+	}
+
+	/**
+	 * Returns the semantic name announced by assistive technology. An explicit
+	 * accessible name takes precedence over the normal component name.
+	 */
+	public final String getAccessibleName() {
+		return accessibleName == null ? getName() : accessibleName;
+	}
+
+	public final void setAccessibleName(String name) {
+		if (name != null && name.isBlank())
+			throw new IllegalArgumentException("Accessible name must not be blank");
+		if (java.util.Objects.equals(accessibleName, name)) return;
+		String old = getAccessibleName();
+		accessibleName = name;
+		fireAccessibleProperty(AccessibleContext.ACCESSIBLE_NAME_PROPERTY,
+				old, getAccessibleName());
+	}
+
+	public final String getAccessibleDescription() {
+		return accessibleDescription;
+	}
+
+	public final void setAccessibleDescription(String description) {
+		if (description != null && description.isBlank())
+			throw new IllegalArgumentException(
+					"Accessible description must not be blank");
+		if (java.util.Objects.equals(accessibleDescription, description)) return;
+		String old = accessibleDescription;
+		accessibleDescription = description;
+		fireAccessibleProperty(AccessibleContext.ACCESSIBLE_DESCRIPTION_PROPERTY,
+				old, description);
+	}
+
+	/** Overrides the control-specific Java accessibility role. */
+	public final void setAccessibleRole(AccessibleRole role) {
+		if (accessibleRole == role) return;
+		AccessibleRole old = getAccessibleRole();
+		accessibleRole = role;
+		fireAccessibleProperty(AccessibleContext.ACCESSIBLE_VISIBLE_DATA_PROPERTY,
+				old, getAccessibleRole());
+	}
+
+	public final AccessibleRole getAccessibleRole() {
+		return accessibleRole == null ? defaultAccessibleRole() : accessibleRole;
+	}
+
+	/** Removes purely decorative nodes, including their subtree, from the tree. */
+	public final void setAccessibilityEnabled(boolean enabled) {
+		if (accessibilityEnabled == enabled) return;
+		accessibilityEnabled = enabled;
+		fireAccessibleProperty(AccessibleContext.ACCESSIBLE_CHILD_PROPERTY,
+				null, this);
+	}
+
+	public final boolean isAccessibilityEnabled() {
+		return accessibilityEnabled;
+	}
+
+	/** Default role for custom containers; subclasses should refine it. */
+	protected AccessibleRole defaultAccessibleRole() {
+		return getGLChildren().isEmpty()
+				? AccessibleRole.CANVAS : AccessibleRole.PANEL;
+	}
+
+	/** Adds control-specific states such as selected, editable or expanded. */
+	protected void collectAccessibleStates(AccessibleStateSet states) {
+	}
+
+	/** Number of semantic actions offered by this node. */
+	protected int accessibleActionCount() { return 0; }
+
+	protected String accessibleActionDescription(int index) { return null; }
+
+	protected boolean performAccessibleAction(int index) { return false; }
+
+	/** Optional numeric value contract used by sliders, progress and spinners. */
+	protected Number accessibleCurrentValue() { return null; }
+
+	protected boolean setAccessibleCurrentValue(Number value) { return false; }
+
+	protected Number accessibleMinimumValue() { return null; }
+
+	protected Number accessibleMaximumValue() { return null; }
+
+	/** Optional text exposed by text-bearing controls. */
+	protected String accessibleTextContent() { return null; }
+
+	protected int accessibleCaretPosition() { return -1; }
+
+	protected int accessibleSelectionStart() { return -1; }
+
+	protected int accessibleSelectionEnd() { return -1; }
+
+	/** Announces a dynamic semantic state change to assistive technology. */
+	protected final void fireAccessibleStateChange(AccessibleState state,
+			boolean present) {
+		fireAccessibleProperty(AccessibleContext.ACCESSIBLE_STATE_PROPERTY,
+				present ? null : state, present ? state : null);
+	}
+
+	/** Announces a changed semantic value. */
+	protected final void fireAccessibleValueChange(Object oldValue,
+			Object newValue) {
+		fireAccessibleProperty(AccessibleContext.ACCESSIBLE_VALUE_PROPERTY,
+				oldValue, newValue);
+	}
+
+	/** Announces a changed automatically derived accessible name. */
+	protected final void fireAccessibleNameChange(String oldName,
+			String newName) {
+		if (accessibleName == null)
+			fireAccessibleProperty(AccessibleContext.ACCESSIBLE_NAME_PROPERTY,
+					oldName, newName);
+	}
+
+	/** Announces that a text control's content changed. */
+	protected final void fireAccessibleTextChange(Object oldText,
+			Object newText) {
+		fireAccessibleProperty(AccessibleContext.ACCESSIBLE_TEXT_PROPERTY,
+				oldText, newText);
 	}
 
 	/** Supplies the automatic name used until {@link #setName(String)} is called. */
@@ -732,6 +880,7 @@ public abstract class GLContainer implements GLParent, GLMouseTarget {
 		if (this.visible == visible)
 			return;
 		this.visible = visible;
+		fireAccessibleStateChange(AccessibleState.VISIBLE, visible);
 		if (!visible)
 			clearGLFocus(this);
 		invalidateParentLayout();
@@ -744,6 +893,282 @@ public abstract class GLContainer implements GLParent, GLMouseTarget {
 	}
 
 	protected void detached(GLParent formerParent) {
+	}
+
+	@Override
+	public final AccessibleContext getAccessibleContext() {
+		if (accessibleContext == null)
+			accessibleContext = new GLAccessibleContext();
+		return accessibleContext;
+	}
+
+	private void fireAccessibleProperty(String property, Object oldValue,
+			Object newValue) {
+		AccessibleContext context = accessibleContext;
+		if (context != null)
+			context.firePropertyChange(property, oldValue, newValue);
+	}
+
+	private List<GLContainer> accessibleChildren() {
+		return getGLChildren().stream()
+				.filter(child -> child.isAccessibilityEnabled() && child.isVisible())
+				.toList();
+	}
+
+	private Component accessibleHost() {
+		for (GLParent parent = glParent; parent != null;) {
+			if (parent instanceof Component component) return component;
+			parent = parent instanceof GLContainer container
+					? container.getGLParent() : null;
+		}
+		return null;
+	}
+
+	private Point rootLocation() {
+		float rootX = x;
+		float rootY = y;
+		for (GLParent parent = glParent; parent instanceof GLContainer container;
+				parent = container.getGLParent()) {
+			rootX += container.getX();
+			rootY += container.getY();
+		}
+		return new Point(Math.round(rootX), Math.round(rootY));
+	}
+
+	private final class GLAccessibleContext extends AccessibleContext
+			implements AccessibleComponent, AccessibleAction, AccessibleValue,
+				AccessibleText {
+		@Override public String getAccessibleName() {
+			return GLContainer.this.getAccessibleName();
+		}
+		@Override public void setAccessibleName(String name) {
+			GLContainer.this.setAccessibleName(name);
+		}
+		@Override public String getAccessibleDescription() {
+			return GLContainer.this.getAccessibleDescription();
+		}
+		@Override public void setAccessibleDescription(String description) {
+			GLContainer.this.setAccessibleDescription(description);
+		}
+		@Override public AccessibleRole getAccessibleRole() {
+			return GLContainer.this.getAccessibleRole();
+		}
+		@Override public AccessibleStateSet getAccessibleStateSet() {
+			AccessibleStateSet states = new AccessibleStateSet();
+			if (isEnabled()) states.add(AccessibleState.ENABLED);
+			if (isVisible()) states.add(AccessibleState.VISIBLE);
+			if (isShowing()) states.add(AccessibleState.SHOWING);
+			if (GLContainer.this instanceof GLKeyTarget target
+					&& target.isFocusTraversable())
+				states.add(AccessibleState.FOCUSABLE);
+			if (getGLFocusOwner() == GLContainer.this)
+				states.add(AccessibleState.FOCUSED);
+			collectAccessibleStates(states);
+			return states;
+		}
+		@Override public Accessible getAccessibleParent() {
+			return glParent instanceof Accessible accessible ? accessible : null;
+		}
+		@Override public void setAccessibleParent(Accessible parent) {
+			// Parentage follows the retained GL tree and cannot be reassigned here.
+		}
+		@Override public int getAccessibleIndexInParent() {
+			if (glParent == null) return -1;
+			List<GLContainer> siblings = glParent.getGLChildren().stream()
+					.filter(child -> child.isAccessibilityEnabled()
+							&& child.isVisible()).toList();
+			return siblings.indexOf(GLContainer.this);
+		}
+		@Override public int getAccessibleChildrenCount() {
+			return accessibleChildren().size();
+		}
+		@Override public Accessible getAccessibleChild(int index) {
+			List<GLContainer> children = accessibleChildren();
+			return index < 0 || index >= children.size() ? null : children.get(index);
+		}
+		@Override public Locale getLocale() {
+			Component host = accessibleHost();
+			return host == null ? Locale.getDefault() : host.getLocale();
+		}
+		@Override public AccessibleComponent getAccessibleComponent() { return this; }
+		@Override public AccessibleAction getAccessibleAction() {
+			return accessibleActionCount() == 0 ? null : this;
+		}
+		@Override public AccessibleValue getAccessibleValue() {
+			return accessibleCurrentValue() == null ? null : this;
+		}
+		@Override public AccessibleText getAccessibleText() {
+			return accessibleTextContent() == null ? null : this;
+		}
+		@Override public java.awt.Color getBackground() { return null; }
+		@Override public void setBackground(java.awt.Color color) { }
+		@Override public java.awt.Color getForeground() { return null; }
+		@Override public void setForeground(java.awt.Color color) { }
+		@Override public java.awt.Cursor getCursor() {
+			Component host = accessibleHost();
+			return host == null ? null : host.getCursor();
+		}
+		@Override public void setCursor(java.awt.Cursor cursor) {
+			Component host = accessibleHost();
+			if (host != null) host.setCursor(cursor);
+		}
+		@Override public java.awt.Font getFont() { return null; }
+		@Override public void setFont(java.awt.Font font) { }
+		@Override public java.awt.FontMetrics getFontMetrics(java.awt.Font font) {
+			Component host = accessibleHost();
+			return host == null || font == null ? null : host.getFontMetrics(font);
+		}
+		@Override public boolean isEnabled() {
+			return !(GLContainer.this instanceof com.vingame.glswing.ui.GLControl control)
+					|| control.isEnabled();
+		}
+		@Override public void setEnabled(boolean enabled) {
+			if (GLContainer.this instanceof com.vingame.glswing.ui.GLControl control)
+				control.setEnabled(enabled);
+		}
+		@Override public boolean isVisible() { return GLContainer.this.isVisible(); }
+		@Override public void setVisible(boolean visible) {
+			GLContainer.this.setVisible(visible);
+		}
+		@Override public boolean isShowing() {
+			if (!isVisible()) return false;
+			Component host = accessibleHost();
+			return host != null && host.isShowing();
+		}
+		@Override public boolean contains(Point point) {
+			return point != null && point.x >= 0 && point.y >= 0
+					&& point.x < getWidth() && point.y < getHeight();
+		}
+		@Override public Point getLocationOnScreen() {
+			Component host = accessibleHost();
+			if (host == null || !host.isShowing()) return null;
+			Point result = host.getLocationOnScreen();
+			Point root = rootLocation();
+			result.translate(root.x, root.y);
+			return result;
+		}
+		@Override public Point getLocation() {
+			return new Point(Math.round(getX()), Math.round(getY()));
+		}
+		@Override public void setLocation(Point point) {
+			if (point != null) GLContainer.this.setLocation(point.x, point.y);
+		}
+		@Override public Rectangle getBounds() {
+			return new Rectangle(Math.round(getX()), Math.round(getY()),
+					Math.round(getWidth()), Math.round(getHeight()));
+		}
+		@Override public void setBounds(Rectangle bounds) {
+			if (bounds != null) GLContainer.this.setBounds(bounds.x, bounds.y,
+					bounds.width, bounds.height);
+		}
+		@Override public java.awt.Dimension getSize() {
+			return new java.awt.Dimension(Math.round(getWidth()), Math.round(getHeight()));
+		}
+		@Override public void setSize(java.awt.Dimension size) {
+			if (size != null) GLContainer.this.setSize(size.width, size.height);
+		}
+		@Override public Accessible getAccessibleAt(Point point) {
+			if (point == null) return null;
+			List<GLContainer> children = getGLChildrenInPaintOrder();
+			for (int i = children.size() - 1; i >= 0; i--) {
+				GLContainer child = children.get(i);
+				if (!child.isAccessibilityEnabled() || !child.isVisible()) continue;
+				if (point.x >= child.getX() && point.y >= child.getY()
+						&& point.x < child.getX() + child.getWidth()
+						&& point.y < child.getY() + child.getHeight())
+					return child;
+			}
+			return null;
+		}
+		@Override public boolean isFocusTraversable() {
+			return GLContainer.this instanceof GLKeyTarget target
+					&& target.isFocusTraversable();
+		}
+		@Override public void requestFocus() {
+			if (GLContainer.this instanceof GLKeyTarget target
+					&& target.isFocusTraversable())
+				requestGLFocus(target);
+		}
+		@Override public void addFocusListener(FocusListener listener) { }
+		@Override public void removeFocusListener(FocusListener listener) { }
+		@Override public int getAccessibleActionCount() {
+			return accessibleActionCount();
+		}
+		@Override public String getAccessibleActionDescription(int index) {
+			return accessibleActionDescription(index);
+		}
+		@Override public boolean doAccessibleAction(int index) {
+			return performAccessibleAction(index);
+		}
+		@Override public Number getCurrentAccessibleValue() {
+			return accessibleCurrentValue();
+		}
+		@Override public boolean setCurrentAccessibleValue(Number value) {
+			return setAccessibleCurrentValue(value);
+		}
+		@Override public Number getMinimumAccessibleValue() {
+			return accessibleMinimumValue();
+		}
+		@Override public Number getMaximumAccessibleValue() {
+			return accessibleMaximumValue();
+		}
+		@Override public int getIndexAtPoint(Point point) { return -1; }
+		@Override public Rectangle getCharacterBounds(int index) { return null; }
+		@Override public int getCharCount() {
+			String text = accessibleTextContent();
+			return text == null ? 0 : text.length();
+		}
+		@Override public int getCaretPosition() { return accessibleCaretPosition(); }
+		@Override public String getAtIndex(int part, int index) {
+			return textSegment(part, index, 0);
+		}
+		@Override public String getAfterIndex(int part, int index) {
+			return textSegment(part, index, 1);
+		}
+		@Override public String getBeforeIndex(int part, int index) {
+			return textSegment(part, index, -1);
+		}
+		@Override public AttributeSet getCharacterAttribute(int index) { return null; }
+		@Override public int getSelectionStart() { return accessibleSelectionStart(); }
+		@Override public int getSelectionEnd() { return accessibleSelectionEnd(); }
+		@Override public String getSelectedText() {
+			String text = accessibleTextContent();
+			int start = accessibleSelectionStart();
+			int end = accessibleSelectionEnd();
+			return text == null || start < 0 || end <= start || end > text.length()
+					? null : text.substring(start, end);
+		}
+
+		private String textSegment(int part, int index, int direction) {
+			String text = accessibleTextContent();
+			if (text == null || text.isEmpty() || index < 0 || index >= text.length())
+				return null;
+			if (part == AccessibleText.CHARACTER) {
+				int target = index + direction;
+				return target < 0 || target >= text.length()
+						? null : text.substring(target, target + 1);
+			}
+			BreakIterator iterator = part == AccessibleText.WORD
+					? BreakIterator.getWordInstance(getLocale())
+					: part == AccessibleText.SENTENCE
+							? BreakIterator.getSentenceInstance(getLocale()) : null;
+			if (iterator == null) return null;
+			iterator.setText(text);
+			int start = iterator.first();
+			String previous = null;
+			boolean containingSeen = false;
+			for (int end = iterator.next(); end != BreakIterator.DONE;
+					start = end, end = iterator.next()) {
+				String segment = text.substring(start, end);
+				if (index >= start && index < end) {
+					if (direction < 0) return previous;
+					if (direction == 0) return segment;
+					containingSeen = true;
+				} else if (containingSeen && direction > 0) return segment;
+				previous = segment;
+			}
+			return null;
+		}
 	}
 
 	/** Controls whether this container's recorded geometry participates in picking. */

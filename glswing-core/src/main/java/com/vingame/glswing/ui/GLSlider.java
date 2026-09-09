@@ -8,6 +8,8 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.DoubleFunction;
+
+import javax.accessibility.AccessibleRole;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -208,12 +210,29 @@ public class GLSlider extends GLControl {
 	protected String defaultName() {
 		return text;
 	}
+	@Override protected AccessibleRole defaultAccessibleRole() {
+		return AccessibleRole.SLIDER;
+	}
+	@Override protected Number accessibleCurrentValue() { return value; }
+	@Override protected boolean setAccessibleCurrentValue(Number next) {
+		if (next == null || !isEnabled()) return false;
+		setValue(next.doubleValue());
+		return true;
+	}
+	@Override protected Number accessibleMinimumValue() {
+		return mode == Mode.FIXED ? minimum : null;
+	}
+	@Override protected Number accessibleMaximumValue() {
+		return mode == Mode.FIXED ? maximum : null;
+	}
 
 	public final void setText(String text) {
 		text = requireText(text);
 		if (this.text.equals(text))
 			return;
+		String oldText = this.text;
 		this.text = text;
+		fireAccessibleNameChange(oldText, text);
 		invalidateRecording();
 	}
 
@@ -228,7 +247,9 @@ public class GLSlider extends GLControl {
 			updateVisibleRange();
 			return;
 		}
+		double old = this.value;
 		this.value = resolved;
+		fireAccessibleValueChange(old, resolved);
 		updateVisibleRange();
 		invalidateRecording();
 		fireStateChanged();

@@ -22,6 +22,7 @@ see the [rendering guide](graphics-pipeline.md).
 | Application startup | `GLApplication`, `GLStartupPlan`, `GLApplicationContext`, `GLApplicationHandle` | Splash, resources, startup work, first-frame handoff, and lifetime |
 | Hosts | `GLFrame`, `GLSwingContainerCanvas`, `GLSwingPanel`, `GLDialog` | OpenGL surface, animation, root hierarchy, and windows |
 | Component tree | `GLParent`, `GLContainer` | Children, bounds, z-order, culling, damage, and cached rendering |
+| Accessibility | `AccessibleContext`, `AccessibleRole`, `GLContainer` accessibility methods | Virtual accessible tree, semantics, actions, values, and focus |
 | Layout | `GLLayout`, `GLLayouts`, `GLGridLayout`, `GLConstraints`, `GLSize`, `GLInsets` | Measurement and arrangement |
 | Basic controls | `GLControl`, `GLLabel`, `GLButton`, `GLDialogButtonBar`, `GLCheckBox`, `GLLine` | State, focus, actions, and simple content |
 | Value input | `GLSlider`, `GLSliderGroup`, `GLInputGroup<T>`, `GLTextEditor`, `GLTextInputFormats`, `GLComboBox<T>` | Selection, validation, grouped editing, and history |
@@ -97,3 +98,4 @@ render methods manually.
 9. [Undo and redo](ui-framework/history.md)
 10. [Documents and serialization](ui-framework/documents.md)
 11. [Node editor](ui-framework/nodes.md)
+12. [Accessibility](ui-framework/accessibility.md)

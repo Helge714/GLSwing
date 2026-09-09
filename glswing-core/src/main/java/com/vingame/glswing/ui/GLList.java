@@ -12,6 +12,10 @@ import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Function;
 
+import javax.accessibility.AccessibleRole;
+import javax.accessibility.AccessibleState;
+import javax.accessibility.AccessibleStateSet;
+
 import com.vingame.glswing.component.GLContainer;
 import com.vingame.glswing.input.GLInputActions;
 import com.vingame.glswing.input.GLKeyBinding;
@@ -136,6 +140,14 @@ public final class GLList<T> extends GLControl implements GLVirtualViewportConte
 	}
 
 	public GLListModel<T> getModel() { return model; }
+	@Override protected AccessibleRole defaultAccessibleRole() {
+		return AccessibleRole.LIST;
+	}
+	@Override protected void collectAccessibleStates(AccessibleStateSet states) {
+		if (selectionModel.getSelectionMode()
+				!= GLListSelectionModel.SelectionMode.SINGLE)
+			states.add(AccessibleState.MULTISELECTABLE);
+	}
 	public void setModel(GLListModel<T> model) {
 		if (model == null)
 			throw new IllegalArgumentException("List model must not be null");

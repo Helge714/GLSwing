@@ -2,6 +2,8 @@ package com.vingame.glswing.ui;
 
 import java.awt.Color;
 
+import javax.accessibility.AccessibleRole;
+
 import com.vingame.glswing.layout.GLInsets;
 import com.vingame.glswing.layout.GLSize;
 import com.vingame.glswing.rendering.GLContext2D;
@@ -33,7 +35,9 @@ public class GLLabel extends com.vingame.glswing.component.GLContainer {
 		text = requireText(text);
 		if (this.text.equals(text))
 			return;
+		String oldText = this.text;
 		this.text = text;
+		fireAccessibleNameChange(oldText, text);
 		updatePresentation();
 	}
 
@@ -93,6 +97,9 @@ public class GLLabel extends com.vingame.glswing.component.GLContainer {
 	@Override
 	protected String defaultName() {
 		return text;
+	}
+	@Override protected AccessibleRole defaultAccessibleRole() {
+		return AccessibleRole.LABEL;
 	}
 
 	@Override

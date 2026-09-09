@@ -2,6 +2,8 @@ package com.vingame.glswing.ui;
 
 import java.awt.event.MouseEvent;
 
+import javax.accessibility.AccessibleState;
+
 import com.vingame.glswing.component.GLContainer;
 import com.vingame.glswing.component.GLParent;
 import com.vingame.glswing.input.GLKeyEvent;
@@ -52,6 +54,7 @@ public abstract class GLControl extends GLContainer implements GLKeyTarget {
 		if (this.enabled == enabled)
 			return;
 		this.enabled = enabled;
+		fireAccessibleStateChange(AccessibleState.ENABLED, enabled);
 		if (!enabled) {
 			mousePressed = false;
 			keyboardPressed = false;
@@ -69,6 +72,7 @@ public abstract class GLControl extends GLContainer implements GLKeyTarget {
 		if (this.focusable == focusable)
 			return;
 		this.focusable = focusable;
+		fireAccessibleStateChange(AccessibleState.FOCUSABLE, focusable);
 		if (!focusable)
 			clearGLFocus(this);
 		focusabilityChanged(focusable);
@@ -175,6 +179,7 @@ public abstract class GLControl extends GLContainer implements GLKeyTarget {
 		if (focused)
 			return;
 		focused = true;
+		fireAccessibleStateChange(AccessibleState.FOCUSED, true);
 		controlFocusChanged(true);
 		repaintGL();
 	}
@@ -184,6 +189,7 @@ public abstract class GLControl extends GLContainer implements GLKeyTarget {
 		if (!focused)
 			return;
 		focused = false;
+		fireAccessibleStateChange(AccessibleState.FOCUSED, false);
 		keyboardPressed = false;
 		updateState();
 		controlFocusChanged(false);
