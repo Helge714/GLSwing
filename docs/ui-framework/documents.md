@@ -386,6 +386,10 @@ Each registered migration receives the serialized bytes of version `n` and
 must return version `n + 1`. Migrations run in order before `readCurrent`.
 Applications with streaming or format-specific migration requirements can
 implement `GLDocumentCodec` directly and interpret `schemaVersion` themselves.
+`GLDocumentReadResult` lets a self-describing codec report the schema actually
+found in its payload. `GLDocumentManager` then keeps the converted model in
+memory, marks it modified, and writes the current schema only after an explicit
+save. The source file is never replaced merely because it was opened.
 
 ```java
 GLDocumentCodecRegistry codecs = new GLDocumentCodecRegistry();
@@ -395,6 +399,31 @@ codecs.register(nodeGraphs);
 
 The pair `typeId + codecId` must be unique. Multiple codecs may represent the
 same model type, such as JSON and a compact binary encoding.
+An unavailable codec produces `GLDocumentCodecNotFoundException`; an unsupported
+schema produces `GLDocumentSchemaException`. Codecs never guess a replacement
+encoding.
+
+### Migration approval and errors
+
+The lifecycle installs the standard themed migration and failure dialogs by
+default. Replace either handler when a product needs a different compatibility
+policy or presentation:
+
+```java
+lifecycle.setMigrationRequestHandler(
+        GLDocumentDialogs.migrationHandler(window));
+lifecycle.setFailureHandler(
+        GLDocumentDialogs.failureHandler(window));
+```
+
+The standard migration dialog offers update, read-only, and cancel choices.
+Update exposes the converted in-memory model as a modified document; read-only
+prevents persistence; cancel releases the unopened document. The standard
+failure dialog maps structured failure kinds to localized explanations and
+provides a separate technical-details view whose stack trace can be copied.
+Applications may replace either handler with product-specific presentation.
+The returned `CompletionStage` remains exceptional after a failure, allowing
+callers to perform additional recovery or telemetry without parsing dialog text.
 
 ## Plain files
 
@@ -412,9 +441,11 @@ Use `create(content, title, codec)` for a new document. `save(document)` writes
 to its existing file URI; `saveAs(document, path)` assigns a new location.
 `manage(document, codec)` adopts an existing document, which is useful when an
 already constructed editor is introduced into a managed workspace.
-Plain files do not carry a GLSwing manifest, so extension-based opening assumes
-the codec's current schema. If an external format supplies its own version,
-pass that version to `open(path, codec, schemaVersion)`.
+Plain files do not normally carry a GLSwing manifest, so extension-based opening
+assumes the codec's current schema. A self-describing codec may return the
+actual stored version through `readResult`. If another external format supplies
+its version separately, pass that version to
+`open(path, codec, schemaVersion)`.
 
 ## Compound document bundles
 

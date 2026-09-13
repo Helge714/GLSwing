@@ -4,6 +4,8 @@ import java.awt.Color;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
+import java.awt.MouseInfo;
+import java.awt.Point;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -17,6 +19,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import com.vingame.glswing.component.GLContainer;
 import com.vingame.glswing.component.GLParent;
 import com.vingame.glswing.input.GLMouseEvent;
+import com.vingame.glswing.input.GLMousePressCaptureTarget;
 import com.vingame.glswing.input.GLKeyEvent;
 import com.vingame.glswing.input.GLInputActions;
 import com.vingame.glswing.input.GLKeyTarget;
@@ -29,6 +32,9 @@ import com.vingame.glswing.rendering.GLColorInterpolation;
 import com.vingame.glswing.rendering.GLContext2D;
 import com.vingame.glswing.rendering.GLStroke;
 import com.vingame.glswing.rendering.GLTransform;
+import com.vingame.glswing.node.model.GLGraphDiagnostic;
+import com.vingame.glswing.node.model.GLNodeConnectionId;
+import com.vingame.glswing.node.model.GLNodeGraphValidationResult;
 import com.vingame.glswing.ui.GLTheme;
 import com.vingame.glswing.ui.GLMenuItem;
 import com.vingame.glswing.ui.GLPopupMenu;
@@ -39,7 +45,7 @@ import com.vingame.glswing.ui.GLUiKeys;
  * selection, viewport navigation and interactive graph connections.
  */
 public class GLNodeEditor extends GLContainer
-		implements GLMouseWheelCaptureTarget, GLKeyTarget {
+		implements GLMouseWheelCaptureTarget, GLMousePressCaptureTarget, GLKeyTarget {
 	private static final float CONNECTION_DRAG_THRESHOLD = 4;
 	private static final float MARQUEE_DRAG_THRESHOLD = 3;
 	private final List<GLNode> nodes = new ArrayList<>();
@@ -76,6 +82,8 @@ public class GLNodeEditor extends GLContainer
 	private Float connectionWidth;
 	private Color connectionBorder;
 	private Color selectedConnectionBorder;
+	private Color warningConnectionBorder;
+	private Color errorConnectionBorder;
 	private Float connectionBorderWidth;
 	private GLColorInterpolator connectionColorInterpolator;
 	private float zoom = 1;
@@ -100,10 +108,36 @@ public class GLNodeEditor extends GLContainer
 	private int marqueeModifiers;
 	private boolean interactiveCurveRendering;
 	private GLPopupMenu connectionContextMenu;
+	@FunctionalInterface public interface EmptyConnectionDropListener {
+		void connectionDropped(GLNodeEditor editor, GLNodePort fixedPort,
+				float graphX, float graphY, float screenX, float screenY);
+	}
+	@FunctionalInterface public interface NodeCreationRequestListener {
+		void creationRequested(GLNodeEditor editor, float graphX, float graphY,
+				float screenX, float screenY);
+	}
+	private EmptyConnectionDropListener emptyConnectionDropListener;
+	private NodeCreationRequestListener nodeCreationRequestListener;
+	private GLNodeEditingActions editingActions;
+	private GLNodePlacement activePlacement;
+	private javax.swing.Timer placementTimer;
 	private GLMenuItem deleteConnectionMenuItem;
 
 	public GLNodeEditor() { }
 	private GLNodeConnection contextConnection;
+
+	public void setEmptyConnectionDropListener(EmptyConnectionDropListener listener) {
+		emptyConnectionDropListener = listener;
+	}
+	/** Handles a secondary click on empty graph space. */
+	public void setNodeCreationRequestListener(NodeCreationRequestListener listener) {
+		nodeCreationRequestListener = listener;
+	}
+	public GLNodeEditingActions getEditingActions() { return editingActions; }
+	public void setEditingActions(GLNodeEditingActions actions) {
+		if (actions != editingActions) cancelPlacement();
+		editingActions = actions;
+	}
 
 	public void addNode(GLNode node, float x, float y) {
 		if (node == null)
@@ -122,6 +156,8 @@ public class GLNodeEditor extends GLContainer
 		node.setLocation(x, y);
 		nodes.add(node);
 		addGL(node);
+		for (GLNodeEditorListener listener : listeners)
+			listener.nodeAdded(this, node);
 	}
 
 	public boolean removeNode(GLNode node) {
@@ -140,6 +176,8 @@ public class GLNodeEditor extends GLContainer
 					|| connection.getOutput().getNode() == node)
 				removeConnection(connection);
 		removeGL(node);
+		for (GLNodeEditorListener listener : listeners)
+			listener.nodeRemoved(this, node);
 		return true;
 	}
 
@@ -214,6 +252,18 @@ public class GLNodeEditor extends GLContainer
 	}
 
 	public void addConnection(GLNodeConnection connection) {
+		addConnection(connection, true);
+	}
+
+	/**
+	 * Projects an authoritative stored connection even when current port
+	 * validators reject it. Callers should attach a diagnostic immediately.
+	 */
+	public void addProjectedConnection(GLNodeConnection connection) {
+		addConnection(connection, false);
+	}
+
+	private void addConnection(GLNodeConnection connection, boolean validate) {
 		if (connection == null)
 			throw new IllegalArgumentException("Node connection must not be null");
 		if (!nodes.contains(connection.getOutput().getNode())
@@ -224,7 +274,7 @@ public class GLNodeEditor extends GLContainer
 			return;
 		GLNodePort output = connection.getOutput();
 		GLNodePort input = connection.getInput();
-		if (!canConnect(output, input))
+		if (validate && !canConnect(output, input))
 			throw new IllegalArgumentException(
 					"Node ports reject this connection or reached their capacity");
 		if (input.getMaximumConnections() == 1)
@@ -475,6 +525,78 @@ public class GLNodeEditor extends GLContainer
 			return;
 		selectedConnectionBorder = null;
 		repaintGL();
+	}
+
+	public Color getWarningConnectionBorder() {
+		return warningConnectionBorder != null ? warningConnectionBorder
+				: getGLTheme().values().getColor("nodeEditor.warningConnectionBorder",
+						new Color(224, 154, 45));
+	}
+
+	public void setWarningConnectionBorder(Color color) {
+		if (color == null)
+			throw new IllegalArgumentException("Warning border color must not be null");
+		warningConnectionBorder = color;
+		repaintGL();
+	}
+
+	public void clearWarningConnectionBorder() {
+		if (warningConnectionBorder == null) return;
+		warningConnectionBorder = null;
+		repaintGL();
+	}
+
+	public Color getErrorConnectionBorder() {
+		return errorConnectionBorder != null ? errorConnectionBorder
+				: getGLTheme().values().getColor("nodeEditor.errorConnectionBorder",
+						new Color(222, 70, 70));
+	}
+
+	public void setErrorConnectionBorder(Color color) {
+		if (color == null)
+			throw new IllegalArgumentException("Error border color must not be null");
+		errorConnectionBorder = color;
+		repaintGL();
+	}
+
+	public void clearErrorConnectionBorder() {
+		if (errorConnectionBorder == null) return;
+		errorConnectionBorder = null;
+		repaintGL();
+	}
+
+	/** Clears all visual connection diagnostics in this editor. */
+	public void clearConnectionDiagnostics() {
+		for (GLNodeConnection connection : connections)
+			connection.clearDiagnostic();
+	}
+
+	/**
+	 * Applies model diagnostics to visual connections carrying matching model IDs.
+	 * Errors take precedence over warnings. Unmentioned connections are reset.
+	 */
+	public void applyConnectionDiagnostics(GLNodeGraphValidationResult result) {
+		if (result == null)
+			throw new IllegalArgumentException("Validation result required");
+		Map<GLNodeConnectionId, DiagnosticDecoration> decorations =
+				new LinkedHashMap<>();
+		for (GLGraphDiagnostic diagnostic : result.diagnostics()) {
+			GLNodeConnectionStatus status = diagnostic.severity()
+					== GLGraphDiagnostic.Severity.ERROR
+							? GLNodeConnectionStatus.ERROR
+							: GLNodeConnectionStatus.WARNING;
+			for (GLNodeConnectionId id : diagnostic.connectionIds()) {
+				DiagnosticDecoration current = decorations.get(id);
+				if (current == null || status == GLNodeConnectionStatus.ERROR)
+					decorations.put(id, new DiagnosticDecoration(status,
+							diagnostic.message()));
+			}
+		}
+		for (GLNodeConnection connection : connections) {
+			DiagnosticDecoration decoration = decorations.get(connection.getModelId());
+			if (decoration == null) connection.clearDiagnostic();
+			else connection.setDiagnostic(decoration.status(), decoration.message());
+		}
 	}
 
 	/** Border thickness added on each side of a connection in screen pixels. */
@@ -799,7 +921,11 @@ public class GLNodeEditor extends GLContainer
 		GLTransform previous = context.getTransform();
 		try {
 			context.setTransform(viewTransform(previous));
-			super.renderChildren(context);
+			for (GLContainer child : getGLChildrenInPaintOrder()) {
+				if (child instanceof GLNode node && node.isMuted())
+					drawMutedBypasses(context, node);
+				child.renderComponent(context);
+			}
 			drawMarquee(context);
 		} finally {
 			context.setTransform(previous);
@@ -810,6 +936,15 @@ public class GLNodeEditor extends GLContainer
 	@Override
 	public void mousePressed(GLMouseEvent event) {
 		requestGLFocus(this);
+		if (finishPlacementFromClick(event)) return;
+		if (event.getButton() == MouseEvent.BUTTON3
+				&& nodeCreationRequestListener != null) {
+			float[] world = screenToWorld(event.getScreenX(), event.getScreenY());
+			nodeCreationRequestListener.creationRequested(this, world[0], world[1],
+					event.getScreenX(), event.getScreenY());
+			event.consume();
+			return;
+		}
 		if (event.getButton() == MouseEvent.BUTTON2) {
 			beginPan(event);
 			return;
@@ -869,17 +1004,156 @@ public class GLNodeEditor extends GLContainer
 
 	@Override
 	protected void detached(GLParent formerParent) {
+		cancelPlacement();
 		formerParent.finishInteractiveRepaint();
 		super.detached(formerParent);
 	}
 
 	@Override
 	public void keyPressed(GLKeyEvent event) {
-		if (!getGLInputMap().matches(GLInputActions.NODE_DELETE, event)
-				|| selectedConnection == null && selectedNodes.isEmpty())
+		if (activePlacement != null
+				&& getGLInputMap().matches(GLInputActions.CANCEL, event)) {
+			cancelPlacement(); event.consume(); return;
+		}
+		if (getGLInputMap().matches(GLInputActions.NODE_SELECT_ALL, event)) {
+			if (!nodes.isEmpty() && selectedNodes.size() == nodes.size()) clearSelection();
+			else setSelectedNodes(nodes);
+			event.consume(); return;
+		}
+		GLNode activeNode = getActiveNode();
+		if (getGLInputMap().matches(GLInputActions.NODE_EDIT_TITLE, event)
+				&& activeNode != null && activeNode.isTitleEditable()) {
+			activeNode.editTitle(); event.consume(); return;
+		}
+		if (getGLInputMap().matches(GLInputActions.NODE_CREATE, event)) {
+			float[] point = pointerGraphPosition();
+			if (editingActions != null)
+				editingActions.requestNodeCreation(point[0], point[1], point[2], point[3]);
+			else if (nodeCreationRequestListener != null)
+				nodeCreationRequestListener.creationRequested(this, point[0], point[1],
+						point[2], point[3]);
+			event.consume(); return;
+		}
+		if (getGLInputMap().matches(GLInputActions.NODE_OPEN_COMPOSITE, event)
+				&& editingActions != null
+				&& editingActions.canOpenSelectedComposite()) {
+			editingActions.openSelectedComposite(); event.consume(); return;
+		}
+		if (getGLInputMap().matches(GLInputActions.NODE_MOVE, event)
+				&& editingActions != null && !selectedNodes.isEmpty()) {
+			float[] point = pointerGraphPosition();
+			cancelPlacement();
+			beginPlacement(editingActions.beginMoveSelection(point[0], point[1]));
+			event.consume(); return;
+		}
+		if (editingActions != null && !selectedNodes.isEmpty()
+				&& getGLInputMap().matches(GLInputActions.NODE_TOGGLE_HIDDEN, event)
+				&& editingActions.canToggleHidden()) {
+			editingActions.toggleHidden(); event.consume(); return;
+		}
+		if (editingActions != null && !selectedNodes.isEmpty()
+				&& getGLInputMap().matches(GLInputActions.NODE_TOGGLE_MUTED, event)
+				&& editingActions.canToggleMuted()) {
+			editingActions.toggleMuted(); event.consume(); return;
+		}
+		if (editingActions != null) {
+			if (getGLInputMap().matches(GLInputActions.NODE_COPY, event)
+					&& editingActions.canCopy()) editingActions.copy();
+			else if (getGLInputMap().matches(GLInputActions.NODE_CUT, event)
+					&& editingActions.canCut()) editingActions.cut();
+			else if (getGLInputMap().matches(GLInputActions.NODE_PASTE, event)
+					&& editingActions.canPaste()) {
+				float[] point = pointerGraphPosition();
+				cancelPlacement();
+				beginPlacement(editingActions.beginPaste(point[0], point[1]));
+			} else if (getGLInputMap().matches(GLInputActions.NODE_DUPLICATE, event)
+					&& editingActions.canDuplicate()) {
+				float[] point = pointerGraphPosition();
+				cancelPlacement();
+				beginPlacement(editingActions.beginDuplicate(point[0], point[1]));
+			}
+			else if (getGLInputMap().matches(
+					GLInputActions.NODE_EXTRACT_COMPOSITE, event)
+					&& editingActions.canExtractComposite())
+				editingActions.extractComposite();
+			else if (getGLInputMap().matches(GLInputActions.NODE_DELETE, event)
+					&& selectedConnection == null && !selectedNodes.isEmpty()
+					&& editingActions.canDelete())
+				editingActions.delete();
+			else if (getGLInputMap().matches(GLInputActions.NODE_DELETE, event)
+					&& selectedConnection != null) deleteSelection();
+			else return;
+			event.consume();
 			return;
-		deleteSelection();
+		}
+		if (getGLInputMap().matches(GLInputActions.NODE_DELETE, event)
+				&& (selectedConnection != null || !selectedNodes.isEmpty())) {
+			deleteSelection();
+			event.consume();
+		}
+	}
+
+	boolean finishPlacementFromClick(GLMouseEvent event) {
+		if (activePlacement == null || event == null) return false;
+		if (event.getButton() == MouseEvent.BUTTON1) confirmPlacement();
+		else if (event.getButton() == MouseEvent.BUTTON3) cancelPlacement();
+		else return false;
 		event.consume();
+		return true;
+	}
+
+	@Override
+	public boolean capturesMousePress(int button) {
+		return activePlacement != null
+				&& (button == MouseEvent.BUTTON1 || button == MouseEvent.BUTTON3);
+	}
+
+	private void beginPlacement(GLNodePlacement placement) {
+		if (placement == null) return;
+		activePlacement = placement;
+		placementTimer = new javax.swing.Timer(16, event -> updatePlacementFromPointer());
+		placementTimer.start();
+		updatePlacementFromPointer();
+	}
+
+	private void confirmPlacement() {
+		GLNodePlacement placement = activePlacement;
+		stopPlacementTimer();
+		activePlacement = null;
+		if (placement != null) placement.confirm();
+	}
+
+	private void cancelPlacement() {
+		GLNodePlacement placement = activePlacement;
+		stopPlacementTimer();
+		activePlacement = null;
+		if (placement != null) placement.cancel();
+	}
+
+	private void stopPlacementTimer() {
+		if (placementTimer != null) placementTimer.stop();
+		placementTimer = null;
+	}
+
+	private void updatePlacementFromPointer() {
+		if (activePlacement == null) return;
+		float[] point = pointerGraphPosition();
+		activePlacement.moveTo(point[0], point[1]);
+	}
+
+	private float[] pointerGraphPosition() {
+		float[] bounds = getLastRenderedScreenBounds();
+		float screenX = bounds == null ? getWidth() * .5f : bounds[0] + bounds[2] * .5f;
+		float screenY = bounds == null ? getHeight() * .5f : bounds[1] + bounds[3] * .5f;
+		try {
+			Point pointer = MouseInfo.getPointerInfo().getLocation();
+			if (bounds != null && pointer.x >= bounds[0] && pointer.x <= bounds[0] + bounds[2]
+					&& pointer.y >= bounds[1] && pointer.y <= bounds[1] + bounds[3]) {
+				screenX = pointer.x; screenY = pointer.y;
+			}
+		} catch (RuntimeException ignored) { }
+		float[] world = screenToWorld(screenX, screenY);
+		return new float[] { world[0], world[1], screenX, screenY };
 	}
 
 	@Override
@@ -1071,6 +1345,10 @@ public class GLNodeEditor extends GLContainer
 		GLNodePort fixed = fixedGesturePort;
 		GLNodePort target = !captureLost && connectionDragging
 				? candidatePort : null;
+		boolean emptyDrop = !captureLost && connectionDragging && target == null;
+		float dropX = connectionPointerX, dropY = connectionPointerY;
+		float screenX = event == null ? Float.NaN : event.getScreenX();
+		float screenY = event == null ? Float.NaN : event.getScreenY();
 		GLNodeConnection detached = detachedConnection;
 		clearConnectionGestureState();
 		if (target != null) {
@@ -1084,6 +1362,9 @@ public class GLNodeEditor extends GLContainer
 		} else if (captureLost && detached != null) {
 			addConnection(detached);
 		}
+		if (emptyDrop && fixed != null && emptyConnectionDropListener != null)
+			emptyConnectionDropListener.connectionDropped(this, fixed, dropX, dropY,
+					screenX, screenY);
 		recordConnectionChange(connectionGestureBefore,
 				List.copyOf(connections));
 		connectionGestureBefore = List.of();
@@ -1370,6 +1651,8 @@ public class GLNodeEditor extends GLContainer
 			node.setBounds(state.x(), state.y(), state.width(), state.height());
 			nodes.add(Math.min(state.index(), nodes.size()), node);
 			addGL(node);
+			for (GLNodeEditorListener listener : listeners)
+				listener.nodeAdded(this, node);
 		}
 		for (int index = 0; index < snapshot.paintOrder().size(); index++) {
 			GLContainer child = snapshot.paintOrder().get(index);
@@ -1444,6 +1727,9 @@ public class GLNodeEditor extends GLContainer
 			List<GLNode> selection, GLNode active) {
 	}
 
+	private record DiagnosticDecoration(GLNodeConnectionStatus status,
+			String message) { }
+
 	private enum WorkspaceGesture { NONE, PAN, MARQUEE }
 
 	private void drawConnections(GLContext2D context) {
@@ -1472,14 +1758,37 @@ public class GLNodeEditor extends GLContainer
 		}
 	}
 
+	private void drawMutedBypasses(GLContext2D context, GLNode node) {
+		Color color = getGLTheme().values().getColor("node.mutedBypass",
+				new Color(224, 72, 72));
+		Color border = new Color(Math.max(0, color.getRed() - 55),
+				Math.max(0, color.getGreen() - 35),
+				Math.max(0, color.getBlue() - 35), color.getAlpha());
+		float width = Math.max(.1f, getGLTheme().values().getFloat(
+				"node.mutedBypassWidth", 2));
+		for (Map.Entry<String, String> mapping
+				: node.getMuteBypassMappings().entrySet()) {
+			GLNodePort input = node.findPort(mapping.getKey());
+			GLNodePort output = node.findPort(mapping.getValue());
+			if (input != null && output != null)
+				drawConnectionCurve(context, portX(input), portY(input),
+						portX(output), portY(output), width, color, color,
+						border, null);
+		}
+	}
+
 	private void drawConnection(GLContext2D context,
 			GLNodeConnection connection) {
 		GLNodePort output = connection.getOutput();
 		GLNodePort input = connection.getInput();
 		if (output.getNode() == null || input.getNode() == null)
 			return;
-		Color border = connection == selectedConnection
-				? getSelectedConnectionBorder() : getConnectionBorder();
+		Color border = switch (connection.getStatus()) {
+			case ERROR -> getErrorConnectionBorder();
+			case WARNING -> getWarningConnectionBorder();
+			case NORMAL -> connection == selectedConnection
+					? getSelectedConnectionBorder() : getConnectionBorder();
+		};
 		drawConnectionCurve(context, portX(output), portY(output),
 				portX(input), portY(input), connection.getWidth(),
 				output.getColor(), input.getColor(), border, connection);

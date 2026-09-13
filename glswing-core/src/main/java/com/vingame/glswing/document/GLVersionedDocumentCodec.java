@@ -30,8 +30,8 @@ public abstract class GLVersionedDocumentCodec<T> implements GLDocumentCodec<T> 
 
 	@Override public final T read(InputStream input, int schemaVersion) throws IOException {
 		if (!supportsSchemaVersion(schemaVersion))
-			throw new GLDocumentFormatException("Unsupported schema version " + schemaVersion
-					+ " for " + typeId());
+			throw new GLDocumentSchemaException(typeId(), schemaVersion,
+					currentSchemaVersion());
 		byte[] serialized = input.readAllBytes();
 		for (int version = schemaVersion; version < currentSchemaVersion(); version++)
 			serialized = migrations.get(version).migrate(serialized);

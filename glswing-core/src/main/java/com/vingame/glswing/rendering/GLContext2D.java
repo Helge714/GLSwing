@@ -22,6 +22,7 @@ public final class GLContext2D {
 
 	private final GLRenderer2D renderer;
 	private Color color = Color.BLACK;
+	private float alphaMultiplier = 1;
 	private GLStroke stroke = GLStroke.DEFAULT;
 	private float curveTolerance = GLStroke.CURVE_TOLERANCE_NORMAL;
 	private ShaderProgram filledShader;
@@ -49,6 +50,7 @@ public final class GLContext2D {
 
 	void reset(float logicalWidth, float logicalHeight) {
 		color = Color.BLACK;
+		alphaMultiplier = 1;
 		stroke = GLStroke.DEFAULT;
 		curveTolerance = GLStroke.CURVE_TOLERANCE_NORMAL;
 		filledShader = null;
@@ -75,6 +77,23 @@ public final class GLContext2D {
 
 	public Color getColor() {
 		return color;
+	}
+
+	/**
+	 * Sets the alpha multiplier applied to subsequent drawing operations. This is
+	 * direct vertex opacity, not isolated group opacity, and therefore does not
+	 * introduce an off-screen layer or an additional draw call.
+	 */
+	public void setAlphaMultiplier(float multiplier) {
+		if (!Float.isFinite(multiplier) || multiplier < 0 || multiplier > 1)
+			throw new IllegalArgumentException(
+					"Alpha multiplier must be between zero and one");
+		alphaMultiplier = multiplier;
+	}
+
+	/** Returns the alpha multiplier applied to subsequent drawing operations. */
+	public float getAlphaMultiplier() {
+		return alphaMultiplier;
 	}
 
 	/**
@@ -207,7 +226,7 @@ public final class GLContext2D {
 			throw new IllegalStateException(
 					"Drawing a recording while another recording is active is not supported yet");
 		try {
-			recording.replay(renderer, parameters);
+			recording.replay(renderer, parametersWithAlphaMultiplier(parameters));
 		} finally {
 			filledShader = renderer.currentFilledShader();
 			textureShader = renderer.currentTextureShader();
@@ -3028,10 +3047,28 @@ public final class GLContext2D {
 			throw new IllegalArgumentException("Transformed coordinate is not finite");
 	}
 
-	private static Color requireColor(Color color) {
+	private Color requireColor(Color color) {
 		if (color == null)
 			throw new IllegalArgumentException("Drawing color must not be null");
-		return color;
+		// Recording vertices remain reusable; the multiplier is applied when the
+		// recording is replayed in its current surrounding context.
+		if (recording != null || alphaMultiplier == 1 || color.getAlpha() == 0)
+			return color;
+		return new Color(color.getRed(), color.getGreen(), color.getBlue(),
+				Math.round(color.getAlpha() * alphaMultiplier));
+	}
+
+	private GLRenderParameters parametersWithAlphaMultiplier(
+			GLRenderParameters parameters) {
+		if (alphaMultiplier == 1) return parameters;
+		GLRenderParameters combined = new GLRenderParameters()
+				.setOpacity(alphaMultiplier);
+		if (parameters == null) return combined;
+		combined.setTransform(parameters.getTransform())
+				.setTint(parameters.getTint())
+				.setOpacity(parameters.getOpacity() * alphaMultiplier);
+		if (parameters.hasColor()) combined.setColor(parameters.getColor());
+		return combined;
 	}
 
 	private static int requirePickId(int pickId) {
@@ -3114,7 +3151,8 @@ public final class GLContext2D {
 	}
 
 	private ContextState captureContextState() {
-		return new ContextState(color, stroke, filledShader, textureShader, textShader,
+		return new ContextState(color, alphaMultiplier, stroke,
+				filledShader, textureShader, textShader,
 				uiShader,
 				curveTolerance, pickId, mouseTarget,
 				mouseOriginDefined, mouseOriginX, mouseOriginY,
@@ -3131,6 +3169,7 @@ public final class GLContext2D {
 
 	private void restoreContextState(ContextState state) {
 		color = state.color;
+		alphaMultiplier = state.alphaMultiplier;
 		stroke = state.stroke;
 		filledShader = state.filledShader;
 		textureShader = state.textureShader;
@@ -3146,7 +3185,7 @@ public final class GLContext2D {
 		logicalHeight = state.logicalHeight;
 	}
 
-	private record ContextState(Color color, GLStroke stroke,
+	private record ContextState(Color color, float alphaMultiplier, GLStroke stroke,
 			ShaderProgram filledShader, ShaderProgram textureShader,
 			ShaderProgram textShader, ShaderProgram uiShader, float curveTolerance,
 			int pickId, GLMouseTarget mouseTarget,

@@ -133,22 +133,24 @@ public final class GLDocumentBundle {
 		GLDocumentCodec<T> codec = codecs.require(descriptor.typeId(), descriptor.codecId(),
 				contentType);
 		if (!codec.supportsSchemaVersion(descriptor.schemaVersion()))
-			throw new GLDocumentFormatException("Unsupported schema version "
-					+ descriptor.schemaVersion() + " for entry " + id);
-		T content;
+			throw new GLDocumentSchemaException(descriptor.typeId(),
+					descriptor.schemaVersion(), codec.currentSchemaVersion());
+		GLDocumentReadResult<T> decoded;
 		try (ZipFile archive = new ZipFile(path.toFile())) {
 			ZipEntry payload = archive.getEntry(descriptor.location());
 			if (payload == null) throw new GLDocumentFormatException("Payload is missing: " + id);
 			try (InputStream input = new BufferedInputStream(archive.getInputStream(payload))) {
-				content = codec.read(input, descriptor.schemaVersion());
+				decoded = codec.readResult(input, descriptor.schemaVersion());
 			}
 		}
-		GLDocument<T> document = new GLDocument<>(content, title(id), entryLocation(descriptor),
+		GLDocument<T> document = new GLDocument<>(decoded.content(), title(id), entryLocation(descriptor),
 				new com.vingame.glswing.history.GLHistoryManager());
 		GLDocumentEntry<T> result = new GLDocumentEntry<>(descriptor, document);
 		loaded.put(id, result); document.addListener(ignored -> fire());
-		if (descriptor.schemaVersion() != codec.currentSchemaVersion())
+		if (decoded.migrated()) {
 			structureModified = true;
+			document.markModified();
+		}
 		return result;
 	}
 

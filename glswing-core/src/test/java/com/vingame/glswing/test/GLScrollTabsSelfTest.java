@@ -94,6 +94,11 @@ public final class GLScrollTabsSelfTest {
 		pane.setBounds(0, 0, 301, 200);
 		check(!pane.getHorizontalScrollBar().isVisible(),
 				"NEVER allowed the horizontal bar to appear");
+		pane.setContentTracksViewportWidth(true);
+		check(pane.isContentTracksViewportWidth()
+				&& content.getWidth() < content.getPreferredGLSize().width()
+				&& content.getWidth() > 250,
+				"Viewport-width tracking retained the content's preferred width");
 	}
 
 	private static GLMouseWheelEvent wheel(int modifiers, int rotation) {

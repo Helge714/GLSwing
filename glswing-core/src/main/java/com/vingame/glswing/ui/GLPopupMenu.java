@@ -13,6 +13,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.WeakHashMap;
+import java.util.IdentityHashMap;
+import java.util.function.Predicate;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import javax.accessibility.AccessibleRole;
@@ -53,6 +55,8 @@ public class GLPopupMenu extends GLContainer {
 			new WeakHashMap<>();
 
 	private final List<GLContainer> rows = new ArrayList<>();
+	private final Map<GLContainer, GLSize> customRowSizes = new IdentityHashMap<>();
+	private Predicate<? super GLMenuItem> itemFilter = item -> true;
 	private final CopyOnWriteArrayList<GLPopupMenuListener> popupMenuListeners =
 			new CopyOnWriteArrayList<>();
 	private final MenuScrollBar scrollBar;
@@ -177,6 +181,34 @@ public class GLPopupMenu extends GLContainer {
 		return item;
 	}
 
+	/** Adds an interactive custom row, such as a search field, to this popup. */
+	public final <T extends GLContainer> T addContent(T content,
+			float preferredWidth, float height) {
+		if (content == null || !Float.isFinite(preferredWidth)
+				|| !Float.isFinite(height) || preferredWidth <= 0 || height <= 0)
+			throw new IllegalArgumentException("Valid popup content bounds required");
+		if (isShowing())
+			throw new IllegalStateException("Close a menu before changing its rows");
+		if (rows.contains(content) || content.getGLParent() != null)
+			throw new IllegalArgumentException("Popup content is already attached");
+		rows.add(content);
+		customRowSizes.put(content, new GLSize(preferredWidth, height));
+		addGL(content);
+		invalidateMenuLayout();
+		return content;
+	}
+
+	/** Filters normal menu items while retaining custom content rows. */
+	public final void setItemFilter(Predicate<? super GLMenuItem> filter) {
+		itemFilter = filter == null ? item -> true : filter;
+		invalidateMenuLayout();
+		if (session != null) {
+			session.closeAfter(this);
+			prepareLayout(layoutMaximumHeight);
+			repaintAndRebuildPicking(this);
+		}
+	}
+
 	public final boolean removeItem(GLMenuItem item) {
 		if (isShowing())
 			throw new IllegalStateException("Close a menu before changing its rows");
@@ -199,6 +231,7 @@ public class GLPopupMenu extends GLContainer {
 			removeGL(row);
 		}
 		rows.clear();
+		customRowSizes.clear();
 		updateMnemonics();
 		invalidateMenuLayout();
 	}
@@ -465,7 +498,7 @@ public class GLPopupMenu extends GLContainer {
 	public final void close() {
 		MenuSession current = session;
 		if (current != null)
-			current.close();
+			current.close(true);
 	}
 
 	public final boolean isShowing() {
@@ -669,8 +702,11 @@ public class GLPopupMenu extends GLContainer {
 		appliedStyle = style;
 		float contentWidth = style.minimumWidth();
 		for (GLContainer row : rows)
-			if (row instanceof GLMenuItem item)
+			if (row instanceof GLMenuItem item && itemFilter.test(item))
 				contentWidth = Math.max(contentWidth, item.requiredWidth(style));
+			else if (!(row instanceof GLMenuItem) && customRowSizes.containsKey(row))
+				contentWidth = Math.max(contentWidth,
+						customRowSizes.get(row).width());
 		if (!title.isEmpty())
 			contentWidth = Math.max(contentWidth, titleView.requiredWidth(style));
 
@@ -678,14 +714,12 @@ public class GLPopupMenu extends GLContainer {
 		float titleHeight = title.isEmpty() ? 0 : style.itemHeight();
 		float naturalRowsHeight = 0;
 		for (GLContainer row : rows)
-			naturalRowsHeight += rowHeight(row, style);
+			if (included(row)) naturalRowsHeight += rowHeight(row, style);
 		float totalAvailableRowsHeight = Math.max(0,
 				maximumHeight - padding.vertical() - titleHeight);
 		float availableRowsHeight = totalAvailableRowsHeight;
 		boolean scrollable = naturalRowsHeight > availableRowsHeight;
 
-		for (GLContainer row : rows)
-			row.setVisible(false);
 		topFade.setVisible(false);
 		bottomFade.setVisible(false);
 		leftFade.setVisible(false);
@@ -771,11 +805,15 @@ public class GLPopupMenu extends GLContainer {
 						attachedEdge == AttachedEdge.BOTTOM ? 0 : edgeRadius)));
 		for (int index = 0; index < rows.size(); index++) {
 			GLContainer row = rows.get(index);
+			if (!included(row)) {
+				row.setVisible(false);
+				continue;
+			}
 			float height = rowHeight(row, style);
 			boolean intersectsViewport = rowY + height > 0
 					&& rowY < viewportHeight;
+			row.setVisible(intersectsViewport);
 			if (intersectsViewport) {
-				row.setVisible(true);
 				row.setBounds(padding.left() - horizontalScrollOffset,
 						rowViewportY + rowY, rowWidth, height);
 			}
@@ -940,9 +978,14 @@ public class GLPopupMenu extends GLContainer {
 				&& menuHit.getLocalY() <= getHeight() - padding.bottom();
 	}
 
-	private static float rowHeight(GLContainer row, GLMenuStyle style) {
-		return row instanceof GLMenuItem
+	private float rowHeight(GLContainer row, GLMenuStyle style) {
+		GLSize custom = customRowSizes.get(row);
+		return custom != null ? custom.height() : row instanceof GLMenuItem
 				? style.itemHeight() : style.separatorHeight();
+	}
+
+	private boolean included(GLContainer row) {
+		return !(row instanceof GLMenuItem item) || itemFilter.test(item);
 	}
 
 	final float naturalHeight() {
@@ -951,7 +994,7 @@ public class GLPopupMenu extends GLContainer {
 		if (!title.isEmpty())
 			height += style.itemHeight();
 		for (GLContainer row : rows)
-			height += rowHeight(row, style);
+			if (included(row)) height += rowHeight(row, style);
 		return height;
 	}
 
@@ -1483,7 +1526,8 @@ public class GLPopupMenu extends GLContainer {
 
 		@Override
 		public void mousePressed(GLMouseEvent event) {
-			session.close();
+			session.close(true);
+			event.consume();
 		}
 	}
 

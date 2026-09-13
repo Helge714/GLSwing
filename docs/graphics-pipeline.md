@@ -63,6 +63,7 @@ color, picking, and pipeline variants.
 | Methods | Purpose |
 |---|---|
 | `setColor`, `getColor` | Set or inspect the default drawing color |
+| `setAlphaMultiplier`, `getAlphaMultiplier` | Apply direct alpha without an off-screen layer |
 | `clear()`, `clear(Color)`, `clearDepth()` | Clear active color, picking, or depth outputs |
 | `getScreenBounds` | Transform local bounds into screen bounds |
 | `intersectsRedrawBounds` | Test geometry against the current damage region |

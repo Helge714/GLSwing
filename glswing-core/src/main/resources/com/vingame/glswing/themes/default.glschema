@@ -237,6 +237,8 @@ nodeEditor.minimumConnectionHandleLength=NUMBER, "Value of the nodeEditor.minimu
 nodeEditor.connectionWidth=NUMBER, "Value of the nodeEditor.connectionWidth theme property."
 nodeEditor.connectionBorder=COLOR, "Value of the nodeEditor.connectionBorder theme property."
 nodeEditor.selectedConnectionBorder=COLOR, "Value of the nodeEditor.selectedConnectionBorder theme property."
+nodeEditor.warningConnectionBorder=COLOR, "Outer border for node connections carrying a warning diagnostic."
+nodeEditor.errorConnectionBorder=COLOR, "Outer border for node connections carrying an error diagnostic."
 nodeEditor.connectionBorderWidth=NUMBER, "Value of the nodeEditor.connectionBorderWidth theme property."
 nodeEditor.connectionColorInterpolation=ENUM, "Color space used to interpolate node connections.", values=srgb|linear_rgb|oklab, fragment=colors
 nodeEditor.marqueeFill=COLOR, "Value of the nodeEditor.marqueeFill theme property."
@@ -264,6 +266,8 @@ node.titleBackground=COLOR, "Value of the node.titleBackground theme property."
 node.titleGradientLight=COLOR, "Value of the node.titleGradientLight theme property."
 node.titleGradientDark=COLOR, "Value of the node.titleGradientDark theme property."
 node.titleText=COLOR, "Value of the node.titleText theme property."
+node.collapseChevron=COLOR, "Chevron color for collapsed nodes."
+node.collapseChevronHover=COLOR, "Chevron color while its expansion target is hovered."
 node.border=COLOR, "Value of the node.border theme property."
 node.selectedBorder=COLOR, "Value of the node.selectedBorder theme property."
 node.activeSelectedBorder=COLOR, "Value of the node.activeSelectedBorder theme property."
@@ -275,6 +279,9 @@ node.portHover=COLOR, "Value of the node.portHover theme property."
 node.cornerRadius=NUMBER, "Value of the node.cornerRadius theme property."
 node.borderWidth=NUMBER, "Value of the node.borderWidth theme property."
 node.titleHeight=NUMBER, "Value of the node.titleHeight theme property."
+node.collapseChevronSize=NUMBER, "Visual size of the collapsed-node Chevron.", min=3, max=64
+node.collapseChevronHitSize=NUMBER, "Width reserved for the collapsed-node Chevron and its pointer target.", min=12, max=96
+node.collapseChevronWidth=NUMBER, "Screen-space stroke width of the collapsed-node Chevron.", min=0.5, max=16
 node.shadowSoftness=NUMBER, "Value of the node.shadowSoftness theme property."
 node.shadowOffsetX=NUMBER, "Value of the node.shadowOffsetX theme property."
 node.shadowOffsetY=NUMBER, "Value of the node.shadowOffsetY theme property."
@@ -283,6 +290,10 @@ node.rowGap=NUMBER, "Value of the node.rowGap theme property."
 node.minimumWidth=NUMBER, "Value of the node.minimumWidth theme property."
 node.resizeHandleSize=NUMBER, "Value of the node.resizeHandleSize theme property."
 node.contentPadding=INSETS, "Value of the node.contentPadding theme property."
+node.mutedBypass=COLOR, "Color of the internal input-to-output bypass shown on muted nodes."
+node.mutedBypassWidth=NUMBER, "Screen-space width of muted-node bypass lines.", min=0.1, max=32
+node.opacity=NUMBER, "Opacity of ordinary node views.", min=0, max=1
+node.mutedOpacity=NUMBER, "Opacity of muted node views.", min=0, max=1
 dialog.cornerRadius=NUMBER, "Value of the dialog.cornerRadius theme property."
 dialog.titleBar.height=NUMBER, "Value of the dialog.titleBar.height theme property."
 dialog.titleBar.background=COLOR, "Value of the dialog.titleBar.background theme property."

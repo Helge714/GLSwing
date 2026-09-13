@@ -140,4 +140,29 @@ final class MavenSmokeTest {
 	void nodes() {
 		GLNodeSelfTest.main(NO_ARGS);
 	}
+
+	@Test
+	void nodeEditorBinding() {
+		GLNodeEditorBindingSelfTest.main(NO_ARGS);
+	}
+
+	@Test
+	void nodeGraphDocuments() throws Exception {
+		GLNodeGraphDocumentSelfTest.main(NO_ARGS);
+	}
+
+	@Test
+	void nodeGraphModel() {
+		GLNodeGraphModelSelfTest.main(NO_ARGS);
+	}
+
+	@Test
+	void compositeExpansion() {
+		GLCompositeExpansionSelfTest.main(NO_ARGS);
+	}
+
+	@Test
+	void executionPlans() throws Exception {
+		GLExecutionPlanSelfTest.main(NO_ARGS);
+	}
 }

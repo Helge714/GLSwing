@@ -23,6 +23,8 @@ import com.vingame.glswing.input.GLInputMap;
 import com.vingame.glswing.input.GLKeyTarget;
 import com.vingame.glswing.input.GLMouseEvent;
 import com.vingame.glswing.input.GLMouseTarget;
+import com.vingame.glswing.input.GLMousePressCaptureTarget;
+import com.vingame.glswing.input.GLKeyPressCaptureTarget;
 import com.vingame.glswing.input.GLMouseWheelEvent;
 import com.vingame.glswing.input.GLMouseWheelCaptureTarget;
 import com.vingame.glswing.input.GLPickResult;
@@ -234,6 +236,7 @@ final class GLContainerInputDispatcher {
 
 	private void dispatchMousePressed(MouseEvent event, GLPickResult result) {
 		result = attached(result);
+		result = capturePress(result, event.getButton());
 		GLMouseTarget hitTarget = result.getTarget();
 		if (!preservesKeyboardFocus(hitTarget))
 			host.requestGLFocus(hitTarget instanceof GLKeyTarget keyTarget
@@ -245,6 +248,19 @@ final class GLContainerInputDispatcher {
 				: GLPickResult.none();
 		if (capturedPick.hasTarget())
 			host.repaintColorOnly();
+	}
+
+	private static GLPickResult capturePress(GLPickResult result, int button) {
+		if (result == null || !result.hasTarget()) return result;
+		for (GLMouseTarget current = result.getTarget(); current != null;) {
+			if (current instanceof GLMousePressCaptureTarget capture
+					&& capture.capturesMousePress(button))
+				return current == result.getTarget() ? result : result.retarget(current);
+			if (!(current instanceof GLContainer child)) break;
+			GLParent parent = child.getGLParent();
+			current = parent instanceof GLMouseTarget mouseTarget ? mouseTarget : null;
+		}
+		return result;
 	}
 
 	private static boolean preservesKeyboardFocus(GLMouseTarget target) {
@@ -579,6 +595,16 @@ final class GLContainerInputDispatcher {
 
 	private static void dispatchKeyPressed(GLKeyTarget target,
 			GLKeyEvent event) {
+		if (target instanceof GLContainer focused) {
+			for (GLParent parent = focused.getGLParent();
+					parent instanceof GLContainer ancestor;
+					parent = ancestor.getGLParent())
+				if (ancestor instanceof GLKeyPressCaptureTarget capture
+						&& capture.capturesKeyPress(event)) {
+					capture.keyPressed(event);
+					if (event.isConsumed()) return;
+				}
+		}
 		target.keyPressed(event);
 		if (event.isConsumed() || !(target instanceof GLContainer container))
 			return;

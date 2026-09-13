@@ -54,6 +54,153 @@ may change in subsequent `0.x` releases.
 
 ### UI
 
+- Composite-interface sidebars now derive their scrollable height from the
+  rows that are actually visible. Port lists use compact connected add,
+  remove, move-up, and move-down controls, while icon-only bound toggles
+  directly determine whether slider values are fixed or open-ended.
+- Added the rendering-independent `GLNodeGraph` model with stable graph, node,
+  connection, and endpoint identities; portable structured property values;
+  immutable revision snapshots; atomic edit callbacks; cascading node removal;
+  and validated snapshot replacement. This forms the shared model boundary for
+  future editor bindings, document codecs, validators, composites, and optional
+  execution backends.
+- Added backend-neutral node and port descriptors, a type registry,
+  configurable cycle policies, previous-step port timing, and structured graph
+  diagnostics. Node editors can map diagnostics by stable connection ID and
+  draw warning or error borders without replacing connection data colors. The
+  Showcase node page demonstrates cycle-policy and delayed-feedback changes
+  interactively.
+- Added `GLNodeEditorBinding` for bidirectional graph/editor synchronization,
+  model-driven node projection, automatic validation decoration, stable visual
+  connection IDs, and separately captured/restored node layout state. The
+  Showcase node page now uses this binding instead of maintaining two graphs.
+- Added model-aware node editing sessions with cut, copy, paste, duplicate, and
+  delete commands. Clipboard fragments preserve properties, type versions,
+  internal wiring, and view bounds; paste assigns fresh identities, and each
+  complete graph-and-layout change forms one undo/redo entry. Standard node
+  shortcuts and context-menu actions can delegate to the session.
+- Node editors now provide select-all toggling, positioned creation requests,
+  direct composite opening, and cancellable floating placement. Paste,
+  duplicate, and move selections follow the pointer until confirmed and still
+  produce a single graph-and-layout history entry. Popup menus can host custom
+  interactive rows and filter normal items, enabling an inline searchable node
+  creation popup. Placement confirmation captures presses before embedded node
+  controls, and popup dismissal reliably restores the preceding keyboard focus.
+- The Showcase opens composite assets in the existing graph workspace with
+  Escape navigation, the complete editing command set, filtered creation that
+  prevents direct self-containment, and unique group-input/group-output
+  boundary projections. These structural nodes are created automatically,
+  omitted from the add menu, and protected from destructive editing commands.
+- Added selection-to-composite extraction. Boundary connections become typed
+  public ports, internal nodes and edges form a reusable graph asset, and the
+  surrounding graph is rewired through one composite instance. Extracted assets
+  can be embedded in a project document or written as standalone `.glgraph`
+  documents and registered in the node catalog.
+- Added the versioned `.glgraph` document codec with separately stored view
+  state, portable metadata, unknown-node preservation, embedded graph assets,
+  project-relative external asset references, and standalone composite export.
+- `.glgraph` schema 2 adds explicit node-type versions while retaining schema-1
+  compatibility. Applications can register transactional consecutive asset and
+  node migrations and inspect an immutable step report. Migrated plain or
+  bundled documents remain modified in memory until explicitly saved.
+- Document lifecycles now expose structured operation failures and migration
+  approval. Standard localized themed dialogs cover missing codecs, unsupported
+  versions, damaged files, I/O failures, migration failures, read-only opening,
+  cancellation, and copyable technical details.
+- Added composite node contracts with public-to-internal port mappings, loaded
+  asset registration, minimum dependency versions, and bounded pre-expansion
+  analysis. Direct and indirect recursion, missing assets, invalid mappings,
+  excessive nesting, and node/connection/operation budgets produce structured
+  graph diagnostics before a flattened graph is allocated.
+- `.glgraph` schema 3 stores self-describing composite contracts, including
+  typed public properties, defaults, numeric ranges, and multi-target internal
+  mappings. Transactional property edits integrate with document history.
+- Added deterministic composite flattening with per-instance node/connection
+  IDs, public-port rewiring, property propagation, all-or-nothing failure, and
+  complete origin paths for mapping backend diagnostics and profiler data back
+  to visible composite instances.
+- Added a language-independent immutable node execution plan with registered
+  operation contracts, deterministic topological scheduling and hashing,
+  explicit previous-step state reads, dead-subgraph removal, constant folding,
+  reusable temporary slots, static cost/storage statistics, and preserved
+  composite origins. The backend SPI is independent of the editor and includes
+  a deterministic Java reference runtime for offline tests and future backend
+  conformance fixtures.
+- Execution plans now propagate fixed or property-dependent latency in a named
+  domain unit and record per-input compensation for parallel paths. Backends
+  advertise plan versions, operations, latency units, and previous-step support
+  before preparation. Structured diagnostics preserve operation, node, and
+  composite origins.
+- Added a bounded, checksummed, versioned binary execution-plan exchange codec
+  and an asynchronous plan controller. Newer successful builds replace plans
+  atomically, failed builds retain the previous plan, and leases defer disposal
+  until in-flight execution has finished. Toolchain-specific C++, Rust, GPU,
+  and audio runtimes remain independent downstream projects.
+- The Showcase node page now includes an execution inspector for compiling,
+  stepping, inspecting, and deliberately rejecting replacement plans while the
+  active plan remains usable. Global previous-step cycle policy is now applied
+  consistently during scheduling, input binding, and state allocation.
+- The Java reference backend now supports operation-level execution with value
+  and duration traces while retaining atomic graph-step state updates. The
+  Showcase inspector links selected nodes and backend failures to their planned
+  operations, displays live input/output values and storage, and provides
+  operation stepping, continue, and per-node breakpoints.
+- The Showcase execution inspector now presents a collapsible hierarchy rebuilt
+  from complete composite origin paths. Internal leaf operations remain linked
+  to their outer visible node, while composite summaries aggregate scheduled
+  operations, estimated cost, persistent state, and measured Java runtime.
+- Added a backend-neutral searchable node catalog with categories, keywords,
+  default properties, favorites, recents, and typed-port compatibility filters.
+  The editor binding can insert catalog nodes at graph coordinates, and empty
+  connection drops can be handed to a compatible-node chooser.
+- The Showcase node workspace now includes a searchable palette, compatible
+  connection completion, a transactional property inspector, and editable
+  Composite tabs with breadcrumb navigation. Composite edits replace the
+  registered asset atomically and rebuild the root execution plan.
+- Added reusable `GLNodeWorkspace` and `GLCompositeInterfaceEditor` controls.
+  The workspace provides searchable insertion, standard editing commands,
+  in-place composite navigation, automatic Group Input/Output projections, and
+  persistable `.glgraph` snapshots. Public-port renames and removals update
+  dependent open graphs in the same undo/redo transaction, and node-catalog
+  descriptors are refreshed with the resulting contract.
+- Composite interfaces now present dedicated input and output lists with
+  application-defined value types. Inputs support portable editor metadata,
+  socket visibility, and built-in slider options for range and numeric kind.
+  Port names can be edited in place and ports can be reordered by dragging or
+  by the adjacent move actions. The complete inspector is vertically scrollable
+  without horizontal port-list overflow; all port settings are committed
+  atomically by its Apply action. List actions use font-independent vector
+  symbols.
+  Editor registrations can pair portable metadata with runtime control
+  factories. `GLCompositeNodeViewFactory` resolves those factories for every
+  composite instance while the application factory remains responsible for
+  leaf nodes. Public ports can be authored before a matching internal endpoint
+  exists; Group Input/Output connections establish or remove the binding, and
+  only a connected unbound port prevents flattening. Added
+  `GLNodeValueTypeRegistry`, `GLNodeInputEditorRegistry`, and graph schema 5
+  persistence; older ports remain compatible.
+- Composite interface settings now apply immediately. Changing a public value
+  type preserves its current internal binding and displays an incompatible
+  binding with the standard connection-error decoration. New public ports stay
+  unbound until the author explicitly connects their Group Input/Output socket.
+  Typed node ports only become drag-snap candidates when both port validators
+  accept the connection.
+- The built-in composite slider editor now exposes fixed/free behavior,
+  bar/button presentation, integer or floating-point input, a spinner-based
+  default, and independently optional minimum and maximum constraints. Inline
+  editors hide while a connected socket supplies the value. Node workspaces
+  capture Escape before focused sidebar controls so nested-composite navigation
+  remains reliable.
+- Output-only labels are right-aligned in every node. Composite interface
+  updates preserve existing Group Input and Group Output positions instead of
+  returning their projections to default coordinates.
+- Corrected the Showcase design and composite-page bounds so tab content stays
+  within the visible tab container at the default window size.
+- `GLList` now supports optional drag reordering, programmatic movement of the
+  selected row, application-owned reorder handlers, and left/right default-cell
+  text alignment. `GLDefaultListModel.moveElement(...)` provides the matching
+  mutable-model operation.
+
 - Added a Java Accessibility bridge for `GLJPanel` and `GLCanvas` hosts.
   Lightweight controls now expose a virtual accessible hierarchy with names,
   descriptions, roles, live states, geometry, focus, standard actions, and

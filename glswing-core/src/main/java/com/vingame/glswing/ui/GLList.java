@@ -36,6 +36,7 @@ import com.vingame.glswing.rendering.GLStroke;
  * containing {@link GLScrollPane} are attached and rendered.
  */
 public final class GLList<T> extends GLControl implements GLVirtualViewportContent {
+	public enum CellTextAlignment { LEFT, RIGHT }
 	/** Immutable state passed to a cell renderer. */
 	public record CellState(boolean selected, boolean lead, boolean listFocused,
 			boolean enabled, GLControlState pointerState) { }
@@ -99,6 +100,12 @@ public final class GLList<T> extends GLControl implements GLVirtualViewportConte
 				GLContainer editor) { }
 	}
 
+	/** Applies one requested row move and returns whether it was accepted. */
+	@FunctionalInterface
+	public interface ReorderHandler<T> {
+		boolean move(GLList<T> list, T item, int fromIndex, int toIndex);
+	}
+
 	private final Map<Integer, Cell> visibleCells = new LinkedHashMap<>();
 	private final ArrayDeque<Cell> cellPool = new ArrayDeque<>();
 	private final CopyOnWriteArrayList<ItemMouseListener<T>> itemMouseListeners =
@@ -133,6 +140,9 @@ public final class GLList<T> extends GLControl implements GLVirtualViewportConte
 	private int hoveredIndex = -1;
 	private float pointerViewportY = Float.NaN;
 	private float pointerCellX = Float.NaN;
+	private boolean dragReorderingEnabled;
+	private ReorderHandler<T> reorderHandler;
+	private CellTextAlignment cellTextAlignment = CellTextAlignment.LEFT;
 
 	public GLList() { this(new GLDefaultListModel<>()); }
 	public GLList(Collection<? extends T> items) {
@@ -251,6 +261,31 @@ public final class GLList<T> extends GLControl implements GLVirtualViewportConte
 	}
 	public KeyHandler<T> getKeyHandler() { return keyHandler; }
 	public void setKeyHandler(KeyHandler<T> handler) { keyHandler = handler; }
+	public boolean isDragReorderingEnabled() { return dragReorderingEnabled; }
+	/** Enables or disables pointer-drag row reordering. */
+	public void setDragReorderingEnabled(boolean enabled) {
+		dragReorderingEnabled = enabled;
+	}
+	public ReorderHandler<T> getReorderHandler() { return reorderHandler; }
+	/**
+	 * Installs the domain move operation. Without a handler, mutable default-list
+	 * models are reordered directly.
+	 */
+	public void setReorderHandler(ReorderHandler<T> handler) {
+		reorderHandler = handler;
+	}
+	public CellTextAlignment getCellTextAlignment() { return cellTextAlignment; }
+	public void setCellTextAlignment(CellTextAlignment alignment) {
+		if (alignment == null) throw new IllegalArgumentException("Alignment required");
+		if (cellTextAlignment == alignment) return;
+		cellTextAlignment = alignment; invalidateVisibleCells();
+	}
+	/** Moves the selected row by one or more positions. */
+	public boolean moveSelectedItemBy(int offset) {
+		int from = getSelectedIndex();
+		if (from < 0 || offset == 0) return false;
+		return moveItem(from, Math.max(0, Math.min(model.getSize() - 1, from + offset)));
+	}
 
 	public GLListStyle getGLStyle() {
 		return localStyle != null ? localStyle : GLListStyle.fromTheme(getGLTheme());
@@ -712,9 +747,12 @@ public final class GLList<T> extends GLControl implements GLVirtualViewportConte
 		float baseline = (height - font.getLineHeight()) * .5f + font.getAscent();
 		Color color = !state.enabled() ? style.disabledTextColor()
 				: state.selected() ? style.selectedTextColor() : style.textColor();
-		context.drawUITextShadow(font, text, padding.left(), baseline,
+		float x = cellTextAlignment == CellTextAlignment.RIGHT
+				? Math.max(padding.left(), width - padding.right() - font.measureText(text))
+				: padding.left();
+		context.drawUITextShadow(font, text, x, baseline,
 				getGLTheme().textShadow("list"));
-		context.drawUIText(font, text, padding.left(), baseline, color);
+		context.drawUIText(font, text, x, baseline, color);
 	}
 	private GLScrollPane containingScrollPane() {
 		GLContainer current = this;
@@ -727,6 +765,20 @@ public final class GLList<T> extends GLControl implements GLVirtualViewportConte
 	private void requireModelIndex(int index) {
 		if (index < 0 || index >= model.getSize())
 			throw new IndexOutOfBoundsException("List index: " + index);
+	}
+	private boolean moveItem(int from, int to) {
+		if (from == to || from < 0 || to < 0 || from >= model.getSize()
+				|| to >= model.getSize()) return false;
+		T item = model.getElementAt(from);
+		boolean moved;
+		if (reorderHandler != null) moved = reorderHandler.move(this, item, from, to);
+		else if (model instanceof GLDefaultListModel<?> mutable) {
+			@SuppressWarnings("unchecked")
+			GLDefaultListModel<T> typed = (GLDefaultListModel<T>) mutable;
+			typed.moveElement(from, to); moved = true;
+		} else return false;
+		if (moved && to < model.getSize()) setSelectedIndex(to);
+		return moved;
 	}
 	private void layoutEditingComponent() {
 		if (editingIndex < 0 || editingCell == null || editingComponent == null
@@ -751,6 +803,8 @@ public final class GLList<T> extends GLControl implements GLVirtualViewportConte
 	private final class Cell extends GLControl {
 		private int index = -1;
 		private boolean selectedBeforePress;
+		private float reorderPressY;
+		private boolean reorderDragged;
 		private Cell() { super(false); }
 		private void setIndex(int index) {
 			if (this.index == index) return;
@@ -875,6 +929,8 @@ public final class GLList<T> extends GLControl implements GLVirtualViewportConte
 			fireItemMousePressed(index, event, selectedBeforePress);
 			if (event.isConsumed()) return;
 			if (event.getButton() == MouseEvent.BUTTON1) {
+				reorderPressY = event.hasLocalPosition() ? event.getLocalY() : 0;
+				reorderDragged = false;
 				GLList.this.requestGLFocus(GLList.this);
 				selectFromInput(index, event.getModifiersEx());
 			} else if (event.getButton() == MouseEvent.BUTTON3
@@ -883,9 +939,21 @@ public final class GLList<T> extends GLControl implements GLVirtualViewportConte
 		}
 		@Override protected void controlMouseDragged(GLMouseEvent event) {
 			updatePointer(event);
+			if (dragReorderingEnabled && event.hasLocalPosition()
+					&& Math.abs(event.getLocalY() - reorderPressY) >= 3)
+				reorderDragged = true;
 		}
 		@Override protected void controlMouseReleased(GLMouseEvent event) {
 			updatePointer(event);
+			if (event.getButton() == MouseEvent.BUTTON1 && reorderDragged
+					&& event.hasLocalPosition()) {
+				int target = indexAt(getY() + event.getLocalY());
+				if (target < 0) target = event.getLocalY() < 0 ? 0 : model.getSize() - 1;
+				moveItem(index, target);
+				event.consume();
+				reorderDragged = false;
+				return;
+			}
 			fireItemMouseReleased(index, event, selectedBeforePress);
 		}
 		@Override protected void controlMouseClicked(GLMouseEvent event) {

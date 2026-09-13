@@ -5,6 +5,7 @@ import java.awt.event.MouseEvent;
 import com.vingame.glswing.input.GLMouseEvent;
 import com.vingame.glswing.input.GLMouseTarget;
 import com.vingame.glswing.input.GLMouseWheelEvent;
+import com.vingame.glswing.node.model.GLNodeConnectionId;
 
 /** A directed, visually configurable connection between two node ports. */
 public final class GLNodeConnection implements GLMouseTarget {
@@ -12,6 +13,9 @@ public final class GLNodeConnection implements GLMouseTarget {
 	private final GLNodePort input;
 	private GLNodeEditor editor;
 	private Float width;
+	private GLNodeConnectionId modelId;
+	private GLNodeConnectionStatus status = GLNodeConnectionStatus.NORMAL;
+	private String diagnosticMessage;
 
 	public GLNodeConnection(GLNodePort output, GLNodePort input) {
 		if (output == null || output.getDirection() != GLNodePort.Direction.OUTPUT)
@@ -24,6 +28,32 @@ public final class GLNodeConnection implements GLMouseTarget {
 
 	public GLNodePort getOutput() { return output; }
 	public GLNodePort getInput() { return input; }
+	public GLNodeConnectionId getModelId() { return modelId; }
+
+	/** Associates this visual connection with its stable domain-model identity. */
+	public void setModelId(GLNodeConnectionId modelId) {
+		this.modelId = modelId;
+	}
+
+	public GLNodeConnectionStatus getStatus() { return status; }
+	public String getDiagnosticMessage() { return diagnosticMessage; }
+
+	/** Sets the diagnostic decoration without changing the connection's data colors. */
+	public void setDiagnostic(GLNodeConnectionStatus status, String message) {
+		if (status == null)
+			throw new IllegalArgumentException("Connection status required");
+		String normalized = message == null || message.isBlank() ? null : message;
+		if (this.status == status
+				&& java.util.Objects.equals(diagnosticMessage, normalized))
+			return;
+		this.status = status;
+		diagnosticMessage = normalized;
+		changed();
+	}
+
+	public void clearDiagnostic() {
+		setDiagnostic(GLNodeConnectionStatus.NORMAL, null);
+	}
 
 	public float getWidth() {
 		return width != null ? width

@@ -28,6 +28,7 @@ public final class GLListSelfTest {
 		testKeyboardSelection();
 		testViewportVirtualization();
 		testInlineEditingLifecycle();
+		testOptionalReordering();
 		testThemeValues();
 		System.out.println("GL list self-test passed.");
 	}
@@ -142,6 +143,27 @@ public final class GLListSelfTest {
 		model.setElementAt("Updated", 0);
 		check(cancellations.get() == 2 && !list.isEditing(),
 				"Model changes did not cancel their inline editor");
+	}
+
+	private static void testOptionalReordering() {
+		GLDefaultListModel<String> model =
+				new GLDefaultListModel<>(List.of("A", "B", "C"));
+		GLList<String> list = new GLList<>(model);
+		list.setSelectedIndex(0);
+		check(list.moveSelectedItemBy(2)
+				&& model.elements().equals(List.of("B", "C", "A"))
+				&& list.getSelectedIndex() == 2,
+				"Mutable list did not reorder its selected item");
+		AtomicInteger requestedTarget = new AtomicInteger(-1);
+		list.setReorderHandler((source, item, from, to) -> {
+			requestedTarget.set(to); return false;
+		});
+		check(!list.moveSelectedItemBy(-1) && requestedTarget.get() == 1
+				&& model.elements().equals(List.of("B", "C", "A")),
+				"Rejected domain reorder mutated the list model");
+		list.setCellTextAlignment(GLList.CellTextAlignment.RIGHT);
+		check(list.getCellTextAlignment() == GLList.CellTextAlignment.RIGHT,
+				"List text alignment was not retained");
 	}
 
 	private static void testThemeValues() {

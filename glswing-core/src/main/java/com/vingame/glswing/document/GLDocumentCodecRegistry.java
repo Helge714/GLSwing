@@ -40,8 +40,7 @@ public final class GLDocumentCodecRegistry {
 			Class<T> contentType) throws GLDocumentFormatException {
 		GLDocumentCodec<?> codec = codecs.get(new Key(typeId, codecId));
 		if (codec == null)
-			throw new GLDocumentFormatException("No codec registered for " + typeId
-					+ " using " + codecId);
+			throw new GLDocumentCodecNotFoundException(typeId, codecId);
 		if (!codec.contentType().equals(contentType))
 			throw new GLDocumentFormatException("Document type " + typeId + " contains "
 					+ codec.contentType().getName() + ", not " + contentType.getName());

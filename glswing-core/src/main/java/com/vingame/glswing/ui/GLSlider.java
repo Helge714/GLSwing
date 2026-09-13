@@ -220,10 +220,10 @@ public class GLSlider extends GLControl {
 		return true;
 	}
 	@Override protected Number accessibleMinimumValue() {
-		return mode == Mode.FIXED ? minimum : null;
+		return Double.isFinite(minimum) ? minimum : null;
 	}
 	@Override protected Number accessibleMaximumValue() {
-		return mode == Mode.FIXED ? maximum : null;
+		return Double.isFinite(maximum) ? maximum : null;
 	}
 
 	public final void setText(String text) {
@@ -318,6 +318,36 @@ public class GLSlider extends GLControl {
 		invalidateRecording();
 	}
 
+	/**
+	 * Configures optional value constraints for a FREE slider. A {@code null}
+	 * side remains unbounded; the independent display range is unchanged.
+	 */
+	public final void setValueBounds(Double minimum, Double maximum) {
+		requireFree();
+		double nextMinimum = minimum == null ? Double.NEGATIVE_INFINITY : minimum;
+		double nextMaximum = maximum == null ? Double.POSITIVE_INFINITY : maximum;
+		if (minimum != null) requireFinite(minimum, "Slider minimum");
+		if (maximum != null) requireFinite(maximum, "Slider maximum");
+		if (!(nextMaximum > nextMinimum))
+			throw new IllegalArgumentException("Slider maximum must exceed minimum");
+		if (integerValuesOnly && Math.ceil(nextMinimum) > Math.floor(nextMaximum))
+			throw new IllegalArgumentException(
+					"Integer-only slider bounds must contain an integer");
+		this.minimum = nextMinimum; this.maximum = nextMaximum;
+		defaultValue = resolveValue(defaultValue);
+		setValue(value);
+	}
+
+	public final java.util.OptionalDouble getValueMinimum() {
+		return Double.isFinite(minimum) ? java.util.OptionalDouble.of(minimum)
+				: java.util.OptionalDouble.empty();
+	}
+
+	public final java.util.OptionalDouble getValueMaximum() {
+		return Double.isFinite(maximum) ? java.util.OptionalDouble.of(maximum)
+				: java.util.OptionalDouble.empty();
+	}
+
 	public final double getStep() {
 		return step;
 	}
@@ -334,8 +364,7 @@ public class GLSlider extends GLControl {
 	/** Restricts values to integers and makes bar dragging advance in whole steps. */
 	public final void setIntegerValuesOnly(boolean value) {
 		if (integerValuesOnly == value) return;
-		if (value && mode == Mode.FIXED
-				&& Math.ceil(minimum) > Math.floor(maximum))
+		if (value && Math.ceil(minimum) > Math.floor(maximum))
 			throw new IllegalStateException(
 					"The slider range does not contain an integer");
 		cancelValueEditing();
@@ -856,12 +885,12 @@ public class GLSlider extends GLControl {
 			changeValueFromUser(value + step, "Increase slider");
 			event.consume();
 		} else if (getGLInputMap().matches(GLInputActions.NAVIGATE_HOME, event)) {
-			if (mode == Mode.FIXED) {
+			if (Double.isFinite(minimum)) {
 				changeValueFromUser(minimum, "Set slider to minimum");
 				event.consume();
 			}
 		} else if (getGLInputMap().matches(GLInputActions.NAVIGATE_END, event)) {
-			if (mode == Mode.FIXED) {
+			if (Double.isFinite(maximum)) {
 				changeValueFromUser(maximum, "Set slider to maximum");
 				event.consume();
 			}
@@ -1239,10 +1268,8 @@ public class GLSlider extends GLControl {
 
 	private double resolveValue(double candidate) {
 		if (!integerValuesOnly)
-			return mode == Mode.FIXED
-					? clamp(candidate, minimum, maximum) : candidate;
+			return clamp(candidate, minimum, maximum);
 		double rounded = Math.round(candidate);
-		if (mode == Mode.FREE) return rounded;
 		return clamp(rounded, Math.ceil(minimum), Math.floor(maximum));
 	}
 

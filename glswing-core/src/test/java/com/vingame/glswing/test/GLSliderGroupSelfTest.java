@@ -28,7 +28,24 @@ public final class GLSliderGroupSelfTest {
 		testLinkedEditingHistory();
 		testCompatibilityChecks();
 		testFreeSliderCursor();
+		testOptionalFreeSliderBounds();
 		System.out.println("GL slider group self-test passed.");
+	}
+
+	private static void testOptionalFreeSliderBounds() {
+		GLSlider slider = GLSlider.free("Bounded", 0, 10, 4);
+		slider.setValueBounds(0.0, null);
+		slider.setValue(-8);
+		check(close(slider.getValue(), 0)
+				&& slider.getValueMinimum().orElseThrow() == 0
+				&& slider.getValueMaximum().isEmpty(),
+				"A FREE slider did not enforce its optional lower bound");
+		slider.setValueBounds(null, 8.0);
+		slider.setValue(12);
+		check(close(slider.getValue(), 8)
+				&& slider.getValueMinimum().isEmpty()
+				&& slider.getValueMaximum().orElseThrow() == 8,
+				"A FREE slider did not enforce its optional upper bound");
 	}
 
 	private static void testLinkedEditingHistory() {

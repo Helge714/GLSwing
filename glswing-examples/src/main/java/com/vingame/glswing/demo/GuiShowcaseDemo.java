@@ -14,11 +14,18 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.net.URI;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 import javax.swing.AbstractAction;
 import javax.swing.JComponent;
@@ -65,10 +72,66 @@ import com.vingame.glswing.file.GLFileDialogs;
 import com.vingame.glswing.file.GLFileFilter;
 import com.vingame.glswing.file.GLFileSelectionMode;
 import com.vingame.glswing.node.GLNode;
+import com.vingame.glswing.node.GLNodePalette;
+import com.vingame.glswing.node.GLNodePropertyInspector;
 import com.vingame.glswing.node.GLNodeEditor;
-import com.vingame.glswing.node.GLNodePort;
+import com.vingame.glswing.node.GLNodeEditorListener;
+import com.vingame.glswing.node.GLNodeEditingActions;
 import com.vingame.glswing.node.GLNodePorts;
+import com.vingame.glswing.node.GLNodePort;
 import com.vingame.glswing.node.GLNodeResizeMode;
+import com.vingame.glswing.node.GLNodeWorkspace;
+import com.vingame.glswing.node.binding.GLNodeEditorBinding;
+import com.vingame.glswing.node.binding.GLNodeGraphEditingSession;
+import com.vingame.glswing.node.binding.GLNodeEditorViewState;
+import com.vingame.glswing.node.binding.GLNodeViewState;
+import com.vingame.glswing.node.document.GLNodeGraphAsset;
+import com.vingame.glswing.node.document.GLNodeGraphAssetKind;
+import com.vingame.glswing.node.document.GLNodeGraphDocument;
+import com.vingame.glswing.node.composite.GLCompositeExpansionLimits;
+import com.vingame.glswing.node.composite.GLCompositeGraphRegistry;
+import com.vingame.glswing.node.composite.GLCompositeInterfaceEditor;
+import com.vingame.glswing.node.composite.GLCompositeNodeDescriptor;
+import com.vingame.glswing.node.composite.GLCompositeNodeViewFactory;
+import com.vingame.glswing.node.composite.GLNodeInputEditorDescriptor;
+import com.vingame.glswing.node.composite.GLNodeInputEditorRegistry;
+import com.vingame.glswing.node.composite.GLCompositeOrigin;
+import com.vingame.glswing.node.composite.GLCompositePortMapping;
+import com.vingame.glswing.node.execution.GLExecutionPlan;
+import com.vingame.glswing.node.execution.GLExecutionOperation;
+import com.vingame.glswing.node.execution.GLExecutionPlanCompiler;
+import com.vingame.glswing.node.execution.GLExecutionPlanController;
+import com.vingame.glswing.node.execution.GLExecutionPlanOptions;
+import com.vingame.glswing.node.execution.GLExecutionPlanSwapResult;
+import com.vingame.glswing.node.execution.GLNodeImplementationDescriptor;
+import com.vingame.glswing.node.execution.GLNodeImplementationKind;
+import com.vingame.glswing.node.execution.GLNodeImplementationRegistry;
+import com.vingame.glswing.node.execution.java.GLJavaExecutablePlan;
+import com.vingame.glswing.node.execution.java.GLJavaExecutionBackend;
+import com.vingame.glswing.node.execution.java.GLJavaExecutionException;
+import com.vingame.glswing.node.execution.java.GLJavaExecutionResult;
+import com.vingame.glswing.node.execution.java.GLJavaExecutionTrace;
+import com.vingame.glswing.node.model.GLGraphConnection;
+import com.vingame.glswing.node.model.GLGraphCyclePolicy;
+import com.vingame.glswing.node.model.GLGraphNode;
+import com.vingame.glswing.node.model.GLNodeConnectionId;
+import com.vingame.glswing.node.model.GLNodeCatalog;
+import com.vingame.glswing.node.model.GLNodeCatalogEntry;
+import com.vingame.glswing.node.model.GLNodeEndpoint;
+import com.vingame.glswing.node.model.GLNodeGraph;
+import com.vingame.glswing.node.model.GLNodeId;
+import com.vingame.glswing.node.model.GLNodePortDescriptor;
+import com.vingame.glswing.node.model.GLNodePropertySchemaRegistry;
+import com.vingame.glswing.node.model.GLNumberNodeProperty;
+import com.vingame.glswing.node.model.GLEnumNodeProperty;
+import com.vingame.glswing.node.model.GLBooleanNodeProperty;
+import com.vingame.glswing.node.model.GLNodeTypeDescriptor;
+import com.vingame.glswing.node.model.GLNodeTypeRegistry;
+import com.vingame.glswing.node.model.GLNodeValueTypeDescriptor;
+import com.vingame.glswing.node.model.GLNodeValueTypeRegistry;
+import com.vingame.glswing.node.model.GLNodeValue;
+import com.vingame.glswing.node.model.GLPortDirection;
+import com.vingame.glswing.node.model.GLPortTiming;
 import com.vingame.glswing.lsp.GLLanguageServer;
 import com.vingame.glswing.lsp.GLLanguageServerProfile;
 import com.vingame.glswing.lsp.GLLanguageServerRegistry;
@@ -83,12 +146,14 @@ import com.vingame.glswing.ui.GLActionMap;
 import com.vingame.glswing.ui.GLCheckBox;
 import com.vingame.glswing.ui.GLComboBox;
 import com.vingame.glswing.ui.GLDialogButtonBar;
+import com.vingame.glswing.ui.GLDocumentDialogs;
 import com.vingame.glswing.ui.GLFontSpec;
 import com.vingame.glswing.ui.GLLabel;
 import com.vingame.glswing.ui.GLLabelStyle;
 import com.vingame.glswing.ui.GLList;
 import com.vingame.glswing.ui.GLListSelectionModel;
 import com.vingame.glswing.ui.GLDefaultTreeModel;
+import com.vingame.glswing.ui.GLDefaultListModel;
 import com.vingame.glswing.ui.GLTree;
 import com.vingame.glswing.ui.GLCodeEditor;
 import com.vingame.glswing.ui.GLCodeLanguages;
@@ -118,7 +183,7 @@ import com.vingame.glswing.ui.GLThemes;
 public final class GuiShowcaseDemo {
 
 	static final float DESIGN_WIDTH = 1180;
-	static final float DESIGN_HEIGHT = 660;
+	static final float DESIGN_HEIGHT = 790;
 	private static final Path THEME_RELATIVE_DIRECTORY = Path.of("resources",
 			"com", "vingame", "glswing", "themes");
 	private static List<String> lspCommand = List.of();
@@ -175,7 +240,7 @@ public final class GuiShowcaseDemo {
 		GLApplicationHandle handle = GLApplication.builder()
 				.title(title)
 				.backend(backend)
-				.size(1260, 800)
+				.size(1260, 920)
 				.minimumSize(760, 520)
 				.clearColor(new Color(12, 17, 27))
 				.theme(showcaseThemeDirectory().resolve("dark.gltheme"),
@@ -232,7 +297,7 @@ public final class GuiShowcaseDemo {
 
 	private static void showWindow() {
 		ShowcasePanel panel = new ShowcasePanel();
-		panel.setPreferredSize(new Dimension(1260, 800));
+		panel.setPreferredSize(new Dimension(1260, 920));
 		JLabel status = createStatusLabel("GUI-Showcase startet ...");
 		Timer statistics = new Timer(1000,
 				event -> status.setText(panel.performanceText()));
@@ -931,6 +996,69 @@ public final class GuiShowcaseDemo {
 		private final GLFileDialogs fileDialogs = GLFileDialogs.auto();
 		private final GLFileDialogs nativeFileDialogs = GLFileDialogs.nativeDialogs();
 		private final GLFileDialogs themedFileDialogs = GLFileDialogs.themed();
+		private ExecutorService nodeExecutionExecutor;
+		private GLExecutionPlanController<GLJavaExecutablePlan> nodePlanController;
+		private GLNodeGraph showcaseNodeGraph;
+		private GLNodeTypeRegistry showcaseNodeTypes;
+		private GLNodeEditor showcaseNodeEditor;
+		private GLNodeEditorBinding showcaseNodeBinding;
+		private final GLNodeCatalog showcaseNodeCatalog = new GLNodeCatalog();
+		private final GLNodePalette nodeCreationPalette =
+				new GLNodePalette(showcaseNodeCatalog);
+		private GLList<GLNodeCatalogEntry> nodePaletteList;
+		private GLTextEditor nodePaletteSearch;
+		private GLCheckBox nodePaletteCompatible;
+		private GLLabel nodePaletteStatus;
+		private PendingNodeConnection pendingNodeConnection;
+		private Float requestedNodeX;
+		private Float requestedNodeY;
+		private GLPopupMenu nodeCreationMenu;
+		private int nodePaletteInsertCount;
+		private int extractedCompositeCount;
+		private GLCompositeGraphRegistry showcaseCompositeRegistry;
+		private GLNodeInputEditorRegistry showcaseInputEditors;
+		private GLComboBox<GLGraphCyclePolicy> showcaseCyclePolicy;
+		private GLLabel nodeExecutionStatus;
+		private GLLabel nodeExecutionStats;
+		private GLLabel nodeExecutionOutput;
+		private GLTextArea nodeExecutionDetails;
+		private GLTree<PlanTreeItem> nodeExecutionTree;
+		private final GLDefaultTreeModel<PlanTreeItem> nodeExecutionTreeModel =
+				new GLDefaultTreeModel<>();
+		private GLExecutionOperation nodeInspectedOperation;
+		private boolean syncingInspectorSelection;
+		private final Map<GLNodeId, PlanTreeItem> nodeTreeItemsByVisibleId =
+				new HashMap<>();
+		private final Map<String, GLContainer> openCompositeTabs = new HashMap<>();
+		private final Map<String, GLNodeEditorBinding> openCompositeBindings =
+				new HashMap<>();
+		private final Map<String, GLNodeWorkspace> openCompositeWorkspaces =
+				new HashMap<>();
+		private GLButton nodeRunButton;
+		private GLButton nodeBreakpointButton;
+		private GLNodePropertyInspector nodePropertyInspector;
+		private final Set<GLNodeId> nodeBreakpoints = new LinkedHashSet<>();
+		private volatile GLJavaExecutionResult nodeLastExecution;
+		private volatile GLNodeId nodePausedAtBreakpoint;
+		private final AtomicReference<GLNodeValue> observedNodeOutput =
+				new AtomicReference<>();
+		private final GLNodeId showcaseTintNodeId = GLNodeId.random();
+		private final GLNodeId showcaseMaterialLeafNodeId = GLNodeId.random();
+		private final GLNodeConnectionId showcaseCompositeConnectionId =
+				GLNodeConnectionId.random();
+
+		private enum PlanTreeKind { PLAN, COMPOSITE, OPERATION }
+		private record PlanTreeItem(String key, String label, PlanTreeKind kind,
+				List<GLCompositeOrigin.Instance> compositePath,
+				GLExecutionOperation operation,
+				GLNodeId visibleNodeId) {
+			PlanTreeItem {
+				compositePath = compositePath == null ? List.of() : List.copyOf(compositePath);
+			}
+			@Override public String toString() { return label; }
+		}
+		private record PendingNodeConnection(GLNodeEndpoint endpoint,
+				GLNodePort.Direction direction, float x, float y) { }
 
 		ShowcaseSurface(ShowcaseHost host) {
 			this.host = host;
@@ -977,6 +1105,10 @@ public final class GuiShowcaseDemo {
 					() -> new GLTextDocument("public final class Untitled {\n\n}\n"),
 					this::createJavaDocumentView);
 			documentLifecycle.setCloseRequestHandler(this::confirmDocumentClose);
+			documentLifecycle.setFailureHandler(
+					GLDocumentDialogs.failureHandler(host.parent()));
+			documentLifecycle.setMigrationRequestHandler(
+					GLDocumentDialogs.migrationHandler(host.parent()));
 			documentLifecycle.setAutosaveCoordinator(documentAutosave);
 			documentLifecycle.setFileWatcher(documentFileWatcher);
 			documentLifecycle.setConflictRequestHandler(this::confirmSaveConflict);
@@ -1432,6 +1564,12 @@ public final class GuiShowcaseDemo {
 
 		void closeLanguageServer() {
 			languageServerClosing = true;
+			openCompositeBindings.values().forEach(GLNodeEditorBinding::close);
+			openCompositeBindings.clear();
+			openCompositeWorkspaces.values().forEach(GLNodeWorkspace::close);
+			openCompositeWorkspaces.clear();
+			if (nodePlanController != null) nodePlanController.close();
+			if (nodeExecutionExecutor != null) nodeExecutionExecutor.shutdownNow();
 			documentLifecycle.close();
 			documentAutosave.close();
 			documentFileWatcher.close();
@@ -2170,6 +2308,7 @@ public final class GuiShowcaseDemo {
 			searchLabel.setBounds(18, 18, 56, 24);
 			filesPage.addGL(searchLabel);
 			GLTextEditor search = new GLTextEditor();
+			search.setCommitOnFocusLost(false);
 			search.setBounds(78, 14, 280, 30);
 			search.addTextChangeListener(event -> {
 				browser.setSearchQuery(search.getText());
@@ -2203,36 +2342,1357 @@ public final class GuiShowcaseDemo {
 		}
 
 		private void buildNodeEditorPage() {
+			GLLabel policyLabel = new GLLabel("Cycle policy");
+			policyLabel.setBounds(8, 12, 88, 28);
+			nodeEditorPage.addGL(policyLabel);
+			GLComboBox<GLGraphCyclePolicy> policy = new GLComboBox<>(
+					List.of(GLGraphCyclePolicy.values()));
+			showcaseCyclePolicy = policy;
+			policy.setItemTextProvider(value -> switch (value) {
+				case ACYCLIC -> "Acyclic";
+				case DELAYED_FEEDBACK -> "Delayed feedback";
+				case PREVIOUS_STEP -> "Previous step";
+			});
+			policy.setSelectedItem(GLGraphCyclePolicy.DELAYED_FEEDBACK);
+			policy.setBounds(100, 10, 180, 30);
+			nodeEditorPage.addGL(policy);
+
+			GLCheckBox delayedOutput = new GLCheckBox(
+					"Material output uses previous-step timing");
+			delayedOutput.setSelected(true);
+			delayedOutput.setBounds(300, 12, 330, 26);
+			nodeEditorPage.addGL(delayedOutput);
+			GLLabel validationStatus = new GLLabel("Not validated");
+			validationStatus.setBounds(650, 12, 474, 26);
+			nodeEditorPage.addGL(validationStatus);
+
 			GLNodeEditor editor = new GLNodeEditor();
-			editor.setBounds(8, 8, 1124, 590);
-			nodeEditorPage.addGL(editor);
-
-			GLNode texture = new GLNode("Texture");
-			texture.setResizeMode(GLNodeResizeMode.BOTH);
-			texture.addInput("scale", GLSlider.fixed("Scale", 0.1, 8, 1));
-			texture.addOutput("color", new GLLabel("Mapped Color"));
-			editor.addNode(texture, 80, 80);
-
-			GLNode material = new GLNode("Material");
-			material.setResizeMode(GLNodeResizeMode.HORIZONTAL);
-			material.addInput("roughness",
-					GLSlider.fixed("Roughness", 0, 1, 0.42));
-			GLComboBox<String> blend = new GLComboBox<>(
-					List.of("Linear", "Multiply", "Screen"));
-			GLNodePorts base = material.addInputOutput("base", blend, "result");
-			base.input().setContentHiddenWhenConnected(true);
-			editor.addNode(material, 390, 115);
-
-			GLNode output = new GLNode("Output");
-			output.setResizeMode(GLNodeResizeMode.NONE);
-			output.addInput("surface", new GLLabel("Surface"));
-			output.addInput("alpha", GLSlider.fixed("Alpha", 0, 1, 1));
-			editor.addNode(output, 780, 270);
-
-			editor.connect(texture.findPort("color"), material.findPort("base"));
-			GLNodePort surface = output.findPort("surface");
-			editor.connect(material.findPort("result"), surface);
+			showcaseNodeEditor = editor;
+			editor.setBounds(236, 48, 548, 550);
 			editor.setConnectionColorInterpolator(GLColorInterpolation.OKLAB);
+			nodeEditorPage.addGL(editor);
+			GLNodeId textureId = GLNodeId.random();
+			GLNodeId materialId = GLNodeId.random();
+			GLNodeId outputId = GLNodeId.random();
+			GLNodeConnectionId textureToMaterialId = GLNodeConnectionId.random();
+			GLNodeConnectionId materialToOutputId = GLNodeConnectionId.random();
+			GLNodeConnectionId feedbackId = GLNodeConnectionId.random();
+			GLNodeGraph graph = new GLNodeGraph();
+			showcaseNodeGraph = graph;
+			graph.edit("Create showcase feedback graph", edit -> {
+				edit.addNode(new GLGraphNode(textureId, "showcase.texture",
+						Map.of("gain", GLNodeValue.of(1.0))));
+				edit.addNode(new GLGraphNode(materialId, "showcase.material-stack",
+						Map.of("blend", GLNodeValue.of("Normal"),
+								"enabled", GLNodeValue.of(true))));
+				edit.addNode(new GLGraphNode(outputId, "showcase.output"));
+				edit.addConnection(new GLGraphConnection(textureToMaterialId,
+						new GLNodeEndpoint(textureId, "color"),
+						new GLNodeEndpoint(materialId, "base")));
+				edit.addConnection(new GLGraphConnection(materialToOutputId,
+						new GLNodeEndpoint(materialId, "result"),
+						new GLNodeEndpoint(outputId, "surface")));
+				edit.addConnection(new GLGraphConnection(feedbackId,
+						new GLNodeEndpoint(materialId, "result"),
+						new GLNodeEndpoint(textureId, "feedback")));
+			});
+
+			GLNodeTypeRegistry types = new GLNodeTypeRegistry();
+			showcaseNodeTypes = types;
+			registerShowcaseNodeTypes(types, GLPortTiming.PREVIOUS_STEP);
+			showcaseCompositeRegistry = createShowcaseCompositeRegistry(
+					GLPortTiming.PREVIOUS_STEP);
+			showcaseInputEditors = createShowcaseInputEditors();
+			configureNodeExecutionBackend();
+			GLNodeEditorViewState viewState = new GLNodeEditorViewState(Map.of(
+					textureId, new GLNodeViewState(45, 80),
+					materialId, new GLNodeViewState(290, 115),
+					outputId, new GLNodeViewState(570, 270)));
+			GLNodeEditorBinding binding = new GLNodeEditorBinding(graph, types,
+					editor, new GLCompositeNodeViewFactory(showcaseCompositeRegistry,
+						showcaseInputEditors, (node, type) -> createShowcaseNodeView(type),
+						id -> showcaseNodeCatalog.find(id)
+								.map(GLNodeCatalogEntry::displayName).orElse(id)),
+					policy.getSelectedItem(), viewState);
+			showcaseNodeBinding = binding;
+			buildNodeExecutionInspector();
+			GLNodeGraphEditingSession editing = new GLNodeGraphEditingSession(binding,
+					host.historyManager());
+			editor.setEditingActions(new GLNodeEditingActions() {
+				@Override public boolean canCopy() {
+					return !editor.getSelectedNodes().isEmpty();
+				}
+				@Override public boolean canCut() { return canCopy(); }
+				@Override public boolean canPaste() { return editing.hasClipboardContent(); }
+				@Override public boolean canDuplicate() { return canCopy(); }
+				@Override public boolean canExtractComposite() { return canCopy(); }
+				@Override public void copy() { editing.copySelection(); }
+				@Override public void cut() { editing.cutSelection(); }
+				@Override public void paste(float x, float y) { editing.paste(x, y); }
+				@Override public void duplicate() { editing.duplicateSelection(28, 28); }
+				@Override public com.vingame.glswing.node.GLNodePlacement beginPaste(
+						float x, float y) { return editing.beginPaste(x, y); }
+				@Override public com.vingame.glswing.node.GLNodePlacement beginDuplicate(
+						float x, float y) { return editing.beginDuplicate(x, y); }
+				@Override public com.vingame.glswing.node.GLNodePlacement beginMoveSelection(
+						float x, float y) { return editing.beginMoveSelection(x, y); }
+				@Override public void delete() { editing.removeSelection(); }
+				@Override public void toggleHidden() { editing.toggleHiddenSelection(); }
+				@Override public void toggleMuted() { editing.toggleMutedSelection(); }
+				@Override public void requestNodeCreation(float x, float y,
+						float screenX, float screenY) {
+					showNodeCreationMenu(x, y, screenX, screenY);
+				}
+				@Override public void openSelectedComposite() {
+					GLNodeId id = selectedShowcaseNodeId();
+					GLGraphNode node = id == null ? null
+							: showcaseNodeGraph.snapshot().findNode(id).orElse(null);
+					if (node == null) return;
+					showcaseCompositeRegistry.findComposite(node.typeId()).ifPresent(descriptor ->
+							openCompositeAsset(id, node.typeId(), descriptor.assetId()));
+				}
+				@Override public boolean canOpenSelectedComposite() {
+					GLNodeId id = selectedShowcaseNodeId();
+					return id != null && showcaseNodeGraph.snapshot().findNode(id)
+							.flatMap(node -> showcaseCompositeRegistry.findComposite(
+									node.typeId())).isPresent();
+				}
+				@Override public void extractComposite() {
+					int number = ++extractedCompositeCount;
+					String typeId = "showcase.extracted." + number;
+					try {
+						editing.extractSelection(typeId + ".asset", typeId,
+								"Extracted Composite " + number, "Composites",
+								showcaseCompositeRegistry, showcaseNodeCatalog);
+						refreshNodePalette();
+						nodePaletteStatus.setText("Selection extracted as a reusable composite");
+					} catch (RuntimeException failure) {
+						nodePaletteStatus.setText("Cannot extract: " + failure.getMessage());
+					}
+				}
+			});
+			editor.setEmptyConnectionDropListener((source, port, x, y, screenX, screenY) -> {
+				GLNodeId nodeId = binding.findNodeId(port.getNode()).orElse(null);
+				if (nodeId == null) return;
+				pendingNodeConnection = new PendingNodeConnection(
+						new GLNodeEndpoint(nodeId, port.getId()), port.getDirection(), x, y);
+				nodePaletteCompatible.setSelected(true);
+				nodePaletteStatus.setText("Choose a compatible node to complete the connection");
+				refreshNodePalette();
+				nodePaletteSearch.requestGLFocus(nodePaletteSearch);
+			});
+			editor.setNodeCreationRequestListener((source, x, y, screenX, screenY) ->
+					showNodeCreationMenu(x, y, screenX, screenY));
+			configureShowcaseNodeCatalog(types);
+			buildNodePalette();
+			editor.addNodeEditorListener(new GLNodeEditorListener() {
+				@Override public void selectionChanged(GLNodeEditor source) {
+					if (!syncingInspectorSelection) {
+						nodeInspectedOperation = null;
+						PlanTreeItem item = nodeTreeItemsByVisibleId.get(
+								selectedShowcaseNodeId());
+						if (item != null && nodeExecutionTree != null) {
+							syncingInspectorSelection = true;
+							try { nodeExecutionTree.setSelectedValue(item); }
+							finally { syncingInspectorSelection = false; }
+						}
+					}
+					refreshNodeInspectorDetails();
+					if (nodePropertyInspector != null) nodePropertyInspector.refresh();
+					if (nodePaletteCompatible != null && nodePaletteCompatible.isSelected())
+						refreshNodePalette();
+				}
+			});
+			binding.addValidationListener((source, result) -> {
+				showNodeValidation(validationStatus, result);
+				compileShowcaseNodePlan(false);
+			});
+			policy.addActionListener(event ->
+					binding.setCyclePolicy(policy.getSelectedItem()));
+			delayedOutput.addActionListener(event -> {
+				GLPortTiming timing = delayedOutput.isSelected()
+						? GLPortTiming.PREVIOUS_STEP : GLPortTiming.CURRENT;
+				registerShowcaseNodeTypes(types, timing);
+				updateShowcaseCompositeTiming(timing);
+				binding.refresh();
+			});
+			showNodeValidation(validationStatus, binding.validationResult());
+			compileShowcaseNodePlan(false);
+		}
+
+		private void buildNodeExecutionInspector() {
+			GLTabbedPane inspectorTabs = new GLTabbedPane();
+			inspectorTabs.setBounds(796, 48, 336, 590);
+			nodeEditorPage.addGL(inspectorTabs);
+			ControlLayer inspector = new ControlLayer("Execution Inspector");
+			inspectorTabs.addTab("Execution", inspector);
+			nodeExecutionStatus = new GLLabel("Waiting for graph");
+			nodeExecutionStatus.setBounds(16, 47, 304, 22);
+			inspector.addGL(nodeExecutionStatus);
+			nodeExecutionStats = new GLLabel("No active plan");
+			nodeExecutionStats.setBounds(16, 71, 304, 22);
+			inspector.addGL(nodeExecutionStats);
+			nodeExecutionOutput = new GLLabel("Last output: -");
+			nodeExecutionOutput.setBounds(16, 95, 304, 22);
+			inspector.addGL(nodeExecutionOutput);
+			nodeExecutionTree = new GLTree<>(nodeExecutionTreeModel);
+			nodeExecutionTree.setRenameContextMenuEnabled(false);
+			nodeExecutionTree.setRowHeight(23);
+			nodeExecutionTree.setItemTextProvider(PlanTreeItem::label);
+			nodeExecutionTree.setBounds(16, 124, 304, 150);
+			nodeExecutionTree.getSelectionModel().addSelectionListener(
+					(source, oldSelection, newSelection) -> inspectPlanTreeSelection());
+			nodeExecutionTree.addActivationListener((source, item) -> {
+				if (item.kind() == PlanTreeKind.COMPOSITE) openCompositeGraphTab(item);
+			});
+			inspector.addGL(nodeExecutionTree);
+
+			nodeExecutionDetails = new GLTextArea("Compile the graph to inspect its plan.");
+			nodeExecutionDetails.setEditable(false);
+			nodeExecutionDetails.setLineWrap(false);
+			nodeExecutionDetails.setBounds(16, 280, 304, 170);
+			inspector.addGL(nodeExecutionDetails);
+
+			GLButton compile = new GLButton("Compile");
+			compile.setBounds(16, 462, 90, 30);
+			compile.addActionListener(event -> compileShowcaseNodePlan(false));
+			inspector.addGL(compile);
+			nodeRunButton = new GLButton("Run step");
+			nodeRunButton.setEnabled(false);
+			nodeRunButton.setBounds(112, 462, 96, 30);
+			nodeRunButton.addActionListener(event -> runShowcaseNodeStep());
+			inspector.addGL(nodeRunButton);
+			GLButton reject = new GLButton("Reject update");
+			reject.setBounds(214, 462, 106, 30);
+			reject.addActionListener(event -> compileShowcaseNodePlan(true));
+			inspector.addGL(reject);
+
+			GLButton stepOperation = new GLButton("Step op");
+			stepOperation.setBounds(16, 504, 90, 30);
+			stepOperation.addActionListener(event -> advanceShowcaseNodeOperation(false));
+			inspector.addGL(stepOperation);
+			GLButton continueExecution = new GLButton("Continue");
+			continueExecution.setBounds(112, 504, 96, 30);
+			continueExecution.addActionListener(event -> advanceShowcaseNodeOperation(true));
+			inspector.addGL(continueExecution);
+			nodeBreakpointButton = new GLButton("Breakpoint");
+			nodeBreakpointButton.setBounds(214, 504, 106, 30);
+			nodeBreakpointButton.addActionListener(event -> toggleNodeBreakpoint());
+			inspector.addGL(nodeBreakpointButton);
+			buildNodePropertyInspector(inspectorTabs);
+		}
+
+		private void configureShowcaseNodeCatalog(GLNodeTypeRegistry types) {
+			if (!showcaseNodeCatalog.entries().isEmpty()) return;
+			showcaseNodeCatalog.register(new GLNodeCatalogEntry(
+					types.find("showcase.texture").orElseThrow(), "Texture", "Sources",
+					Map.of("gain", GLNodeValue.of(1.0)), "image", "color"));
+			showcaseNodeCatalog.register(new GLNodeCatalogEntry(
+					types.find("showcase.material-stack").orElseThrow(), "Material Stack",
+					"Composites", Map.of("blend", GLNodeValue.of("Normal"),
+							"enabled", GLNodeValue.of(true)), "shade", "tint"));
+			showcaseNodeCatalog.register(new GLNodeCatalogEntry(
+					types.find("showcase.output").orElseThrow(), "Surface Output", "Outputs",
+					Map.of(), "result", "display"));
+		}
+
+		private void buildNodePalette() {
+			ControlLayer palette = new ControlLayer("Node Palette");
+			palette.setBounds(8, 48, 216, 550);
+			nodeEditorPage.addGL(palette);
+			nodeCreationPalette.setBounds(2, 34, 212, 448);
+			nodeCreationPalette.setActivationListener(this::insertPaletteNode);
+			palette.addGL(nodeCreationPalette);
+			nodePaletteSearch = nodeCreationPalette.searchEditor();
+			nodePaletteList = nodeCreationPalette.nodeList();
+			nodePaletteCompatible = nodeCreationPalette.compatibleOnlyControl();
+			GLButton add = new GLButton("Add node");
+			add.setBounds(12, 494, 92, 30);
+			add.addActionListener(event -> insertPaletteNode(nodePaletteList.getSelectedValue()));
+			palette.addGL(add);
+			GLButton favorite = new GLButton("Favorite");
+			favorite.setBounds(110, 494, 94, 30);
+			favorite.addActionListener(event -> nodeCreationPalette.toggleSelectedFavorite());
+			palette.addGL(favorite);
+			nodePaletteStatus = nodeCreationPalette.statusLabel();
+			nodePaletteStatus.setText("Double-click a node to add it");
+			refreshNodePalette();
+		}
+
+		private void refreshNodePalette() {
+			if (nodePaletteList == null) return;
+			GLNodePortDescriptor compatible = null;
+			if (nodePaletteCompatible != null && nodePaletteCompatible.isSelected()) {
+				GLNodeEndpoint endpoint = pendingNodeConnection == null ? null
+						: pendingNodeConnection.endpoint();
+				GLNodeId selected = endpoint == null ? selectedShowcaseNodeId()
+						: endpoint.nodeId();
+				if (selected != null) compatible = showcaseNodeGraph.snapshot().findNode(selected)
+						.flatMap(node -> showcaseNodeTypes.find(node.typeId()))
+						.flatMap(type -> endpoint == null
+								? type.ports().stream().filter(port -> port.direction()
+										== com.vingame.glswing.node.model.GLPortDirection.OUTPUT)
+										.findFirst()
+								: type.findPort(endpoint.portId())).orElse(null);
+			}
+			nodeCreationPalette.setCompatiblePort(compatible);
+			nodeCreationPalette.refresh();
+		}
+
+		private void insertPaletteNode(GLNodeCatalogEntry entry) {
+			if (entry == null || showcaseNodeBinding == null) return;
+			PendingNodeConnection pending = pendingNodeConnection;
+			int offset = nodePaletteInsertCount++ % 8;
+			float x = pending != null ? pending.x() : requestedNodeX != null
+					? requestedNodeX : 55 + offset * 28;
+			float y = pending != null ? pending.y() : requestedNodeY != null
+					? requestedNodeY : 350 + offset * 18;
+			GLNodeId added = showcaseNodeBinding.addNode(entry.type().id(),
+					entry.defaultProperties(), x, y);
+			if (pending != null) {
+				var desiredDirection = pending.direction() == GLNodePort.Direction.OUTPUT
+						? com.vingame.glswing.node.model.GLPortDirection.INPUT
+						: com.vingame.glswing.node.model.GLPortDirection.OUTPUT;
+				GLNodePortDescriptor sourcePort = showcaseNodeGraph.snapshot()
+						.findNode(pending.endpoint().nodeId())
+						.flatMap(node -> showcaseNodeTypes.find(node.typeId()))
+						.flatMap(type -> type.findPort(pending.endpoint().portId()))
+						.orElseThrow();
+				entry.type().ports().stream().filter(port -> port.direction() == desiredDirection
+						&& port.valueTypeId().equals(sourcePort.valueTypeId()))
+						.findFirst().ifPresent(port -> showcaseNodeGraph.edit(
+								"Complete connection", edit -> edit.addConnection(
+										new GLGraphConnection(GLNodeConnectionId.random(),
+												pending.direction() == GLNodePort.Direction.OUTPUT
+														? pending.endpoint()
+														: new GLNodeEndpoint(added, port.id()),
+												pending.direction() == GLNodePort.Direction.OUTPUT
+														? new GLNodeEndpoint(added, port.id())
+														: pending.endpoint()))));
+				pendingNodeConnection = null;
+				nodePaletteStatus.setText("Connection completed");
+				nodePaletteCompatible.setSelected(false);
+			}
+			showcaseNodeCatalog.markUsed(entry.type().id());
+			requestedNodeX = requestedNodeY = null;
+			refreshNodePalette();
+		}
+
+		private void showNodeCreationMenu(float x, float y, float screenX, float screenY) {
+			requestedNodeX = x;
+			requestedNodeY = y;
+			showNodeCreationMenu(screenX, screenY, entry -> true,
+					this::insertPaletteNode);
+		}
+
+		private void showNodeCreationMenu(float screenX, float screenY,
+				Predicate<GLNodeCatalogEntry> allowed,
+				Consumer<GLNodeCatalogEntry> insertion) {
+			if (nodeCreationMenu != null && nodeCreationMenu.isShowing())
+				nodeCreationMenu.close();
+			nodeCreationMenu = nodeCreationPalette.showPopup(host.parent(),
+					screenX, screenY, allowed, null, insertion);
+		}
+
+		private void buildNodePropertyInspector(GLTabbedPane inspectorTabs) {
+			ControlLayer properties = new ControlLayer("Property Inspector");
+			inspectorTabs.addTab("Properties", properties);
+			GLNodePropertySchemaRegistry schemas = new GLNodePropertySchemaRegistry();
+			schemas.register("showcase.texture", List.of(
+					new GLNumberNodeProperty("gain", "Gain", 0, 2, .01, false)));
+			schemas.register("showcase.material-stack", List.of(
+					new GLEnumNodeProperty("blend", "Blend mode",
+							List.of("Normal", "Multiply", "Screen")),
+					new GLBooleanNodeProperty("enabled", "Enabled")));
+			nodePropertyInspector = new GLNodePropertyInspector(showcaseNodeBinding,
+					schemas);
+			GLScrollPane scroll = new GLScrollPane(nodePropertyInspector);
+			scroll.setHorizontalScrollBarPolicy(GLScrollPane.ScrollBarPolicy.NEVER);
+			scroll.setVerticalScrollBarPolicy(GLScrollPane.ScrollBarPolicy.AS_NEEDED);
+			scroll.setContentTracksViewportWidth(true);
+			scroll.setBounds(8, 40, 320, 510);
+			properties.addGL(scroll);
+		}
+
+		private void configureNodeExecutionBackend() {
+			nodeExecutionExecutor = Executors.newSingleThreadExecutor(operation -> {
+				Thread thread = new Thread(operation, "glswing-showcase-node-execution");
+				thread.setDaemon(true);
+				return thread;
+			});
+			GLJavaExecutionBackend backend = new GLJavaExecutionBackend();
+			backend.register("showcase.texture", (context, inputs, properties) -> {
+				GLNodeValue feedback = inputs.getOrDefault("feedback", List.of(
+						GLNodeValue.NullValue.INSTANCE)).get(0);
+				String value = feedback == GLNodeValue.NullValue.INSTANCE
+						? "Texture" : "Texture + feedback";
+				return Map.of("color", GLNodeValue.of(value));
+			});
+			backend.register("showcase.material", (context, inputs, properties) ->
+					Map.of("result", GLNodeValue.of("Shaded "
+							+ inputs.get("base").get(0).toJavaValue())));
+			backend.register("showcase.tint", (context, inputs, properties) ->
+					Map.of("result", GLNodeValue.of("Tinted "
+							+ inputs.get("base").get(0).toJavaValue())));
+			backend.register("showcase.output", (context, inputs, properties) -> {
+				observedNodeOutput.set(inputs.get("surface").get(0));
+				return Map.of();
+			});
+			nodePlanController = new GLExecutionPlanController<>(backend,
+					nodeExecutionExecutor, ignored -> { });
+		}
+
+		private static GLNodeImplementationRegistry showcaseImplementations(
+				boolean incompatible) {
+			GLNodeImplementationRegistry implementations =
+					new GLNodeImplementationRegistry();
+			implementations.register(new GLNodeImplementationDescriptor(
+					"showcase.texture", "showcase.texture",
+					GLNodeImplementationKind.STATEFUL, false, 2, 2));
+			implementations.register(new GLNodeImplementationDescriptor(
+					"showcase.tint", "showcase.tint", GLNodeImplementationKind.PURE,
+					false, 2, 1));
+			implementations.register(new GLNodeImplementationDescriptor(
+					"showcase.material", incompatible ? "showcase.unavailable"
+							: "showcase.material", GLNodeImplementationKind.PURE,
+					false, 4, 3));
+			implementations.register(new GLNodeImplementationDescriptor(
+					"showcase.output", "showcase.output",
+					GLNodeImplementationKind.EFFECT, true, 1, 0));
+			return implementations;
+		}
+
+		private void compileShowcaseNodePlan(boolean incompatible) {
+			if (showcaseNodeGraph == null || showcaseNodeTypes == null
+					|| nodePlanController == null) return;
+			GLNodeGraphAsset asset = new GLNodeGraphAsset("showcase.execution", 1,
+					GLNodeGraphAssetKind.PROJECT, showcaseNodeGraph.snapshot(),
+					new GLNodeEditorViewState(Map.of()));
+			var compiled = GLExecutionPlanCompiler.compile(asset,
+					showcaseCompositeRegistry, GLCompositeExpansionLimits.DEFAULT,
+					showcaseNodeTypes, showcaseImplementations(incompatible),
+					showcaseCyclePolicy.getSelectedItem(),
+					new GLExecutionPlanOptions("frame"));
+			if (!compiled.isValid()) {
+				compiled.diagnostics().stream().flatMap(problem ->
+						problem.nodeIds().stream()).findFirst().ifPresent(this::focusShowcaseNode);
+				nodeExecutionStatus.setText("Compilation rejected");
+				nodeExecutionStats.setText(compiled.diagnostics().size() + " problem(s)");
+				nodeExecutionDetails.setText(compiled.diagnostics().stream()
+						.map(problem -> problem.code() + "\n  " + problem.message())
+						.reduce((left, right) -> left + "\n\n" + right)
+						.orElse("Unknown compilation failure"));
+				nodeRunButton.setEnabled(nodePlanController.currentPlan().isPresent());
+				return;
+			}
+			GLExecutionPlan candidate = compiled.plan().orElseThrow();
+			String retainedHash = nodePlanController.currentPlan()
+					.map(GLExecutionPlan::hash).orElse(null);
+			nodeExecutionStatus.setText(incompatible
+					? "Testing incompatible update ..." : "Preparing plan ...");
+			nodePlanController.prepareAndSwap(candidate).whenComplete((result, failure) ->
+					SwingUtilities.invokeLater(() -> {
+						if (languageServerClosing) return;
+						if (failure != null) {
+							nodeExecutionStatus.setText("Preparation failed");
+							nodeExecutionDetails.setText(failure.toString());
+						} else if (result.status()
+								== GLExecutionPlanSwapResult.Status.ACTIVATED) {
+							nodeLastExecution = null;
+							nodePausedAtBreakpoint = null;
+							nodeExecutionStatus.setText("Active · "
+									+ shortHash(candidate.hash()));
+							nodeExecutionStats.setText(planStatistics(candidate));
+							rebuildNodeExecutionTree(candidate);
+							refreshNodeInspectorDetails();
+						} else {
+							String active = nodePlanController.currentPlan()
+									.map(plan -> shortHash(plan.hash())).orElse("none");
+							nodeExecutionStatus.setText("Update "
+									+ result.status().name().toLowerCase(Locale.ROOT)
+									+ " · active " + active + " retained");
+							if (!result.diagnostics().isEmpty())
+								nodeExecutionDetails.setText(result.diagnostics().stream()
+										.map(problem -> problem.code() + "\n  "
+												+ problem.message())
+										.reduce((left, right) -> left + "\n\n" + right)
+										.orElse("Update rejected"));
+							if (retainedHash != null && nodePlanController.currentPlan()
+									.map(GLExecutionPlan::hash).filter(retainedHash::equals).isEmpty())
+								nodeExecutionStatus.setText("Retention check failed");
+						}
+						nodeRunButton.setEnabled(nodePlanController.currentPlan().isPresent());
+					}));
+		}
+
+		private void runShowcaseNodeStep() {
+			if (nodePlanController == null) return;
+			var lease = nodePlanController.acquire();
+			if (lease.isEmpty()) {
+				nodeExecutionStatus.setText("No active plan");
+				return;
+			}
+			nodeRunButton.setEnabled(false);
+			nodeExecutionExecutor.execute(() -> {
+				try (var active = lease.get()) {
+					var result = active.prepared().evaluate();
+					nodeLastExecution = result;
+					nodePausedAtBreakpoint = null;
+					GLNodeValue output = observedNodeOutput.get();
+					SwingUtilities.invokeLater(() -> {
+						if (languageServerClosing) return;
+						nodeExecutionStatus.setText("Executed step " + result.step()
+								+ " · " + shortHash(active.plan().hash()));
+						nodeExecutionOutput.setText("Last output: "
+								+ (output == null ? "-" : output.toJavaValue()));
+						refreshNodeInspectorDetails();
+						nodeRunButton.setEnabled(true);
+					});
+				} catch (GLJavaExecutionException failure) {
+					SwingUtilities.invokeLater(() -> {
+						if (languageServerClosing) return;
+						focusShowcaseNode(visibleOperationNodeId(failure.operation()));
+						nodeExecutionStatus.setText("Execution failed");
+						nodeExecutionDetails.setText(formatBackendFailure(failure));
+						nodeRunButton.setEnabled(true);
+					});
+				}
+			});
+		}
+
+		private void advanceShowcaseNodeOperation(boolean continueToBreakpoint) {
+			if (nodePlanController == null || nodeExecutionExecutor == null) return;
+			var lease = nodePlanController.acquire();
+			if (lease.isEmpty()) {
+				nodeExecutionStatus.setText("No active plan");
+				return;
+			}
+			Set<GLNodeId> breakpoints = Set.copyOf(nodeBreakpoints);
+			nodeRunButton.setEnabled(false);
+				nodeExecutionExecutor.execute(() -> {
+				try (var active = lease.get()) {
+					GLJavaExecutablePlan executable = active.prepared();
+					GLNodeId resumedBreakpoint = nodePausedAtBreakpoint;
+					GLJavaExecutionTrace lastTrace = null;
+					GLJavaExecutionResult completed = null;
+					GLExecutionOperation paused = null;
+					do {
+						var next = executable.nextOperation();
+						GLNodeId breakpointNode = next.map(
+								ShowcaseSurface::visibleOperationNodeId).orElse(null);
+						if (continueToBreakpoint && next.isPresent()
+								&& breakpoints.contains(breakpointNode)
+								&& !breakpointNode.equals(resumedBreakpoint)) {
+							paused = next.get();
+							nodePausedAtBreakpoint = breakpointNode;
+							break;
+						}
+						var progress = executable.executeNext();
+						lastTrace = progress.trace().orElse(lastTrace);
+						completed = progress.completedStep().orElse(null);
+					} while (continueToBreakpoint && completed == null);
+					if (paused == null)
+						nodePausedAtBreakpoint = completed == null ? resumedBreakpoint : null;
+					GLJavaExecutionTrace displayedTrace = lastTrace;
+					GLJavaExecutionResult displayedResult = completed;
+					GLExecutionOperation displayedPause = paused;
+					if (completed != null) nodeLastExecution = completed;
+					SwingUtilities.invokeLater(() -> {
+						if (languageServerClosing) return;
+						if (displayedPause != null) {
+							nodeExecutionStatus.setText("Paused before operation "
+									+ (displayedPause.index() + 1));
+							focusShowcaseNode(visibleOperationNodeId(displayedPause));
+						} else if (displayedResult != null) {
+							nodeExecutionStatus.setText("Completed step "
+									+ displayedResult.step());
+							GLNodeValue output = observedNodeOutput.get();
+							nodeExecutionOutput.setText("Last output: "
+									+ (output == null ? "-" : output.toJavaValue()));
+						} else if (displayedTrace != null) {
+							nodeExecutionStatus.setText("Executed operation "
+									+ (displayedTrace.operation().index() + 1));
+							focusShowcaseNode(visibleOperationNodeId(
+									displayedTrace.operation()));
+						}
+						refreshNodeInspectorDetails(displayedTrace);
+						nodeRunButton.setEnabled(true);
+					});
+				} catch (GLJavaExecutionException failure) {
+					SwingUtilities.invokeLater(() -> {
+						if (languageServerClosing) return;
+						focusShowcaseNode(visibleOperationNodeId(failure.operation()));
+						nodeExecutionStatus.setText("Execution failed");
+						nodeExecutionDetails.setText(formatBackendFailure(failure));
+						nodeRunButton.setEnabled(true);
+					});
+				}
+			});
+		}
+
+		private void toggleNodeBreakpoint() {
+			GLNodeId selected = selectedShowcaseNodeId();
+			if (selected == null) {
+				nodeExecutionStatus.setText("Select a node first");
+				return;
+			}
+			if (!nodeBreakpoints.add(selected)) nodeBreakpoints.remove(selected);
+			refreshNodeInspectorDetails();
+		}
+
+		private GLNodeId selectedShowcaseNodeId() {
+			if (showcaseNodeEditor == null || showcaseNodeBinding == null
+					|| showcaseNodeEditor.getActiveNode() == null) return null;
+			return showcaseNodeBinding.findNodeId(showcaseNodeEditor.getActiveNode())
+					.orElse(null);
+		}
+
+		private void focusShowcaseNode(GLNodeId id) {
+			if (showcaseNodeEditor == null || showcaseNodeBinding == null || id == null)
+				return;
+			showcaseNodeBinding.findNodeView(id).ifPresent(node ->
+					showcaseNodeEditor.setSelectedNodes(List.of(node)));
+		}
+
+		private static GLNodeId visibleOperationNodeId(GLExecutionOperation operation) {
+			return operation.origin().filter(origin -> !origin.instances().isEmpty())
+					.map(origin -> origin.instances().get(0).nodeId())
+					.orElse(operation.nodeId());
+		}
+
+		private void rebuildNodeExecutionTree(GLExecutionPlan plan) {
+			nodeExecutionTreeModel.clear();
+			nodeTreeItemsByVisibleId.clear();
+			PlanTreeItem root = new PlanTreeItem("plan", "Execution plan · "
+					+ shortHash(plan.hash()), PlanTreeKind.PLAN, List.of(), null, null);
+			nodeExecutionTreeModel.addRoot(root);
+			Map<String, PlanTreeItem> composites = new HashMap<>();
+			for (GLExecutionOperation operation : plan.operations()) {
+				PlanTreeItem parent = root;
+				List<GLCompositeOrigin.Instance> path = operation.origin()
+						.map(GLCompositeOrigin::instances).orElse(List.of());
+				for (int depth = 0; depth < path.size(); depth++) {
+					List<GLCompositeOrigin.Instance> prefix = List.copyOf(
+							path.subList(0, depth + 1));
+					String key = "composite/" + prefix.stream()
+							.map(instance -> instance.nodeId().toString())
+							.reduce((left, right) -> left + "/" + right).orElse("");
+					PlanTreeItem composite = composites.get(key);
+					if (composite == null) {
+						GLCompositeOrigin.Instance instance = prefix.get(prefix.size() - 1);
+						composite = new PlanTreeItem(key, instance.nodeTypeId(),
+								PlanTreeKind.COMPOSITE, prefix, null,
+								prefix.get(0).nodeId());
+						composites.put(key, composite);
+						nodeExecutionTreeModel.addChild(parent, composite);
+						nodeTreeItemsByVisibleId.putIfAbsent(prefix.get(0).nodeId(), composite);
+					}
+					parent = composite;
+				}
+				GLNodeId visible = path.isEmpty() ? operation.nodeId() : path.get(0).nodeId();
+				PlanTreeItem leaf = new PlanTreeItem("operation/" + operation.index(),
+						(operation.index() + 1) + " · " + operation.operationTypeId(),
+						PlanTreeKind.OPERATION, path, operation, visible);
+				nodeExecutionTreeModel.addChild(parent, leaf);
+				if (path.isEmpty()) nodeTreeItemsByVisibleId.put(operation.nodeId(), leaf);
+			}
+			nodeExecutionTree.expandAll();
+		}
+
+		private void inspectPlanTreeSelection() {
+			if (syncingInspectorSelection || nodeExecutionTree == null) return;
+			PlanTreeItem item = nodeExecutionTree.getSelectedValue();
+			if (item == null) return;
+			nodeInspectedOperation = item.operation();
+			if (item.visibleNodeId() != null) {
+				syncingInspectorSelection = true;
+				try { focusShowcaseNode(item.visibleNodeId()); }
+				finally { syncingInspectorSelection = false; }
+			}
+			GLExecutionPlan plan = nodePlanController == null ? null
+					: nodePlanController.currentPlan().orElse(null);
+			if (plan == null) return;
+			if (item.kind() == PlanTreeKind.COMPOSITE) {
+				nodeExecutionDetails.setText(describeComposite(plan, item));
+				return;
+			}
+			refreshNodeInspectorDetails();
+		}
+
+		private void openCompositeGraphTab(PlanTreeItem item) {
+			if (item.compositePath().isEmpty() || showcaseCompositeRegistry == null) return;
+			GLCompositeOrigin.Instance instance = item.compositePath()
+					.get(item.compositePath().size() - 1);
+			String assetId = instance.assetId();
+			openCompositeAsset(instance.nodeId(), instance.nodeTypeId(), assetId);
+		}
+
+		private void openCompositeAsset(GLNodeId instanceId, String nodeTypeId,
+				String assetId) {
+			openCompositeAsset(instanceId, nodeTypeId, assetId, showcaseNodeEditor);
+		}
+
+		private void openCompositeAsset(GLNodeId instanceId, String nodeTypeId,
+				String assetId, GLNodeEditor returnEditor) {
+			GLContainer existing = openCompositeTabs.get(assetId);
+			if (existing != null) {
+				existing.bringToFront();
+				return;
+			}
+			GLNodeGraphAsset asset = showcaseCompositeRegistry.findAsset(assetId)
+					.orElse(null);
+			if (asset == null || asset.compositeDescriptor() == null) return;
+			GLContainer page = new GLContainer() {
+				@Override protected void resized(float width, float height) {
+					GLNodeWorkspace workspace = openCompositeWorkspaces.get(assetId);
+					if (workspace != null) workspace.setBounds(0, 0, width, height);
+				}
+				@Override protected void record(GLContext2D context) {
+					context.fillUIRoundRect(0, 0, getWidth(), getHeight(), 0,
+							getGLTheme().values().getColor("palette.surface", SURFACE));
+				}
+			};
+			page.setBounds(0, 0, nodeEditorPage.getWidth(), nodeEditorPage.getHeight());
+			openCompositeTabs.put(assetId, page);
+			GLNodeValueTypeRegistry valueTypes = new GLNodeValueTypeRegistry();
+			valueTypes.register(new GLNodeValueTypeDescriptor("number", "Number"));
+			valueTypes.register(new GLNodeValueTypeDescriptor("color", "Color"));
+			valueTypes.register(new GLNodeValueTypeDescriptor("audio", "Audio"));
+			GLNodeWorkspace workspace = new GLNodeWorkspace(showcaseNodeTypes,
+					showcaseCompositeRegistry, showcaseNodeCatalog,
+					(node, type) -> createShowcaseNodeView(type),
+					showcaseCyclePolicy.getSelectedItem(), host.historyManager(),
+					valueTypes, showcaseInputEditors);
+			workspace.setBounds(0, 0, page.getWidth(), page.getHeight());
+			workspace.editor().setConnectionColorInterpolator(GLColorInterpolation.OKLAB);
+			workspace.setCompositeExtractionSupplier(() -> {
+				int number = ++extractedCompositeCount;
+				String type = "showcase.extracted." + number;
+				return new GLNodeWorkspace.CompositeExtraction(type + ".asset", type,
+						"Extracted Composite " + number, "Composites");
+			});
+			workspace.setChangeListener(() -> {
+				refreshNodePalette();
+				if (showcaseNodeBinding != null) showcaseNodeBinding.refresh();
+				compileShowcaseNodePlan(false);
+			});
+			workspace.setAdditionalDependentGraphsSupplier(() ->
+					List.of(showcaseNodeGraph));
+			openCompositeWorkspaces.put(assetId, workspace);
+			page.addGL(workspace);
+			workspace.openDocument(nodeTypeId, new GLNodeGraphDocument(asset));
+			GLButton close = new GLButton("×");
+			close.setBounds(page.getWidth() - 38, 6, 30, 28);
+			page.addGL(close);
+			close.bringToFront();
+			Runnable closeComposite = () -> {
+				workspace.close();
+				openCompositeWorkspaces.remove(assetId);
+				openCompositeTabs.remove(assetId);
+				nodeEditorPage.removeGL(page);
+				GLNodeEditor focusTarget = returnEditor == null
+						? showcaseNodeEditor : returnEditor;
+				focusTarget.requestGLFocus(focusTarget);
+			};
+			workspace.setRootNavigationAction(closeComposite);
+			close.addActionListener(event -> closeComposite.run());
+			nodeEditorPage.addGL(page);
+			page.bringToFront();
+			workspace.editor().requestGLFocus(workspace.editor());
+		}
+
+		@SuppressWarnings("unused")
+		private void openCompositeAssetLegacy(GLNodeId instanceId, String nodeTypeId,
+				String assetId, GLNodeEditor returnEditor) {
+			GLContainer existing = openCompositeTabs.get(assetId);
+			if (existing != null) {
+				existing.bringToFront();
+				return;
+			}
+			GLNodeGraphAsset asset = showcaseCompositeRegistry.findAsset(assetId)
+					.orElse(null);
+			if (asset == null) return;
+			GLContainer page = new GLContainer() {
+				@Override protected void record(GLContext2D context) {
+					context.fillUIRoundRect(0, 0, getWidth(), getHeight(), 0,
+							getGLTheme().values().getColor("palette.surface", SURFACE));
+				}
+			};
+			page.setBounds(0, 0, nodeEditorPage.getWidth(), nodeEditorPage.getHeight());
+			openCompositeTabs.put(assetId, page);
+			GLButton rootCrumb = new GLButton("Node Editor");
+			rootCrumb.setBounds(10, 10, 112, 30);
+			page.addGL(rootCrumb);
+			GLLabel separator = new GLLabel(">");
+			separator.setBounds(128, 10, 18, 30);
+			page.addGL(separator);
+			GLLabel current = new GLLabel(nodeTypeId + "  /  " + assetId);
+			current.setBounds(150, 10, 760, 30);
+			page.addGL(current);
+			GLButton close = new GLButton("Close");
+			close.setBounds(1050, 10, 96, 30);
+			page.addGL(close);
+			AtomicReference<Runnable> closeAction = new AtomicReference<>();
+			GLNodeEditor nestedEditor = new GLNodeEditor() {
+				@Override public void keyPressed(GLKeyEvent event) {
+					super.keyPressed(event);
+					if (!event.isConsumed()
+							&& getGLInputMap().matches(GLInputActions.CANCEL, event)) {
+						Runnable action = closeAction.get();
+						if (action != null) action.run();
+						event.consume();
+					}
+				}
+			};
+			nestedEditor.setBounds(10, 50, 816, 560);
+			nestedEditor.setConnectionColorInterpolator(GLColorInterpolation.OKLAB);
+			page.addGL(nestedEditor);
+			GLNodeGraph nestedGraph = new GLNodeGraph(asset.graph());
+			GLNodeEditorBinding nestedBinding = new GLNodeEditorBinding(nestedGraph,
+					showcaseNodeTypes, nestedEditor,
+					(node, type) -> createShowcaseNodeView(type),
+					showcaseCyclePolicy.getSelectedItem(), asset.viewState());
+			openCompositeBindings.put(assetId, nestedBinding);
+			GLCompositeInterfaceEditor interfaceEditor =
+					new GLCompositeInterfaceEditor(showcaseCompositeRegistry,
+							showcaseNodeTypes, host.historyManager());
+			interfaceEditor.setBounds(836, 50, 310, 560);
+			interfaceEditor.setAssetId(assetId);
+			page.addGL(interfaceEditor);
+			GLNodeGraphEditingSession nestedEditing = new GLNodeGraphEditingSession(
+					nestedBinding, host.historyManager());
+			nestedEditor.setEditingActions(new GLNodeEditingActions() {
+				private boolean hasModelSelection() {
+					return nestedEditor.getSelectedNodes().stream()
+							.anyMatch(node -> nestedBinding.findNodeId(node).isPresent());
+				}
+				@Override public boolean canCopy() {
+					return hasModelSelection();
+				}
+				@Override public boolean canCut() { return canCopy(); }
+				@Override public boolean canPaste() {
+					return nestedEditing.hasClipboardContent();
+				}
+				@Override public boolean canDuplicate() { return canCopy(); }
+				@Override public boolean canExtractComposite() { return canCopy(); }
+				@Override public boolean canDelete() { return hasModelSelection(); }
+				@Override public void copy() { nestedEditing.copySelection(); }
+				@Override public void cut() { nestedEditing.cutSelection(); }
+				@Override public void paste(float x, float y) {
+					nestedEditing.paste(x, y);
+				}
+				@Override public void duplicate() {
+					nestedEditing.duplicateSelection(28, 28);
+				}
+				@Override public com.vingame.glswing.node.GLNodePlacement beginPaste(
+						float x, float y) { return nestedEditing.beginPaste(x, y); }
+				@Override public com.vingame.glswing.node.GLNodePlacement beginDuplicate(
+						float x, float y) { return nestedEditing.beginDuplicate(x, y); }
+				@Override public com.vingame.glswing.node.GLNodePlacement beginMoveSelection(
+						float x, float y) { return nestedEditing.beginMoveSelection(x, y); }
+				@Override public void delete() { nestedEditing.removeSelection(); }
+				@Override public void requestNodeCreation(float x, float y,
+						float screenX, float screenY) {
+					showNodeCreationMenu(screenX, screenY,
+							entry -> !entry.type().id().equals(nodeTypeId), entry -> {
+								nestedBinding.addNode(entry.type().id(),
+										entry.defaultProperties(), x, y);
+								showcaseNodeCatalog.markUsed(entry.type().id());
+							});
+				}
+				@Override public boolean canOpenSelectedComposite() {
+					GLNode selected = nestedEditor.getActiveNode();
+					return selected != null && nestedBinding.findNodeId(selected)
+							.flatMap(id -> nestedGraph.snapshot().findNode(id))
+							.flatMap(node -> showcaseCompositeRegistry.findComposite(
+									node.typeId())).isPresent();
+				}
+				@Override public void openSelectedComposite() {
+					GLNode selected = nestedEditor.getActiveNode();
+					GLNodeId id = selected == null ? null
+							: nestedBinding.findNodeId(selected).orElse(null);
+					GLGraphNode node = id == null ? null
+							: nestedGraph.snapshot().findNode(id).orElse(null);
+					if (node == null) return;
+					showcaseCompositeRegistry.findComposite(node.typeId())
+							.ifPresent(descriptor -> openCompositeAsset(id,
+									node.typeId(), descriptor.assetId(), nestedEditor));
+				}
+				@Override public void extractComposite() {
+					int number = ++extractedCompositeCount;
+					String extractedType = "showcase.extracted." + number;
+					nestedEditing.extractSelection(extractedType + ".asset",
+							extractedType, "Extracted Composite " + number,
+							"Composites", showcaseCompositeRegistry,
+							showcaseNodeCatalog);
+					refreshNodePalette();
+				}
+			});
+			nestedEditor.setNodeCreationRequestListener((source, x, y, screenX, screenY) ->
+					showNodeCreationMenu(screenX, screenY,
+							entry -> !entry.type().id().equals(nodeTypeId), entry -> {
+								nestedBinding.addNode(entry.type().id(),
+										entry.defaultProperties(), x, y);
+								showcaseNodeCatalog.markUsed(entry.type().id());
+							}));
+			addCompositeBoundaryNodes(nestedEditor, nestedBinding,
+					asset.compositeDescriptor());
+			interfaceEditor.setChangeListener(() -> {
+				GLCompositeNodeDescriptor descriptor = showcaseCompositeRegistry
+						.findAsset(assetId).map(GLNodeGraphAsset::compositeDescriptor)
+						.orElse(null);
+				if (descriptor == null) return;
+				for (GLNode node : List.copyOf(nestedEditor.getNodes()))
+					if (("Group Input".equals(node.getTitle())
+							|| "Group Output".equals(node.getTitle()))
+							&& !node.isTitleEditable()) nestedEditor.removeNode(node);
+				addCompositeBoundaryNodes(nestedEditor, nestedBinding, descriptor);
+				compileShowcaseNodePlan(false);
+			});
+			nestedGraph.addListener((source, change) -> {
+				GLNodeGraphAsset currentAsset = showcaseCompositeRegistry.findAsset(assetId)
+						.orElse(asset);
+				showcaseCompositeRegistry.replaceAsset(new GLNodeGraphAsset(assetId,
+						currentAsset.version(), currentAsset.kind(), change.after(),
+						nestedBinding.captureViewState(), currentAsset.metadata(),
+						currentAsset.compositeDescriptor()));
+				compileShowcaseNodePlan(false);
+			});
+			Runnable closeComposite = () -> {
+				GLNodeGraphAsset currentAsset = showcaseCompositeRegistry.findAsset(assetId)
+						.orElse(asset);
+				showcaseCompositeRegistry.replaceAsset(new GLNodeGraphAsset(assetId,
+						currentAsset.version(), currentAsset.kind(), nestedGraph.snapshot(),
+						nestedBinding.captureViewState(), currentAsset.metadata(),
+						currentAsset.compositeDescriptor()));
+				nestedBinding.close();
+				openCompositeBindings.remove(assetId);
+				openCompositeTabs.remove(assetId);
+				nodeEditorPage.removeGL(page);
+				GLNodeEditor focusTarget = returnEditor == null
+						? showcaseNodeEditor : returnEditor;
+				focusTarget.requestGLFocus(focusTarget);
+			};
+			closeAction.set(closeComposite);
+			close.addActionListener(event -> closeComposite.run());
+			rootCrumb.addActionListener(event -> closeComposite.run());
+			nodeEditorPage.addGL(page);
+			page.bringToFront();
+			nestedEditor.requestGLFocus(nestedEditor);
+		}
+
+		private void addCompositeBoundaryNodes(GLNodeEditor editor,
+				GLNodeEditorBinding binding, GLCompositeNodeDescriptor descriptor) {
+			if (descriptor == null) return;
+			addCompositeBoundaryNode(editor, binding, descriptor,
+					GLPortDirection.INPUT, 24, 90);
+			addCompositeBoundaryNode(editor, binding, descriptor,
+					GLPortDirection.OUTPUT,
+					Math.max(300, editor.getWidth() - 220), 90);
+		}
+
+		private void addCompositeBoundaryNode(GLNodeEditor editor,
+				GLNodeEditorBinding binding, GLCompositeNodeDescriptor descriptor,
+				GLPortDirection direction, float x, float y) {
+			if (descriptor == null || hasCompositeBoundaryNode(editor, direction)) return;
+			GLNode boundary = new GLNode(direction == GLPortDirection.INPUT
+					? "Group Input" : "Group Output");
+			boundary.setTitleEditable(false);
+			boundary.setResizeMode(GLNodeResizeMode.NONE);
+			List<GLNodePort[]> connections = new java.util.ArrayList<>();
+			for (GLCompositePortMapping mapping : descriptor.portMappings()) {
+				GLNodePortDescriptor port = mapping.publicPort();
+				if (port.direction() != direction) continue;
+				if (!mapping.isBound()) continue;
+				GLNode internal = binding.findNodeView(
+						mapping.internalEndpoint().nodeId()).orElse(null);
+				if (internal == null) continue;
+				GLNodePort internalPort = internal.findPort(
+						mapping.internalEndpoint().portId());
+				if (internalPort == null) continue;
+				if (direction == GLPortDirection.INPUT) {
+					GLNodePort output = boundary.addOutput(port.id(), new GLLabel(port.id()));
+					connections.add(new GLNodePort[] { output, internalPort });
+				} else {
+					GLNodePort input = boundary.addInput(port.id(), new GLLabel(port.id()));
+					connections.add(new GLNodePort[] { internalPort, input });
+				}
+			}
+			if (connections.isEmpty()) return;
+			editor.addNode(boundary, x, y);
+			for (GLNodePort[] connection : connections)
+				if (editor.canConnect(connection[0], connection[1]))
+					editor.connect(connection[0], connection[1]);
+			editor.setSelectedNode(boundary);
+		}
+
+		private static boolean hasCompositeBoundaryNode(GLNodeEditor editor,
+				GLPortDirection direction) {
+			String title = direction == GLPortDirection.INPUT
+					? "Group Input" : "Group Output";
+			return editor.getNodes().stream().anyMatch(node -> title.equals(node.getTitle())
+					&& !node.isTitleEditable());
+		}
+
+		private void refreshNodeInspectorDetails() {
+			refreshNodeInspectorDetails(null);
+		}
+
+		private void refreshNodeInspectorDetails(GLJavaExecutionTrace currentTrace) {
+			if (nodePlanController == null || nodeExecutionDetails == null) return;
+			GLExecutionPlan plan = nodePlanController.currentPlan().orElse(null);
+			if (plan == null) return;
+			GLNodeId selected = selectedShowcaseNodeId();
+			if (nodeBreakpointButton != null) nodeBreakpointButton.setText(selected != null
+					&& nodeBreakpoints.contains(selected) ? "Remove break" : "Add break");
+			if (nodeInspectedOperation != null) {
+				GLJavaExecutionTrace trace = traceFor(nodeInspectedOperation, currentTrace);
+				nodeExecutionDetails.setText(describeOperation(plan,
+						nodeInspectedOperation, trace, nodeLastExecution));
+				return;
+			}
+			if (selected == null) {
+				nodeExecutionDetails.setText(describePlan(plan));
+				return;
+			}
+			GLExecutionOperation operation = plan.operationsByNodeId().get(selected);
+			if (operation == null) {
+				PlanTreeItem composite = nodeTreeItemsByVisibleId.get(selected);
+				nodeExecutionDetails.setText(composite != null
+						&& composite.kind() == PlanTreeKind.COMPOSITE
+								? describeComposite(plan, composite)
+								: "SELECTED NODE\n" + selected
+										+ "\n\nThe node was folded or removed from this plan.");
+				return;
+			}
+			GLJavaExecutionTrace trace = traceFor(operation, currentTrace);
+			nodeExecutionDetails.setText(describeOperation(plan, operation, trace,
+					nodeLastExecution));
+		}
+
+		private GLJavaExecutionTrace traceFor(GLExecutionOperation operation,
+				GLJavaExecutionTrace currentTrace) {
+			if (currentTrace != null && currentTrace.operation().nodeId()
+					.equals(operation.nodeId())) return currentTrace;
+			return nodeLastExecution == null ? null : nodeLastExecution.traces().stream()
+					.filter(value -> value.operation().nodeId().equals(operation.nodeId()))
+					.findFirst().orElse(null);
+		}
+
+		private static String planStatistics(GLExecutionPlan plan) {
+			var statistics = plan.statistics();
+			return statistics.scheduledOperations() + " ops · "
+					+ statistics.temporarySlots() + " temp · "
+					+ statistics.stateSlots() + " state · "
+					+ statistics.maximumLatency() + " " + plan.latencyUnitId();
+		}
+
+		private static String describePlan(GLExecutionPlan plan) {
+			StringBuilder text = new StringBuilder("PLAN ")
+					.append(shortHash(plan.hash())).append('\n')
+					.append("Source nodes: ").append(plan.statistics().sourceNodes())
+					.append("\nRetained: ").append(plan.statistics().retainedNodes())
+					.append("\nFolded: ").append(plan.statistics().foldedOperations())
+					.append("\nRemoved: ").append(plan.statistics().sourceNodes()
+							- plan.statistics().retainedNodes())
+					.append("\nCost: ").append(plan.statistics().estimatedOperationCost())
+					.append("\n\nSCHEDULE\n");
+			for (var operation : plan.operations()) {
+				text.append(operation.index() + 1).append("  ")
+						.append(operation.operationTypeId()).append("\n   node ")
+						.append(operation.nodeId().toString(), 0, 8)
+						.append(" · latency ").append(operation.outputLatency())
+						.append(' ').append(plan.latencyUnitId()).append('\n');
+				for (var input : operation.inputs())
+					if (input.compensationLatency() > 0)
+						text.append("   +").append(input.compensationLatency())
+								.append(" align ").append(input.portId()).append('\n');
+				operation.origin().ifPresent(origin -> text.append("   origin ")
+						.append(origin.sourceAssetId()).append('\n'));
+			}
+			return text.toString().stripTrailing();
+		}
+
+		private String describeComposite(GLExecutionPlan plan, PlanTreeItem item) {
+			List<GLExecutionOperation> operations = plan.operations().stream()
+					.filter(operation -> operation.origin().map(origin ->
+							origin.instances().size() >= item.compositePath().size()
+									&& origin.instances().subList(0,
+											item.compositePath().size())
+										.equals(item.compositePath())).orElse(false))
+					.toList();
+			long estimatedCost = operations.stream()
+					.mapToLong(GLExecutionOperation::estimatedCost).sum();
+			long measuredNanos = nodeLastExecution == null ? 0
+					: nodeLastExecution.traces().stream()
+							.filter(trace -> operations.contains(trace.operation()))
+							.mapToLong(GLJavaExecutionTrace::durationNanos).sum();
+			long stateSlots = plan.values().stream().filter(value ->
+					value.storage() == com.vingame.glswing.node.execution.GLExecutionStorage.STATE
+							&& operations.stream().anyMatch(operation ->
+									operation.nodeId().equals(value.producerNodeId())))
+					.count();
+			StringBuilder text = new StringBuilder("COMPOSITE\n")
+					.append(item.label()).append("\npath ")
+					.append(item.compositePath().stream()
+							.map(instance -> instance.nodeTypeId() + ":"
+									+ instance.nodeId().toString().substring(0, 8))
+							.reduce((left, right) -> left + " > " + right).orElse("root"))
+					.append("\n\ninternal operations ").append(operations.size())
+					.append("\nestimated cost ").append(estimatedCost)
+					.append("\nstate slots ").append(stateSlots);
+			if (nodeLastExecution != null)
+				text.append("\nmeasured total ").append(formatDuration(measuredNanos));
+			text.append("\n\nSCHEDULE\n");
+			for (GLExecutionOperation operation : operations)
+				text.append(operation.index() + 1).append(" · ")
+						.append(operation.operationTypeId()).append("\n");
+			return text.toString().stripTrailing();
+		}
+
+		private static String describeOperation(GLExecutionPlan plan,
+				GLExecutionOperation operation, GLJavaExecutionTrace trace,
+				GLJavaExecutionResult result) {
+			StringBuilder text = new StringBuilder("SELECTED OPERATION ")
+					.append(operation.index() + 1).append('\n')
+					.append(operation.nodeTypeId()).append("\nnode ")
+					.append(operation.nodeId()).append("\nkind ")
+					.append(operation.kind()).append("\nlatency ")
+					.append(operation.processingLatency()).append(" -> ")
+					.append(operation.outputLatency()).append(' ')
+					.append(plan.latencyUnitId()).append("\nestimated cost ")
+					.append(operation.estimatedCost());
+			if (trace != null) text.append("\nmeasured ")
+					.append(formatDuration(trace.durationNanos()));
+			text.append("\n\nINPUTS\n");
+			if (operation.inputs().isEmpty()) text.append("-\n");
+			for (var input : operation.inputs()) {
+				text.append(input.portId()).append(" [")
+						.append(input.timing().name().toLowerCase(Locale.ROOT))
+						.append("] = ");
+				List<GLNodeValue> values = trace == null ? null
+						: trace.inputs().get(input.portId());
+				text.append(values == null ? "not evaluated" : formatNodeValues(values))
+						.append('\n');
+			}
+			text.append("\nOUTPUTS\n");
+			if (operation.outputs().isEmpty()) text.append("-");
+			for (var output : operation.outputs().entrySet()) {
+				GLNodeValue value = trace == null ? null : trace.outputs().get(output.getKey());
+				if (value == null && result != null)
+					value = result.find(output.getValue()).orElse(null);
+				var storage = plan.values().stream()
+						.filter(candidate -> candidate.ref().equals(output.getValue()))
+						.findFirst().orElse(null);
+				text.append(output.getKey()).append(" = ")
+						.append(value == null ? "not evaluated" : formatNodeValue(value));
+				if (storage != null) text.append("\n  ")
+						.append(storage.storage().name().toLowerCase(Locale.ROOT))
+						.append(" slot ").append(storage.storageSlot());
+				text.append('\n');
+			}
+			operation.origin().ifPresent(origin -> text.append("\nORIGIN\n")
+					.append(origin.sourceAssetId()).append('\n')
+					.append(origin.instances().isEmpty() ? "root node"
+							: origin.instances().stream().map(instance -> instance.assetId()
+									+ ":" + instance.nodeId().toString().substring(0, 8))
+									.reduce((left, right) -> left + " > " + right).orElse("")));
+			return text.toString().stripTrailing();
+		}
+
+		private static String formatNodeValues(List<GLNodeValue> values) {
+			return values.stream().map(ShowcaseSurface::formatNodeValue)
+					.reduce((left, right) -> left + ", " + right).orElse("-");
+		}
+
+		private static String formatNodeValue(GLNodeValue value) {
+			Object result = value.toJavaValue();
+			return result == null ? "null" : String.valueOf(result);
+		}
+
+		private static String formatDuration(long nanos) {
+			if (nanos < 1_000) return nanos + " ns";
+			if (nanos < 1_000_000) return String.format(Locale.ROOT, "%.2f us",
+					nanos / 1_000.0);
+			return String.format(Locale.ROOT, "%.2f ms", nanos / 1_000_000.0);
+		}
+
+		private static String formatBackendFailure(GLJavaExecutionException failure) {
+			var diagnostic = failure.diagnostic();
+			return "BACKEND ERROR\n" + diagnostic.code() + "\nnode "
+					+ failure.operation().nodeId() + "\noperation "
+					+ (failure.operation().index() + 1) + "\n\n"
+					+ diagnostic.message()
+					+ diagnostic.technicalDetails().map(value -> "\n\n" + value)
+							.orElse("");
+		}
+
+		private static String shortHash(String hash) {
+			return hash.substring(0, Math.min(8, hash.length()));
+		}
+
+		private static void registerShowcaseNodeTypes(GLNodeTypeRegistry types,
+				GLPortTiming materialTiming) {
+			types.unregister("showcase.texture");
+			types.unregister("showcase.tint");
+			types.unregister("showcase.material");
+			types.unregister("showcase.material-stack");
+			types.unregister("showcase.output");
+			types.register(new GLNodeTypeDescriptor("showcase.texture",
+					GLNodePortDescriptor.input("feedback", "color", false, 1),
+					GLNodePortDescriptor.output("color", "color")));
+			types.register(new GLNodeTypeDescriptor("showcase.material",
+					GLNodePortDescriptor.input("base", "color", true, 1),
+					GLNodePortDescriptor.output("result", "color", materialTiming,
+							Integer.MAX_VALUE)));
+			types.register(new GLNodeTypeDescriptor("showcase.tint",
+					GLNodePortDescriptor.input("base", "color", true, 1),
+					GLNodePortDescriptor.output("result", "color")));
+			types.register(new GLNodeTypeDescriptor("showcase.material-stack",
+					GLNodePortDescriptor.input("base", "color", true, 1),
+					GLNodePortDescriptor.output("result", "color", materialTiming,
+							Integer.MAX_VALUE)));
+			types.register(new GLNodeTypeDescriptor("showcase.output",
+					GLNodePortDescriptor.input("surface", "color", true, 1)));
+		}
+
+		private GLNodeInputEditorRegistry createShowcaseInputEditors() {
+			GLNodeInputEditorRegistry editors = new GLNodeInputEditorRegistry();
+			editors.register(new GLNodeInputEditorDescriptor(
+					"showcase.color-picker", "Color picker", Set.of("color"), Map.of()),
+					context -> {
+						com.vingame.glswing.ui.GLColorChooser chooser =
+								new com.vingame.glswing.ui.GLColorChooser(new Color(84, 120, 181));
+						chooser.setToolTipText(context.port().id());
+						return chooser;
+					});
+			return editors;
+		}
+
+		private GLCompositeGraphRegistry createShowcaseCompositeRegistry(
+				GLPortTiming materialTiming) {
+			GLNodeGraphAsset previous = showcaseCompositeRegistry == null ? null
+					: showcaseCompositeRegistry.findAsset("showcase.material-stack.asset")
+							.orElse(null);
+			GLCompositeNodeDescriptor descriptor = new GLCompositeNodeDescriptor(
+					"showcase.material-stack", "showcase.material-stack.asset", 1,
+					List.of(new GLCompositePortMapping(
+							GLNodePortDescriptor.input("base", "color", true, 1),
+							new GLNodeEndpoint(showcaseTintNodeId, "base")),
+							new GLCompositePortMapping(GLNodePortDescriptor.output(
+									"result", "color", materialTiming, Integer.MAX_VALUE),
+									new GLNodeEndpoint(showcaseMaterialLeafNodeId, "result"))));
+			var graph = previous == null
+					? new com.vingame.glswing.node.model.GLNodeGraphSnapshot(
+							com.vingame.glswing.node.model.GLNodeGraphId.random(), 0,
+							List.of(new GLGraphNode(showcaseTintNodeId, "showcase.tint"),
+									new GLGraphNode(showcaseMaterialLeafNodeId,
+											"showcase.material")),
+							List.of(new GLGraphConnection(showcaseCompositeConnectionId,
+									new GLNodeEndpoint(showcaseTintNodeId, "result"),
+									new GLNodeEndpoint(showcaseMaterialLeafNodeId, "base"))))
+					: previous.graph();
+			GLNodeEditorViewState viewState = previous == null
+					? new GLNodeEditorViewState(Map.of(
+							showcaseTintNodeId, new GLNodeViewState(180, 170),
+							showcaseMaterialLeafNodeId, new GLNodeViewState(570, 170)))
+					: previous.viewState();
+			GLNodeGraphAsset asset = new GLNodeGraphAsset(
+					"showcase.material-stack.asset", 1,
+					GLNodeGraphAssetKind.COMPOSITE,
+					graph, viewState, Map.of(), descriptor);
+			GLCompositeGraphRegistry registry = new GLCompositeGraphRegistry();
+			registry.registerAsset(asset);
+			if (showcaseCompositeRegistry != null)
+				for (GLNodeGraphAsset existing : showcaseCompositeRegistry.assets())
+					if (!existing.id().equals(asset.id())) registry.registerAsset(existing);
+			return registry;
+		}
+
+		private void updateShowcaseCompositeTiming(GLPortTiming timing) {
+			if (showcaseCompositeRegistry == null) return;
+			GLNodeGraphAsset asset = showcaseCompositeRegistry
+					.findAsset("showcase.material-stack.asset").orElse(null);
+			if (asset == null || asset.compositeDescriptor() == null) return;
+			GLCompositeNodeDescriptor old = asset.compositeDescriptor();
+			List<GLCompositePortMapping> ports = old.portMappings().stream().map(mapping -> {
+				GLNodePortDescriptor port = mapping.publicPort();
+				if (port.direction() != GLPortDirection.OUTPUT) return mapping;
+				GLNodePortDescriptor updated = new GLNodePortDescriptor(port.id(),
+						port.direction(), port.valueTypeId(), timing, port.required(),
+						port.maximumConnections());
+				return new GLCompositePortMapping(updated, mapping.internalEndpoint(),
+						mapping.presentation());
+			}).toList();
+			GLCompositeNodeDescriptor descriptor = new GLCompositeNodeDescriptor(
+					old.nodeTypeId(), old.assetId(), old.minimumAssetVersion(), ports,
+					old.properties(), old.propertyMappings());
+			showcaseCompositeRegistry.replaceAsset(new GLNodeGraphAsset(asset.id(),
+					asset.version(), asset.kind(), asset.graph(), asset.viewState(),
+					asset.metadata(), descriptor));
+			showcaseNodeTypes.replace(descriptor.nodeType());
+		}
+
+		private static GLNode createShowcaseNodeView(GLNodeTypeDescriptor type) {
+			if (type.id().startsWith("showcase.extracted.")) {
+				GLNode node = new GLNode("Extracted Composite");
+				node.setResizeMode(GLNodeResizeMode.HORIZONTAL);
+				for (GLNodePortDescriptor port : type.ports())
+					if (port.direction() == com.vingame.glswing.node.model.GLPortDirection.INPUT)
+						node.addInput(port.id(), new GLLabel(port.id()));
+					else node.addOutput(port.id(), new GLLabel(port.id()));
+				return node;
+			}
+			return switch (type.id()) {
+				case "showcase.texture" -> {
+					GLNode node = new GLNode("Texture");
+					node.setResizeMode(GLNodeResizeMode.BOTH);
+					node.addInput("feedback", new GLLabel("Feedback"));
+					node.addInput("scale", GLSlider.fixed("Scale", 0.1, 8, 1));
+					node.addOutput("color", new GLLabel("Mapped Color"));
+					yield node;
+				}
+				case "showcase.material", "showcase.material-stack" -> {
+					GLNode node = new GLNode("Material");
+					node.setResizeMode(GLNodeResizeMode.HORIZONTAL);
+					node.addInput("roughness",
+							GLSlider.fixed("Roughness", 0, 1, 0.42));
+					GLComboBox<String> blend = new GLComboBox<>(
+							List.of("Linear", "Multiply", "Screen"));
+					GLNodePorts base = node.addInputOutput("base", blend, "result");
+					base.input().setContentHiddenWhenConnected(true);
+					yield node;
+				}
+				case "showcase.tint" -> {
+					GLNode node = new GLNode("Tint");
+					node.setResizeMode(GLNodeResizeMode.HORIZONTAL);
+					node.addInput("base", new GLLabel("Base Color"));
+					node.addOutput("result", new GLLabel("Tinted Color"));
+					yield node;
+				}
+				case "showcase.output" -> {
+					GLNode node = new GLNode("Output");
+					node.setResizeMode(GLNodeResizeMode.NONE);
+					node.addInput("surface", new GLLabel("Surface"));
+					node.addInput("alpha", GLSlider.fixed("Alpha", 0, 1, 1));
+					yield node;
+				}
+				default -> throw new IllegalArgumentException(
+						"Unsupported showcase node type: " + type.id());
+			};
+		}
+
+		private static void showNodeValidation(GLLabel label,
+				com.vingame.glswing.node.model.GLNodeGraphValidationResult result) {
+			if (result.isValid()) {
+				label.setText("Valid graph - ready for compilation");
+				return;
+			}
+			String messages = result.diagnostics().stream()
+					.map(problem -> problem.message()).distinct()
+					.reduce((first, second) -> first + "; " + second)
+					.orElse("Invalid graph");
+			label.setText("Invalid - " + messages);
 		}
 
 		private void openShowcaseDialog(GLParent owner,

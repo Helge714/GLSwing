@@ -2,6 +2,11 @@ package com.vingame.glswing.node;
 
 /** Receives structural and selection changes from a {@link GLNodeEditor}. */
 public interface GLNodeEditorListener {
+	default void nodeAdded(GLNodeEditor editor, GLNode node) {
+	}
+
+	default void nodeRemoved(GLNodeEditor editor, GLNode node) {
+	}
 
 	default void connectionAdded(GLNodeEditor editor,
 			GLNodeConnection connection) {

@@ -41,6 +41,17 @@ public final class GLDefaultListModel<T> implements GLListModel<T> {
 		fire(ChangeType.INTERVAL_REMOVED, index, index);
 		return removed;
 	}
+	/** Moves one element while preserving the order of all remaining elements. */
+	public void moveElement(int fromIndex, int toIndex) {
+		if (fromIndex < 0 || fromIndex >= elements.size()
+				|| toIndex < 0 || toIndex >= elements.size())
+			throw new IndexOutOfBoundsException("List move: " + fromIndex + " -> " + toIndex);
+		if (fromIndex == toIndex) return;
+		T element = elements.remove(fromIndex);
+		elements.add(toIndex, element);
+		fire(ChangeType.CONTENTS_CHANGED, Math.min(fromIndex, toIndex),
+				Math.max(fromIndex, toIndex));
+	}
 	public boolean removeElement(T element) {
 		int index = elements.indexOf(element);
 		if (index < 0) return false;

@@ -71,6 +71,8 @@ public abstract class GLContainer implements GLParent, GLMouseTarget, Accessible
 	private volatile float width;
 	private volatile float height;
 	private volatile boolean visible = true;
+	private volatile float renderingOpacity = 1;
+	private volatile float renderingAlphaMultiplier = 1;
 	private volatile GLSize minimumGLSize = GLSize.ZERO;
 	private volatile GLSize preferredGLSize;
 	private volatile GLSize intrinsicPreferredGLSize;
@@ -137,10 +139,14 @@ public abstract class GLContainer implements GLParent, GLMouseTarget, Accessible
 		GLMouseTarget previousTarget = context.getMouseTarget();
 		int previousPickId = context.getPickId();
 		Color previousColor = context.getColor();
+		float previousAlphaMultiplier = context.getAlphaMultiplier();
 		GLStroke previousStroke = context.getStroke();
 		boolean connectedClip = false;
+		boolean opacityLayer = false;
 		try {
 			context.setTransform(previousTransform.copy().translate(x, y));
+			context.setAlphaMultiplier(previousAlphaMultiplier
+					* renderingAlphaMultiplier);
 			transformComponent(context);
 			if (isMouseTargetEnabled())
 				context.setMouseTarget(this, 0, 0);
@@ -165,6 +171,10 @@ public abstract class GLContainer implements GLParent, GLMouseTarget, Accessible
 			lastRenderedVisualHeight = visualHeight;
 			lastRenderedOverflowLeft = overflow.left();
 			lastRenderedOverflowTop = overflow.top();
+			if (renderingOpacity < 1 && visualWidth > 0 && visualHeight > 0) {
+				context.beginLayer(localX, localY, visualWidth, visualHeight);
+				opacityLayer = true;
+			}
 			if (context.intersectsRedrawBounds(
 					localX, localY, visualWidth, visualHeight)) {
 				ensureRecording(context);
@@ -172,9 +182,11 @@ public abstract class GLContainer implements GLParent, GLMouseTarget, Accessible
 			}
 			renderChildren(context);
 		} finally {
+			if (opacityLayer) context.endLayer(renderingOpacity);
 			if(connectedClip) context.endClip();
 			context.setTransform(previousTransform);
 			context.setColor(previousColor);
+			context.setAlphaMultiplier(previousAlphaMultiplier);
 			context.setStroke(previousStroke);
 			if (previousTarget != null)
 				context.setMouseTarget(previousTarget, 0, 0);
@@ -185,6 +197,43 @@ public abstract class GLContainer implements GLParent, GLMouseTarget, Accessible
 				context.clearPickId();
 			}
 		}
+	}
+
+	/** Returns the opacity used to composite this complete component subtree. */
+	public final float getRenderingOpacity() { return renderingOpacity; }
+
+	/**
+	 * Sets the opacity of this component and all children. Values below one use
+	 * an off-screen layer so overlapping child shapes are composited only once.
+	 */
+	public final void setRenderingOpacity(float opacity) {
+		if (!Float.isFinite(opacity) || opacity < 0 || opacity > 1)
+			throw new IllegalArgumentException("Rendering opacity must be between 0 and 1");
+		if (Float.compare(renderingOpacity, opacity) == 0) return;
+		renderingOpacity = opacity;
+		repaintGL();
+	}
+
+	/**
+	 * Returns the direct alpha multiplier inherited by this component's complete
+	 * subtree. Unlike {@link #getRenderingOpacity()}, this does not isolate
+	 * overlapping shapes in an off-screen layer.
+	 */
+	public final float getRenderingAlphaMultiplier() {
+		return renderingAlphaMultiplier;
+	}
+
+	/**
+	 * Sets direct vertex opacity for this component and its children without
+	 * creating an off-screen layer or additional draw call.
+	 */
+	public final void setRenderingAlphaMultiplier(float multiplier) {
+		if (!Float.isFinite(multiplier) || multiplier < 0 || multiplier > 1)
+			throw new IllegalArgumentException(
+					"Rendering alpha multiplier must be between zero and one");
+		if (Float.compare(renderingAlphaMultiplier, multiplier) == 0) return;
+		renderingAlphaMultiplier = multiplier;
+		repaintGL();
 	}
 
 	private void ensureRecording(GLContext2D context) {

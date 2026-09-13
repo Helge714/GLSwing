@@ -33,6 +33,7 @@ public final class GLScrollPane extends GLContainer {
 	private float scrollUnit = 28;
 	private float viewportWidth;
 	private float viewportHeight;
+	private boolean contentTracksViewportWidth;
 	private boolean layingOut;
 
 	public GLScrollPane() {
@@ -109,6 +110,19 @@ public final class GLScrollPane extends GLContainer {
 		this.scrollUnit = scrollUnit;
 	}
 
+	/**
+	 * Makes the content use the visible viewport width instead of its preferred
+	 * width. This is useful for vertically scrolling forms and inspectors.
+	 */
+	public boolean isContentTracksViewportWidth() {
+		return contentTracksViewportWidth;
+	}
+	public void setContentTracksViewportWidth(boolean tracksViewportWidth) {
+		if (contentTracksViewportWidth == tracksViewportWidth) return;
+		contentTracksViewportWidth = tracksViewportWidth;
+		layoutPane();
+	}
+
 	public GLScrollPaneStyle getGLStyle() {
 		return localStyle != null ? localStyle
 				: GLScrollPaneStyle.fromTheme(getGLTheme());
@@ -168,9 +182,13 @@ public final class GLScrollPane extends GLContainer {
 		if (width <= 0 || height <= 0)
 			return;
 		GLScrollPaneStyle style = getGLStyle();
-		context.fillAndDrawUIRoundRect(0, 0, width, height,
-				layoutCornerRadius(style.cornerRadius()), layoutBorderWidth(style.borderWidth()), style.background(),
-				style.border(), GLStroke.WidthSpace.SCREEN);
+		float radius = layoutCornerRadius(style.cornerRadius());
+		float border = layoutBorderWidth(style.borderWidth());
+		if (border > 0)
+			context.fillAndDrawUIRoundRect(0, 0, width, height, radius, border,
+					style.background(), style.border(), GLStroke.WidthSpace.SCREEN);
+		else context.fillUIRoundRect(0, 0, width, height, radius,
+				style.background());
 	}
 
 	@Override
@@ -219,7 +237,8 @@ public final class GLScrollPane extends GLContainer {
 				if (verticalPolicy == ScrollBarPolicy.AS_NEEDED)
 					vertical = preferred.height() > candidateHeight + 0.01f;
 				if (horizontalPolicy == ScrollBarPolicy.AS_NEEDED)
-					horizontal = preferred.width() > candidateWidth + 0.01f;
+					horizontal = !contentTracksViewportWidth
+						&& preferred.width() > candidateWidth + 0.01f;
 			}
 			viewportWidth = Math.max(0, availableWidth
 					- (vertical ? verticalThickness + gap : 0));
@@ -236,7 +255,8 @@ public final class GLScrollPane extends GLContainer {
 				horizontalBar.setBounds(padding.left(),
 						padding.top() + viewportHeight + gap,
 						viewportWidth, horizontalThickness);
-			float contentWidth = Math.max(viewportWidth, preferred.width());
+			float contentWidth = contentTracksViewportWidth ? viewportWidth
+					: Math.max(viewportWidth, preferred.width());
 			float contentHeight = Math.max(viewportHeight, preferred.height());
 			verticalBar.setValues(verticalBar.getValue(), viewportHeight,
 					contentHeight);

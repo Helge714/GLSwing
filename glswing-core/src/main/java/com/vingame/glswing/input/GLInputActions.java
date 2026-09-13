@@ -78,6 +78,18 @@ public final class GLInputActions {
 			"text.history-coalesce-millis";
 
 	public static final String NODE_DELETE = "node.delete-selection";
+	public static final String NODE_EDIT_TITLE = "node.edit-title";
+	public static final String NODE_COPY = "node.copy";
+	public static final String NODE_CUT = "node.cut";
+	public static final String NODE_PASTE = "node.paste";
+	public static final String NODE_DUPLICATE = "node.duplicate";
+	public static final String NODE_EXTRACT_COMPOSITE = "node.extract-composite";
+	public static final String NODE_SELECT_ALL = "node.select-all";
+	public static final String NODE_CREATE = "node.create";
+	public static final String NODE_OPEN_COMPOSITE = "node.open-composite";
+	public static final String NODE_MOVE = "node.move-selection";
+	public static final String NODE_TOGGLE_HIDDEN = "node.toggle-hidden";
+	public static final String NODE_TOGGLE_MUTED = "node.toggle-muted";
 	public static final String NODE_TOGGLE_SELECTION = "node.toggle-selection";
 	public static final String NODE_HORIZONTAL_WHEEL = "node.horizontal-wheel";
 	public static final String NODE_VERTICAL_WHEEL = "node.vertical-wheel";

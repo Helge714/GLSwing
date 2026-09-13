@@ -9,7 +9,7 @@ state changes local and balance every begin/end operation.
 ## Contents
 
 - [Units](#units)
-- [Paint and strokes](#paint-and-strokes)
+- [Paint, alpha, and strokes](#paint-alpha-and-strokes)
 - [Coordinate systems](#coordinate-systems)
 - [Depth and lighting](#depth-and-lighting)
 - [Outputs and clipping](#outputs-and-clipping)
@@ -26,7 +26,7 @@ state changes local and balance every begin/end operation.
 | Scale, alpha, and thresholds | Dimensionless |
 | Colors | `java.awt.Color` |
 
-## Paint and strokes
+## Paint, alpha, and strokes
 
 The context color supplies the default for overloads without an explicit
 `Color`; a color argument affects only that command.
@@ -36,6 +36,27 @@ g.setColor(new Color(70, 140, 230));
 g.fillRect(20, 20, 120, 50);
 g.fillCircle(200, 45, 25, Color.ORANGE);
 ```
+
+`setAlphaMultiplier(float)` multiplies the alpha channel of every subsequent
+drawing operation without introducing a layer or another draw call. The value
+must be between `0` and `1`; nested component multipliers are multiplied. This
+is direct shape opacity, so overlapping translucent shapes remain individually
+visible. Use a [layer](layers-effects.md) when a complete group must be
+composited once after its contents have been drawn.
+
+```java
+float previous = g.getAlphaMultiplier();
+try {
+    g.setAlphaMultiplier(previous * 0.85f);
+    drawNodeContents(g);
+} finally {
+    g.setAlphaMultiplier(previous);
+}
+```
+
+`GLContainer#setRenderingAlphaMultiplier(float)` applies the same direct alpha
+behavior to a complete component subtree. `setRenderingOpacity(float)` retains
+isolated layer semantics.
 
 ### Strokes
 

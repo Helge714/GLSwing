@@ -25,6 +25,7 @@ public final class GLDocumentManager implements AutoCloseable {
 	private final ExecutorService ownedExecutor;
 	private final Map<UUID, GLDocumentCodec<?>> bindings = new ConcurrentHashMap<>();
 	private final Map<UUID, Integer> schemaBindings = new ConcurrentHashMap<>();
+	private final Map<UUID, Integer> migratedFromSchemas = new ConcurrentHashMap<>();
 	private final AtomicBoolean closed = new AtomicBoolean();
 
 	public GLDocumentManager(GLDocumentCodecRegistry codecs) {
@@ -54,6 +55,12 @@ public final class GLDocumentManager implements AutoCloseable {
 	public boolean isManaged(GLDocument<?> document) {
 		return document != null && bindings.containsKey(document.id());
 	}
+	/** Stored schema from which this document was upgraded, if any. */
+	public java.util.OptionalInt migratedFromSchema(GLDocument<?> document) {
+		Integer version = document == null ? null : migratedFromSchemas.get(document.id());
+		return version == null ? java.util.OptionalInt.empty()
+				: java.util.OptionalInt.of(version);
+	}
 	GLDocumentCodec<?> codecFor(GLDocument<?> document) {
 		return document == null ? null : bindings.get(document.id());
 	}
@@ -80,12 +87,17 @@ public final class GLDocumentManager implements AutoCloseable {
 		validateRegistered(codec); Path source = normalize(path);
 		return CompletableFuture.supplyAsync(() -> {
 			try (var input = new BufferedInputStream(Files.newInputStream(source))) {
-				T content = codec.read(input, schemaVersion);
-				GLDocument<T> document = new GLDocument<>(content,
+				GLDocumentReadResult<T> decoded = codec.readResult(input, schemaVersion);
+				GLDocument<T> document = new GLDocument<>(decoded.content(),
 						source.getFileName().toString(), source.toUri(),
 						new com.vingame.glswing.history.GLHistoryManager());
 				bindings.put(document.id(), codec);
-				schemaBindings.put(document.id(), schemaVersion); return document;
+				schemaBindings.put(document.id(), codec.currentSchemaVersion());
+				if (decoded.migrated()) {
+					migratedFromSchemas.put(document.id(), decoded.storedSchemaVersion());
+					document.markModified();
+				}
+				return document;
 			} catch (IOException failure) {
 				throw new CompletionException(failure);
 			}
@@ -117,6 +129,7 @@ public final class GLDocumentManager implements AutoCloseable {
 					document.setTitle(destination.getFileName().toString());
 				document.markPersisted();
 				schemaBindings.put(document.id(), codec.currentSchemaVersion());
+				migratedFromSchemas.remove(document.id());
 				return destination;
 			} catch (IOException failure) {
 				throw new CompletionException(failure);
@@ -140,7 +153,12 @@ public final class GLDocumentManager implements AutoCloseable {
 		Path source = normalize(Path.of(document.location()));
 		return CompletableFuture.supplyAsync(() -> {
 			try (var input = new BufferedInputStream(Files.newInputStream(source))) {
-				document.replacePersistedContent(codec.read(input, schemaVersion));
+				GLDocumentReadResult<T> decoded = codec.readResult(input, schemaVersion);
+				document.replacePersistedContent(decoded.content());
+				if (decoded.migrated()) {
+					migratedFromSchemas.put(document.id(), decoded.storedSchemaVersion());
+					document.markModified();
+				} else migratedFromSchemas.remove(document.id());
 				return document;
 			} catch (IOException failure) {
 				throw new CompletionException(failure);
@@ -150,6 +168,7 @@ public final class GLDocumentManager implements AutoCloseable {
 	public boolean release(GLDocument<?> document) {
 		if (document == null) return false;
 		schemaBindings.remove(document.id());
+		migratedFromSchemas.remove(document.id());
 		return bindings.remove(document.id()) != null;
 	}
 	public CompletionStage<GLDocumentBundle> openBundle(Path path) {
@@ -186,7 +205,7 @@ public final class GLDocumentManager implements AutoCloseable {
 	@Override public void close() {
 		if (!closed.compareAndSet(false, true)) return;
 		if (ownedExecutor != null) ownedExecutor.shutdown();
-		bindings.clear(); schemaBindings.clear();
+		bindings.clear(); schemaBindings.clear(); migratedFromSchemas.clear();
 	}
 
 	private <T> void validateRegistered(GLDocumentCodec<T> codec) {

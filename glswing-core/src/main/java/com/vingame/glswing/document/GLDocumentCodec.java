@@ -19,5 +19,11 @@ public interface GLDocumentCodec<T> {
 		return version == currentSchemaVersion();
 	}
 	T read(InputStream input, int schemaVersion) throws IOException;
+	/** Reads content and reports whether an older stored schema was upgraded in memory. */
+	default GLDocumentReadResult<T> readResult(InputStream input, int schemaVersion)
+			throws IOException {
+		return new GLDocumentReadResult<>(read(input, schemaVersion), schemaVersion,
+				schemaVersion != currentSchemaVersion());
+	}
 	void write(T content, OutputStream output) throws IOException;
 }

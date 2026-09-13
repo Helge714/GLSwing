@@ -646,6 +646,23 @@ jobs.setElementAt(updatedJob, index);
 jobs.removeElementAt(index);
 ```
 
+Mutable default models can also move an existing row without replacing its
+value. Enable pointer dragging on the list when order is user-editable; arrow
+buttons or other commands can invoke the same operation through
+`moveSelectedItemBy(...)`:
+
+```java
+list.setDragReorderingEnabled(true);
+up.addActionListener(event -> list.moveSelectedItemBy(-1));
+down.addActionListener(event -> list.moveSelectedItemBy(1));
+```
+
+With a `GLDefaultListModel`, the list applies accepted moves directly. For a
+domain model, persistence, validation, or undo/redo, install a
+`ReorderHandler<T>`. It receives the item and both indices and returns whether
+the move was accepted. The handler owns the model update; returning `false`
+leaves the order and selection unchanged.
+
 `GLListModel<T>` is the minimal interface for application-owned or lazy data
 sources. Its range events distinguish additions, removals, and content changes,
 allowing selection indices and visible cells to update without reconstructing
@@ -665,7 +682,8 @@ reported through `addActivationListener(...)`. Arrow keys, Home, End, Page Up,
 and Page Down move the lead row and reveal it with the smallest required scroll.
 
 The default renderer converts values with `String.valueOf` and can instead use
-`setItemTextProvider(...)`. For structured rows, install a cell renderer:
+`setItemTextProvider(...)`. Its text can be left- or right-aligned with
+`setCellTextAlignment(...)`. For structured rows, install a cell renderer:
 
 ```java
 list.setCellRenderer((context, source, value, index, state, width, height) -> {
@@ -815,3 +833,9 @@ override automatic bar visibility, and `setScrollOffset(x,y)` for direct
 positioning. `scrollRectToVisible(x,y,width,height)` performs the
 minimal scroll required to reveal a content rectangle and clamps the result to
 the available range.
+
+Vertically scrolling forms and inspectors usually need to follow the available
+viewport width rather than retain a wider preferred width. Enable
+`setContentTracksViewportWidth(true)` for that layout. The content still keeps
+its preferred height, so a vertical scrollbar appears as needed without a
+clipped horizontal remainder.

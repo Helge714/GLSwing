@@ -3,9 +3,12 @@ package com.vingame.glswing.node;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.Map;
 
 import com.vingame.glswing.component.GLContainer;
 import com.vingame.glswing.component.GLParent;
+import com.vingame.glswing.input.GLInputActions;
 import com.vingame.glswing.input.GLMouseEvent;
 import com.vingame.glswing.input.GLPointerController;
 import com.vingame.glswing.input.GLPointerCursor;
@@ -29,20 +32,36 @@ import com.vingame.glswing.ui.GLUiKeys;
  * Public convenience methods hide the internal row representation.
  */
 public class GLNode extends GLContainer {
+	private final CopyOnWriteArrayList<Runnable> activationListeners =
+			new CopyOnWriteArrayList<>();
 	private final List<Entry> entries = new ArrayList<>();
 	private final GLTextEditor titleEditor;
 	private GLPopupMenu contextMenu;
 	private GLMenuItem editTitleMenuItem;
+	private GLMenuItem copyMenuItem;
+	private GLMenuItem cutMenuItem;
+	private GLMenuItem duplicateMenuItem;
+	private GLMenuItem extractCompositeMenuItem;
+	private GLMenuItem hideMenuItem;
+	private GLMenuItem muteMenuItem;
 	private GLMenuItem deleteNodeMenuItem;
 	private String title;
 	private GLNodeStyle localStyle;
+	private GLNodePortOrder portOrder = GLNodePortOrder.INPUTS_FIRST;
 	private GLNodeResizeMode resizeMode = GLNodeResizeMode.BOTH;
 	private boolean dragAnywhere;
 	private boolean titleEditable = true;
 	private boolean titleGradientEnabled;
+	private boolean contentHidden;
+	private boolean muted;
+	private Map<String, String> muteBypassMappings = Map.of();
+	private float expandedHeight;
 	private boolean selected;
 	private boolean activeSelected;
 	private boolean hovered;
+	private boolean collapseChevronHovered;
+	private boolean collapseChevronPressed;
+	private boolean consumeChevronClick;
 	private Gesture gesture = Gesture.NONE;
 	private GLPointerController pointerController = GLPointerController.NONE;
 	private float pressLocalX;
@@ -183,6 +202,81 @@ public class GLNode extends GLContainer {
 		styleChanged();
 	}
 
+	/** Returns the visual order used for input and output rows. */
+	public GLNodePortOrder getPortOrder() {
+		return portOrder;
+	}
+
+	/**
+	 * Sets the visual order used for port rows. Input/output rows remain stable
+	 * relative to other rows of the same kind.
+	 */
+	public void setPortOrder(GLNodePortOrder order) {
+		if (order == null)
+			throw new IllegalArgumentException("Node port order must not be null");
+		if (portOrder == order)
+			return;
+		portOrder = order;
+		updateMetricsAndLayout();
+	}
+
+	/** Returns whether nonessential, currently unconnected rows are collapsed. */
+	public boolean isContentHidden() { return contentHidden; }
+
+	/** Collapses or restores nonessential node rows. */
+	public void setContentHidden(boolean hidden) {
+		if (contentHidden == hidden) return;
+		if (hidden) expandedHeight = getHeight();
+		contentHidden = hidden;
+		updateMetricsAndLayout();
+		float preferred = getPreferredGLSize().height();
+		setSize(getWidth(), hidden ? preferred : Math.max(preferred, expandedHeight));
+		invalidateRecording();
+	}
+
+	/** Keeps a row visible while this node is collapsed. */
+	public void setAlwaysVisible(GLContainer content, boolean alwaysVisible) {
+		Entry entry = entries.stream().filter(value -> value.content == content)
+				.findFirst().orElseThrow(() -> new IllegalArgumentException(
+						"Content is not part of this node"));
+		setAlwaysVisible(entry, alwaysVisible);
+	}
+
+	/** Keeps the row owning a port visible while this node is collapsed. */
+	public void setAlwaysVisible(GLNodePort port, boolean alwaysVisible) {
+		Entry entry = entryFor(port);
+		if (entry == null) throw new IllegalArgumentException("Port is not part of this node");
+		setAlwaysVisible(entry, alwaysVisible);
+	}
+
+	public boolean isMuted() { return muted; }
+	public void setMuted(boolean muted) {
+		if (this.muted == muted) return;
+		this.muted = muted;
+		updateRenderingOpacity();
+		invalidateRecording();
+	}
+
+	/** Defines input-to-output lines displayed while this node is muted. */
+	public void setMuteBypassMappings(Map<String, String> mappings) {
+		if (mappings == null) throw new IllegalArgumentException("Bypass mappings required");
+		Map<String, String> copy = new java.util.LinkedHashMap<>();
+		mappings.forEach((input, output) -> {
+			GLNodePort in = findPort(input), out = findPort(output);
+			if (in == null || out == null || in.getDirection() != GLNodePort.Direction.INPUT
+					|| out.getDirection() != GLNodePort.Direction.OUTPUT)
+				throw new IllegalArgumentException("Bypass mapping requires node input and output ports");
+			copy.put(input, output);
+		});
+		muteBypassMappings = Map.copyOf(copy);
+		invalidateRecording();
+	}
+
+	/** Returns the visual and executable input-to-output mute mappings. */
+	public Map<String, String> getMuteBypassMappings() {
+		return muteBypassMappings;
+	}
+
 	public void addContent(GLContainer content) {
 		addEntry(content, null, null);
 	}
@@ -246,11 +340,11 @@ public class GLNode extends GLContainer {
 	}
 
 	public List<GLContainer> getContents() {
-		return entries.stream().map(entry -> entry.content).toList();
+		return orderedEntries().stream().map(entry -> entry.content).toList();
 	}
 
 	public List<GLNodePort> getPorts() {
-		return entries.stream()
+		return orderedEntries().stream()
 				.flatMap(entry -> java.util.stream.Stream.of(
 						entry.input, entry.output))
 				.filter(java.util.Objects::nonNull).toList();
@@ -282,7 +376,11 @@ public class GLNode extends GLContainer {
 				Math.max(0, height - border));
 		if (innerWidth > 0 && titleHeight > 0) {
 			float innerRadius = Math.max(0, style.cornerRadius() - border);
-			if (titleGradientEnabled)
+			if (muted)
+				context.fillUIRoundRect(border, border, innerWidth, titleHeight,
+						new GLCornerRadii(innerRadius, innerRadius, 0, 0),
+						style.background());
+			else if (titleGradientEnabled)
 				context.fillUIVerticalGradientRoundRect(border, border,
 						innerWidth, titleHeight, innerRadius, 0,
 						style.titleGradientLight(), style.titleGradientDark());
@@ -297,6 +395,13 @@ public class GLNode extends GLContainer {
 			float textX = style.contentPadding().left();
 			float available = Math.max(0,
 					width - style.contentPadding().horizontal());
+			if (contentHidden) {
+				float hitSize = collapseChevronHitSize();
+				drawCollapseChevron(context, textX, hitSize,
+						style.titleHeight());
+				textX += hitSize;
+				available = Math.max(0, available - hitSize);
+			}
 			String visibleTitle = GLTextFitter.ellipsize(font, title, available);
 			float baseline = Math.max(font.getAscent(),
 					(style.titleHeight() - font.getLineHeight()) * 0.5f
@@ -345,6 +450,11 @@ public class GLNode extends GLContainer {
 	public void mouseClicked(GLMouseEvent event) {
 		if (event.getButton() != MouseEvent.BUTTON1)
 			return;
+		if (consumeChevronClick) {
+			consumeChevronClick = false;
+			event.consume();
+			return;
+		}
 		if (getGLParent() instanceof GLNodeEditor editor)
 			editor.completeNodeClick(this, event.getModifiersEx());
 		if (event.completesDoubleClick()
@@ -352,13 +462,34 @@ public class GLNode extends GLContainer {
 				&& event.getLocalY() <= getGLStyle().titleHeight()) {
 			editTitle();
 			event.consume();
+		} else if (event.completesDoubleClick()) {
+			for (Runnable listener : activationListeners) listener.run();
+			event.consume();
 		}
+	}
+
+	/** Invoked by a double-click on the node body outside its editable title. */
+	public void addActivationListener(Runnable listener) {
+		if (listener == null) throw new IllegalArgumentException("Listener required");
+		activationListeners.addIfAbsent(listener);
+	}
+
+	public void removeActivationListener(Runnable listener) {
+		activationListeners.remove(listener);
 	}
 
 	@Override
 	protected void themeChanged() {
+		updateRenderingOpacity();
 		if (localStyle == null)
 			styleChanged();
+	}
+
+	private void updateRenderingOpacity() {
+		float opacity = getGLTheme().values().getFloat(
+				muted ? "node.mutedOpacity" : "node.opacity", muted ? .62f : .95f);
+		setRenderingOpacity(1);
+		setRenderingAlphaMultiplier(Math.max(0, Math.min(1, opacity)));
 	}
 
 	@Override
@@ -369,23 +500,28 @@ public class GLNode extends GLContainer {
 	@Override
 	public void mouseEntered(GLMouseEvent event) {
 		hovered = true;
+		updateCollapseChevronHover(event);
 		updateCursor(event);
 	}
 
 	@Override
 	public void mouseMoved(GLMouseEvent event) {
+		updateCollapseChevronHover(event);
 		updateCursor(event);
 	}
 
 	@Override
 	public void mouseExited(GLMouseEvent event) {
 		hovered = false;
+		setCollapseChevronHovered(false);
 		if (gesture == Gesture.NONE)
 			clearCursor();
 	}
 
 	@Override
 	public void mousePressed(GLMouseEvent event) {
+		if (getGLParent() instanceof GLNodeEditor editor
+				&& editor.finishPlacementFromClick(event)) return;
 		if (event.getButton() == MouseEvent.BUTTON3) {
 			activateFromPort(event, true);
 			showContextMenu(event);
@@ -394,6 +530,14 @@ public class GLNode extends GLContainer {
 		}
 		if (event.getButton() != MouseEvent.BUTTON1 || !event.hasLocalPosition())
 			return;
+		if (isCollapseChevronHit(event)) {
+			collapseChevronPressed = true;
+			pointerController = event.getPointerController();
+			pointerController.setCursor(this, GLPointerCursor.HAND);
+			invalidateRecording();
+			event.consume();
+			return;
+		}
 		activateFromPort(event, false);
 		if (!selected)
 			return;
@@ -438,12 +582,25 @@ public class GLNode extends GLContainer {
 
 	@Override
 	public void mouseReleased(GLMouseEvent event) {
+		if (event.getButton() == MouseEvent.BUTTON1 && collapseChevronPressed) {
+			boolean expand = isCollapseChevronHit(event);
+			collapseChevronPressed = false;
+			consumeChevronClick = true;
+			invalidateRecording();
+			if (expand) expandFromChevron();
+			event.consume();
+			return;
+		}
 		if (event.getButton() == MouseEvent.BUTTON1)
 			finishGesture(event);
 	}
 
 	@Override
 	public void mouseCaptureLost(GLMouseEvent event) {
+		if (collapseChevronPressed) {
+			collapseChevronPressed = false;
+			invalidateRecording();
+		}
 		finishGesture(null);
 	}
 
@@ -482,7 +639,7 @@ public class GLNode extends GLContainer {
 		if (entry == null)
 			return;
 		syncConnectedLabel(entry);
-		layoutEntries();
+		updateMetricsAndLayout();
 		repaintAndRebuildPicking(this);
 	}
 
@@ -501,6 +658,8 @@ public class GLNode extends GLContainer {
 			output.attachTo(this);
 		GLLabel connectedLabel = input == null ? null
 				: new GLLabel(content.getName());
+		if (input == null && output != null && content instanceof GLLabel label)
+			label.setAlignment(GLLabel.Alignment.RIGHT);
 		Entry entry = new Entry(content, input, output, connectedLabel);
 		entries.add(entry);
 		addGL(content);
@@ -530,14 +689,15 @@ public class GLNode extends GLContainer {
 		GLFont font = getGLFont(style.titleFont());
 		float widest = font.measureText(title) + style.contentPadding().horizontal();
 		float rowsHeight = 0;
-		for (Entry entry : entries) {
+		List<Entry> shown = shownEntries();
+		for (Entry entry : shown) {
 			GLSize preferred = entry.content.getPreferredGLSize();
 			widest = Math.max(widest,
 					preferred.width() + style.contentPadding().horizontal());
 			rowsHeight += preferred.height();
 		}
-		if (entries.size() > 1)
-			rowsHeight += style.rowGap() * (entries.size() - 1);
+		if (shown.size() > 1)
+			rowsHeight += style.rowGap() * (shown.size() - 1);
 		computedMinimumWidth = Math.max(style.minimumWidth(), widest);
 		computedMinimumHeight = style.titleHeight()
 				+ style.contentPadding().top() + rowsHeight
@@ -549,15 +709,16 @@ public class GLNode extends GLContainer {
 	}
 
 	private void layoutEntries() {
-		if (entries.isEmpty())
-			return;
+		List<Entry> shown = shownEntries();
+		for (Entry entry : entries) setEntryVisible(entry, shown.contains(entry));
+		if (shown.isEmpty()) return;
 		GLNodeStyle style = getGLStyle();
 		GLInsets padding = style.contentPadding();
 		float contentX = padding.left();
 		float contentWidth = Math.max(0, getWidth() - padding.horizontal());
 		float y = style.titleHeight() + padding.top();
 		float diameter = style.portRadius() * 2;
-		for (Entry entry : entries) {
+		for (Entry entry : shown) {
 			GLSize preferred = entry.content.getPreferredGLSize();
 			float rowHeight = preferred.height();
 			entry.content.setBounds(contentX, y, contentWidth, rowHeight);
@@ -574,6 +735,47 @@ public class GLNode extends GLContainer {
 						diameter, diameter);
 			y += rowHeight + style.rowGap();
 		}
+	}
+
+	private List<Entry> shownEntries() {
+		return orderedEntries().stream().filter(this::isEntryShown).toList();
+	}
+
+	private boolean isEntryShown(Entry entry) {
+		return !contentHidden || entry.alwaysVisible
+				|| entry.input != null && entry.input.getConnectionCount() > 0
+				|| entry.output != null && entry.output.getConnectionCount() > 0;
+	}
+
+	private void setEntryVisible(Entry entry, boolean visible) {
+		entry.content.setVisible(visible);
+		if (entry.connectedLabel != null) entry.connectedLabel.setVisible(visible);
+		if (entry.input != null) entry.input.setVisible(visible);
+		if (entry.output != null) entry.output.setVisible(visible);
+	}
+
+	private void setAlwaysVisible(Entry entry, boolean value) {
+		if (entry.alwaysVisible == value) return;
+		entry.alwaysVisible = value;
+		updateMetricsAndLayout();
+	}
+
+
+	private List<Entry> orderedEntries() {
+		if (portOrder == GLNodePortOrder.DECLARATION_ORDER || entries.size() < 2)
+			return entries;
+		List<Entry> ordered = new ArrayList<>(entries);
+		ordered.sort(java.util.Comparator.comparingInt(this::rowOrder));
+		return ordered;
+	}
+
+	private int rowOrder(Entry entry) {
+		boolean input = entry.input != null;
+		boolean output = entry.output != null;
+		if (input && output) return 1;
+		if (!input && !output) return 2;
+		boolean first = portOrder == GLNodePortOrder.INPUTS_FIRST ? input : output;
+		return first ? 0 : 3;
 	}
 
 	private boolean isPresentedChild(GLContainer child) {
@@ -687,6 +889,22 @@ public class GLNode extends GLContainer {
 				getGLLocalizer().text(GLUiKeys.NODE_EDIT_TITLE),
 				event -> editTitle());
 		contextMenu.addSeparator();
+		copyMenuItem = contextMenu.addItem(getGLLocalizer().text(GLUiKeys.NODE_COPY),
+				event -> invokeEditingAction(GLNodeEditingActions::copy));
+		cutMenuItem = contextMenu.addItem(getGLLocalizer().text(GLUiKeys.NODE_CUT),
+				event -> invokeEditingAction(GLNodeEditingActions::cut));
+		duplicateMenuItem = contextMenu.addItem(
+				getGLLocalizer().text(GLUiKeys.NODE_DUPLICATE),
+				event -> invokeEditingAction(GLNodeEditingActions::duplicate));
+		extractCompositeMenuItem = contextMenu.addItem(
+				getGLLocalizer().text(GLUiKeys.NODE_EXTRACT_COMPOSITE),
+				event -> invokeEditingAction(GLNodeEditingActions::extractComposite));
+		contextMenu.addSeparator();
+		hideMenuItem = contextMenu.addItem(getGLLocalizer().text(GLUiKeys.NODE_HIDE),
+				event -> invokeEditingAction(GLNodeEditingActions::toggleHidden));
+		muteMenuItem = contextMenu.addItem(getGLLocalizer().text(GLUiKeys.NODE_MUTE),
+				event -> invokeEditingAction(GLNodeEditingActions::toggleMuted));
+		contextMenu.addSeparator();
 		deleteNodeMenuItem = contextMenu.addItem(
 				getGLLocalizer().text(GLUiKeys.NODE_DELETE),
 				event -> deleteFromEditor());
@@ -699,6 +917,39 @@ public class GLNode extends GLContainer {
 		if (deleteNodeMenuItem != null)
 			deleteNodeMenuItem.setText(
 					getGLLocalizer().text(deleteMenuKey()));
+		if (copyMenuItem != null) copyMenuItem.setText(getGLLocalizer().text(GLUiKeys.NODE_COPY));
+		if (cutMenuItem != null) cutMenuItem.setText(getGLLocalizer().text(GLUiKeys.NODE_CUT));
+		if (duplicateMenuItem != null) duplicateMenuItem.setText(
+				getGLLocalizer().text(GLUiKeys.NODE_DUPLICATE));
+		if (extractCompositeMenuItem != null) extractCompositeMenuItem.setText(
+				getGLLocalizer().text(GLUiKeys.NODE_EXTRACT_COMPOSITE));
+		if (hideMenuItem != null) hideMenuItem.setText(getGLLocalizer().text(
+				contentHidden ? GLUiKeys.NODE_UNHIDE : GLUiKeys.NODE_HIDE));
+		if (muteMenuItem != null) muteMenuItem.setText(getGLLocalizer().text(
+				muted ? GLUiKeys.NODE_UNMUTE : GLUiKeys.NODE_MUTE));
+		updateContextMenuAccelerators();
+	}
+
+	private void updateContextMenuAccelerators() {
+		setAccelerator(editTitleMenuItem, GLInputActions.NODE_EDIT_TITLE);
+		setAccelerator(copyMenuItem, GLInputActions.NODE_COPY);
+		setAccelerator(cutMenuItem, GLInputActions.NODE_CUT);
+		setAccelerator(duplicateMenuItem, GLInputActions.NODE_DUPLICATE);
+		setAccelerator(extractCompositeMenuItem, GLInputActions.NODE_EXTRACT_COMPOSITE);
+		setAccelerator(hideMenuItem, GLInputActions.NODE_TOGGLE_HIDDEN);
+		setAccelerator(muteMenuItem, GLInputActions.NODE_TOGGLE_MUTED);
+		setAccelerator(deleteNodeMenuItem, GLInputActions.NODE_DELETE);
+	}
+
+	private void setAccelerator(GLMenuItem item, String action) {
+		if (item == null) return;
+		var bindings = getGLInputMap().getKeyBindings(action);
+		item.setAcceleratorText(bindings.isEmpty() ? ""
+				: bindings.get(0).toDisplayString());
+	}
+
+	@Override protected void inputMapChanged() {
+		updateContextMenuAccelerators();
 	}
 
 	private String deleteMenuKey() {
@@ -711,10 +962,21 @@ public class GLNode extends GLContainer {
 	private void deleteFromEditor() {
 		if (!(getGLParent() instanceof GLNodeEditor editor))
 			return;
+		if (editor.getEditingActions() != null) {
+			editor.getEditingActions().delete();
+			return;
+		}
 		if (isSelected())
 			editor.removeSelectedNodesFromUser();
 		else
 			editor.removeNodeFromUser(this);
+	}
+
+	private void invokeEditingAction(
+			java.util.function.Consumer<GLNodeEditingActions> action) {
+		if (getGLParent() instanceof GLNodeEditor editor
+				&& editor.getEditingActions() != null)
+			action.accept(editor.getEditingActions());
 	}
 
 	private void showContextMenu(GLMouseEvent event) {
@@ -723,6 +985,16 @@ public class GLNode extends GLContainer {
 			return;
 		GLPopupMenu menu = getContextMenu();
 		editTitleMenuItem.setEnabled(titleEditable);
+		GLNodeEditingActions actions = getGLParent() instanceof GLNodeEditor editor
+				? editor.getEditingActions() : null;
+		copyMenuItem.setEnabled(actions != null && actions.canCopy());
+		cutMenuItem.setEnabled(actions != null && actions.canCut());
+		duplicateMenuItem.setEnabled(actions != null && actions.canDuplicate());
+		extractCompositeMenuItem.setEnabled(actions != null
+				&& actions.canExtractComposite());
+		hideMenuItem.setEnabled(actions != null && actions.canToggleHidden());
+		muteMenuItem.setEnabled(actions != null && actions.canToggleMuted());
+		deleteNodeMenuItem.setEnabled(actions == null || actions.canDelete());
 		menu.show(host, event.getScreenX(), event.getScreenY());
 	}
 
@@ -784,6 +1056,10 @@ public class GLNode extends GLContainer {
 		if (!event.hasLocalPosition() || gesture != Gesture.NONE)
 			return;
 		pointerController = event.getPointerController();
+		if (isCollapseChevronHit(event)) {
+			pointerController.setCursor(this, GLPointerCursor.HAND);
+			return;
+		}
 		Gesture resize = resizeGesture(event.getLocalX(), event.getLocalY());
 		if (resize != Gesture.NONE) {
 			setGestureCursor(resize);
@@ -793,6 +1069,71 @@ public class GLNode extends GLContainer {
 		} else {
 			clearCursor();
 		}
+	}
+
+	private void drawCollapseChevron(GLContext2D context, float hitX,
+			float hitSize, float titleHeight) {
+		float size = Math.max(3, getGLTheme().values().getFloat(
+				"node.collapseChevronSize", 7));
+		float centerX = hitX + hitSize * .5f;
+		float centerY = titleHeight * .5f;
+		float half = size * .5f;
+		var values = getGLTheme().values();
+		java.awt.Color color = values.getColor(
+				collapseChevronHovered || collapseChevronPressed
+						? "node.collapseChevronHover" : "node.collapseChevron",
+				getGLStyle().titleText());
+		GLStroke previous = context.getStroke();
+		try {
+			context.setStroke(new GLStroke(Math.max(.5f, values.getFloat(
+					"node.collapseChevronWidth", 1.5f)))
+					.withCap(GLStroke.Cap.ROUND)
+					.withJoin(GLStroke.Join.ROUND)
+					.withWidthSpace(GLStroke.WidthSpace.SCREEN));
+			context.drawUILine(centerX - half * .45f, centerY - half,
+					centerX + half * .45f, centerY, color);
+			context.drawUILine(centerX + half * .45f, centerY,
+					centerX - half * .45f, centerY + half, color);
+		} finally {
+			context.setStroke(previous);
+		}
+	}
+
+	private float collapseChevronHitSize() {
+		return Math.max(12, getGLTheme().values().getFloat(
+				"node.collapseChevronHitSize", 20));
+	}
+
+	private boolean isCollapseChevronHit(GLMouseEvent event) {
+		if (!contentHidden || !event.hasLocalPosition()) return false;
+		float start = getGLStyle().contentPadding().left();
+		return event.getLocalX() >= start
+				&& event.getLocalX() <= start + collapseChevronHitSize()
+				&& event.getLocalY() >= 0
+				&& event.getLocalY() <= getGLStyle().titleHeight();
+	}
+
+	private void updateCollapseChevronHover(GLMouseEvent event) {
+		setCollapseChevronHovered(isCollapseChevronHit(event));
+	}
+
+	private void setCollapseChevronHovered(boolean value) {
+		if (collapseChevronHovered == value) return;
+		collapseChevronHovered = value;
+		invalidateRecording();
+	}
+
+	private void expandFromChevron() {
+		if (!contentHidden) return;
+		if (getGLParent() instanceof GLNodeEditor editor) {
+			GLNodeEditingActions actions = editor.getEditingActions();
+			if (actions != null && actions.canToggleHidden()) {
+				editor.activate(this, 0, false);
+				actions.toggleHidden();
+				return;
+			}
+		}
+		setContentHidden(false);
 	}
 
 	private void setGestureCursor(Gesture gesture) {
@@ -873,6 +1214,7 @@ public class GLNode extends GLContainer {
 		private final GLNodePort input;
 		private final GLNodePort output;
 		private final GLLabel connectedLabel;
+		private boolean alwaysVisible;
 
 		private Entry(GLContainer content, GLNodePort input,
 				GLNodePort output, GLLabel connectedLabel) {

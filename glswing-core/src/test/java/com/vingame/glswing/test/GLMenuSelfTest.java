@@ -149,6 +149,22 @@ public final class GLMenuSelfTest {
 		if (formerlyHovered.getControlState() != GLControlState.NORMAL)
 			throw new AssertionError(
 					"Closed popup retained a transient item highlight");
+
+		GLPopupMenu filtered = new GLPopupMenu();
+		GLMenuItem matching = filtered.addItem("Matching node");
+		GLMenuItem hidden = filtered.addItem("Other node");
+		filtered.show(host, 20, 20);
+		float unfilteredHeight = filtered.getHeight();
+		filtered.setItemFilter(item -> item == matching);
+		if (!matching.isVisible() || hidden.isVisible()
+				|| filtered.getHeight() >= unfilteredHeight)
+			throw new AssertionError(
+					"A visible popup did not apply its item filter immediately");
+		filtered.setItemFilter(null);
+		if (!matching.isVisible() || !hidden.isVisible())
+			throw new AssertionError("Clearing a live popup filter lost menu rows");
+		filtered.close();
+
 		widthModes.setTextOverflow(GLPopupTextOverflow.HORIZONTAL_SCROLL);
 		widthModes.show(host, 20, 20);
 		if (Math.abs(widthModes.getWidth() - 100) > 0.01f)

@@ -6,6 +6,7 @@ import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 import com.vingame.glswing.node.GLNode;
 import com.vingame.glswing.node.GLNodeEditor;
@@ -13,7 +14,17 @@ import com.vingame.glswing.node.GLNodeEditorListener;
 import com.vingame.glswing.node.GLNodeConnection;
 import com.vingame.glswing.node.GLNodePort;
 import com.vingame.glswing.node.GLNodePorts;
+import com.vingame.glswing.node.GLNodePortOrder;
 import com.vingame.glswing.node.GLNodeResizeMode;
+import com.vingame.glswing.node.GLNodeConnectionStatus;
+import com.vingame.glswing.node.model.GLGraphConnection;
+import com.vingame.glswing.node.model.GLGraphDiagnostic;
+import com.vingame.glswing.node.model.GLGraphNode;
+import com.vingame.glswing.node.model.GLNodeConnectionId;
+import com.vingame.glswing.node.model.GLNodeEndpoint;
+import com.vingame.glswing.node.model.GLNodeGraph;
+import com.vingame.glswing.node.model.GLNodeGraphValidationResult;
+import com.vingame.glswing.node.model.GLNodeId;
 import com.vingame.glswing.input.GLMouseEvent;
 import com.vingame.glswing.input.GLMouseWheelEvent;
 import com.vingame.glswing.input.GLPickResult;
@@ -38,11 +49,47 @@ public final class GLNodeSelfTest {
 		testDragAndHorizontalResize();
 		testZoomTitleEditingAndConnections();
 		testConnectionPolicyAndReplacement();
+		testConnectionDiagnosticMapping();
 		testComponentNamesAndConnectedPresentation();
 		testLocalizedTitleAction();
 		testMultipleNodeContextDeletion();
 		testAnalyticShadowInstance();
 		System.out.println("GL node self-test passed.");
+	}
+
+	private static void testConnectionDiagnosticMapping() {
+		GLNodeEditor editor = new GLNodeEditor();
+		GLNode source = new GLNode("Source");
+		GLNodePort output = source.addOutput("out", new GLLabel("Output"));
+		GLNode target = new GLNode("Target");
+		GLNodePort input = target.addInput("in", new GLLabel("Input"));
+		editor.addNode(source, 10, 10);
+		editor.addNode(target, 250, 10);
+		GLNodeConnection visual = editor.connect(output, input);
+		GLNodeConnectionId edgeId = GLNodeConnectionId.random();
+		visual.setModelId(edgeId);
+
+		GLNodeId sourceId = GLNodeId.random();
+		GLNodeId targetId = GLNodeId.random();
+		GLNodeGraph graph = new GLNodeGraph();
+		graph.edit("Create", edit -> {
+			edit.addNode(new GLGraphNode(sourceId, "test.source"));
+			edit.addNode(new GLGraphNode(targetId, "test.target"));
+			edit.addConnection(new GLGraphConnection(edgeId,
+					new GLNodeEndpoint(sourceId, "out"),
+					new GLNodeEndpoint(targetId, "in")));
+		});
+		GLGraphDiagnostic diagnostic = new GLGraphDiagnostic(
+				GLGraphDiagnostic.Severity.ERROR, "graph.cycle", "Cycle",
+				Set.of(sourceId, targetId), Set.of(edgeId));
+		editor.applyConnectionDiagnostics(new GLNodeGraphValidationResult(
+				graph.snapshot(), List.of(diagnostic)));
+		check(visual.getStatus() == GLNodeConnectionStatus.ERROR
+				&& "Cycle".equals(visual.getDiagnosticMessage()),
+				"Model diagnostic was not mapped to the visual connection");
+		editor.clearConnectionDiagnostics();
+		check(visual.getStatus() == GLNodeConnectionStatus.NORMAL,
+				"Clearing connection diagnostics retained the decoration");
 	}
 
 	private static void testComponentNamesAndConnectedPresentation() {
@@ -106,6 +153,15 @@ public final class GLNodeSelfTest {
 				"A compatible port pair was rejected");
 		check(!editor.canConnect(secondOutput, input),
 				"The input's connection validator was ignored");
+		GLNodeConnection invalidProjection = new GLNodeConnection(secondOutput, input);
+		editor.addProjectedConnection(invalidProjection);
+		invalidProjection.setDiagnostic(GLNodeConnectionStatus.ERROR,
+				"Incompatible value types");
+		check(editor.getConnections().contains(invalidProjection)
+				&& invalidProjection.getStatus() == GLNodeConnectionStatus.ERROR,
+				"An authoritative invalid connection could not remain visible");
+		editor.removeConnection(invalidProjection);
+		graphChanges[0] = graphChanges[1] = 0;
 		editor.connect(firstOutput, input);
 		check(input.getConnectionCount() == 1,
 				"Port connection count was not updated");
@@ -144,14 +200,15 @@ public final class GLNodeSelfTest {
 		editor.addNode(first, 10, 10);
 		editor.addNode(second, 200, 10);
 		editor.setSelectedNodes(List.of(first, second));
+		int deleteIndex = first.getContextMenu().getItems().size() - 1;
 		check("Delete nodes".equals(
-				first.getContextMenu().getItems().get(1).getText()),
+				first.getContextMenu().getItems().get(deleteIndex).getText()),
 				"A multi-selection retained the singular node delete text");
 		first.setGLLocalizer(GLLocalizer.GERMAN);
 		check("Nodes löschen".equals(
-				first.getContextMenu().getItems().get(1).getText()),
+				first.getContextMenu().getItems().get(deleteIndex).getText()),
 				"The plural node delete text was not localized");
-		first.getContextMenu().getItems().get(1).doClick();
+		first.getContextMenu().getItems().get(deleteIndex).doClick();
 		check(editor.getNodes().isEmpty(),
 				"The plural node delete action did not remove the selection");
 	}
@@ -259,9 +316,25 @@ public final class GLNodeSelfTest {
 				GLSlider.fixed("Factor", 0, 1, 0.5));
 		GLNodePorts pair = node.addInputOutput("source",
 				new GLLabel("Conversion"), "result");
-		GLNodePort output = node.addOutput("color", new GLLabel("Color"));
+		GLLabel outputLabel = new GLLabel("Color");
+		GLNodePort output = node.addOutput("color", outputLabel);
 		node.setResizeMode(GLNodeResizeMode.HORIZONTAL);
 		node.setSize(280, node.getPreferredGLSize().height());
+		check(input.getY() < label.getY() && label.getY() < output.getY(),
+				"Node rows did not place inputs before content and outputs");
+		node.setPortOrder(GLNodePortOrder.OUTPUTS_FIRST);
+		check(output.getY() < label.getY() && label.getY() < input.getY(),
+				"Node rows did not honor outputs-first ordering");
+		node.setPortOrder(GLNodePortOrder.INPUTS_FIRST);
+		node.setAlwaysVisible(label, true);
+		float expandedHeight = node.getHeight();
+		node.setContentHidden(true);
+		check(label.isVisible() && !input.isVisible() && !output.isVisible()
+				&& node.getHeight() < expandedHeight,
+				"Hidden node did not retain its exempt row and collapse other rows");
+		node.setContentHidden(false);
+		check(input.isVisible() && output.isVisible(),
+				"Unhiding a node did not restore its port rows");
 
 		check(node.getContents().size() == 4,
 				"Node did not retain all convenience rows");
@@ -271,6 +344,8 @@ public final class GLNodeSelfTest {
 		check(input.getX() < 0 && output.getX() < node.getWidth()
 				&& output.getX() + output.getWidth() > node.getWidth(),
 				"Node ports were not centered on the outer edges");
+		check(outputLabel.getAlignment() == GLLabel.Alignment.RIGHT,
+				"Output-only label was not aligned with the output edge");
 		check(node.getResizeMode() == GLNodeResizeMode.HORIZONTAL,
 				"Node resize mode was not retained");
 		check(node.removeContent(label) && !node.getContents().contains(label),
@@ -327,7 +402,8 @@ public final class GLNodeSelfTest {
 				&& editor.getSelectedNodes().isEmpty(),
 				"Removing the selected node did not clear selection");
 		editor.setSelectedNode(first);
-		first.getContextMenu().getItems().get(1).doClick();
+		var contextItems = first.getContextMenu().getItems();
+		contextItems.get(contextItems.size() - 1).doClick();
 		check(editor.getNodes().isEmpty(),
 				"The built-in node delete context action did not remove selection");
 		check(selectionChanges[0] >= 4,

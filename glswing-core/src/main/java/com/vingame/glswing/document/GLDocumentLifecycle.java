@@ -64,6 +64,8 @@ public final class GLDocumentLifecycle<T> implements AutoCloseable {
 	private GLDocumentConflictRequestHandler conflictHandler = request ->
 			CompletableFuture.completedFuture(GLDocumentConflictChoice.CANCEL);
 	private java.util.function.Consumer<Throwable> reloadFailureHandler = ignored -> { };
+	private GLDocumentFailureHandler failureHandler;
+	private GLDocumentMigrationRequestHandler migrationHandler;
 	private boolean autoReloadCleanDocuments;
 	private boolean closed;
 
@@ -76,6 +78,8 @@ public final class GLDocumentLifecycle<T> implements AutoCloseable {
 		this.manager = manager; this.codec = codec; this.tabs = tabs;
 		this.dialogs = dialogs; this.owner = owner; this.newContent = newContent;
 		this.viewFactory = viewFactory;
+		failureHandler = com.vingame.glswing.ui.GLDocumentDialogs.failureHandler(owner);
+		migrationHandler = com.vingame.glswing.ui.GLDocumentDialogs.migrationHandler(owner);
 		previousCloseHandler = tabs.tabs().getCloseRequestHandler();
 		tabs.tabs().setCloseRequestHandler(installedCloseHandler);
 		tabs.tabs().addCloseListener(closeListener);
@@ -165,6 +169,16 @@ public final class GLDocumentLifecycle<T> implements AutoCloseable {
 		if (handler == null) throw new IllegalArgumentException("Failure handler required");
 		reloadFailureHandler = handler;
 	}
+	/** Receives structured failures from user-initiated lifecycle operations. */
+	public void setFailureHandler(GLDocumentFailureHandler handler) {
+		if (handler == null) throw new IllegalArgumentException("Failure handler required");
+		failureHandler = handler;
+	}
+	/** Decides how a successfully migrated older document should be opened. */
+	public void setMigrationRequestHandler(GLDocumentMigrationRequestHandler handler) {
+		if (handler == null) throw new IllegalArgumentException("Migration handler required");
+		migrationHandler = handler;
+	}
 
 	/** Creates, manages and opens a new modified document tab. */
 	public GLDocument<T> newDocument() {
@@ -175,13 +189,48 @@ public final class GLDocumentLifecycle<T> implements AutoCloseable {
 	/** Shows the configured file chooser and opens the approved file. */
 	public CompletionStage<GLDocument<T>> open() {
 		ensureOpen();
-		return dialogs.show(openRequest(), owner).thenCompose(result -> result.approved()
-				? open(result.selectedPath()) : CompletableFuture.completedFuture(null));
+		CompletionStage<GLDocument<T>> result = dialogs.show(openRequest(), owner)
+				.thenCompose(selection -> selection.approved()
+						? openResolved(selection.selectedPath())
+						: CompletableFuture.completedFuture(null));
+		return report(result, GLDocumentOperation.OPEN, null);
 	}
 	public CompletionStage<GLDocument<T>> open(Path path) {
 		ensureOpen();
+		return report(openResolved(path), GLDocumentOperation.OPEN, path);
+	}
+	private CompletionStage<GLDocument<T>> openResolved(Path path) {
 		return manager.open(path, codec, codec.currentSchemaVersion())
-				.thenCompose(document -> onUi(() -> { addView(document); return document; }));
+				.thenCompose(document -> approveMigration(document, path))
+				.thenCompose(document -> document == null
+						? CompletableFuture.completedFuture(null)
+						: onUi(() -> { addView(document); return document; }));
+	}
+	private CompletionStage<GLDocument<T>> approveMigration(GLDocument<T> document,
+			Path path) {
+		java.util.OptionalInt source = manager.migratedFromSchema(document);
+		if (source.isEmpty()) return CompletableFuture.completedFuture(document);
+		CompletionStage<GLDocumentMigrationChoice> decision;
+		try {
+			decision = migrationHandler.requestMigration(new GLDocumentMigrationRequest(
+					document, path, source.getAsInt(), codec.currentSchemaVersion()));
+		} catch (RuntimeException failure) {
+			manager.release(document); return CompletableFuture.failedFuture(failure);
+		}
+		if (decision == null) { manager.release(document); return CompletableFuture.completedFuture(null); }
+		return decision.thenApply(choice -> {
+			GLDocumentMigrationChoice resolved = choice == null
+					? GLDocumentMigrationChoice.CANCEL : choice;
+			if (resolved == GLDocumentMigrationChoice.CANCEL) {
+				manager.release(document); return null;
+			}
+			if (resolved == GLDocumentMigrationChoice.OPEN_READ_ONLY)
+			{
+				document.setReadOnly(true);
+				document.markPersisted();
+			}
+			return document;
+		});
 	}
 	/** Adds an already managed document, including a recovered document, as a tab. */
 	public int addDocument(GLDocument<T> document) {
@@ -199,15 +248,18 @@ public final class GLDocumentLifecycle<T> implements AutoCloseable {
 	}
 	public CompletionStage<Path> save() {
 		GLDocument<?> document = activeDocument();
-		return document == null ? failed("No active document") : save(document);
+		CompletionStage<Path> result = document == null ? failed("No active document") : save(document);
+		return report(result, GLDocumentOperation.SAVE, path(document));
 	}
 	public CompletionStage<Path> saveAs() {
 		GLDocument<?> document = activeDocument();
-		return document == null ? failed("No active document") : saveAs(document);
+		CompletionStage<Path> result = document == null ? failed("No active document") : saveAs(document);
+		return report(result, GLDocumentOperation.SAVE_AS, path(document));
 	}
 	public CompletionStage<List<Path>> saveAll() {
 		ensureOpen();
-		return saveAll(tabs.documents(), 0, new ArrayList<>());
+		return report(saveAll(tabs.documents(), 0, new ArrayList<>()),
+				GLDocumentOperation.SAVE_ALL, null);
 	}
 	/** Reloads a managed document, resets its history, and rebuilds its open view. */
 	public CompletionStage<GLDocument<T>> reload(GLDocument<T> document) {
@@ -215,7 +267,7 @@ public final class GLDocumentLifecycle<T> implements AutoCloseable {
 		if (document == null || !manager.isManaged(document))
 			return CompletableFuture.failedFuture(
 					new IllegalArgumentException("Managed document required"));
-		return manager.reload(document).thenCompose(reloaded -> onUi(() -> {
+		CompletionStage<GLDocument<T>> result = manager.reload(document).thenCompose(reloaded -> onUi(() -> {
 			GLContainer replacement = viewFactory.apply(reloaded);
 			if (replacement == null)
 				throw new IllegalStateException("Document view factory returned null");
@@ -225,6 +277,7 @@ public final class GLDocumentLifecycle<T> implements AutoCloseable {
 			fireChanged();
 			return reloaded;
 		}));
+		return report(result, GLDocumentOperation.RELOAD, path(document));
 	}
 	public CompletionStage<Boolean> closeActiveDocument() {
 		if (activeDocument() == null) return CompletableFuture.completedFuture(false);
@@ -516,6 +569,20 @@ public final class GLDocumentLifecycle<T> implements AutoCloseable {
 				|| result instanceof java.util.concurrent.ExecutionException)
 				&& result.getCause() != null) result = result.getCause();
 		return result;
+	}
+	private <R> CompletionStage<R> report(CompletionStage<R> stage,
+			GLDocumentOperation operation, Path path) {
+		return stage.whenComplete((result, failure) -> {
+			if (failure == null) return;
+			GLDocumentFailure structured = GLDocumentFailure.of(operation, path, failure);
+			if (EventQueue.isDispatchThread()) failureHandler.handle(structured);
+			else EventQueue.invokeLater(() -> failureHandler.handle(structured));
+		});
+	}
+	private static Path path(GLDocument<?> document) {
+		if (document == null || document.location() == null
+				|| !"file".equalsIgnoreCase(document.location().getScheme())) return null;
+		return Path.of(document.location());
 	}
 	private static <R> CompletionStage<R> failed(String message) {
 		return CompletableFuture.failedFuture(new IllegalStateException(message));
