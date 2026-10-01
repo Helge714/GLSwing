@@ -17,6 +17,13 @@ public final class GLNodeGraphValidator {
 
 	public static GLNodeGraphValidationResult validate(GLNodeGraphSnapshot graph,
 			GLNodeTypeRegistry registry, GLGraphCyclePolicy cyclePolicy) {
+        return validate(graph,registry,cyclePolicy,Set.of());
+    }
+
+    /** Inputs supplied by the surrounding composite interface need no local wire. */
+    public static GLNodeGraphValidationResult validate(GLNodeGraphSnapshot graph,
+            GLNodeTypeRegistry registry, GLGraphCyclePolicy cyclePolicy, Set<GLNodeEndpoint> suppliedInputs) {
+        suppliedInputs=Set.copyOf(suppliedInputs);
 		if (graph == null || registry == null || cyclePolicy == null)
 			throw new IllegalArgumentException(
 					"Graph, node registry, and cycle policy are required");
@@ -49,7 +56,7 @@ public final class GLNodeGraphValidator {
 						Set.of(outputNode.id(), inputNode.id()), Set.of(connection.id())));
 				valid = false;
 			}
-			if (!output.valueTypeId().equals(input.valueTypeId())) {
+			if (!registry.compatibleValueTypes(output.valueTypeId(),input.valueTypeId())) {
 				diagnostics.add(error("connection.type",
 						"Incompatible port types: " + output.valueTypeId() + " and "
 								+ input.valueTypeId(),
@@ -67,7 +74,7 @@ public final class GLNodeGraphValidator {
 			if (type == null) continue;
 			for (GLNodePortDescriptor port : type.ports()) {
 				int count = connectionCounts.getOrDefault(new PortKey(node.id(), port.id()), 0);
-				if (port.required() && count == 0)
+				if (port.required() && count == 0 && !suppliedInputs.contains(new GLNodeEndpoint(node.id(),port.id())))
 					diagnostics.add(error("port.required",
 							"Required input is not connected: " + port.id(),
 							Set.of(node.id()), Set.of()));

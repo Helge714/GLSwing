@@ -7,6 +7,43 @@ import java.util.Optional;
 
 /** Thread-safe registry of node contracts used by validation and compilation. */
 public final class GLNodeTypeRegistry {
+    private java.util.function.BiPredicate<String,String> valueTypeCompatibility=String::equals;
+    /** Optional application conversion contract; default remains strict type equality. */
+    public synchronized void setValueTypeCompatibility(java.util.function.BiPredicate<String,String> policy){valueTypeCompatibility=java.util.Objects.requireNonNull(policy);}
+    public synchronized boolean compatibleValueTypes(String source,String target){return valueTypeCompatibility.test(source,target);}
+
+    private final Map<String,String> exclusionInputs = new LinkedHashMap<>();
+    /** Preferred input for exclusion; an unconnected preference falls back to the first connected input. */
+    public synchronized void setExclusionInput(String typeId, String inputPortId) {
+        var type=types.get(typeId);
+        if (type==null) throw new IllegalArgumentException("Registered node type required");
+        if (inputPortId==null) { exclusionInputs.remove(typeId); return; }
+        var port=type.findPort(inputPortId).orElse(null);
+        if (port==null || port.direction()!=GLPortDirection.INPUT)
+            throw new IllegalArgumentException("Exclusion input must be an input port");
+        exclusionInputs.put(typeId,inputPortId);
+    }
+    public synchronized Optional<String> exclusionInput(String typeId) {
+        return Optional.ofNullable(exclusionInputs.get(typeId));
+    }
+    private final Map<String, GLNodeInsertionPorts> insertionPorts = new LinkedHashMap<>();
+
+    /** Null disables wire insertion; no ports are guessed for unconfigured types. */
+    public synchronized void setInsertionPorts(String typeId, GLNodeInsertionPorts ports) {
+        GLNodeTypeDescriptor type = types.get(typeId);
+        if (type == null) throw new IllegalArgumentException("Registered node type required");
+        if (ports == null) { insertionPorts.remove(typeId); return; }
+        var input = type.findPort(ports.inputPortId()).orElse(null);
+        var output = type.findPort(ports.outputPortId()).orElse(null);
+        if (input == null || output == null || input.direction() != GLPortDirection.INPUT
+                || output.direction() != GLPortDirection.OUTPUT)
+            throw new IllegalArgumentException("Insertion requires an input and an output");
+        insertionPorts.put(typeId, ports);
+    }
+
+    public synchronized Optional<GLNodeInsertionPorts> insertionPorts(String typeId) {
+        return Optional.ofNullable(insertionPorts.get(typeId));
+    }
 	private final Map<String, GLNodeTypeDescriptor> types = new LinkedHashMap<>();
 	private final Map<String, List<GLNodeMuteBypass>> muteBypasses =
 			new LinkedHashMap<>();
@@ -27,6 +64,8 @@ public final class GLNodeTypeRegistry {
 	}
 
 	public synchronized boolean unregister(String typeId) {
+		exclusionInputs.remove(typeId);
+		insertionPorts.remove(typeId);
 		muteBypasses.remove(typeId);
 		return types.remove(typeId) != null;
 	}
@@ -50,7 +89,7 @@ public final class GLNodeTypeRegistry {
 			GLNodePortDescriptor output = type.findPort(mapping.outputPortId()).orElse(null);
 			if (input == null || output == null || input.direction() != GLPortDirection.INPUT
 					|| output.direction() != GLPortDirection.OUTPUT
-					|| !input.valueTypeId().equals(output.valueTypeId()))
+					|| !compatibleValueTypes(input.valueTypeId(),output.valueTypeId()))
 				throw new IllegalArgumentException(
 						"Mute bypass requires compatible input and output ports");
 		}
@@ -67,7 +106,7 @@ public final class GLNodeTypeRegistry {
 			if (input.direction() != GLPortDirection.INPUT) continue;
 			for (GLNodePortDescriptor output : type.ports())
 				if (output.direction() == GLPortDirection.OUTPUT
-						&& input.valueTypeId().equals(output.valueTypeId()))
+						&& compatibleValueTypes(input.valueTypeId(),output.valueTypeId()))
 					return List.of(new GLNodeMuteBypass(input.id(), output.id()));
 		}
 		return List.of();

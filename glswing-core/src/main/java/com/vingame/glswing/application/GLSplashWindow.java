@@ -12,7 +12,7 @@ import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JComponent;
-import javax.swing.JDialog;
+import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
@@ -20,7 +20,7 @@ import javax.swing.WindowConstants;
 
 final class GLSplashWindow {
 	private final GLSplashConfiguration configuration;
-	private final JDialog dialog;
+	private final JFrame dialog;
 	private final JPanel shell = new JPanel(new BorderLayout());
 	private final GLSplashViewContext viewContext;
 	private long shownAt;
@@ -28,7 +28,8 @@ final class GLSplashWindow {
 	GLSplashWindow(GLSplashConfiguration configuration, String applicationTitle,
 			GLSplashViewFactory viewFactory, Window owner) {
 		this.configuration = configuration;
-		dialog = new JDialog(owner);
+		dialog = new JFrame(applicationTitle);
+		if (owner != null) dialog.setIconImages(owner.getIconImages());
 		viewContext = new GLSplashViewContext(configuration, applicationTitle);
 		JComponent content = viewFactory == null
 				? createStandardView() : viewFactory.create(viewContext);
@@ -74,7 +75,7 @@ final class GLSplashWindow {
 		String message = failure.getMessage();
 		JLabel explanation = new JLabel("Startup failed"
 				+ (message == null ? "" : " — " + message));
-		explanation.setForeground(new Color(220, 68, 68));
+		explanation.setForeground(com.vingame.glswing.ui.GLTheme.DEFAULT.values().getColor("splash.error"));
 		JButton close = new JButton("Close");
 		close.addActionListener(event -> {
 			dialog.dispose();

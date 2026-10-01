@@ -1,6 +1,7 @@
 package com.vingame.glswing.test;
 
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 
 import com.vingame.glswing.history.GLHistoryManager;
 import com.vingame.glswing.node.GLNode;
@@ -104,8 +105,9 @@ public final class GLNodeEditorBindingSelfTest {
 			history.reset();
 			GLNodeId copySource = graph.snapshot().nodes().get(0).id();
 			editor.setSelectedNode(binding.findNodeView(copySource).orElseThrow());
+			AtomicReference<GLNodeEditorViewState> inactiveView = new AtomicReference<>();
 			GLNodeGraphEditingSession editing = new GLNodeGraphEditingSession(binding,
-					history);
+					history, inactiveView::set);
 			check(editing.copySelection() != null, "Node selection was not copied");
 			var pasted = editing.paste(500, 300);
 			check(pasted.insertedNodes().size() == 1
@@ -155,6 +157,10 @@ public final class GLNodeEditorBindingSelfTest {
 			check(history.redo() && types.find("test.extracted").isPresent()
 					&& graph.snapshot().findNode(extracted.compositeNode().id()).isPresent(),
 					"Redo did not restore the extracted composite");
+			binding.close();
+			check(history.undo() && types.find("test.extracted").isEmpty()
+					&& inactiveView.get() != null,
+					"Undo through a closed binding did not restore offline state");
 		}
 		System.out.println("GL node-editor binding self-test passed.");
 	}

@@ -369,7 +369,7 @@ public class GLColorPicker extends GLContainer {
 		@Override protected void record(GLContext2D context) {
 			super.record(context); float x=getWidth()/2,y=getHeight()/2;
 			var old=context.getStroke(); context.setStroke(new com.vingame.glswing.rendering.GLStroke(1.5f));
-			Color c=getGLTheme().values().getColor("palette.text",Color.WHITE);
+			Color c=getGLTheme().values().getColor("palette.text");
 			context.drawUILine(x-3,y+direction*2,x,y-direction*2,c);
 			context.drawUILine(x,y-direction*2,x+3,y+direction*2,c);context.setStroke(old);
 		}
@@ -382,11 +382,11 @@ public class GLColorPicker extends GLContainer {
 			try {
 				for(float x=0;x<w;x+=6)for(float y=0;y<h;y+=6)
 					context.fillUIRoundRect(x,y,Math.min(6,w-x),Math.min(6,h-y),0,
-							(((int)(x/6)+(int)(y/6))&1)==0?Color.LIGHT_GRAY:Color.GRAY);
+							(((int)(x/6)+(int)(y/6))&1)==0?getGLTheme().values().getColor("colorPicker.checkerLight"):getGLTheme().values().getColor("colorPicker.checkerDark"));
 				context.fillUIRoundRect(0,0,w/2,h,0,original);
 				context.fillUIRoundRect(w/2,0,w-w/2,h,0,color);
 			} finally {context.endClip();}
-			Color border=getGLTheme().values().getColor("palette.border",Color.DARK_GRAY);
+			Color border=getGLTheme().values().getColor("palette.border");
 			context.drawUIRoundRect(0,0,w,h,radius,1,border);
 			context.drawUILine(w/2,0,w/2,h,border);
 		}
@@ -396,7 +396,7 @@ public class GLColorPicker extends GLContainer {
 				com.vingame.glswing.rendering.GLIcon.fromSvgResource("com/vingame/glswing/icons/eyedropper.svg");
 		EyedropperButton() { super(""); }
 		@Override protected void record(GLContext2D context) {
-			Color normal=getGLTheme().values().getColor("palette.text",Color.WHITE);
+			Color normal=getGLTheme().values().getColor("palette.text");
 			Color accent=getGLTheme().values().getColor("palette.accent",normal);
 			Color tint=!isEnabled()?new Color(normal.getRed(),normal.getGreen(),normal.getBlue(),100)
 					:getControlState()==GLControlState.NORMAL?normal:accent;

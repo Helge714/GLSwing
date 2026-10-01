@@ -136,7 +136,7 @@ public final class GLLocalizationThemeSelfTest {
 
 	private static void testBundledThemes() {
 		GLTheme defaults = GLThemes.DEFAULT;
-		GLTheme dark = GLThemes.DARK;
+		GLTheme dark = GLThemes.BLUE;
 		GLTheme light = GLThemes.LIGHT;
 		check("Default".equals(defaults.values().get("theme.name", ""))
 				&& "Dark".equals(dark.values().get("theme.name", ""))

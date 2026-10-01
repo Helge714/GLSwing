@@ -36,7 +36,7 @@ public abstract class GLControl extends GLContainer implements GLKeyTarget {
 		super.render(context);
 		if(isFocused() && getConnectedShape()!=null && !insideHighlightedLayoutGroup())
 			context.drawUIRoundRect(0,0,getWidth(),getHeight(),getConnectedShape(),1.5f,
-					getGLTheme().values().getColor("palette.accent",java.awt.Color.BLUE),
+					getGLTheme().values().getColor("palette.accent"),
 					com.vingame.glswing.rendering.GLStroke.WidthSpace.SCREEN);
 	}
 	private boolean insideHighlightedLayoutGroup() {

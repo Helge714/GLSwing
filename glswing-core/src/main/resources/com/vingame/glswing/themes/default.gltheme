@@ -1,199 +1,167 @@
+# GLSwing Theme Studio starter document
 theme.name=Default
 
+# Global typography
 font.family=SansSerif
 font.style=plain
 font.size=12
 
-@COLOR palette.surface=rgba(57, 57, 57, 255)
-@COLOR palette.text=rgba(224, 224, 224, 255)
-@COLOR palette.textDisabled=rgba(136, 136, 136, 255)
-@COLOR palette.textSecondary=rgba(170, 170, 170, 255)
-@COLOR palette.border=rgba(37, 37, 37, 255)
-@COLOR palette.accent=rgba(84, 120, 181, 255)
-@COLOR palette.selection=rgba(69, 105, 166, 191)
-@COLOR palette.invalid=rgba(190, 70, 70, 255)
+# Shared palette
+@COLOR palette.surface=rgb(57, 57, 57)
+@COLOR palette.text=rgb(224, 224, 224)
+@COLOR palette.textDisabled=rgb(136, 136, 136)
+@COLOR palette.textSecondary=rgb(170, 170, 170)
+@COLOR palette.border=rgb(37, 37, 37)
+@COLOR palette.accent=rgb(84, 120, 181)
+@COLOR palette.selection=rgb(69, 105, 166, 191)
+@COLOR palette.invalid=rgb(190, 70, 70)
 
-codeEditor.background=rgba(47, 47, 47, 255)
-codeEditor.text=rgba(217, 232, 247, 255)
-codeEditor.keyword=rgba(204, 108, 29, 255)
-codeEditor.string=rgba(23, 198, 163, 255)
-codeEditor.number=rgba(104, 151, 187, 255)
-codeEditor.comment=rgba(128, 128, 128, 255)
-codeEditor.type=rgba(18, 144, 195, 255)
-codeEditor.navigationLink=rgba(82, 156, 255, 255)
-codeEditor.semantic.namespace=rgba(18, 144, 195, 255)
-codeEditor.semantic.type=${codeEditor.type}
-codeEditor.semantic.class=rgba(18, 144, 195, 255)
-codeEditor.semantic.class.abstract=rgba(62, 171, 230, 255)
-codeEditor.semantic.class.static=rgba(177, 102, 218, 255)
-codeEditor.semantic.enum=rgba(204, 129, 186, 255)
-codeEditor.semantic.interface=rgba(128, 242, 246, 255)
-codeEditor.semantic.struct=${codeEditor.type}
-codeEditor.semantic.typeParameter=rgba(191, 164, 164, 255)
-codeEditor.semantic.parameter=rgba(121, 171, 255, 255)
-codeEditor.semantic.variable=rgba(243, 236, 121, 255)
-codeEditor.semantic.variable.declaration=rgba(242, 242, 0, 255)
-codeEditor.semantic.variable.readonly=rgba(141, 218, 248, 255)
-codeEditor.semantic.variable.static=rgba(141, 218, 248, 255)
-codeEditor.semantic.property=rgba(102, 225, 248, 255)
-codeEditor.semantic.property.readonly=rgba(141, 218, 248, 255)
-codeEditor.semantic.property.static=rgba(141, 218, 248, 255)
-codeEditor.semantic.enumMember=rgba(141, 218, 248, 255)
-codeEditor.semantic.event=rgba(102, 225, 248, 255)
-codeEditor.semantic.function=rgba(167, 236, 33, 255)
-codeEditor.semantic.function.abstract=rgba(128, 246, 167, 255)
-codeEditor.semantic.function.declaration=rgba(30, 181, 64, 255)
-codeEditor.semantic.function.definition=rgba(30, 181, 64, 255)
-codeEditor.semantic.function.static=rgba(150, 236, 63, 255)
-codeEditor.semantic.method=rgba(167, 236, 33, 255)
-codeEditor.semantic.method.abstract=rgba(128, 246, 167, 255)
-codeEditor.semantic.method.declaration=rgba(30, 181, 64, 255)
-codeEditor.semantic.method.definition=rgba(30, 181, 64, 255)
-codeEditor.semantic.method.static=rgba(150, 236, 63, 255)
-codeEditor.semantic.macro=rgba(177, 102, 218, 255)
-codeEditor.semantic.modifier=${codeEditor.keyword}
-codeEditor.semantic.regexp=${codeEditor.string}
-codeEditor.semantic.operator=rgba(230, 230, 250, 255)
-codeEditor.semantic.decorator=rgba(160, 160, 160, 255)
-codeEditor.semantic.*.deprecated=rgba(128, 128, 128, 255)
-
-textShadow.color=rgba(0, 0, 0, 0)
-textShadow.on=true
-textShadow.offsetX=1
-textShadow.offsetY=1
-textShadow.softness=0
-textShadow.offsetSpace=screen
-
-fileDialog.hiddenText=${palette.textSecondary}
-fileDialog.hiddenItalic=true
-
-state.normal=rgba(90, 90, 90, 255)
-state.hover=rgba(110, 110, 110, 255)
+# Shared control states
+state.normal=rgb(90, 90, 90)
+state.hover=rgb(110, 110, 110)
 state.pressed=${palette.accent}
-state.disabled=rgba(48, 48, 48, 255)
+state.disabled=rgb(48, 48, 48)
 
-button.pressedLight=rgba(105, 136, 190, 255)
-button.pressedDark=rgba(74, 106, 159, 255)
+# Text shadow
+textShadow.color=rgb(0, 0, 0, 128)
 
-@NUMBER metrics.cornerRadius=4
-@NUMBER metrics.borderWidth=1
-@NUMBER metrics.controlHeight=22
-@INSETS metrics.padding=1,6,1,6
-
+# Labels
 label.text=${palette.text}
-label.padding=0,0,0,0
+label.font.family=${font.family}
+label.font.style=${font.style}
+label.font.size=${font.size}
+label.textShadow.color=${textShadow.color}
 
-checkBox.boxSize=14
-checkBox.gap=6
-checkBox.checkStrokeWidth=1.5
-checkBox.padding=0,0,0,0
+# Buttons
+button.background=${state.normal}
+button.border=${palette.border}
+button.hover=${state.hover}
+button.pressedLight=rgb(105, 136, 190)
+button.pressedDark=rgb(74, 106, 159)
+button.disabled=${state.disabled}
+button.focus=${palette.accent}
+button.text=${palette.text}
+button.textDisabled=${palette.textDisabled}
+button.font.family=${font.family}
+button.font.style=${font.style}
+button.font.size=${font.size}
+button.textShadow.color=${textShadow.color}
 
+# Check boxes
+checkBox.background=${state.normal}
+checkBox.border=${palette.border}
+checkBox.hover=${state.hover}
+checkBox.pressed=${state.pressed}
+checkBox.disabled=${state.disabled}
+checkBox.focus=${palette.accent}
+checkBox.check=${palette.text}
+checkBox.checkDisabled=${palette.textDisabled}
+checkBox.text=${palette.text}
+checkBox.textDisabled=${palette.textDisabled}
+checkBox.font.family=${font.family}
+checkBox.font.style=${font.style}
+checkBox.font.size=${font.size}
+checkBox.textShadow.color=${textShadow.color}
+
+# Sliders
+slider.background=${state.normal}
+slider.border=${palette.border}
 slider.hover=${state.hover}
-slider.pressed=rgba(125, 125, 125, 255)
-slider.progressLight=rgba(105, 145, 210, 255)
-slider.progressDark=rgba(68, 104, 165, 255)
-slider.focusProgressLight=${slider.progressLight}
-slider.focusProgressDark=${slider.progressDark}
+slider.pressed=rgb(125, 125, 125)
+slider.disabled=${state.disabled}
+slider.progressLight=rgb(105, 145, 210)
+slider.progressDark=rgb(68, 104, 165)
+slider.focusProgressLight=rgb(120, 160, 225)
+slider.focusProgressDark=rgb(83, 119, 180)
 slider.arrowBackground=${state.normal}
 slider.arrowHover=${state.hover}
 slider.arrowPressed=${palette.accent}
 slider.arrowDisabled=${state.disabled}
 slider.arrow=${palette.text}
 slider.arrowTextDisabled=${palette.textDisabled}
-slider.preferredWidth=180
-slider.arrowButtonWidth=14
-slider.arrowInset=2
-slider.arrowStrokeWidth=1.5
+slider.text=${palette.text}
+slider.textDisabled=${palette.textDisabled}
+slider.font.family=${font.family}
+slider.font.style=${font.style}
+slider.font.size=${font.size}
+slider.textShadow.color=${textShadow.color}
 
-numberSpinner.height=28
-numberSpinner.preferredWidth=120
-numberSpinner.buttonWidth=24
-numberSpinner.arrowStrokeWidth=1.5
-numberSpinner.cornerRadius=${metrics.cornerRadius}
-numberSpinner.borderWidth=${metrics.borderWidth}
-numberSpinner.padding=${metrics.padding}
-
-textEditor.background=rgba(42, 42, 42, 255)
-textEditor.text=${palette.text}
-textEditor.textDisabled=${palette.textDisabled}
-textEditor.selection=${palette.selection}
-textEditor.searchMatch=rgba(255, 196, 64, 82)
-textEditor.searchActiveMatch=rgba(255, 164, 32, 160)
-textEditor.caret=${palette.text}
+# Text editors
+textEditor.background=rgb(42, 42, 42)
 textEditor.border=${palette.border}
 textEditor.focus=${palette.accent}
 textEditor.invalid=${palette.invalid}
-textEditor.cornerRadius=${metrics.cornerRadius}
-textEditor.height=20
-textEditor.preferredWidth=120
-textEditor.overflowFadeWidth=10
-textEditor.padding=1,4,1,4
+textEditor.text=${palette.text}
+textEditor.textDisabled=${palette.textDisabled}
+textEditor.selection=${palette.selection}
+textEditor.caret=${palette.text}
+textEditor.font.family=${font.family}
+textEditor.font.style=${font.style}
+textEditor.font.size=${font.size}
+textEditor.textShadow.color=${textShadow.color}
+textEditor.searchMatch=rgba(255, 196, 64, 82)
+textEditor.searchActiveMatch=rgba(255, 164, 32, 160)
 
+# Combo boxes
+comboBox.background=${state.normal}
+comboBox.border=${palette.border}
+comboBox.hover=${state.hover}
+comboBox.pressed=${state.pressed}
+comboBox.pressedLight=${button.pressedLight}
+comboBox.pressedDark=${button.pressedDark}
+comboBox.disabled=${state.disabled}
+comboBox.text=${palette.text}
+comboBox.textDisabled=${palette.textDisabled}
+comboBox.arrow=${palette.text}
+comboBox.font.family=${font.family}
+comboBox.font.style=${font.style}
+comboBox.font.size=${font.size}
+comboBox.textShadow.color=${textShadow.color}
+
+# Menus and popup menus
 menu.background=${palette.surface}
+menu.border=${palette.border}
 menu.hover=${state.hover}
 menu.pressed=${state.pressed}
 menu.text=${palette.text}
 menu.textDisabled=${palette.textDisabled}
 menu.accelerator=${palette.textSecondary}
-menu.border=${palette.border}
 menu.separator=${palette.border}
 menu.arrow=${palette.text}
-menu.cornerRadius=${metrics.cornerRadius}
-menu.itemCornerRadius=2
-menu.itemHeight=27
-menu.separatorHeight=9
-menu.minimumWidth=170
-menu.itemHorizontalPadding=10
-menu.columnGap=18
-menu.padding=4,4,4,4
-menu.shadow.color=rgba(0, 0, 0, 105)
-menu.shadow.softness=9
-menu.shadow.offsetX=0
-menu.shadow.offsetY=3
+menu.shadow.color=rgb(0, 0, 0, 105)
+menu.font.family=${font.family}
+menu.font.style=${font.style}
+menu.font.size=${font.size}
+menu.textShadow.color=${textShadow.color}
 
-menuBar.background=rgba(45, 45, 45, 255)
-menuBar.text=${palette.text}
-menuBar.textDisabled=${palette.textDisabled}
+# Menu bars
+menuBar.background=rgb(45, 45, 45)
+menuBar.border=${palette.border}
 menuBar.hover=${state.hover}
 menuBar.pressed=${state.pressed}
 menuBar.active=${palette.accent}
-menuBar.border=${palette.border}
-menuBar.height=26
-menuBar.itemHorizontalPadding=10
-menuBar.itemGap=1
-menuBar.cornerRadius=${metrics.cornerRadius}
+menuBar.text=${palette.text}
+menuBar.textDisabled=${palette.textDisabled}
+menuBar.font.family=${font.family}
+menuBar.font.style=${font.style}
+menuBar.font.size=${font.size}
+menuBar.textShadow.color=${textShadow.color}
 
-comboBox.text=${palette.text}
-comboBox.arrow=${palette.text}
-comboBox.pressedLight=${button.pressedLight}
-comboBox.pressedDark=${button.pressedDark}
-comboBox.cornerRadius=4
-comboBox.minimumWidth=120
-comboBox.arrowAreaWidth=22
-comboBox.arrowStrokeWidth=1.5
-comboBox.padding=1,7,1,7
-
-scrollBar.track=rgba(37, 37, 37, 160)
+# Scroll bars and scroll panes
+scrollBar.track=rgb(37, 37, 37, 160)
 scrollBar.thumb=${palette.textSecondary}
 scrollBar.thumbHover=${palette.text}
 scrollBar.thumbPressed=${palette.accent}
 scrollBar.thumbDisabled=${state.disabled}
-scrollBar.thickness=9
-scrollBar.minimumThumbLength=18
-scrollBar.trackPadding=2
-scrollBar.cornerRadius=4
-
 scrollPane.background=${palette.surface}
 scrollPane.border=${palette.border}
-scrollPane.borderWidth=${metrics.borderWidth}
-scrollPane.cornerRadius=${metrics.cornerRadius}
-scrollPane.scrollBarGap=2
-scrollPane.padding=4,4,4,4
 scrollPane.viewportBorder=${list.background}
-scrollPane.viewportBorderWidth=${metrics.borderWidth}
 
+# Lists
 list.background=${textEditor.background}
-list.rowBackground=rgba(0, 0, 0, 0)
+list.border=${palette.border}
+list.focus=${palette.accent}
+list.rowBackground=rgb(0, 0, 0, 0)
 list.rowHoverBackground=${state.hover}
 list.rowPressedBackground=${state.pressed}
 list.selectionBackground=${palette.selection}
@@ -201,23 +169,14 @@ list.selectionInactiveBackground=derive(${palette.selection}, alpha*=0.67)
 list.text=${palette.text}
 list.selectedText=${palette.text}
 list.textDisabled=${palette.textDisabled}
-list.border=${palette.border}
-list.focus=${palette.accent}
-list.cornerRadius=${metrics.cornerRadius}
-list.borderWidth=${metrics.borderWidth}
-list.rowHeight=28
-list.preferredWidth=180
-list.cellPadding=3,8,3,8
 
-tree.indent=18
-tree.disclosureSize=11
+# Trees
 tree.disclosureHover=${state.hover}
 tree.disclosurePressed=${state.pressed}
-tree.disclosureCornerRadius=3
-tree.iconSize=18
-tree.iconGap=6
 
+# Tabbed panes
 tabbedPane.background=${palette.surface}
+tabbedPane.border=${palette.border}
 tabbedPane.tabBarBackground=${menuBar.background}
 tabbedPane.tab=${state.normal}
 tabbedPane.tabHover=${state.hover}
@@ -226,101 +185,391 @@ tabbedPane.tabSelected=${palette.accent}
 tabbedPane.tabDisabled=${state.disabled}
 tabbedPane.text=${palette.text}
 tabbedPane.textDisabled=${palette.textDisabled}
-tabbedPane.border=${palette.border}
-tabbedPane.borderWidth=${metrics.borderWidth}
-tabbedPane.cornerRadius=${metrics.cornerRadius}
-tabbedPane.tabHeight=28
-tabbedPane.minimumTabWidth=72
-tabbedPane.maximumTabWidth=220
-tabbedPane.tabGap=2
-tabbedPane.tabHorizontalPadding=12
-tabbedPane.contentPadding=0,0,0,0
 
-nodeEditor.background=rgba(35, 35, 35, 255)
-nodeEditor.gridVisible=true
-nodeEditor.gridMinor=rgba(255, 255, 255, 10)
-nodeEditor.gridMajor=rgba(255, 255, 255, 24)
-nodeEditor.gridSpacing=24
-nodeEditor.gridMajorInterval=4
-nodeEditor.gridLineWidth=1
-nodeEditor.connectionSnapDistance=18
-nodeEditor.connectionCurveTolerance=0.01
-nodeEditor.connectionHandleFactor=0.55
-nodeEditor.minimumConnectionHandleLength=50
-nodeEditor.connectionWidth=3
+# Layout groups
+layoutGroup.border=${palette.border}
+layoutGroup.focusBorder=${palette.accent}
+
+# File dialogs
+fileDialog.background=${textEditor.background}
+fileDialog.footer.background=${button.background}
+fileDialog.commandBar.background=${button.background}
+fileDialog.commandBar.borderColor=${button.border}
+fileDialog.header.background=${button.background}
+fileDialog.header.borderColor=${button.border}
+fileDialog.row.background=${textEditor.background}
+fileDialog.selectionColor=${palette.selection}
+fileDialog.hiddenText=${palette.textSecondary}
+
+# Code editor base syntax
+codeEditor.background=rgb(47, 47, 47)
+codeEditor.text=rgb(217, 232, 247)
+codeEditor.keyword=rgb(204, 108, 29)
+codeEditor.string=rgb(23, 198, 163)
+codeEditor.number=rgb(104, 151, 187)
+codeEditor.comment=rgb(128, 128, 128)
+codeEditor.type=rgb(18, 144, 195)
+codeEditor.navigationLink=rgb(82, 156, 255)
+
+# Code editor semantic highlighting
+codeEditor.semantic.namespace=rgb(18, 144, 195)
+codeEditor.semantic.type=${codeEditor.type}
+codeEditor.semantic.class=rgb(18, 144, 195)
+codeEditor.semantic.class.abstract=rgb(62, 171, 230)
+codeEditor.semantic.class.static=rgb(177, 102, 218)
+codeEditor.semantic.enum=rgb(204, 129, 186)
+codeEditor.semantic.interface=rgb(128, 242, 246)
+codeEditor.semantic.struct=${codeEditor.type}
+codeEditor.semantic.typeParameter=rgb(191, 164, 164)
+codeEditor.semantic.parameter=rgb(121, 171, 255)
+codeEditor.semantic.variable=rgb(243, 236, 121)
+codeEditor.semantic.variable.declaration=rgb(242, 242, 0)
+codeEditor.semantic.variable.readonly=rgb(141, 218, 248)
+codeEditor.semantic.variable.static=rgb(141, 218, 248)
+codeEditor.semantic.property=rgb(102, 225, 248)
+codeEditor.semantic.property.readonly=rgb(141, 218, 248)
+codeEditor.semantic.property.static=rgb(141, 218, 248)
+codeEditor.semantic.enumMember=rgb(141, 218, 248)
+codeEditor.semantic.event=rgb(102, 225, 248)
+codeEditor.semantic.function=rgb(167, 236, 33)
+codeEditor.semantic.function.abstract=rgb(128, 246, 167)
+codeEditor.semantic.function.declaration=rgb(30, 181, 64)
+codeEditor.semantic.function.definition=rgb(30, 181, 64)
+codeEditor.semantic.function.static=rgb(150, 236, 63)
+codeEditor.semantic.method=rgb(167, 236, 33)
+codeEditor.semantic.method.abstract=rgb(128, 246, 167)
+codeEditor.semantic.method.declaration=rgb(30, 181, 64)
+codeEditor.semantic.method.definition=rgb(30, 181, 64)
+codeEditor.semantic.method.static=rgb(150, 236, 63)
+codeEditor.semantic.macro=rgb(177, 102, 218)
+codeEditor.semantic.modifier=${codeEditor.keyword}
+codeEditor.semantic.regexp=${codeEditor.string}
+codeEditor.semantic.operator=rgb(230, 230, 250)
+codeEditor.semantic.decorator=rgb(160, 160, 160)
+codeEditor.semantic.*.deprecated=rgb(128, 128, 128)
+
+# Code editor overlays
+codeEditor.overviewRulerBackground=rgb(0, 0, 0, 25)
+codeEditor.colorPreviewBorder=${palette.border}
+codeEditor.colorPreviewCheckerLight=rgb(225, 225, 225)
+codeEditor.colorPreviewCheckerDark=rgb(145, 145, 145)
+codeEditor.inlay.background=rgb(67, 69, 72)
+codeEditor.inlay.border=rgb(90, 93, 97)
+codeEditor.inlay.text=rgb(187, 191, 196)
+
+# Node editor
+nodeEditor.background=rgb(35, 35, 35)
+nodeEditor.gridMinor=rgb(255, 255, 255, 10)
+nodeEditor.gridMajor=rgb(255, 255, 255, 24)
 nodeEditor.connectionBorder=${palette.border}
 nodeEditor.selectedConnectionBorder=${palette.accent}
 nodeEditor.warningConnectionBorder=rgb(224, 154, 45)
 nodeEditor.errorConnectionBorder=rgb(222, 70, 70)
-nodeEditor.connectionBorderWidth=1
 nodeEditor.connectionColorInterpolation=srgb
 nodeEditor.marqueeFill=derive(${palette.selection}, alpha*=0.5)
 nodeEditor.marqueeBorder=${palette.accent}
-nodeEditor.marqueeBorderWidth=1
+
+# Nodes
+node.background=${palette.surface}
+node.titleBackground=${state.normal}
+node.titleGradientLight=rgb(103, 103, 103)
+node.titleGradientDark=rgb(77, 77, 77)
+node.titleText=${palette.text}
+node.border=${palette.border}
+node.selectedBorder=rgb(190, 70, 70)
+node.activeSelectedBorder=rgb(200, 200, 200)
+node.shadow=rgb(0, 0, 0, 105)
+node.inputPort=rgb(112, 174, 232)
+node.outputPort=rgb(237, 157, 91)
+node.portBorder=${palette.border}
+node.portHover=${palette.text}
+node.collapseChevron=${palette.textSecondary}
+node.collapseChevronHover=${palette.accent}
+node.mutedBypass=rgba(224, 72, 72, 255)
+
+# Dialogs
+dialog.titleBar.background=${palette.surface}
+dialog.titleBar.text=${palette.text}
+dialog.titleBar.border=${palette.border}
+dialog.close.text=${palette.text}
+dialog.close.activeText=rgb(255, 255, 255)
+dialog.close.hover=rgb(196, 43, 28)
+dialog.close.pressed=rgb(153, 32, 22)
+dialog.border=${palette.border}
+dialog.shadow.color=rgb(0, 0, 0, 120)
+
+
+# Shared geometry
+@NUMBER metrics.cornerRadius=4
+@NUMBER metrics.borderWidth=1.3
+@NUMBER metrics.controlHeight=24
+@INSETS metrics.padding=5, 7, 5, 7
+@NUMBER metrics.strokeWidth=1.5
+
+# Text shadow
+textShadow.on=false
+textShadow.offsetX=1
+textShadow.offsetY=1
+textShadow.softness=10
+textShadow.offsetSpace=screen
+
+# Labels
+label.padding=0, 0, 0, 0
+label.textShadow.on=${textShadow.on}
+label.textShadow.offsetX=${textShadow.offsetX}
+label.textShadow.offsetY=${textShadow.offsetY}
+label.textShadow.softness=${textShadow.softness}
+label.textShadow.offsetSpace=${textShadow.offsetSpace}
+
+# Buttons
+button.cornerRadius=${metrics.cornerRadius}
+button.borderWidth=${metrics.borderWidth}
+button.height=${metrics.controlHeight}
+button.padding=${metrics.padding}
+button.textShadow.on=${textShadow.on}
+button.textShadow.offsetX=${textShadow.offsetX}
+button.textShadow.offsetY=${textShadow.offsetY}
+button.textShadow.softness=${textShadow.softness}
+button.textShadow.offsetSpace=${textShadow.offsetSpace}
+
+# Check boxes
+checkBox.boxSize=15
+checkBox.gap=6
+checkBox.checkStrokeWidth=${metrics.strokeWidth}
+checkBox.cornerRadius=${metrics.cornerRadius}
+checkBox.borderWidth=${metrics.borderWidth}
+checkBox.padding=3, 7, 3, 7
+checkBox.textShadow.on=${textShadow.on}
+checkBox.textShadow.offsetX=${textShadow.offsetX}
+checkBox.textShadow.offsetY=${textShadow.offsetY}
+checkBox.textShadow.softness=${textShadow.softness}
+checkBox.textShadow.offsetSpace=${textShadow.offsetSpace}
+
+# Sliders
+slider.preferredWidth=180
+slider.height=${metrics.controlHeight}
+slider.cornerRadius=${metrics.cornerRadius}
+slider.borderWidth=${metrics.borderWidth}
+slider.padding=${metrics.padding}
+slider.arrowButtonWidth=14
+slider.arrowInset=2
+slider.arrowStrokeWidth=${metrics.strokeWidth}
+slider.textShadow.on=${textShadow.on}
+slider.textShadow.offsetX=${textShadow.offsetX}
+slider.textShadow.offsetY=${textShadow.offsetY}
+slider.textShadow.softness=${textShadow.softness}
+slider.textShadow.offsetSpace=${textShadow.offsetSpace}
+
+# Number spinners
+numberSpinner.preferredWidth=120
+numberSpinner.height=${metrics.controlHeight}
+numberSpinner.cornerRadius=${metrics.cornerRadius}
+numberSpinner.borderWidth=${metrics.borderWidth}
+numberSpinner.padding=${metrics.padding}
+numberSpinner.buttonWidth=24
+numberSpinner.arrowStrokeWidth=${metrics.strokeWidth}
+
+# Text editors
+textEditor.preferredWidth=120
+textEditor.height=${metrics.controlHeight}
+textEditor.cornerRadius=${metrics.cornerRadius}
+textEditor.borderWidth=${metrics.borderWidth}
+textEditor.padding=${metrics.padding}
+textEditor.overflowFadeWidth=10
+textEditor.textShadow.on=${textShadow.on}
+textEditor.textShadow.offsetX=${textShadow.offsetX}
+textEditor.textShadow.offsetY=${textShadow.offsetY}
+textEditor.textShadow.softness=${textShadow.softness}
+textEditor.textShadow.offsetSpace=${textShadow.offsetSpace}
+
+# Combo boxes
+comboBox.minimumWidth=120
+comboBox.height=${metrics.controlHeight}
+comboBox.cornerRadius=${metrics.cornerRadius}
+comboBox.borderWidth=${metrics.borderWidth}
+comboBox.padding=${metrics.padding}
+comboBox.arrowAreaWidth=22
+comboBox.arrowStrokeWidth=1.5
+comboBox.textShadow.on=${textShadow.on}
+comboBox.textShadow.offsetX=${textShadow.offsetX}
+comboBox.textShadow.offsetY=${textShadow.offsetY}
+comboBox.textShadow.softness=${textShadow.softness}
+comboBox.textShadow.offsetSpace=${textShadow.offsetSpace}
+
+# Menus and popup menus
+menu.minimumWidth=170
+menu.itemHeight=27
+menu.separatorHeight=9
+menu.cornerRadius=${metrics.cornerRadius}
+menu.itemCornerRadius=2
+menu.borderWidth=${metrics.borderWidth}
+menu.padding=4, 4, 4, 4
+menu.itemHorizontalPadding=10
+menu.columnGap=18
+menu.shadow.softness=9
+menu.shadow.offsetX=0
+menu.shadow.offsetY=3
+menu.textShadow.on=${textShadow.on}
+menu.textShadow.offsetX=${textShadow.offsetX}
+menu.textShadow.offsetY=${textShadow.offsetY}
+menu.textShadow.softness=${textShadow.softness}
+menu.textShadow.offsetSpace=${textShadow.offsetSpace}
+
+# Menu bars
+menuBar.height=26
+menuBar.cornerRadius=${metrics.cornerRadius}
+menuBar.borderWidth=${metrics.borderWidth}
+menuBar.itemHorizontalPadding=10
+menuBar.itemGap=1
+menuBar.textShadow.on=${textShadow.on}
+menuBar.textShadow.offsetX=${textShadow.offsetX}
+menuBar.textShadow.offsetY=${textShadow.offsetY}
+menuBar.textShadow.softness=${textShadow.softness}
+menuBar.textShadow.offsetSpace=${textShadow.offsetSpace}
+
+# Scroll bars and scroll panes
+scrollBar.thickness=9
+scrollBar.minimumThumbLength=18
+scrollBar.trackPadding=2
+scrollBar.cornerRadius=4
+scrollPane.cornerRadius=${metrics.cornerRadius}
+scrollPane.borderWidth=${metrics.borderWidth}
+scrollPane.padding=4, 4, 4, 4
+scrollPane.scrollBarGap=2
+scrollPane.viewportBorderWidth=${metrics.borderWidth}
+
+# Lists
+list.preferredWidth=180
+list.rowHeight=26
+list.cornerRadius=${metrics.cornerRadius}
+list.borderWidth=${metrics.borderWidth}
+list.cellPadding=3, 8, 3, 8
+
+# Trees
+tree.indent=14
+tree.disclosureSize=11
+tree.disclosureCornerRadius=3
+tree.iconSize=18
+tree.iconGap=6
+
+# Tabbed panes
+tabbedPane.tabHeight=28
+tabbedPane.minimumTabWidth=72
+tabbedPane.maximumTabWidth=220
+tabbedPane.tabGap=${metrics.borderWidth}
+tabbedPane.tabHorizontalPadding=12
+tabbedPane.cornerRadius=${metrics.cornerRadius}
+tabbedPane.borderWidth=${metrics.borderWidth}
+tabbedPane.contentPadding=0, 0, 0, 0
+
+# Layout groups
+layoutGroup.cornerRadius=${metrics.cornerRadius}
+layoutGroup.borderWidth=${metrics.borderWidth}
+
+# File dialogs
+fileDialog.hiddenItalic=true
+fileDialog.commandBar.cornerRadius=${metrics.cornerRadius}
+
+# Code editor overlays
 codeEditor.overviewRulerWidth=7
 codeEditor.overviewRulerGap=3
 codeEditor.overviewMarkerHeight=3
-codeEditor.overviewRulerBackground=rgba(0, 0, 0, 25)
 codeEditor.colorPreviewSize=11
 codeEditor.colorPreviewGap=6
-codeEditor.colorPreviewBorder=${palette.border}
-codeEditor.colorPreviewCheckerLight=rgba(225, 225, 225, 255)
-codeEditor.colorPreviewCheckerDark=rgba(145, 145, 145, 255)
-codeEditor.inlay.background=rgba(67, 69, 72, 255)
-codeEditor.inlay.border=rgba(90, 93, 97, 255)
-codeEditor.inlay.text=rgba(187, 191, 196, 255)
 codeEditor.inlay.fontScale=0.78
 codeEditor.inlay.padding=4
 codeEditor.inlay.gap=3
 codeEditor.inlay.radius=3
 codeEditor.inlay.borderWidth=1
-node.background=${palette.surface}
-node.titleBackground=${state.normal}
-node.titleGradientLight=rgba(103, 103, 103, 255)
-node.titleGradientDark=rgba(77, 77, 77, 255)
-node.titleText=${palette.text}
-node.collapseChevron=${palette.textSecondary}
-node.collapseChevronHover=${palette.accent}
-node.border=${palette.border}
-node.selectedBorder=rgba(190, 70, 70, 255)
-node.activeSelectedBorder=rgba(200, 200, 200, 255)
-node.shadow=rgba(0, 0, 0, 105)
-node.inputPort=rgba(112, 174, 232, 255)
-node.outputPort=rgba(237, 157, 91, 255)
-node.portBorder=${palette.border}
-node.portHover=${palette.text}
-node.cornerRadius=9
+
+# Node editor
+nodeEditor.connectionSnapDistance=18
+nodeEditor.gridVisible=true
+nodeEditor.gridSpacing=20
+nodeEditor.gridMajorInterval=4
+nodeEditor.gridLineWidth=1
+nodeEditor.connectionCurveTolerance=0.01
+nodeEditor.connectionHandleFactor=0.4
+nodeEditor.minimumConnectionHandleLength=20
+nodeEditor.connectionWidth=3
+nodeEditor.connectionDashLength=9
+nodeEditor.connectionDashGap=6
+nodeEditor.connectionBorderWidth=1.5
+nodeEditor.marqueeBorderWidth=1
+
+# Nodes
+node.cornerRadius=6
 node.borderWidth=1.5
-node.titleHeight=30
+node.titleHeight=28
+node.shadowSoftness=12
+node.shadowOffsetX=0
+node.shadowOffsetY=2
+node.portRadius=5
+node.rowGap=6
+node.minimumWidth=200
+node.resizeHandleSize=7
+node.contentPadding=12
 node.collapseChevronSize=7
 node.collapseChevronHitSize=20
 node.collapseChevronWidth=1.5
-node.shadowSoftness=10
-node.shadowOffsetX=0
-node.shadowOffsetY=4
-node.portRadius=5
-node.rowGap=9
-node.minimumWidth=190
-node.resizeHandleSize=7
-node.contentPadding=11,12,12,12
-node.mutedBypass=rgba(224, 72, 72, 255)
 node.mutedBypassWidth=2
 node.opacity=0.95
 node.mutedOpacity=0.62
+
+# Dialogs
 dialog.cornerRadius=10
-dialog.titleBar.height=34
-dialog.titleBar.background=${palette.surface}
-dialog.titleBar.text=${palette.text}
-dialog.titleBar.border=${palette.border}
-dialog.titleBar.borderWidth=1
-dialog.close.text=${palette.text}
-dialog.close.activeText=rgba(255, 255, 255, 255)
-dialog.close.hover=rgba(196, 43, 28, 255)
-dialog.close.pressed=rgba(153, 32, 22, 255)
-dialog.border=${palette.border}
 dialog.borderWidth=1
-dialog.shadow.color=rgba(0, 0, 0, 120)
+dialog.titleBar.height=34
+dialog.titleBar.borderWidth=1
 dialog.shadow.softness=12
 dialog.shadow.offsetX=0
 dialog.shadow.offsetY=4
-layoutGroup.focusBorder=${palette.accent}
+
+nodeEditor.horizontalNodeSpacing=60
+nodeEditor.verticalNodeSpacing=40
+
+# Function curve editor
+curve.width=160
+curve.height=120
+curve.previewHeight=36
+curve.inspectorHeight=200
+curve.padding=9
+curve.pointRadius=3
+curve.hitRadius=7
+@COLOR curve.background=${slider.background}
+@COLOR curve.grid=${palette.border}
+@COLOR curve.line=${palette.accent}
+@COLOR curve.handle=${palette.text}
+@COLOR curve.marker=#E5AF55
+
+tooltip.shadow.color=${menu.shadow.color}
+tooltip.shadow.softness=${menu.shadow.softness}
+tooltip.shadow.offsetX=${menu.shadow.offsetX}
+tooltip.shadow.offsetY=${menu.shadow.offsetY}
+
+node.portEventInnerScale=.36
+
+# Application and auxiliary UI colors (centralized palette).
+@COLOR application.clearColor=${palette.surface}
+@COLOR codeEditor.diagnostic.error=${palette.invalid}
+@COLOR codeEditor.diagnostic.warning=#EBAF37
+@COLOR codeEditor.foldMarker=rgb(150, 150, 150)
+@COLOR codeEditor.occurrence.background=rgb(72,118,168,80)
+@COLOR codeEditor.rename.background=rgb(64,132,214,105)
+@COLOR colorPicker.checkerDark=#808080
+@COLOR colorPicker.checkerLight=#C0C0C0
+@COLOR compositeInterface.background=${palette.surface}
+@COLOR nodeBreadcrumb.hoverText=${palette.text}
+@COLOR nodeWorkspace.background=${palette.surface}
+@COLOR palette.hover=rgb(255, 255, 255, 24)
+@COLOR splash.accent=${palette.accent}
+@COLOR splash.background=${palette.surface}
+@COLOR splash.error=${palette.invalid}
+@COLOR splash.foreground=${palette.text}
+@COLOR splash.mutedForeground=${palette.textSecondary}
+
+@COLOR codeEditor.gutter.background=rgb(0,0,0,28)
+@COLOR codeEditor.gutter.text=${palette.textSecondary}
+@COLOR tabbedPane.closeHover=rgb(255,255,255,34)
+@COLOR line.color=${palette.border}
+@COLOR colorPicker.samplerOutline=#000000

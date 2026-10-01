@@ -27,6 +27,12 @@ public final class GLNodeGraph {
 		void addNode(GLGraphNode node);
 		void removeNode(GLNodeId id);
 		void setProperty(GLNodeId nodeId, String key, GLNodeValue value);
+        default void setExplicitProperty(GLNodeId nodeId, String key, GLNodeValue value) {
+            setProperty(nodeId,key,value);setProperty(nodeId,GLGraphNode.AUTOMATIC_PREFIX+key,GLNodeValue.of(false));
+        }
+        default void setAutomaticProperty(GLNodeId nodeId, String key, GLNodeValue value) {
+            setProperty(nodeId,key,value);setProperty(nodeId,GLGraphNode.AUTOMATIC_PREFIX+key,GLNodeValue.of(true));setProperty(nodeId,GLGraphNode.AUTOMATIC_DEFAULT_PREFIX+key,value);
+        }
 		void removeProperty(GLNodeId nodeId, String key);
 		void addConnection(GLGraphConnection connection);
 		void removeConnection(GLNodeConnectionId id);

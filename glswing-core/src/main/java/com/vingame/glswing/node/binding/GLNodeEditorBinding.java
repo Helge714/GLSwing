@@ -65,6 +65,7 @@ public final class GLNodeEditorBinding implements AutoCloseable {
 	private RuntimeException lastProjectionFailure;
 	private boolean synchronizing;
 	private boolean closed;
+    private GLNodeGraphSnapshot projectedSnapshot;
 
 	public GLNodeEditorBinding(GLNodeGraph graph, GLNodeTypeRegistry types,
 			GLNodeEditor editor, GLNodeViewFactory viewFactory,
@@ -91,6 +92,7 @@ public final class GLNodeEditorBinding implements AutoCloseable {
 	}
 
 	public GLNodeGraph graph() { return graph; }
+	public boolean isClosed() { return closed; }
 	public GLNodeTypeRegistry types() { return types; }
 	public GLNodeEditor editor() { return editor; }
 	public GLGraphCyclePolicy cyclePolicy() { return cyclePolicy; }
@@ -130,11 +132,12 @@ public final class GLNodeEditorBinding implements AutoCloseable {
 			throw new IllegalArgumentException("Cycle policy required");
 		if (cyclePolicy == policy) return;
 		cyclePolicy = policy;
-		validate();
+        validate();
 	}
 
 	/** Reprojects the current snapshot, for example after registry changes. */
 	public void refresh() {
+        projectedSnapshot = null;
 		checkOpen();
 		synchronize(graph.snapshot());
 	}
@@ -210,8 +213,12 @@ public final class GLNodeEditorBinding implements AutoCloseable {
 			for (GLNodeId id : Set.copyOf(nodeViews.keySet()))
 				if (!desiredNodes.contains(id)) removeNodeView(id);
 
-			int index = 0;
+			var previousNodes=projectedSnapshot==null?Map.<GLNodeId,GLGraphNode>of():projectedSnapshot.nodesById();
+            boolean topologyChanged = projectedSnapshot == null || !projectedSnapshot.connections().equals(snapshot.connections())
+                || !projectedSnapshot.nodes().stream().map(n->List.of(n.id(),n.typeId())).toList().equals(snapshot.nodes().stream().map(n->List.of(n.id(),n.typeId())).toList());
+            int index = 0;
 			for (GLGraphNode node : snapshot.nodes()) {
+                if(!topologyChanged && node.equals(previousNodes.get(node.id()))) { index++; continue; }
 				GLNodeTypeDescriptor type = types.find(node.typeId()).orElse(null);
 				GLNode existing = nodeViews.get(node.id());
 				if (type == null) {
@@ -251,7 +258,8 @@ public final class GLNodeEditorBinding implements AutoCloseable {
 		} finally {
 			synchronizing = false;
 		}
-		validate();
+		projectedSnapshot = snapshot;
+        validate();
 	}
 
 	private GLNode addNodeView(GLGraphNode node, GLNodeTypeDescriptor type,
@@ -305,7 +313,9 @@ public final class GLNodeEditorBinding implements AutoCloseable {
 						: types.find(otherNode.typeId())
 								.flatMap(item -> item.findPort(other.getId())).orElse(null);
 				return otherContract == null
-						|| contract.valueTypeId().equals(otherContract.valueTypeId());
+						|| (contract.direction() == GLPortDirection.OUTPUT
+                            ? types.compatibleValueTypes(contract.valueTypeId(), otherContract.valueTypeId())
+                            : types.compatibleValueTypes(otherContract.valueTypeId(), contract.valueTypeId()));
 			});
 		}
 	}
@@ -344,10 +354,44 @@ public final class GLNodeEditorBinding implements AutoCloseable {
 		editor.removeNode(view);
 	}
 
-	private void validate() {
+	private List<com.vingame.glswing.node.model.GLGraphDiagnostic> additionalDiagnostics=List.of();
+    /** Application/backend diagnostics, merged with structural validation. */
+    private Set<GLNodeConnectionId> inactiveConnections=Set.of();
+    public void setAdditionalDiagnostics(List<com.vingame.glswing.node.model.GLGraphDiagnostic> diagnostics){setAdditionalDiagnostics(diagnostics,Set.of());}
+    public void setAdditionalDiagnostics(List<com.vingame.glswing.node.model.GLGraphDiagnostic> diagnostics,Set<GLNodeConnectionId> inactive){
+        var next=List.copyOf(diagnostics);var nextInactive=Set.copyOf(inactive);
+        if(next.equals(additionalDiagnostics)&&nextInactive.equals(inactiveConnections))return;
+        additionalDiagnostics=next;inactiveConnections=nextInactive;validate();
+    }
+    private java.util.Set<com.vingame.glswing.node.model.GLNodeEndpoint> suppliedInputs=java.util.Set.of();
+    /** Declare inputs connected through the enclosing group interface. */
+    public void setSuppliedInputs(java.util.Set<com.vingame.glswing.node.model.GLNodeEndpoint> inputs){
+        var next=java.util.Set.copyOf(inputs);
+        if(next.equals(suppliedInputs))return;
+        suppliedInputs=next;validate();
+    }
+    private void validate() {
 		validationResult = GLNodeGraphValidator.validate(graph.snapshot(), types,
-				cyclePolicy);
-		editor.applyConnectionDiagnostics(validationResult);
+				cyclePolicy,suppliedInputs);
+        var combined=new java.util.ArrayList<>(validationResult.diagnostics());
+        if(!inactiveConnections.isEmpty()){
+            var snapshot=graph.snapshot();
+            var active=new com.vingame.glswing.node.model.GLNodeGraphSnapshot(snapshot.graphId(),snapshot.revision(),snapshot.nodes(),
+                snapshot.connections().stream().filter(w->!inactiveConnections.contains(w.id())).toList());
+            combined.removeIf(d->d.code().equals("graph.cycle"));
+            GLNodeGraphValidator.validate(active,types,cyclePolicy).diagnostics().stream()
+                .filter(d->d.code().equals("graph.cycle")).forEach(combined::add);
+        }
+        combined.addAll(additionalDiagnostics);
+        connectionViews.forEach((id,view)->view.setActive(!inactiveConnections.contains(id)));
+        validationResult=new GLNodeGraphValidationResult(validationResult.snapshot(),combined);
+        nodeViews.forEach((id,view)->{
+            var problems=combined.stream().filter(d->d.nodeIds().contains(id)).toList();
+            if(problems.isEmpty())view.clearDiagnostic();
+            else view.setDiagnostic(problems.stream().anyMatch(d->d.severity()==com.vingame.glswing.node.model.GLGraphDiagnostic.Severity.ERROR)?com.vingame.glswing.node.GLNodeConnectionStatus.ERROR:com.vingame.glswing.node.GLNodeConnectionStatus.WARNING,
+                problems.stream().map(com.vingame.glswing.node.model.GLGraphDiagnostic::message).distinct().collect(java.util.stream.Collectors.joining("\n")));
+        });
+        editor.applyConnectionDiagnostics(validationResult);
 		for (ValidationListener listener : validationListeners)
 			listener.validationChanged(this, validationResult);
 	}

@@ -62,7 +62,27 @@ public class GLNodeEditor extends GLContainer
 			new LinkedHashMap<>();
 	private GLNode selectedNode;
 	private GLNodeConnection selectedConnection;
-	private GLNodePort gestureSource;
+    private GLNodeConnection insertionCandidate;
+    public interface ConnectionInsertionHandler {
+        boolean canInsert(GLNode node, GLNodeConnection connection);
+        boolean insert(GLNode node, GLNodeConnection connection, float startX, float startY);
+    }
+    private ConnectionInsertionHandler insertionHandler;
+    public void setConnectionInsertionHandler(ConnectionInsertionHandler handler) {
+        insertionHandler = handler;
+        insertionCandidate = null;
+    }
+    public GLNodeConnection getInsertionCandidate() { return insertionCandidate; }
+    /** Horizontal edge-to-edge spacing in graph coordinates. */
+    public float getHorizontalNodeSpacing() {
+        float value = getGLTheme().values().getFloat("nodeEditor.horizontalNodeSpacing", 60);
+        return Float.isFinite(value) && value >= 0 ? value : 60;
+    }
+	public float getVerticalNodeSpacing() {
+        float value=getGLTheme().values().getFloat("nodeEditor.verticalNodeSpacing",40);
+        return Float.isFinite(value)&&value>=0?value:40;
+    }
+    private GLNodePort gestureSource;
 	private GLNodePort fixedGesturePort;
 	private GLNodePort candidatePort;
 	private GLNodeConnection detachedConnection;
@@ -529,8 +549,7 @@ public class GLNodeEditor extends GLContainer
 
 	public Color getWarningConnectionBorder() {
 		return warningConnectionBorder != null ? warningConnectionBorder
-				: getGLTheme().values().getColor("nodeEditor.warningConnectionBorder",
-						new Color(224, 154, 45));
+				: getGLTheme().values().getColor("nodeEditor.warningConnectionBorder");
 	}
 
 	public void setWarningConnectionBorder(Color color) {
@@ -548,8 +567,7 @@ public class GLNodeEditor extends GLContainer
 
 	public Color getErrorConnectionBorder() {
 		return errorConnectionBorder != null ? errorConnectionBorder
-				: getGLTheme().values().getColor("nodeEditor.errorConnectionBorder",
-						new Color(222, 70, 70));
+				: getGLTheme().values().getColor("nodeEditor.errorConnectionBorder");
 	}
 
 	public void setErrorConnectionBorder(Color color) {
@@ -587,9 +605,9 @@ public class GLNodeEditor extends GLContainer
 							: GLNodeConnectionStatus.WARNING;
 			for (GLNodeConnectionId id : diagnostic.connectionIds()) {
 				DiagnosticDecoration current = decorations.get(id);
-				if (current == null || status == GLNodeConnectionStatus.ERROR)
-					decorations.put(id, new DiagnosticDecoration(status,
-							diagnostic.message()));
+                var combinedStatus=current!=null&&current.status()==GLNodeConnectionStatus.ERROR?current.status():status;
+                String message=current==null?diagnostic.message():current.message().lines().anyMatch(diagnostic.message()::equals)?current.message():current.message()+"\n"+diagnostic.message();
+                decorations.put(id,new DiagnosticDecoration(combinedStatus,message));
 			}
 		}
 		for (GLNodeConnection connection : connections) {
@@ -647,6 +665,9 @@ public class GLNodeEditor extends GLContainer
 		repaintGL();
 	}
 
+    int activeConnectionCount(GLNodePort port){
+        int count=0;for(var connection:connections)if(connection.isActive()&&(connection.getInput()==port||connection.getOutput()==port))count++;return count;
+    }
 	int connectionCount(GLNodePort port) {
 		int count = 0;
 		for (GLNodeConnection connection : connections)
@@ -1015,7 +1036,12 @@ public class GLNodeEditor extends GLContainer
 				&& getGLInputMap().matches(GLInputActions.CANCEL, event)) {
 			cancelPlacement(); event.consume(); return;
 		}
-		if (getGLInputMap().matches(GLInputActions.NODE_SELECT_ALL, event)) {
+		if (getGLInputMap().matches(GLInputActions.NODE_ARRANGE, event)) {
+            if(activePlacement!=null)return;
+            if(editingActions!=null)editingActions.arrangeAll();else GLNodeAutoLayout.arrange(this);
+            event.consume();return;
+        }
+        if (getGLInputMap().matches(GLInputActions.NODE_SELECT_ALL, event)) {
 			if (!nodes.isEmpty() && selectedNodes.size() == nodes.size()) clearSelection();
 			else setSelectedNodes(nodes);
 			event.consume(); return;
@@ -1076,6 +1102,10 @@ public class GLNodeEditor extends GLContainer
 					GLInputActions.NODE_EXTRACT_COMPOSITE, event)
 					&& editingActions.canExtractComposite())
 				editingActions.extractComposite();
+			else if (getGLInputMap().matches(GLInputActions.NODE_EXCLUDE, event)
+					&& selectedConnection == null && !selectedNodes.isEmpty()) {
+				if (editingActions.canExclude()) editingActions.exclude();
+			}
 			else if (getGLInputMap().matches(GLInputActions.NODE_DELETE, event)
 					&& selectedConnection == null && !selectedNodes.isEmpty()
 					&& editingActions.canDelete())
@@ -1108,7 +1138,7 @@ public class GLNodeEditor extends GLContainer
 				&& (button == MouseEvent.BUTTON1 || button == MouseEvent.BUTTON3);
 	}
 
-	private void beginPlacement(GLNodePlacement placement) {
+	public void beginPlacement(GLNodePlacement placement) {
 		if (placement == null) return;
 		activePlacement = placement;
 		placementTimer = new javax.swing.Timer(16, event -> updatePlacementFromPointer());
@@ -1116,14 +1146,14 @@ public class GLNodeEditor extends GLContainer
 		updatePlacementFromPointer();
 	}
 
-	private void confirmPlacement() {
+	public void confirmPlacement() {
 		GLNodePlacement placement = activePlacement;
 		stopPlacementTimer();
 		activePlacement = null;
 		if (placement != null) placement.confirm();
 	}
 
-	private void cancelPlacement() {
+	public void cancelPlacement() {
 		GLNodePlacement placement = activePlacement;
 		stopPlacementTimer();
 		activePlacement = null;
@@ -1141,7 +1171,7 @@ public class GLNodeEditor extends GLContainer
 		activePlacement.moveTo(point[0], point[1]);
 	}
 
-	private float[] pointerGraphPosition() {
+	public float[] pointerGraphPosition() {
 		float[] bounds = getLastRenderedScreenBounds();
 		float screenX = bounds == null ? getWidth() * .5f : bounds[0] + bounds[2] * .5f;
 		float screenY = bounds == null ? getHeight() * .5f : bounds[1] + bounds[3] * .5f;
@@ -1258,6 +1288,7 @@ public class GLNodeEditor extends GLContainer
 	}
 
 	void beginNodeMove(GLNode source) {
+		insertionCandidate = null;
 		moveStartLocations.clear();
 		Collection<GLNode> moved = selectedNodes.contains(source)
 				? selectedNodes : List.of(source);
@@ -1275,12 +1306,66 @@ public class GLNodeEditor extends GLContainer
 			changed |= entry.getKey().setDragLocation(
 					start[0] + deltaX, start[1] + deltaY);
 		}
+		updateInsertionCandidate(source);
 		if (changed)
 			repaintInteractiveCurves();
 	}
 
+    private void updateInsertionCandidate(GLNode source) {
+        previewConnectionInsertion(moveStartLocations.size() == 1 ? source : null);
+    }
+
+    /** Preview for model-owned move/paste placements; null clears the preview. */
+    public void previewConnectionInsertion(GLNode source) {
+        GLNodeConnection previous = insertionCandidate;
+        insertionCandidate = null;
+        if (source != null && nodes.contains(source) && insertionHandler != null
+                && connections.stream().noneMatch(c -> c.getInput().getNode() == source || c.getOutput().getNode() == source)) {
+            var bounds = new java.awt.geom.Rectangle2D.Float(source.getX(), source.getY(), source.getWidth(), source.getHeight());
+            double best = Double.POSITIVE_INFINITY;
+            for (var connection : connections) {
+                double score = crossingDistance(connection, bounds);
+                if (score < best && insertionHandler.canInsert(source, connection)) {
+                    best = score;
+                    insertionCandidate = connection;
+                }
+            }
+        }
+        if (previous != insertionCandidate) repaintInteractiveCurves();
+    }
+
+    private double crossingDistance(GLNodeConnection connection, java.awt.geom.Rectangle2D bounds) {
+        float x0 = portX(connection.getOutput()), y0 = portY(connection.getOutput());
+        float x1 = portX(connection.getInput()), y1 = portY(connection.getInput());
+        float handle = Math.max(getMinimumConnectionHandleLength(), Math.abs(x1-x0)*getConnectionHandleFactor());
+        var curve = new java.awt.geom.CubicCurve2D.Float(x0,y0,x0+handle,y0,x1-handle,y1,x1,y1);
+        var path = curve.getPathIterator(null, .5 / Math.max(.25, zoom));
+        double[] point = new double[6];
+        double px=x0, py=y0, best=Double.POSITIVE_INFINITY;
+        while (!path.isDone()) {
+            int kind=path.currentSegment(point);
+            if (kind == java.awt.geom.PathIterator.SEG_LINETO && bounds.intersectsLine(px,py,point[0],point[1]))
+                best=Math.min(best,java.awt.geom.Line2D.ptSegDistSq(px,py,point[0],point[1],bounds.getCenterX(),bounds.getCenterY()));
+            px=point[0]; py=point[1]; path.next();
+        }
+        return best;
+    }
+
 	void endNodeMove(GLNode source) {
+		endNodeMove(source, true);
+	}
+
+	void endNodeMove(GLNode source, boolean released) {
 		if (moveStartLocations.containsKey(source)) {
+			GLNodeConnection candidate = released ? insertionCandidate : null;
+			insertionCandidate = null;
+			float[] start = moveStartLocations.get(source);
+			if (candidate != null && insertionHandler != null
+					&& insertionHandler.insert(source, candidate, start[0], start[1])) {
+				moveStartLocations.clear();
+				finishInteractiveCurves();
+				return;
+			}
 			Map<GLNode, float[]> before = copyLocations(moveStartLocations);
 			Map<GLNode, float[]> after = new LinkedHashMap<>();
 			for (GLNode node : moveStartLocations.keySet())
@@ -1759,8 +1844,7 @@ public class GLNodeEditor extends GLContainer
 	}
 
 	private void drawMutedBypasses(GLContext2D context, GLNode node) {
-		Color color = getGLTheme().values().getColor("node.mutedBypass",
-				new Color(224, 72, 72));
+		Color color = getGLTheme().values().getColor("node.mutedBypass");
 		Color border = new Color(Math.max(0, color.getRed() - 55),
 				Math.max(0, color.getGreen() - 35),
 				Math.max(0, color.getBlue() - 35), color.getAlpha());
@@ -1773,7 +1857,7 @@ public class GLNodeEditor extends GLContainer
 			if (input != null && output != null)
 				drawConnectionCurve(context, portX(input), portY(input),
 						portX(output), portY(output), width, color, color,
-						border, null);
+						border, null, input.isConnectionDashed() || output.isConnectionDashed());
 		}
 	}
 
@@ -1786,12 +1870,12 @@ public class GLNodeEditor extends GLContainer
 		Color border = switch (connection.getStatus()) {
 			case ERROR -> getErrorConnectionBorder();
 			case WARNING -> getWarningConnectionBorder();
-			case NORMAL -> connection == selectedConnection
+			case NORMAL -> connection == selectedConnection || connection == insertionCandidate
 					? getSelectedConnectionBorder() : getConnectionBorder();
 		};
 		drawConnectionCurve(context, portX(output), portY(output),
 				portX(input), portY(input), connection.getWidth(),
-				output.getColor(), input.getColor(), border, connection);
+				output.getColor(), input.getColor(), border, connection, connection.isDashed());
 	}
 
 	private void drawConnectionPreview(GLContext2D context) {
@@ -1806,7 +1890,7 @@ public class GLNodeEditor extends GLContainer
 			drawConnectionCurve(context, portX(fixedGesturePort),
 					portY(fixedGesturePort), endX, endY,
 					getConnectionWidth(), start, end,
-					getConnectionBorder(), null);
+					getConnectionBorder(), null, fixedGesturePort.isConnectionDashed());
 		} else {
 			Color end = fixedGesturePort.getColor();
 			Color start = candidatePort == null ? faded(end)
@@ -1818,28 +1902,25 @@ public class GLNodeEditor extends GLContainer
 			drawConnectionCurve(context, startX,
 					startY, portX(fixedGesturePort),
 					portY(fixedGesturePort), getConnectionWidth(), start, end,
-					getConnectionBorder(), null);
+					getConnectionBorder(), null, fixedGesturePort.isConnectionDashed());
 		}
 	}
 
 	private void drawConnectionCurve(GLContext2D context,
 			float x0, float y0, float x1, float y1, float width,
 			Color start, Color end, Color border,
-			GLNodeConnection mouseTarget) {
+			GLNodeConnection mouseTarget, boolean dashed) {
 		float handleFactor = getConnectionHandleFactor();
 		float handle = Math.max(getMinimumConnectionHandleLength(),
 				Math.abs(x1 - x0) * handleFactor);
-		context.setStroke(new GLStroke(width + 2 * getConnectionBorderWidth())
-				.withCap(GLStroke.Cap.ROUND)
-				.withJoin(GLStroke.Join.ROUND)
-				.withWidthSpace(GLStroke.WidthSpace.SCREEN));
+		context.setStroke(connectionStroke(width + 2 * getConnectionBorderWidth(), dashed));
 		if (handle == 0) {
 			float[] points = { x0, y0, x1, y1 };
 			if (mouseTarget == null)
 				context.drawPolyline(points, border, GLContext2D.NO_PICK_ID);
 			else
 				context.drawPolyline(points, border, mouseTarget);
-			context.setStroke(connectionStroke(width));
+			context.setStroke(connectionStroke(width, dashed));
 			float firstThirdX = x0 + (x1 - x0) / 3;
 			float firstThirdY = y0 + (y1 - y0) / 3;
 			float secondThirdX = x0 + (x1 - x0) * 2 / 3;
@@ -1859,7 +1940,7 @@ public class GLNodeEditor extends GLContainer
 						GLContext2D.NO_PICK_ID);
 			else
 				context.drawPolyline(points, border, mouseTarget);
-			context.setStroke(connectionStroke(width));
+			context.setStroke(connectionStroke(width, dashed));
 			if (mouseTarget == null) {
 				context.drawCubicBezier(x0, y0, x0 + handle, y0,
 						x1 - handle, y1, x1, y1, start, end,
@@ -1920,13 +2001,16 @@ public class GLNodeEditor extends GLContainer
 		}
 	}
 
-	private static GLStroke connectionStroke(float width) {
-		return new GLStroke(width).withCap(GLStroke.Cap.ROUND)
+	private GLStroke connectionStroke(float width, boolean dashed) {
+		GLStroke stroke = new GLStroke(width).withCap(dashed ? GLStroke.Cap.BUTT : GLStroke.Cap.ROUND)
 				.withJoin(GLStroke.Join.ROUND)
 				.withWidthSpace(GLStroke.WidthSpace.SCREEN);
-	}
+        return dashed ? stroke.withDash(
+                Math.max(1, getGLTheme().values().getFloat("nodeEditor.connectionDashLength", 9)),
+                Math.max(1, getGLTheme().values().getFloat("nodeEditor.connectionDashGap", 6))) : stroke;
+    }
 
-	private static float portX(GLNodePort port) {
+    private static float portX(GLNodePort port) {
 		return port.getNode().getX() + port.getCenterXInNode();
 	}
 

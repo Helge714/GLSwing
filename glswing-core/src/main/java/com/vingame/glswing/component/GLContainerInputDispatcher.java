@@ -528,9 +528,11 @@ final class GLContainerInputDispatcher {
 			host.addKeyListener(new KeyAdapter() {
 			@Override
 			public void keyPressed(KeyEvent event) {
+                if(host.focusedGLTarget()!=null && host.focusedGLTarget().isKeyboardInputExclusive()){dispatchKey(event,KeyDispatch.PRESSED);event.consume();return;}
 				GLInputMap inputMap = host.focusedGLTarget() instanceof GLContainer container
 						? container.getGLInputMap() : host.getGLInputMap();
-				if (GLMenuMnemonics.handleKeyPressed(host, event, inputMap)) {
+				if ((host.focusedGLTarget()==null || !host.focusedGLTarget().blocksGlobalShortcuts())
+                        && GLMenuMnemonics.handleKeyPressed(host, event, inputMap)) {
 					host.repaintColorOnly();
 					return;
 				}
@@ -543,7 +545,8 @@ final class GLContainerInputDispatcher {
 						instanceof GLContainer container
 								? container.getGLHistoryManager()
 								: host.getGLHistoryManager();
-				if (history != null && history.handleKeyPressed(event, inputMap)) {
+				if (history != null && (host.focusedGLTarget()==null || !host.focusedGLTarget().blocksGlobalShortcuts())
+                        && history.handleKeyPressed(event, inputMap)) {
 					host.repaintColorOnly();
 					return;
 				}
@@ -595,7 +598,13 @@ final class GLContainerInputDispatcher {
 
 	private static void dispatchKeyPressed(GLKeyTarget target,
 			GLKeyEvent event) {
-		if (target instanceof GLContainer focused) {
+        boolean exclusive = target.blocksGlobalShortcuts();
+        if (exclusive) {
+            target.keyPressed(event);
+            if (event.isConsumed()) return;
+            if (event.getKeyCode() != KeyEvent.VK_ESCAPE) { event.consume(); return; }
+        }
+		if (!exclusive && target instanceof GLContainer focused) {
 			for (GLParent parent = focused.getGLParent();
 					parent instanceof GLContainer ancestor;
 					parent = ancestor.getGLParent())
@@ -605,7 +614,7 @@ final class GLContainerInputDispatcher {
 					if (event.isConsumed()) return;
 				}
 		}
-		target.keyPressed(event);
+		if (!exclusive) target.keyPressed(event);
 		if (event.isConsumed() || !(target instanceof GLContainer container))
 			return;
 		for (GLParent parent = container.getGLParent();

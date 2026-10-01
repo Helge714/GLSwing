@@ -281,15 +281,19 @@ final class GLApplicationWindow {
 				throws Exception;
 	}
 
+	static Color resolveClearColor(Color override, GLTheme theme) {
+        return override!=null?override:theme.values().getColor("application.clearColor");
+    }
+
 	private static final class ApplicationPanel extends GLSwingPanel {
 		private static final long serialVersionUID = 1L;
 		private final Color clearColor;
 		ApplicationPanel(Color clearColor) {
 			this.clearColor = clearColor;
-			setBackground(clearColor);
+			setBackground(clearColor != null ? clearColor : com.vingame.glswing.ui.GLTheme.DEFAULT.values().getColor("application.clearColor"));
 		}
 		@Override protected void record(GLContext2D context) {
-			context.clear(clearColor);
+			context.clear(resolveClearColor(clearColor,getGLTheme()));
 		}
 	}
 
@@ -300,10 +304,10 @@ final class GLApplicationWindow {
 				int swapInterval) {
 			super(antialiasingSamples, swapInterval);
 			this.clearColor = clearColor;
-			setBackground(clearColor);
+			setBackground(clearColor != null ? clearColor : com.vingame.glswing.ui.GLTheme.DEFAULT.values().getColor("application.clearColor"));
 		}
 		@Override protected void renderContainer(GLContext2D context) {
-			context.clear(clearColor);
+			context.clear(resolveClearColor(clearColor,getGLTheme()));
 		}
 	}
 }

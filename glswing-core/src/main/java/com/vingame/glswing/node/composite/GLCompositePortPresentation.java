@@ -20,6 +20,11 @@ public record GLCompositePortPresentation(String inputEditorId,
 		editorOptions = Map.copyOf(options);
 	}
 
+    /** Application-owned execution ports remain connectable externally, but have no editable inner boundary. */
+    public boolean applicationManaged() {
+        return GLNodeValue.of(true).equals(editorOptions.get("applicationManaged"));
+    }
+
 	public static GLCompositePortPresentation socketOnly() {
 		return new GLCompositePortPresentation(GLNodeInputEditorRegistry.NONE,
 				true, Map.of());

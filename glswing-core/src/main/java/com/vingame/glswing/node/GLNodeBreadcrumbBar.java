@@ -51,8 +51,7 @@ public final class GLNodeBreadcrumbBar extends GLControl {
 		float maximumSegment = available / segments.size();
 		float x = 0;
 		Color text = getGLTheme().labelStyle().textColor();
-		Color hover = getGLTheme().values().getColor("palette.hover",
-				new Color(255, 255, 255, 24));
+		Color hover = getGLTheme().values().getColor("palette.hover");
 		for (int index = 0; index < segments.size(); index++) {
 			String shown = GLTextFitter.ellipsize(font, segments.get(index),
 					Math.max(0, maximumSegment - HORIZONTAL_PADDING * 2));
@@ -63,7 +62,7 @@ public final class GLNodeBreadcrumbBar extends GLControl {
 				context.fillUIRoundRect(x, 2, width, Math.max(0, getHeight() - 4),
 						4, hover);
 			context.drawUIText(font, shown, x + HORIZONTAL_PADDING, baseline,
-					hovered == index ? Color.WHITE : text);
+					hovered == index ? getGLTheme().values().getColor("nodeBreadcrumb.hoverText") : text);
 			x += width;
 			if (index + 1 < segments.size()) {
 				context.drawUIText(font, "/", x + 4, baseline, text);

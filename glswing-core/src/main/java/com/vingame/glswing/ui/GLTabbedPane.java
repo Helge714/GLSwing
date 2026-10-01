@@ -34,9 +34,19 @@ public final class GLTabbedPane extends GLContainer {
 	private final Host tabHost = new Host();
 	private GLContainer contentHeader;
 	private GLContainer contentFooter;
-	private final GLScrollBar tabScrollBar =
+	private GLScrollBar tabScrollBar =
 			new GLScrollBar(GLScrollBar.Orientation.HORIZONTAL);
-	private GLTabbedPaneStyle localStyle;
+	public enum Placement { TOP, LEFT }
+    private Placement placement=Placement.TOP;
+    public Placement getTabPlacement(){return placement;}
+    public void setTabPlacement(Placement value){
+        java.util.Objects.requireNonNull(value);if(placement==value)return;placement=value;
+        removeGL(tabScrollBar);tabScrollBar=new GLScrollBar(value==Placement.LEFT?GLScrollBar.Orientation.VERTICAL:GLScrollBar.Orientation.HORIZONTAL);
+        addGL(tabScrollBar);tabScrollBar.addScrollListener((bar,before,after)->layoutTabs());styleChanged();ensureSelectedTabVisible();
+    }
+    private float verticalStripWidth(){return getGLStyle().tabHeight();}
+
+    private GLTabbedPaneStyle localStyle;
 	private int selectedIndex = -1;
 	private boolean layingOut;
 	private float tabStripWidth;
@@ -396,7 +406,7 @@ public final class GLTabbedPane extends GLContainer {
 					style.background(), style.border(), GLStroke.WidthSpace.SCREEN);
 		else context.fillUIRoundRect(0, 0, width, height, radius, style.background());
 		context.fillUIRoundRect(border, border,
-				Math.max(0, width - border * 2), style.tabHeight(),
+                placement==Placement.LEFT?Math.min(verticalStripWidth(),Math.max(0,width-border*2)):Math.max(0, width - border * 2), placement==Placement.LEFT?Math.max(0,height-border*2):style.tabHeight(),
 				new GLCornerRadii(layoutCornerRadius(style.cornerRadius()), layoutCornerRadius(style.cornerRadius()), 0, 0),
 				style.tabBarBackground());
 	}
@@ -443,7 +453,18 @@ public final class GLTabbedPane extends GLContainer {
 		try {
 			GLTabbedPaneStyle style = getGLStyle();
 			float border = layoutBorderWidth(style.borderWidth());
-			tabStripWidth = Math.max(0, getWidth() - border * 2);
+			if(placement==Placement.LEFT){
+                tabStripWidth=Math.max(0,getHeight()-border*2);
+                float[] lengths=tabWidths(style,tabStripWidth);tabsWidth=totalWidth(lengths,style.tabGap());
+                boolean scrollable=tabsWidth>tabStripWidth;float thickness=scrollable?tabScrollBar.getGLStyle().thickness():0;
+                float strip=Math.min(verticalStripWidth(),Math.max(0,getWidth()-border*2-thickness));
+                tabScrollBar.setVisible(scrollable);
+                if(scrollable){tabScrollBar.setBounds(border+strip,border,thickness,tabStripWidth);tabScrollBar.setValues(tabScrollBar.getValue(),tabStripWidth,tabsWidth);}else tabScrollBar.setValue(0);
+                float y=border-tabScrollBar.getValue();for(int i=0;i<tabs.size();i++){tabs.get(i).button.setBounds(border,y,strip,lengths[i]);y+=lengths[i]+style.tabGap();}
+                tabHost.setBounds(0,0,border+strip,getHeight());
+                contentHost.setBounds(border+strip+thickness,border,Math.max(0,getWidth()-border*2-strip-thickness),Math.max(0,getHeight()-border*2));
+            }else{
+            tabStripWidth = Math.max(0, getWidth() - border * 2);
 			float[] widths = tabWidths(style, tabStripWidth);
 			tabsWidth = totalWidth(widths, style.tabGap());
 			boolean scrollable = tabsWidth > tabStripWidth + 0.01f;
@@ -470,7 +491,8 @@ public final class GLTabbedPane extends GLContainer {
 			float contentHeight = Math.max(0, getHeight() - contentY - border);
 			contentHost.setBounds(border, contentY,
 					Math.max(0, getWidth() - border * 2), contentHeight);
-			GLInsets padding = style.contentPadding();
+			}
+            GLInsets padding = style.contentPadding();
 			float headerHeight = contentHeader != null && contentHeader.isVisible()
 					? contentHeader.getPreferredGLSize().height() : 0;
 			float footerHeight = contentFooter != null && contentFooter.isVisible()
@@ -491,8 +513,7 @@ public final class GLTabbedPane extends GLContainer {
 						Math.max(0, contentHost.getHeight() - padding.vertical()
 								- headerHeight - footerHeight));
 			float contentRadius = Math.max(0, layoutCornerRadius(style.cornerRadius()) - layoutBorderWidth(style.borderWidth()));
-			GLCornerRadii contentRadii = new GLCornerRadii(0, 0,
-					contentRadius, contentRadius);
+			GLCornerRadii contentRadii = placement==Placement.LEFT?new GLCornerRadii(0,contentRadius,contentRadius,0):new GLCornerRadii(0, 0, contentRadius, contentRadius);
 			for (Tab tab : tabs) {
 				if (tab.content instanceof GLTextArea editor)
 					editor.setContainerShape(contentRadii, false);
@@ -512,7 +533,7 @@ public final class GLTabbedPane extends GLContainer {
 		for (int index = 0; index < tabs.size(); index++) {
 			float measured = style.font().measurementFont()
 					.measureText(tabs.get(index).title)
-					+ style.tabHorizontalPadding() * 2;
+					+ style.tabHorizontalPadding() * 2 + (tabsClosable ? 20 : 0);
 			widths[index] = clamp(measured, style.minimumTabWidth(),
 					style.maximumTabWidth());
 			sum += widths[index];
@@ -552,8 +573,8 @@ public final class GLTabbedPane extends GLContainer {
 		if (selectedIndex < 0 || !tabScrollBar.isVisible())
 			return;
 		TabButton selected = tabs.get(selectedIndex).button;
-		float start = selected.getX() + tabScrollBar.getValue();
-		float end = start + selected.getWidth();
+		float start = (placement==Placement.LEFT?selected.getY():selected.getX()) + tabScrollBar.getValue();
+        float end = start + (placement==Placement.LEFT?selected.getHeight():selected.getWidth());
 		float offset = tabScrollBar.getValue();
 		if (start < offset)
 			tabScrollBar.setValue(start);
@@ -574,14 +595,14 @@ public final class GLTabbedPane extends GLContainer {
 			height = Math.max(height, preferred.height());
 		}
 		setIntrinsicPreferredGLSize(new GLSize(
-				Math.max(240, width + style.contentPadding().horizontal()
+				Math.max(240, width + (placement==Placement.LEFT?verticalStripWidth():0) + style.contentPadding().horizontal()
 						+ layoutBorderWidth(style.borderWidth()) * 2),
 				Math.max(160, height + style.contentPadding().vertical()
 						+ (contentHeader != null && contentHeader.isVisible()
 								? contentHeader.getPreferredGLSize().height() : 0)
 						+ (contentFooter != null && contentFooter.isVisible()
 								? contentFooter.getPreferredGLSize().height() : 0)
-						+ style.tabHeight() + layoutBorderWidth(style.borderWidth()) * 2)));
+						+ (placement==Placement.TOP?style.tabHeight():0) + layoutBorderWidth(style.borderWidth()) * 2)));
 	}
 
 	private int nextEnabled(int disabledIndex) {
@@ -689,10 +710,15 @@ public final class GLTabbedPane extends GLContainer {
 			// Every tab shares one connected tab-strip silhouette. Keeping the
 			// lower corners square also prevents inactive and disabled tabs from
 			// looking like unrelated standalone buttons.
-			GLCornerRadii radii = new GLCornerRadii(layoutCornerRadius(style.cornerRadius()),
-					layoutCornerRadius(style.cornerRadius()), 0, 0);
+			GLCornerRadii radii = placement==Placement.LEFT?new GLCornerRadii(layoutCornerRadius(style.cornerRadius()),0,0,layoutCornerRadius(style.cornerRadius())):new GLCornerRadii(layoutCornerRadius(style.cornerRadius()),layoutCornerRadius(style.cornerRadius()),0,0);
 			context.fillUIRoundRect(0, 0, width, height, radii, background);
-			context.addUIHitArea(0, 0, width, height);
+
+            var originalTransform=context.getTransform();
+            try {
+                if(placement==Placement.LEFT){
+                    context.translate(0,height);context.rotate(-(float)Math.PI/2);
+                    float extent=width;width=height;height=extent;
+                }
 			GLFont font = getGLFont(style.font());
 			String title = GLTextFitter.ellipsize(font, tab.title,
 					Math.max(0, width - style.tabHorizontalPadding() * 2
@@ -710,13 +736,17 @@ public final class GLTabbedPane extends GLContainer {
 				float centerY = height * 0.5f;
 				if (closeHovered)
 					context.fillUIRoundRect(centerX - 8, centerY - 8, 16, 16, 4,
-							new Color(255, 255, 255, 34));
+							getGLTheme().values().getColor("tabbedPane.closeHover"));
 				Color closeColor = isEnabled() ? style.text() : style.textDisabled();
 				context.drawUILine(centerX - 3.5f, centerY - 3.5f,
 						centerX + 3.5f, centerY + 3.5f, closeColor);
 				context.drawUILine(centerX + 3.5f, centerY - 3.5f,
 						centerX - 3.5f, centerY + 3.5f, closeColor);
 			}
+            } finally {context.setTransform(originalTransform);}
+            // The label is rotated, but pointer capture uses the tab's unrotated
+            // coordinates. Submit the complete hit region last to cover glyph picks.
+            context.addUIHitArea(0,0,getWidth(),getHeight());
 		}
 
 		@Override
@@ -731,7 +761,7 @@ public final class GLTabbedPane extends GLContainer {
 				event.consume();
 			} else if (event.getButton() == MouseEvent.BUTTON1) {
 				if (tabsClosable && event.hasLocalPosition()
-						&& event.getLocalX() >= getWidth() - 24) closeTab();
+						&& (placement==Placement.LEFT ? event.getLocalY() <= 24 : event.getLocalX() >= getWidth() - 24)) closeTab();
 				else setSelectedIndex(tabs.indexOf(tab));
 			}
 		}
@@ -757,7 +787,7 @@ public final class GLTabbedPane extends GLContainer {
 		}
 		@Override protected void controlMouseMoved(GLMouseEvent event) {
 			boolean value = tabsClosable && event.hasLocalPosition()
-					&& event.getLocalX() >= getWidth() - 24;
+					&& (placement==Placement.LEFT ? event.getLocalY() <= 24 : event.getLocalX() >= getWidth() - 24);
 			if (closeHovered != value) { closeHovered = value; invalidateRecording(); }
 		}
 		@Override protected void controlMouseExited(GLMouseEvent event) {
@@ -767,7 +797,7 @@ public final class GLTabbedPane extends GLContainer {
 			String explicit = super.toolTipTextAt(event);
 			if (explicit != null) return explicit;
 			GLTabbedPaneStyle style = getGLStyle();
-			float available = getWidth() - style.tabHorizontalPadding() * 2
+			float available = (placement==Placement.LEFT?getHeight():getWidth()) - style.tabHorizontalPadding() * 2
 					- (tabsClosable ? 20 : 0);
 			return GLTextFitter.overflowToolTip(getGLFont(style.font()), tab.title,
 					Math.max(0, available));

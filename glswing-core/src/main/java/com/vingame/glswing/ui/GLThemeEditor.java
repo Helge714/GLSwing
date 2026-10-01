@@ -120,14 +120,16 @@ public final class GLThemeEditor {
 		if (reference == null) return fallback;
 		return switch (reference.toLowerCase()) {
 		case "default" -> GLThemes.DEFAULT;
-		case "dark" -> GLThemes.DARK;
+		case "blue" -> GLThemes.BLUE;
+		case "darkblue" -> GLThemes.DARK_BLUE;
 		case "light" -> GLThemes.LIGHT;
 		default -> GLThemeLoader.load(source.resolveSibling(reference));
 		};
 	}
 
 	private static String presetReference(GLTheme theme) {
-		if (theme == GLThemes.DARK) return "dark";
+		if (theme == GLThemes.BLUE) return "blue";
+		if (theme == GLThemes.DARK_BLUE) return "darkblue";
 		if (theme == GLThemes.LIGHT) return "light";
 		if (theme == GLTheme.DEFAULT || theme == GLThemes.DEFAULT) return "default";
 		return null;

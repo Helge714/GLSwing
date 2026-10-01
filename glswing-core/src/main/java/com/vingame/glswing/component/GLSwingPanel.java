@@ -1150,6 +1150,7 @@ public abstract class GLSwingPanel extends GLJPanel
 		addKeyListener(new KeyAdapter() {
 			@Override
 			public void keyPressed(KeyEvent event) {
+                if(focusedTarget!=null && focusedTarget.isKeyboardInputExclusive()){dispatchKey(event,KeyDispatch.PRESSED);event.consume();return;}
 				GLInputMap resolvedInputMap = focusedTarget instanceof GLContainer container
 						? container.getGLInputMap() : inputMap;
 				if (GLMenuMnemonics.handleKeyPressed(GLSwingPanel.this, event,
@@ -1218,6 +1219,7 @@ public abstract class GLSwingPanel extends GLJPanel
 
 	private static void dispatchKeyPressed(GLKeyTarget target,
 			com.vingame.glswing.input.GLKeyEvent event) {
+        if(target.isKeyboardInputExclusive()){target.keyPressed(event);event.consume();return;}
 		if (target instanceof GLContainer focused) {
 			for (GLParent parent = focused.getGLParent();
 					parent instanceof GLContainer ancestor;

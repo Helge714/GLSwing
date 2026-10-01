@@ -5,6 +5,7 @@ public final class GLUiKeys {
 	public static final String SLIDER_RESET = "glswing.slider.reset";
 	public static final String NUMBER_INCREMENT = "glswing.number.increment";
 	public static final String NUMBER_DECREMENT = "glswing.number.decrement";
+	public static final String NUMBER_RESET = "glswing.number.reset";
 	public static final String NUMBER_EDIT = "glswing.number.edit";
 	public static final String TEXT_MENU_ALIGNMENT = "glswing.text.menu.alignment";
 	public static final String TEXT_MENU_FORMAT = "glswing.text.menu.format";

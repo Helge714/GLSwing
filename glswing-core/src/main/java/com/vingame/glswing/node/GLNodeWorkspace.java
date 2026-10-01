@@ -70,7 +70,6 @@ public final class GLNodeWorkspace extends GLContainer
 		}
 	}
 
-	private static final Color SURFACE = new Color(28, 31, 35);
 	private static final float HEADER_HEIGHT = 40;
 	private static final String BOUNDARY_INPUT_VIEW = "composite.boundary.input";
 	private static final String BOUNDARY_OUTPUT_VIEW = "composite.boundary.output";
@@ -93,6 +92,23 @@ public final class GLNodeWorkspace extends GLContainer
 	private final GLScrollPane propertyScroll;
 	private GLNodePropertyInspector propertyInspector;
 	private final GLNodePalette nodePalette;
+    private java.util.function.Predicate<GLNodeCatalogEntry> nodeCreationFilter=entry->true;
+    @FunctionalInterface public interface NodeCreationHandler {
+        /** Return true when an application-specific entry was handled. */
+        boolean create(GLNodeCatalogEntry entry,float x,float y);
+    }
+    private NodeCreationHandler nodeCreationHandler=(entry,x,y)->false;
+    public void setNodeCreationFilter(java.util.function.Predicate<GLNodeCatalogEntry> filter){
+        nodeCreationFilter=filter==null?entry->true:filter;
+        nodePalette.setAllowedPredicate(this::isNodeCreationAllowed);
+    }
+    public void setNodeCreationHandler(NodeCreationHandler handler){nodeCreationHandler=handler==null?(entry,x,y)->false:handler;}
+    public boolean isNodeCreationAllowed(GLNodeCatalogEntry entry){
+        return entry!=null&&!entry.type().id().equals(currentCompositeType())&&nodeCreationFilter.test(entry);
+    }
+    /** Creates a catalog entry at graph coordinates, using the same policy as the popup. */
+    public void createNode(GLNodeCatalogEntry entry,float x,float y){insert(entry,x,y);}
+
 	private GLPopupMenu creationMenu;
 	private final GLHistoryManagerListener historyListener = manager ->
 			refreshRegisteredInterface();
@@ -103,6 +119,27 @@ public final class GLNodeWorkspace extends GLContainer
 	private GLGraphCyclePolicy cyclePolicy;
 	private Supplier<CompositeExtraction> extractionSupplier;
 	private float inspectorWidth = 300;
+    private GLScrollPane groupEditorsScroll;
+    private final GLContainer generalTab=new SidebarHost(),ioTab=new SidebarHost();
+    private static final class SidebarHost extends GLContainer{
+        @Override protected void record(com.vingame.glswing.rendering.GLContext2D c){}
+        @Override protected void resized(float w,float h){for(var child:getGLChildren())child.setBounds(0,0,w,h);}
+    }
+    public GLTabbedPane inspectorTabs(){return inspectorTabs;}
+    /** A single application sidebar; editor definitions stay application-owned. */
+    public void setGroupEditors(GLContainer content){
+        if(inspectorTabs==null)throw new IllegalStateException("Property schemas required");
+        while(inspectorTabs.getTabCount()>1)inspectorTabs.removeTabAt(inspectorTabs.getTabCount()-1);
+        groupEditorsScroll=new GLScrollPane(content);groupEditorsScroll.setContentTracksViewportWidth(true);
+        groupEditorsScroll.setHorizontalScrollBarPolicy(GLScrollPane.ScrollBarPolicy.NEVER);
+        interfaceEditor.setSectionTabsVisible(false);inspectorTabs.setTabPlacement(GLTabbedPane.Placement.LEFT);
+        inspectorTabs.addSelectionListener((pane,before,after)->{
+            if(groupEditorsScroll==null||after<2)return;
+            if(interfaceScroll.getGLParent() instanceof GLContainer parent)parent.removeGL(interfaceScroll);
+            var host=after==2?generalTab:ioTab;host.addGL(interfaceScroll);interfaceScroll.setBounds(0,0,host.getWidth(),host.getHeight());interfaceEditor.selectSection(after==2?0:1);
+        });
+        updateHeader();
+    }
 	private boolean inspectorVisible = true;
 	private boolean synchronizingAsset;
 	private boolean rebuildingBoundaries;
@@ -170,7 +207,7 @@ public final class GLNodeWorkspace extends GLContainer
 					GLScrollPane.ScrollBarPolicy.AS_NEEDED);
 			propertyScroll.setContentTracksViewportWidth(true);
 			inspectorTabs.addTab("Properties", propertyScroll);
-			inspectorTabs.addTab("Interface", interfaceScroll);
+			inspectorTabs.setClosedTabHistoryEnabled(false);
 		}
 		interfaceEditor.setDependentGraphsSupplier(() -> {
 			List<GLNodeGraph> result = new ArrayList<>(documents.stream()
@@ -212,8 +249,16 @@ public final class GLNodeWorkspace extends GLContainer
 		updateHeader();
 	}
 
+    /** Application-owned composite rendering; model editing and navigation remain in the workspace. */
+    public void setAdditionalGraphDiagnostics(java.util.List<com.vingame.glswing.node.model.GLGraphDiagnostic> diagnostics,java.util.Set<com.vingame.glswing.node.model.GLNodeConnectionId> inactive){if(binding!=null)binding.setAdditionalDiagnostics(diagnostics,inactive);}
+    /** Set application diagnostics for the currently displayed graph. */
+    public void setAdditionalGraphDiagnostics(java.util.List<com.vingame.glswing.node.model.GLGraphDiagnostic> diagnostics){if(binding!=null)binding.setAdditionalDiagnostics(diagnostics);}
+    public void setCompositeViewFactory(GLNodeViewFactory factory){viewFactory.setApplicationFactory(factory);if(binding!=null)binding.refresh();}
 	public GLNodeEditor editor() { return editor; }
 	public GLCompositeInterfaceEditor interfaceEditor() { return interfaceEditor; }
+    /** Include an already registered application-created composite in document snapshots. */
+    public void includeEmbeddedAsset(String id){ensureOpen();if(composites.findAsset(id).isEmpty())throw new IllegalArgumentException("Unknown embedded asset: "+id);embeddedAssetIds.add(id);}
+
 	public GLNodePropertyInspector propertyInspector() { return propertyInspector; }
 	public GLNodeGraph currentGraph() {
 		Document current = documents.peekLast();
@@ -223,6 +268,8 @@ public final class GLNodeWorkspace extends GLContainer
 		Document current = documents.peekLast();
 		return current == null ? null : current.assetId;
 	}
+    /** Asset path from the outermost group to the current group; root graphs have no asset ID. */
+    public List<String> openAssetIds(){return documents.stream().map(d->d.assetId).filter(Objects::nonNull).toList();}
 	public boolean canNavigateBack() { return documents.size() > 1; }
 	public boolean canNavigateForward() { return !forwardDocuments.isEmpty(); }
 	public GLNodePortOrder getCompositePortOrder() {
@@ -324,6 +371,7 @@ public final class GLNodeWorkspace extends GLContainer
 		ensureOpen();
 		if (sourceDocument == null)
 			throw new IllegalStateException("The workspace was not opened with a document");
+		saveActiveAsset();
 		Document rootDocument = documents.peekFirst();
 		if (rootDocument == null) throw new IllegalStateException("No graph is open");
 		if (documents.peekLast() == rootDocument && binding != null)
@@ -404,7 +452,7 @@ public final class GLNodeWorkspace extends GLContainer
 
 	@Override protected void record(GLContext2D context) {
 		context.fillUIRoundRect(0, 0, getWidth(), getHeight(), 0,
-				getGLTheme().values().getColor("palette.surface", SURFACE));
+				getGLTheme().values().getColor("nodeWorkspace.background"));
 	}
 
 	@Override public boolean capturesKeyPress(GLKeyEvent event) {
@@ -412,6 +460,9 @@ public final class GLNodeWorkspace extends GLContainer
 	}
 
 	@Override public void keyPressed(GLKeyEvent event) {
+        if (!event.isConsumed() && getGLInputMap().matches(GLInputActions.NODE_ARRANGE, event)) {
+            editor.keyPressed(event); return;
+        }
 		if (capturesKeyPress(event)) {
 			navigateBack(); event.consume(); return;
 		}
@@ -438,7 +489,11 @@ public final class GLNodeWorkspace extends GLContainer
 			propertyInspector = new GLNodePropertyInspector(binding, propertySchemas);
 			propertyScroll.setContent(propertyInspector);
 		}
-		editing = new GLNodeGraphEditingSession(binding, history);
+		editing = new GLNodeGraphEditingSession(binding, history,
+				state -> {
+					document.viewState = new GLNodeEditorViewState(state.nodes(), captureActiveViewState().auxiliaryNodes());
+					persistDocumentAsset(document);
+				});
 		if (clipboard != null) editing.setClipboard(clipboard);
 		if (!document.selection.isEmpty()) editor.setSelectedNodes(document.selection
 				.stream().map(binding::findNodeView)
@@ -451,7 +506,8 @@ public final class GLNodeWorkspace extends GLContainer
 		configureEditingActions();
 		refreshRegisteredInterface();
 		updateHeader();
-		editor.requestGLFocus(editor);
+		refreshCompositeEditor();
+        if(compositeEditor==null)editor.requestGLFocus(editor);
 	}
 
 	private void closeActiveDocument() {
@@ -484,6 +540,8 @@ public final class GLNodeWorkspace extends GLContainer
 				return hasModelSelection() && extractionSupplier != null;
 			}
 			@Override public boolean canDelete() { return hasModelSelection(); }
+			@Override public boolean canExclude() { return editing.canExcludeSelection(); }
+			@Override public void exclude() { editing.excludeSelection(); } @Override public void arrangeAll() { GLNodeWorkspace.this.arrangeAll(); }
 			@Override public void copy() {
 				clipboard = editing.copySelection();
 				if (clipboard != null) editing.setClipboard(clipboard);
@@ -495,7 +553,10 @@ public final class GLNodeWorkspace extends GLContainer
 			@Override public void paste(float x, float y) {
 				editing.setClipboard(clipboard); editing.paste(x, y);
 			}
-			@Override public void duplicate() { editing.duplicateSelection(28, 28); }
+			@Override public void duplicate() {
+				float[] point=editor.pointerGraphPosition();
+				editor.beginPlacement(editing.beginDuplicate(point[0],point[1]));
+			}
 			@Override public GLNodePlacement beginPaste(float x, float y) {
 				editing.setClipboard(clipboard); return editing.beginPaste(x, y);
 			}
@@ -532,19 +593,39 @@ public final class GLNodeWorkspace extends GLContainer
 				showCreationMenu(x, y, screenX, screenY));
 	}
 
-	private void showCreationMenu(float x, float y, float screenX, float screenY) {
+	/** Arrange the current graph, including boundary projections, as one view-only undo step. */
+    public void arrangeAll() {
+        if(binding==null||editor.getNodes().isEmpty())return;
+        var document=documents.peekLast();var before=captureActiveViewState();
+        GLNodeAutoLayout.arrange(editor);var after=captureActiveViewState();
+        if(before.equals(after))return;
+        document.viewState=after;persistDocumentAsset(document);
+        if(history!=null)history.record("Arrange all nodes",()->restoreArrangement(document,before),()->restoreArrangement(document,after));
+    }
+    private void restoreArrangement(Document document,GLNodeEditorViewState state) {
+        document.viewState=state;
+        if(documents.peekLast()==document&&binding!=null){
+            binding.applyViewState(state);
+            for(var n:editor.getNodes())if(n instanceof BoundaryNode boundary){
+                var b=state.auxiliaryNodes().get(boundary.direction==GLPortDirection.INPUT?BOUNDARY_INPUT_VIEW:BOUNDARY_OUTPUT_VIEW);
+                if(b!=null)n.setBounds(b.x(),b.y(),b.width(),b.height());
+            }
+        }
+        persistDocumentAsset(document);
+    }
+    private void showCreationMenu(float x, float y, float screenX, float screenY) {
 		GLParent host = rootParent();
 		if (host == null) return;
-		String excludedType = currentCompositeType();
 		if (creationMenu != null && creationMenu.isShowing()) creationMenu.close();
 		creationMenu = nodePalette.showPopup(host, screenX, screenY,
-				entry -> !entry.type().id().equals(excludedType), null,
+				this::isNodeCreationAllowed, null,
 				entry -> insert(entry, x, y));
 	}
 
 	private void insert(GLNodeCatalogEntry entry, float x, float y) {
-		if (binding == null || entry == null || entry.type().id().equals(currentCompositeType()))
+		if (binding == null || !isNodeCreationAllowed(entry))
 			return;
+        if(nodeCreationHandler.create(entry,x,y))return;
 		binding.addNode(entry.type().id(), entry.defaultProperties(), x, y);
 		catalog.markUsed(entry.type().id());
 	}
@@ -555,6 +636,9 @@ public final class GLNodeWorkspace extends GLContainer
 		GLCompositeNodeDescriptor descriptor = current == null || current.assetId == null
 				? null : composites.findAsset(current.assetId)
 						.map(GLNodeGraphAsset::compositeDescriptor).orElse(null);
+        binding.setSuppliedInputs(descriptor==null?java.util.Set.of():descriptor.portMappings().stream()
+            .filter(p->p.publicPort().direction()==GLPortDirection.INPUT)
+            .flatMap(p->p.internalEndpoints().stream()).collect(java.util.stream.Collectors.toSet()));
 		boolean descriptorChanged = !Objects.equals(descriptor, displayedDescriptor);
 		interfaceEditor.setAssetId(descriptor == null ? null : descriptor.assetId());
 		interfaceEditor.setCompositeName(descriptor == null ? ""
@@ -645,8 +729,7 @@ public final class GLNodeWorkspace extends GLContainer
 				? null : composites.findComposite(currentCompositeType()).orElse(null);
 		if (descriptor == null) return;
 		List<GLCompositePortMapping> replacements = descriptor.portMappings().stream()
-				.map(mapping -> new GLCompositePortMapping(mapping.publicPort(),
-						visibleBoundaryEndpoint(mapping), mapping.presentation())).toList();
+				.map(mapping -> mapping.withEndpoints(visibleBoundaryEndpoints(mapping))).toList();
 		if (replacements.equals(descriptor.portMappings())) return;
 		try {
 			GLCompositeInterfaceTransactions.replacePorts(composites, types,
@@ -659,7 +742,8 @@ public final class GLNodeWorkspace extends GLContainer
 		}
 	}
 
-	private GLNodeEndpoint visibleBoundaryEndpoint(GLCompositePortMapping mapping) {
+	private List<GLNodeEndpoint> visibleBoundaryEndpoints(GLCompositePortMapping mapping) {
+        List<GLNodeEndpoint> result=new ArrayList<>();
 		for (GLNodeConnection connection : editor.getConnections()) {
 			GLNodePort boundaryPort;
 			GLNodePort internalPort;
@@ -672,9 +756,9 @@ public final class GLNodeWorkspace extends GLContainer
 			} else continue;
 			if (!boundaryPort.getId().equals(mapping.publicPort().id())) continue;
 			GLNodeId node = binding.findNodeId(internalPort.getNode()).orElse(null);
-			if (node != null) return new GLNodeEndpoint(node, internalPort.getId());
+			if (node != null) result.add(new GLNodeEndpoint(node, internalPort.getId()));
 		}
-		return null;
+		return result.stream().distinct().toList();
 	}
 
 	private void addBoundaryNode(GLCompositeNodeDescriptor descriptor,
@@ -682,24 +766,25 @@ public final class GLNodeWorkspace extends GLContainer
 		BoundaryNode node = new BoundaryNode(direction);
 		List<GLNodePort[]> connections = new ArrayList<>();
 		for (GLCompositePortMapping mapping : descriptor.portMappings()) {
-			if (mapping.publicPort().direction() != direction
-					|| !mapping.presentation().socketVisible()) continue;
+			if (mapping.publicPort().direction() != direction || mapping.presentation().applicationManaged()) continue;
 			GLNodePort boundaryPort = direction == GLPortDirection.INPUT
 					? node.addOutput(mapping.publicPort().id(),
 							new GLLabel(mapping.publicPort().id()))
 					: node.addInput(mapping.publicPort().id(),
 							new GLLabel(mapping.publicPort().id()));
 			boundaryPort.setConnectionValidator((own, other) ->
-					mapping.publicPort().valueTypeId().equals(valueTypeOf(other)));
+					types.compatibleValueTypes(mapping.publicPort().valueTypeId(),valueTypeOf(other)));
 			if (!mapping.isBound()) continue;
-			GLNode internal = binding.findNodeView(mapping.internalEndpoint().nodeId())
+			for (var endpoint : mapping.internalEndpoints()) {
+            GLNode internal = binding.findNodeView(endpoint.nodeId())
 					.orElse(null);
 			GLNodePort internalPort = internal == null ? null
-					: internal.findPort(mapping.internalEndpoint().portId());
+					: internal.findPort(endpoint.portId());
 			if (internalPort == null) continue;
 			connections.add(direction == GLPortDirection.INPUT
 					? new GLNodePort[] { boundaryPort, internalPort }
 					: new GLNodePort[] { internalPort, boundaryPort });
+            }
 		}
 		if (node.getPorts().isEmpty()) return;
 		editor.addNode(node, x, y);
@@ -727,14 +812,19 @@ public final class GLNodeWorkspace extends GLContainer
 	private void saveActiveAsset() {
 		if (synchronizingAsset || binding == null) return;
 		Document current = documents.peekLast();
-		if (current == null || current.assetId == null) return;
-		GLNodeGraphAsset previous = composites.findAsset(current.assetId).orElse(null);
+		if (current == null) return;
+		current.viewState = captureActiveViewState();
+		persistDocumentAsset(current);
+	}
+
+	private void persistDocumentAsset(Document document) {
+		if (synchronizingAsset || document == null || document.assetId == null) return;
+		GLNodeGraphAsset previous = composites.findAsset(document.assetId).orElse(null);
 		if (previous == null) return;
 		synchronizingAsset = true;
 		try {
-			current.viewState = captureActiveViewState();
 			composites.replaceAsset(new GLNodeGraphAsset(previous.id(), previous.version(),
-					previous.kind(), current.graph.snapshot(), current.viewState,
+					previous.kind(), document.graph.snapshot(), document.viewState,
 					previous.metadata(), previous.compositeDescriptor()));
 		} finally { synchronizingAsset = false; }
 	}
@@ -779,6 +869,17 @@ public final class GLNodeWorkspace extends GLContainer
 	}
 
 	private void updateHeader() {
+        boolean group = currentAssetId() != null;
+        back.setVisible(group); forward.setVisible(group); breadcrumb.setVisible(group);
+        if(inspectorTabs != null){
+            if(group && inspectorTabs.getTabCount()==1){
+                if(groupEditorsScroll!=null){inspectorTabs.addTab("Editors",groupEditorsScroll);inspectorTabs.addTab("Group-General",generalTab);inspectorTabs.addTab("Group-IO",ioTab);}
+                else inspectorTabs.addTab("Group Settings",interfaceScroll);
+            }else if(!group && inspectorTabs.getTabCount()>1){
+                inspectorTabs.setSelectedIndex(0);
+                while(inspectorTabs.getTabCount()>1)inspectorTabs.removeTabAt(inspectorTabs.getTabCount()-1);
+            }
+        }
 		back.setEnabled(canNavigateBack());
 		forward.setEnabled(canNavigateForward());
 		breadcrumb.setSegments(documents.isEmpty() ? List.of("Node graph")
@@ -786,8 +887,21 @@ public final class GLNodeWorkspace extends GLContainer
 		layoutWorkspace();
 	}
 
-	private void layoutWorkspace() {
+	private java.util.function.Function<GLNodeGraphAsset,GLContainer> compositeEditorFactory;
+    private GLContainer compositeEditor;
+    /** Alternative editing surface for application-owned composite languages. Inspector/navigation remain shared. */
+    public void setCompositeEditorFactory(java.util.function.Function<GLNodeGraphAsset,GLContainer> factory) {
+        compositeEditorFactory=factory; refreshCompositeEditor();
+    }
+    public void refreshCompositeEditor() {
+        GLNodeGraphAsset asset=currentAssetId()==null?null:composites.findAsset(currentAssetId()).orElse(null);
+        GLContainer next=asset==null||compositeEditorFactory==null?null:compositeEditorFactory.apply(asset);
+        if(next!=compositeEditor){if(compositeEditor!=null)removeGL(compositeEditor);compositeEditor=next;if(next!=null)addGL(next);}
+        editor.setVisible(compositeEditor==null);layoutWorkspace();
+    }
+    private void layoutWorkspace() {
 		float width = getWidth(), height = getHeight();
+        float header = currentAssetId() == null ? 0 : HEADER_HEIGHT;
 		boolean showInspector = inspectorVisible
 				&& (currentAssetId() != null || !propertySchemas.isEmpty());
 		float sidebar = showInspector ? Math.min(inspectorWidth,
@@ -796,12 +910,13 @@ public final class GLNodeWorkspace extends GLContainer
 		back.setBounds(8, 6, 32, 28);
 		forward.setBounds(44, 6, 32, 28);
 		breadcrumb.setBounds(84, 6, Math.max(0, editorWidth - 92), 28);
-		editor.setBounds(0, HEADER_HEIGHT, editorWidth,
-				Math.max(0, height - HEADER_HEIGHT));
-		GLContainer sidebarControl = inspectorTabs == null ? interfaceScroll : inspectorTabs;
+		editor.setBounds(0, header, editorWidth,
+				Math.max(0, height - header));
+		if(compositeEditor!=null)compositeEditor.setBounds(0,header,editorWidth,Math.max(0,height-header));
+        GLContainer sidebarControl = inspectorTabs == null ? interfaceScroll : inspectorTabs;
 		sidebarControl.setVisible(showInspector);
-		if (showInspector) sidebarControl.setBounds(width - sidebar, HEADER_HEIGHT,
-				sidebar, Math.max(0, height - HEADER_HEIGHT));
+		if (showInspector) sidebarControl.setBounds(width - sidebar, header,
+				sidebar, Math.max(0, height - header));
 	}
 
 	private GLParent rootParent() {
@@ -850,3 +965,4 @@ public final class GLNodeWorkspace extends GLContainer
 		}
 	}
 }
+

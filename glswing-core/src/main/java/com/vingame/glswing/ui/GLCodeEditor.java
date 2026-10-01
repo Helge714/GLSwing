@@ -26,7 +26,7 @@ import com.vingame.glswing.rendering.GLStroke;
 
 /** Multiline source editor with code navigation and lexical or semantic colors. */
 public class GLCodeEditor extends GLTextArea {
-	private GLCodeLanguage language = GLCodeLanguages.JAVA;
+	private GLCodeLanguage language;
 	private volatile List<GLCodeToken> tokens = List.of();
 	private volatile List<GLCodeSemanticToken> semanticTokens = List.of();
 	private volatile List<GLCodeColor> documentColors = List.of();
@@ -173,7 +173,12 @@ public class GLCodeEditor extends GLTextArea {
 	}
 	/** Creates an editor over an existing model with optional lightweight diagnostics. */
 	public GLCodeEditor(GLTextDocument model, boolean coreDiagnosticsEnabled) {
-		super(model);
+        this(model, coreDiagnosticsEnabled, GLCodeLanguages.JAVA);
+    }
+    /** Uses an application language directly, without initializing built-in language profiles. */
+    public GLCodeEditor(GLTextDocument model, boolean coreDiagnosticsEnabled, GLCodeLanguage initialLanguage) {
+        super(model);
+        language = java.util.Objects.requireNonNull(initialLanguage, "Code language must not be null");
 		this.coreDiagnosticsEnabled = coreDiagnosticsEnabled;
 		diagnosticTimer = new Timer(300, event -> validateSource());
 		diagnosticTimer.setRepeats(false);
@@ -466,7 +471,17 @@ public class GLCodeEditor extends GLTextArea {
 	 * Detects a built-in language from the URI and installs its in-process code
 	 * intelligence. Unknown extensions retain the currently selected language.
 	 */
-	public final void configureDocument(URI uri) {
+	/** Configures a document with an explicit language, bypassing filename detection and built-in profiles. */
+    public final void configureDocument(URI uri, GLCodeLanguage explicitLanguage) {
+        if (uri == null || explicitLanguage == null) throw new IllegalArgumentException("Document URI and language are required");
+        language = explicitLanguage;
+        documentUri = uri;
+        automaticCodeIntelligence = true;
+        retokenize();
+        if (coreDiagnosticsEnabled) validateSource();
+        installAutomaticCodeIntelligence();
+    }
+    public final void configureDocument(URI uri) {
 		if (uri == null) throw new IllegalArgumentException("Document URI is required");
 		GLCodeLanguages.forUri(uri).ifPresent(value -> language = value);
 		documentUri = uri;
@@ -600,7 +615,7 @@ public class GLCodeEditor extends GLTextArea {
 			if (line.endsWith("{") && !line.startsWith("//")) level++;
 		}
 		String replacement = formatted.toString();
-		if (language == GLCodeLanguages.GLTHEME
+		if (language.id().equals("gltheme") && language == GLCodeLanguages.GLTHEME
 				&& language instanceof GLPropertiesCodeLanguage properties)
 			replacement = properties.formatColorValues(replacement,
 					preferredColorOutputModel, colorExpressionFormat);
@@ -1374,6 +1389,8 @@ public class GLCodeEditor extends GLTextArea {
 			event.consume();
 			return;
 		}
+		// A standalone code document has no edit transaction to cancel.
+		if (getGLInputMap().matches(GLInputActions.CANCEL, event)) return;
 		super.controlKeyPressed(event);
 	}
 	private boolean isCompletionShortcut(GLKeyEvent event) {
@@ -1457,8 +1474,7 @@ public class GLCodeEditor extends GLTextArea {
 		Color color = getGLTheme().values().getColor(
 				inlineRename == null ? "codeEditor.referenceMatch"
 						: "codeEditor.renameMatch",
-				inlineRename == null ? new Color(72, 118, 168, 80)
-						: new Color(64, 132, 214, 105));
+				inlineRename == null ? getGLTheme().values().getColor("codeEditor.occurrence.background") : getGLTheme().values().getColor("codeEditor.rename.background"));
 		for (Range range : referenceHighlights) {
 			int start = Math.max(rowStart, range.start);
 			int end = Math.min(rowEnd, range.end);
@@ -1501,7 +1517,7 @@ public class GLCodeEditor extends GLTextArea {
 		float bottomLeft = Math.max(0, containerRadii().bottomLeft() - padding.left());
 		context.fillUIRoundRect(padding.left(), padding.top(), width, height,
 				new com.vingame.glswing.rendering.GLCornerRadii(0, 0, 0, bottomLeft),
-				new Color(0, 0, 0, 28));
+				getGLTheme().values().getColor("codeEditor.gutter.background"));
 		float lineHeight = font.getLineHeight();
 		int first = Math.max(0, (int) Math.floor(getVerticalScrollOffset() / lineHeight));
 		int last = Math.min(visualRowCount(), first
@@ -1521,7 +1537,7 @@ public class GLCodeEditor extends GLTextArea {
 				context.drawUIText(font, number,
 						padding.left() + gutter.numberRight()
 								- font.measureText(number),
-						baseline, new Color(145, 145, 145));
+						baseline, getGLTheme().values().getColor("codeEditor.gutter.text"));
 				GLCodeFoldRange fold = foldRangeAt(line);
 				if (fold != null) drawFoldMarker(context,
 						padding.left() + gutter.foldCenterX(),
@@ -1532,8 +1548,7 @@ public class GLCodeEditor extends GLTextArea {
 	}
 	private void drawFoldMarker(GLContext2D context, float x, float y,
 			boolean collapsed) {
-		Color color = getGLTheme().values().getColor("codeEditor.foldMarker",
-				new Color(150, 150, 150));
+		Color color = getGLTheme().values().getColor("codeEditor.foldMarker");
 		if (collapsed) {
 			context.drawUILine(x - 2, y - 3, x + 2, y, color);
 			context.drawUILine(x + 2, y, x - 2, y + 3, color);
@@ -1575,10 +1590,8 @@ public class GLCodeEditor extends GLTextArea {
 	private void drawColorPreview(GLContext2D context, float x, float y,
 			float size, Color color) {
 		GLThemeValues values = getGLTheme().values();
-		Color light = values.getColor("codeEditor.colorPreviewCheckerLight",
-				new Color(225, 225, 225));
-		Color dark = values.getColor("codeEditor.colorPreviewCheckerDark",
-				new Color(145, 145, 145));
+		Color light = values.getColor("codeEditor.colorPreviewCheckerLight");
+		Color dark = values.getColor("codeEditor.colorPreviewCheckerDark");
 		float inner = Math.max(2, size - 2), half = inner / 2;
 		context.fillUIRoundRect(x + 1, y + 1, half, half, 0, light);
 		context.fillUIRoundRect(x + 1 + half, y + 1, inner - half, half, 0, dark);
@@ -1587,7 +1600,7 @@ public class GLCodeEditor extends GLTextArea {
 				inner - half, inner - half, 0, light);
 		context.fillUIRoundRect(x + 1, y + 1, inner, inner, 1, color);
 		context.drawUIRoundRect(x, y, size, size, 2, 1,
-				values.getColor("codeEditor.colorPreviewBorder", new Color(35, 35, 35)));
+				values.getColor("codeEditor.colorPreviewBorder"));
 	}
 	@Override protected float trailingRowDecorationWidth(int rowStart, int rowEnd) {
 		for (GLCodeColor color : documentColors)
@@ -1618,8 +1631,7 @@ public class GLCodeEditor extends GLTextArea {
 				values.getFloat("codeEditor.overviewMarkerHeight", 3));
 		context.fillUIRoundRect(x, y, rulerWidth, height,
 				Math.min(2, rulerWidth / 2),
-				values.getColor("codeEditor.overviewRulerBackground",
-						new Color(0, 0, 0, 25)));
+				values.getColor("codeEditor.overviewRulerBackground"));
 		for (GLCodeDiagnostic.Severity severity : new GLCodeDiagnostic.Severity[] {
 				GLCodeDiagnostic.Severity.WARNING, GLCodeDiagnostic.Severity.ERROR })
 			for (GLCodeDiagnostic diagnostic : diagnostics)
@@ -1682,7 +1694,7 @@ public class GLCodeEditor extends GLTextArea {
 		if (event.getButton() == java.awt.event.MouseEvent.BUTTON1 && sourceColor != null) {
 			super.controlMousePressed(event);
 			select(sourceColor.start(), sourceColor.end());
-			if (isEditable() && getLanguage() == GLCodeLanguages.GLTHEME) {
+			if (isEditable() && language.id().equals("gltheme") && getLanguage() == GLCodeLanguages.GLTHEME) {
 				String before = getText();
 				String literal = before.substring(sourceColor.start(), sourceColor.end());
 				GLColorModel model = GLColorModel.RGB;
@@ -1864,9 +1876,9 @@ public class GLCodeEditor extends GLTextArea {
 			if (diagnostic.start() <= end && diagnostic.end() > start) return diagnostic;
 		return null;
 	}
-	private static Color diagnosticColor(GLCodeDiagnostic diagnostic) {
+	private Color diagnosticColor(GLCodeDiagnostic diagnostic) {
 		return diagnostic.severity() == GLCodeDiagnostic.Severity.ERROR
-				? new Color(235, 75, 75) : new Color(235, 175, 55);
+				? getGLTheme().values().getColor("codeEditor.diagnostic.error") : getGLTheme().values().getColor("codeEditor.diagnostic.warning");
 	}
 	@Override protected void localizerChanged() {
 		super.localizerChanged();
@@ -1892,53 +1904,37 @@ public class GLCodeEditor extends GLTextArea {
 				themed.disabledTextColor(), themed.selectionColor(), themed.caretColor())
 				.withFont(new GLFontSpec(GLFont.MONOSPACED,
 						GLFont.PLAIN, themed.font().size())));
-		keywordColor = values.getColor("codeEditor.keyword", new Color(204, 108, 29));
-		stringColor = values.getColor("codeEditor.string", new Color(23, 198, 163));
-		numberColor = values.getColor("codeEditor.number", new Color(104, 151, 187));
-		commentColor = values.getColor("codeEditor.comment", new Color(128, 128, 128));
-		typeColor = values.getColor("codeEditor.type", new Color(18, 144, 195));
-		navigationLinkColor = values.getColor("codeEditor.navigationLink",
-				new Color(82, 156, 255));
+		keywordColor = values.getColor("codeEditor.keyword");
+		stringColor = values.getColor("codeEditor.string");
+		numberColor = values.getColor("codeEditor.number");
+		commentColor = values.getColor("codeEditor.comment");
+		typeColor = values.getColor("codeEditor.type");
+		navigationLinkColor = values.getColor("codeEditor.navigationLink");
 		Map<String, Color> configuredSemanticColors = new java.util.LinkedHashMap<>(
 				Map.ofEntries(
-				Map.entry("namespace", values.getColor("codeEditor.semantic.namespace",
-						new Color(18, 144, 195))),
+				Map.entry("namespace", values.getColor("codeEditor.semantic.namespace")),
 				Map.entry("type", values.getColor("codeEditor.semantic.type", typeColor)),
-				Map.entry("class", values.getColor("codeEditor.semantic.class",
-						new Color(18, 144, 195))),
-				Map.entry("enum", values.getColor("codeEditor.semantic.enum",
-						new Color(204, 129, 186))),
-				Map.entry("interface", values.getColor("codeEditor.semantic.interface",
-						new Color(128, 242, 246))),
+				Map.entry("class", values.getColor("codeEditor.semantic.class")),
+				Map.entry("enum", values.getColor("codeEditor.semantic.enum")),
+				Map.entry("interface", values.getColor("codeEditor.semantic.interface")),
 				Map.entry("struct", values.getColor("codeEditor.semantic.struct", typeColor)),
-				Map.entry("typeParameter", values.getColor(
-						"codeEditor.semantic.typeParameter", new Color(191, 164, 164))),
-				Map.entry("parameter", values.getColor("codeEditor.semantic.parameter",
-						new Color(121, 171, 255))),
-				Map.entry("variable", values.getColor("codeEditor.semantic.variable",
-						new Color(243, 236, 121))),
-				Map.entry("property", values.getColor("codeEditor.semantic.property",
-						new Color(102, 225, 248))),
-				Map.entry("enumMember", values.getColor("codeEditor.semantic.enumMember",
-						new Color(141, 218, 248))),
-				Map.entry("event", values.getColor("codeEditor.semantic.event",
-						new Color(102, 225, 248))),
-				Map.entry("function", values.getColor("codeEditor.semantic.function",
-						new Color(167, 236, 33))),
-				Map.entry("method", values.getColor("codeEditor.semantic.method",
-						new Color(167, 236, 33))),
-				Map.entry("macro", values.getColor("codeEditor.semantic.macro",
-						new Color(177, 102, 218))),
+				Map.entry("typeParameter", values.getColor("codeEditor.semantic.typeParameter")),
+				Map.entry("parameter", values.getColor("codeEditor.semantic.parameter")),
+				Map.entry("variable", values.getColor("codeEditor.semantic.variable")),
+				Map.entry("property", values.getColor("codeEditor.semantic.property")),
+				Map.entry("enumMember", values.getColor("codeEditor.semantic.enumMember")),
+				Map.entry("event", values.getColor("codeEditor.semantic.event")),
+				Map.entry("function", values.getColor("codeEditor.semantic.function")),
+				Map.entry("method", values.getColor("codeEditor.semantic.method")),
+				Map.entry("macro", values.getColor("codeEditor.semantic.macro")),
 				Map.entry("keyword", keywordColor),
 				Map.entry("modifier", values.getColor("codeEditor.semantic.modifier",
 						keywordColor)),
 				Map.entry("comment", commentColor), Map.entry("string", stringColor),
 				Map.entry("number", numberColor),
 				Map.entry("regexp", values.getColor("codeEditor.semantic.regexp", stringColor)),
-				Map.entry("operator", values.getColor("codeEditor.semantic.operator",
-						new Color(230, 230, 250))),
-				Map.entry("decorator", values.getColor("codeEditor.semantic.decorator",
-						new Color(160, 160, 160)))));
+				Map.entry("operator", values.getColor("codeEditor.semantic.operator")),
+				Map.entry("decorator", values.getColor("codeEditor.semantic.decorator"))));
 		String semanticPrefix = "codeEditor.semantic.";
 		for (String key : values.asMap().keySet())
 			if (key.startsWith(semanticPrefix) && key.length() > semanticPrefix.length())
@@ -2395,12 +2391,9 @@ public class GLCodeEditor extends GLTextArea {
 			int offset, float x, float top, float baseline, float lineHeight) {
 		GLFont hintFont = inlayFont(font);
 		GLThemeValues values = getGLTheme().values();
-		Color background = values.getColor("codeEditor.inlay.background",
-				new Color(67, 69, 72));
-		Color border = values.getColor("codeEditor.inlay.border",
-				new Color(90, 93, 97));
-		Color text = values.getColor("codeEditor.inlay.text",
-				new Color(187, 191, 196));
+		Color background = values.getColor("codeEditor.inlay.background");
+		Color border = values.getColor("codeEditor.inlay.border");
+		Color text = values.getColor("codeEditor.inlay.text");
 		float padding = inlayMetric("padding", 4);
 		float gap = inlayMetric("gap", 3);
 		float radius = inlayMetric("radius", 3);

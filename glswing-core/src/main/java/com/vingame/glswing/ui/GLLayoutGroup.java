@@ -1,6 +1,5 @@
 package com.vingame.glswing.ui;
 
-import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.geom.Area;
 import java.awt.geom.Path2D;
@@ -70,8 +69,7 @@ public class GLLayoutGroup extends GLContainer {
 			GLCornerRadii shape=new GLCornerRadii(radii[0],radii[1],radii[2],radii[3]);
 			c.control.setConnectedShape(this,shape); area.add(new Area(rounded(c,radii)));
 		}
-		Area outline=border>0?new Area(new BasicStroke(border*2).createStrokedShape(area)):new Area();
-		outline.intersect(area); borderPath=path(outline);
+		borderPath=path(area);
 	}
 	/** Defensive copy of the occupied rounded union, useful for custom backgrounds. */
 	public final Area getOutlineShape() { refreshConnections(); return new Area(area); }
@@ -139,9 +137,9 @@ public class GLLayoutGroup extends GLContainer {
 		paintBorderUnderlay(context,border);
 		super.renderChildren(context);
 		if(lastBorder>0) {
-			context.fillPath(borderPath,border);
 			GLStroke old=context.getStroke();
-			try { context.setStroke(new GLStroke(lastBorder));
+			try { context.setStroke(new GLStroke(lastBorder).withWidthSpace(GLStroke.WidthSpace.SCREEN));
+                context.drawPath(borderPath,border);
 				for(Edge edge:seams) context.drawUILine(edge.x1,edge.y1,edge.x2,edge.y2,border);
 			} finally {context.setStroke(old);}
 		}
@@ -151,10 +149,9 @@ public class GLLayoutGroup extends GLContainer {
 		Color focus=getGLTheme().values().getColor("layoutGroup.focusBorder",
 				getGLTheme().textEditorStyle().focusedBorderColor());
 		float focusWidth=Math.max(1.5f,lastBorder);
-		Area focusOutline=new Area(new BasicStroke(focusWidth*2).createStrokedShape(selected));
-		focusOutline.intersect(selected);context.fillPath(path(focusOutline),focus);
 		GLStroke old=context.getStroke();
-		try {context.setStroke(new GLStroke(focusWidth));
+		try {context.setStroke(new GLStroke(focusWidth).withWidthSpace(GLStroke.WidthSpace.SCREEN));
+            context.drawPath(path(selected),focus);
 			for(Edge edge:seams)if(selectedCell(edge.first,selected)&&selectedCell(edge.second,selected))
 				context.drawUILine(edge.x1,edge.y1,edge.x2,edge.y2,focus);
 		} finally {context.setStroke(old);}

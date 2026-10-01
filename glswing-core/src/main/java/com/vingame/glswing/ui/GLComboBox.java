@@ -42,6 +42,8 @@ public class GLComboBox<T> extends GLControl
 	private interface ComboEntry<E> {
 	}
 
+    private static final class SeparatorEntry<E> implements ComboEntry<E> { }
+
 	private static final class ValueEntry<E> implements ComboEntry<E> {
 		private final E value;
 
@@ -99,6 +101,10 @@ public class GLComboBox<T> extends GLControl
 		rebuildPopupItems();
 		updatePresentation();
 	}
+
+    public final void addSeparator() {
+        rootEntries.add(new SeparatorEntry<>()); rebuildPopupItems();
+    }
 
 	public final void addItem(T item) {
 		ValueEntry<T> entry = new ValueEntry<>(item);
@@ -194,6 +200,10 @@ public class GLComboBox<T> extends GLControl
 		private SubMenu(GroupEntry<T> group) {
 			this.group = group;
 		}
+
+        public SubMenu addSeparator() {
+            group.children.add(new SeparatorEntry<>());rebuildPopupItems();return this;
+        }
 
 		public SubMenu addItem(T value) {
 			ValueEntry<T> entry = new ValueEntry<>(value);
@@ -586,7 +596,8 @@ public class GLComboBox<T> extends GLControl
 	private void buildPopupLevel(GLPopupMenu menu,
 			List<ComboEntry<T>> entries) {
 		for (ComboEntry<T> entry : entries) {
-			if (entry instanceof ValueEntry<?> rawValue) {
+			if(entry instanceof SeparatorEntry<?>){menu.addSeparator();}
+			else if (entry instanceof ValueEntry<?> rawValue) {
 				@SuppressWarnings("unchecked")
 				ValueEntry<T> value = (ValueEntry<T>) rawValue;
 				GLItemPresentation presentation = presentation(value.value);

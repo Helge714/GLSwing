@@ -26,12 +26,14 @@ public final class GLLine extends GLContainer {
 	private float endX;
 	private float endY;
 	private Color color;
+    private boolean themed;
 	private GLStroke stroke;
 	private Orientation orientation;
 
 	public GLLine(Orientation orientation) {
-		this(orientation, Color.GRAY,
+		this(orientation, GLTheme.DEFAULT.values().getColor("line.color"),
 				new GLStroke(1).withWidthSpace(GLStroke.WidthSpace.SCREEN));
+        themed=true;
 	}
 
 	public GLLine(Orientation orientation, Color color, GLStroke stroke) {
@@ -88,13 +90,14 @@ public final class GLLine extends GLContainer {
 	public float getRelativeEndY() { return endY; }
 
 	public Color getColor() {
-		return color;
+		return themed ? getGLTheme().values().getColor("line.color") : color;
 	}
 
 	public void setColor(Color color) {
 		color = requireColor(color);
-		if (this.color.equals(color))
+		if (!themed && this.color.equals(color))
 			return;
+        themed=false;
 		this.color = color;
 		invalidateRecording();
 	}
@@ -122,9 +125,9 @@ public final class GLLine extends GLContainer {
 		if (x1 == x2 && y1 == y2)
 			return;
 		if (stroke.isDashed() || stroke.getOffset() != 0)
-			context.drawLine(x1, y1, x2, y2, color);
+			context.drawLine(x1, y1, x2, y2, getColor());
 		else
-			context.drawUILine(x1, y1, x2, y2, color);
+			context.drawUILine(x1, y1, x2, y2, getColor());
 	}
 
 	@Override

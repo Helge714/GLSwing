@@ -78,6 +78,8 @@ public final class GLInputActions {
 			"text.history-coalesce-millis";
 
 	public static final String NODE_DELETE = "node.delete-selection";
+	public static final String NODE_ARRANGE = "node.arrange-all";
+	public static final String NODE_EXCLUDE = "node.exclude-selection";
 	public static final String NODE_EDIT_TITLE = "node.edit-title";
 	public static final String NODE_COPY = "node.copy";
 	public static final String NODE_CUT = "node.cut";

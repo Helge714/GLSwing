@@ -974,7 +974,8 @@ public final class GLPropertiesCodeLanguage implements GLCodeLanguage {
 		if (inherited == null) return;
 		Map<String, String> builtIn = switch (inherited.value().trim()
 				.toLowerCase(java.util.Locale.ROOT)) {
-		case "dark" -> GLThemes.DARK.values().asMap();
+		case "blue" -> GLThemes.BLUE.values().asMap();
+		case "darkblue" -> GLThemes.DARK_BLUE.values().asMap();
 		case "light" -> GLThemes.LIGHT.values().asMap();
 		case "default", "" -> GLThemes.DEFAULT.values().asMap();
 		default -> null;

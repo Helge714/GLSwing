@@ -512,13 +512,13 @@ public final class GLDialog implements AutoCloseable {
 		}
 		@Override protected void record(GLContext2D context) {
 			var values=getGLTheme().values();float softness=Math.max(0,values.getFloat("dialog.shadow.softness",12));
-			Color shadow=values.getColor("dialog.shadow.color",new Color(0,0,0,120));
+			Color shadow=values.getColor("dialog.shadow.color");
 			if(softness>0&&shadow.getAlpha()>0)context.drawUIRoundRectShadow(0,0,getWidth(),getHeight(),
 					cornerRadius,softness,values.getFloat("dialog.shadow.offsetX",0),
 					values.getFloat("dialog.shadow.offsetY",4),shadow);
 			float border=Math.max(0,values.getFloat("dialog.borderWidth",1));
 			Color borderColor=values.getColor("dialog.border",
-					values.getColor("palette.border",Color.GRAY));
+					values.getColor("palette.border"));
 			if(border>0)context.fillAndDrawUIRoundRect(0,0,getWidth(),getHeight(),cornerRadius,
 					border,background,borderColor,
 					com.vingame.glswing.rendering.GLStroke.WidthSpace.SCREEN);
@@ -542,11 +542,11 @@ public final class GLDialog implements AutoCloseable {
 		}
 		@Override protected void record(GLContext2D context) {
 			Color bg=getGLTheme().values().getColor("dialog.titleBar.background",
-					getGLTheme().values().getColor("palette.surface",Color.DARK_GRAY));
+					getGLTheme().values().getColor("palette.surface"));
 			Color fg=getGLTheme().values().getColor("dialog.titleBar.text",
-					getGLTheme().values().getColor("palette.text",Color.WHITE));
+					getGLTheme().values().getColor("palette.text"));
 			Color border=getGLTheme().values().getColor("dialog.titleBar.border",
-					getGLTheme().values().getColor("palette.border",Color.GRAY));
+					getGLTheme().values().getColor("palette.border"));
 			context.fillUIRoundRect(0,0,getWidth(),getHeight(),0,bg);
 			var font=getGLFont(getGLTheme().labelStyle().font());float baseline=(getHeight()-font.getLineHeight())/2+font.getAscent();
 			context.drawUIText(font,title,12,baseline,fg);
@@ -585,12 +585,12 @@ public final class GLDialog implements AutoCloseable {
 			if(active) {
 				String key=state==GLControlState.PRESSED?"dialog.close.pressed":"dialog.close.hover";
 				Color background=getGLTheme().values().getColor(key,
-						state==GLControlState.PRESSED?new Color(153,32,22):new Color(196,43,28));
+						state==GLControlState.PRESSED?getGLTheme().values().getColor("dialog.close.pressed"):getGLTheme().values().getColor("dialog.close.hover"));
 				context.fillUIRoundRect(0,0,getWidth(),getHeight(),hitShape,background);
 			}
 			Color normal=getGLTheme().values().getColor("dialog.close.text",
-					getGLTheme().values().getColor("palette.text",Color.WHITE));
-			Color foreground=active?getGLTheme().values().getColor("dialog.close.activeText",Color.WHITE):normal;
+					getGLTheme().values().getColor("palette.text"));
+			Color foreground=active?getGLTheme().values().getColor("dialog.close.activeText"):normal;
 			float cx=getWidth()/2,cy=getHeight()/2;
 			com.vingame.glswing.rendering.GLStroke previous=context.getStroke();
 			try {

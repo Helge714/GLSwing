@@ -50,10 +50,10 @@ public record GLSplashConfiguration(Path backgroundImage,
 		private long minimumDisplayMillis = 450;
 		private long handoffDelayMillis;
 		private boolean alwaysOnTop;
-		private Color background = new Color(24, 27, 32);
-		private Color foreground = new Color(242, 244, 247);
-		private Color mutedForeground = new Color(166, 173, 184);
-		private Color accent = new Color(45, 137, 239);
+		private Color background = com.vingame.glswing.ui.GLTheme.DEFAULT.values().getColor("splash.background");
+		private Color foreground = com.vingame.glswing.ui.GLTheme.DEFAULT.values().getColor("splash.foreground");
+		private Color mutedForeground = com.vingame.glswing.ui.GLTheme.DEFAULT.values().getColor("splash.mutedForeground");
+		private Color accent = com.vingame.glswing.ui.GLTheme.DEFAULT.values().getColor("splash.accent");
 		private final List<GLSplashElement> elements = new ArrayList<>();
 		private boolean explicitElements;
 

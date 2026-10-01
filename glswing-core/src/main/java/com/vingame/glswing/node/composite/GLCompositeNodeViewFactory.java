@@ -23,6 +23,8 @@ public final class GLCompositeNodeViewFactory implements GLNodeViewFactory {
 	private final GLNodeInputEditorRegistry inputEditors;
 	private final GLNodeViewFactory leafFactory;
 	private final Function<String, String> titleProvider;
+	private GLNodeViewFactory applicationFactory;
+    public void setApplicationFactory(GLNodeViewFactory factory){applicationFactory=factory;}
 	private GLNodePortOrder portOrder = GLNodePortOrder.INPUTS_FIRST;
 
 	public GLCompositeNodeViewFactory(GLCompositeGraphRegistry composites,
@@ -50,6 +52,7 @@ public final class GLCompositeNodeViewFactory implements GLNodeViewFactory {
 		GLCompositeNodeDescriptor descriptor = composites.findComposite(type.id())
 				.orElse(null);
 		if (descriptor == null) return leafFactory.createNode(node, type);
+        if(applicationFactory!=null)return applicationFactory.createNode(node,type);
 		CompositeView view = new CompositeView(titleProvider.apply(type.id()), descriptor,
 				portOrder);
 		view.setPortOrder(portOrder);
@@ -62,12 +65,13 @@ public final class GLCompositeNodeViewFactory implements GLNodeViewFactory {
 			}
 			GLContainer content = inputEditors.create(new GLNodeInputEditorContext(
 					node, port, mapping.presentation())).orElseGet(() -> new GLLabel(port.id()));
-			if (mapping.presentation().socketVisible()) {
+			{
 				var input = view.addInput(port.id(), content);
+                input.setSocketVisible(mapping.presentation().socketVisible());
 				input.setContentHiddenWhenConnected(!GLNodeInputEditorRegistry.NONE.equals(
 						mapping.presentation().inputEditorId()));
 			}
-			else view.addContent(content);
+			
 		}
 		return view;
 	}
@@ -76,6 +80,7 @@ public final class GLCompositeNodeViewFactory implements GLNodeViewFactory {
 			GLNodeTypeDescriptor type) {
 		GLCompositeNodeDescriptor descriptor = composites.findComposite(type.id())
 				.orElse(null);
+        if(descriptor!=null&&applicationFactory!=null)return applicationFactory.isViewCurrent(view,node,type);
 		return descriptor == null
 				? !(view instanceof CompositeView)
 				: view instanceof CompositeView composite
@@ -85,6 +90,7 @@ public final class GLCompositeNodeViewFactory implements GLNodeViewFactory {
 
 	@Override public void updateNode(GLNode view, GLGraphNode node,
 			GLNodeTypeDescriptor type) {
+        if(composites.findComposite(type.id()).isPresent()&&applicationFactory!=null){applicationFactory.updateNode(view,node,type);return;}
 		if (!(view instanceof CompositeView)) {
 			leafFactory.updateNode(view, node, type);
 			return;

@@ -33,12 +33,18 @@ public class GLNumberSpinner extends GLLayoutGroup {
 	private final CopyOnWriteArrayList<ChangeListener> changeListeners =
 			new CopyOnWriteArrayList<>();
 	private final NumberEditor editor = new NumberEditor();
+    GLNumberSpinnerGroup inputGroup;
 	private final StepButton incrementButton = new StepButton(1);
 	private final StepButton decrementButton = new StepButton(-1);
 	private double minimum;
 	private double maximum;
 	private double value;
 	private double step = 1;
+    private String unit="";
+    private double defaultValue;
+    private Runnable resetAction;
+    private GLPopupMenu contextMenu;
+    private GLMenuItem resetMenuItem;
 	private boolean integerValuesOnly;
 	private boolean enabled = true;
 	private boolean synchronizing;
@@ -56,6 +62,7 @@ public class GLNumberSpinner extends GLLayoutGroup {
 		this.minimum = minimum;
 		this.maximum = maximum;
 		this.value = clamp(value);
+        this.defaultValue = this.value;
 
 		editor.setPreferredGLSize(DEFAULT_WIDTH - DEFAULT_BUTTON_WIDTH,
 				DEFAULT_HEIGHT);
@@ -78,7 +85,44 @@ public class GLNumberSpinner extends GLLayoutGroup {
 		updateEnabledState();
 	}
 
-	public final double getValue() { return value; }
+    /** Non-editable suffix, excluded from selection, caret movement and horizontal scrolling. */
+    public final String getUnit(){return unit;}
+    public final void setUnit(String unit){
+        if(unit==null||unit.indexOf('\n')>=0||unit.indexOf('\r')>=0)throw new IllegalArgumentException("Single-line unit required");
+        this.unit=unit;applyThemeMetrics();editor.invalidateRecording();
+    }
+    public final double getDefaultValue(){return defaultValue;}
+    public final void setDefaultValue(double value){requireFinite(value,"Default value");defaultValue=clamp(value);}
+    /** Optional reset of a compound control; null restores the normal single-value reset. */
+    public final void setResetAction(Runnable action){resetAction=action;}
+    public final void reset(){
+        if(resetAction!=null)resetAction.run();else setValue(defaultValue);
+        syncEditor();
+    }
+    /** Persistent extensible context menu, also available over the editor and step buttons. */
+    public final GLPopupMenu getContextMenu(){
+        if(contextMenu==null){
+            contextMenu=new GLPopupMenu();
+            resetMenuItem=contextMenu.addItem(getGLLocalizer().text(GLUiKeys.NUMBER_RESET),e->{
+                double before=value;reset();recordValueChange(before,value,getGLLocalizer().text(GLUiKeys.NUMBER_RESET));
+            });
+        }
+        return contextMenu;
+    }
+    public final GLMenuItem getResetMenuItem(){getContextMenu();return resetMenuItem;}
+    @Override protected void localizerChanged(){
+        super.localizerChanged();
+        if(resetMenuItem!=null)resetMenuItem.setText(getGLLocalizer().text(GLUiKeys.NUMBER_RESET));
+    }
+    private void showContextMenu(GLMouseEvent event){
+        if(!enabled)return;
+        GLParent host=getGLParent();
+        while(host instanceof com.vingame.glswing.component.GLContainer c && c.getGLParent()!=null)host=c.getGLParent();
+        if(host==null)return;
+        var menu=getContextMenu();resetMenuItem.setEnabled(resetAction!=null||Double.compare(value,clamp(defaultValue))!=0);
+        menu.show(host,event.getScreenX(),event.getScreenY());event.consume();
+    }
+    public final double getValue() { return value; }
 
 	/** Assigns a value without creating a history entry. */
 	public final void setValue(double value) {
@@ -182,7 +226,7 @@ public class GLNumberSpinner extends GLLayoutGroup {
 		incrementButton.setPreferredGLSize(buttonWidth, height * 0.5f);
 		decrementButton.setPreferredGLSize(buttonWidth, height * 0.5f);
 		GLTextEditorStyle editorStyle = getGLTheme().textEditorStyle();
-		editor.setGLStyle(editorStyle.withGeometry(radius, border, height,
+		editor.setBaseStyle(editorStyle.withGeometry(radius, border, height,
 				Math.max(1, width - buttonWidth), padding));
 		GLButtonStyle buttonStyle = getGLTheme().buttonStyle();
 		incrementButton.setGLStyle(buttonStyle.withCornerRadius(radius)
@@ -195,10 +239,10 @@ public class GLNumberSpinner extends GLLayoutGroup {
 		editor.setInputFilter(integerValuesOnly
 				? GLTextInputFormats.INTEGER_NUMBER
 				: GLTextInputFormats.DECIMAL_NUMBER);
-		editor.setInputVerifier(this::isValidEditorValue);
+		editor.setInputVerifier(text -> isValidEditorValue(text) && (inputGroup==null || inputGroup.valid(this,text)));
 	}
 
-	private boolean isValidEditorValue(String text) {
+	boolean isValidEditorValue(String text) {
 		Double parsed = parse(text);
 		return parsed != null && parsed >= minimum && parsed <= maximum
 				&& (!integerValuesOnly || parsed == Math.rint(parsed));
@@ -208,6 +252,7 @@ public class GLNumberSpinner extends GLLayoutGroup {
 		if (synchronizing) return;
 		Double parsed = parse(editor.getText());
 		if (parsed == null) return;
+        if(inputGroup!=null && inputGroup.commit(this,parsed))return;
 		double before = value;
 		applyValue(parsed, true);
 		recordValueChange(before, value,
@@ -242,7 +287,7 @@ public class GLNumberSpinner extends GLLayoutGroup {
 		decrementButton.setEnabled(enabled && value > effectiveMinimum());
 	}
 
-	private void syncEditor() {
+	void syncEditor() {
 		String text = valueFormatter.apply(value);
 		if (text == null)
 			throw new IllegalStateException("Spinner value formatter returned null");
@@ -295,7 +340,56 @@ public class GLNumberSpinner extends GLLayoutGroup {
 	}
 
 	private final class NumberEditor extends GLTextEditor {
-		private NumberEditor() { addActionListener(event -> commitEditor()); }
+		private NumberEditor() {
+            addActionListener(event -> commitEditor());
+            addTextChangeListener(event->{if(!synchronizing&&inputGroup!=null)inputGroup.mirror(GLNumberSpinner.this);});
+            addCancelListener(event->{if(inputGroup!=null)inputGroup.cancel();});
+            addValidationFailureListener(event->{if(inputGroup!=null)inputGroup.cancel();});
+        }
+        @Override protected void controlMousePressed(GLMouseEvent event){
+            if(inputGroup!=null&&isEnabled()&&event.getButton()==MouseEvent.BUTTON1&&event.hasLocalPosition())inputGroup.pressed(GLNumberSpinner.this,event);
+            super.controlMousePressed(event);
+        }
+        @Override protected void controlMouseDragged(GLMouseEvent event){
+            if(inputGroup!=null&&event.hasLocalPosition()&&inputGroup.dragged(GLNumberSpinner.this,event))return;
+            super.controlMouseDragged(event);
+        }
+        @Override protected void controlMouseReleased(GLMouseEvent event){
+            super.controlMouseReleased(event);if(inputGroup!=null)inputGroup.released(GLNumberSpinner.this);
+        }
+        @Override protected void controlMouseCaptureLost(GLMouseEvent event){
+            if(inputGroup!=null)inputGroup.cancel();super.controlMouseCaptureLost(event);
+        }
+        @Override protected void detached(GLParent parent){
+            if(inputGroup!=null)inputGroup.cancel();super.detached(parent);
+        }
+        private GLTextEditorStyle baseStyle;
+        private GLTextEditorStyle baseStyle(){return baseStyle==null?super.getGLStyle():baseStyle;}
+        void setBaseStyle(GLTextEditorStyle style){baseStyle=style;updateUnitPadding();}
+        private String visibleUnit(){return GLTextFitter.ellipsize(getGLFont(baseStyle().font()),unit==null?"":unit,Math.max(0,getWidth()-baseStyle().padding().horizontal()-12));}
+        private void updateUnitPadding(){
+            if(baseStyle==null)return;
+            var base=baseStyle;String text=visibleUnit();float space=text.isEmpty()?0:getGLFont(base.font()).measureText(text)+4;
+            var pad=base.padding();
+            setGLStyle(base.withGeometry(base.cornerRadius(),base.borderWidth(),base.height(),base.preferredWidth(),new GLInsets(pad.top(),pad.left(),pad.bottom(),pad.right()+space)));
+        }
+        @Override protected void resized(float w,float h){updateUnitPadding();super.resized(w,h);}
+        @Override protected void record(GLContext2D context){
+            super.record(context);String text=visibleUnit();if(text.isEmpty())return;
+            var style=baseStyle();var font=getGLFont(style.font());
+            float x=getWidth()-style.padding().right()-font.measureText(text);
+            float baseline=(getHeight()-font.getLineHeight())*.5f+font.getAscent();
+            var previous=context.getMouseTarget();context.clearMouseTarget();
+            try{
+                context.drawUITextShadow(font,text,x,baseline,getGLTheme().textShadow("textEditor"));
+                context.drawUIText(font,text,x,baseline,isEnabled()?style.textColor():style.disabledTextColor());
+            }finally{if(previous!=null)context.setMouseTarget(previous,0,0);}
+        }
+
+        @Override protected void controlMouseClicked(GLMouseEvent event){
+            if(event.getButton()==MouseEvent.BUTTON3){showContextMenu(event);return;}
+            super.controlMouseClicked(event);
+        }
 
 		@Override protected void controlKeyPressed(GLKeyEvent event) {
 			if (getGLInputMap().matches(GLInputActions.NAVIGATE_UP, event)) {
@@ -328,11 +422,16 @@ public class GLNumberSpinner extends GLLayoutGroup {
 			updateToolTip();
 		}
 
-		private void applyStep() { applyValue(value + direction * step, true); }
+		private void applyStep() { if(isEnabled())applyValue(value + direction * step, true); else finishGesture(); }
+
+		@Override protected void controlFocusChanged(boolean focused) {
+			if(!focused)finishGesture();
+			super.controlFocusChanged(focused);
+		}
 
 		@Override protected void controlMousePressed(GLMouseEvent event) {
 			super.controlMousePressed(event);
-			if (event.getButton() != MouseEvent.BUTTON1) return;
+			if (!isEnabled() || event.getButton() != MouseEvent.BUTTON1) return;
 			pointerGesture = true;
 			gestureStart = value;
 			applyStep();
@@ -340,7 +439,8 @@ public class GLNumberSpinner extends GLLayoutGroup {
 		}
 
 		@Override protected void controlMouseClicked(GLMouseEvent event) {
-			// Applied on press so holding can repeat without additional clicks.
+			if(event.getButton()==MouseEvent.BUTTON3)showContextMenu(event);
+            // Left clicks are applied on press so holding can repeat.
 		}
 
 		@Override protected void controlMouseReleased(GLMouseEvent event) {

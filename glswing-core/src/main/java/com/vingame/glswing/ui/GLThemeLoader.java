@@ -454,8 +454,10 @@ public final class GLThemeLoader {
 		return switch (name.toLowerCase()) {
 		case "", "default" -> siblingPreset(path, "default.gltheme",
 				GLTheme.DEFAULT, stack, schema, options);
-		case "dark" -> siblingPreset(path, "dark.gltheme",
-				GLThemes.DARK, stack, schema, options);
+		case "blue" -> siblingPreset(path, "blue.gltheme",
+				GLThemes.BLUE, stack, schema, options);
+		case "darkblue" -> siblingPreset(path, "darkblue.gltheme",
+				GLThemes.DARK_BLUE, stack, schema, options);
 		case "light" -> siblingPreset(path, "light.gltheme",
 				GLThemes.LIGHT, stack, schema, options);
 		default -> loadPath(path.resolveSibling(name).normalize(), stack,

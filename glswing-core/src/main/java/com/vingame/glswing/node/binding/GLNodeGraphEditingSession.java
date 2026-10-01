@@ -5,6 +5,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
 
 import com.vingame.glswing.history.GLHistoryManager;
 import com.vingame.glswing.node.GLNode;
@@ -40,24 +41,136 @@ public final class GLNodeGraphEditingSession {
 
 	private final GLNodeEditorBinding binding;
 	private final GLHistoryManager history;
+	private final Consumer<GLNodeEditorViewState> inactiveViewStateConsumer;
 	private GLNodeGraphFragment clipboard;
 
 	public GLNodeGraphEditingSession(GLNodeEditorBinding binding,
 			GLHistoryManager history) {
+		this(binding, history, state -> { });
+	}
+
+	/**
+	 * Creates a session whose history can restore view state after its binding
+	 * has been closed, for example while another composite level is visible.
+	 */
+	public GLNodeGraphEditingSession(GLNodeEditorBinding binding,
+			GLHistoryManager history,
+			Consumer<GLNodeEditorViewState> inactiveViewStateConsumer) {
 		if (binding == null) throw new IllegalArgumentException("Binding required");
 		this.binding = binding;
 		this.history = history;
+		this.inactiveViewStateConsumer = inactiveViewStateConsumer == null
+				? state -> { } : inactiveViewStateConsumer;
+        binding.editor().setConnectionInsertionHandler(new com.vingame.glswing.node.GLNodeEditor.ConnectionInsertionHandler() {
+            public boolean canInsert(GLNode node, com.vingame.glswing.node.GLNodeConnection connection) {
+                return canInsertIntoConnection(binding.findNodeId(node).orElse(null), connection.getModelId());
+            }
+            public boolean insert(GLNode node, com.vingame.glswing.node.GLNodeConnection connection, float x, float y) {
+                return insertIntoConnection(binding.findNodeId(node).orElse(null), connection.getModelId(), x, y);
+            }
+        });
 	}
+
+    public boolean canInsertIntoConnection(GLNodeId nodeId, GLNodeConnectionId connectionId) {
+        if (binding.isClosed() || nodeId == null || connectionId == null) return false;
+        var graph = binding.graph().snapshot();
+        var node = graph.findNode(nodeId).orElse(null);
+        var edge = graph.findConnection(connectionId).orElse(null);
+        if (node == null || edge == null || edge.output().nodeId().equals(edge.input().nodeId())) return false;
+        if (graph.connections().stream().anyMatch(c -> c.input().nodeId().equals(nodeId) || c.output().nodeId().equals(nodeId))) return false;
+        var ports = binding.types().insertionPorts(node.typeId()).orElse(null);
+        if (ports == null) return false;
+        var type = binding.types().find(node.typeId()).orElseThrow();
+        var input = type.findPort(ports.inputPortId()).orElse(null);
+        var output = type.findPort(ports.outputPortId()).orElse(null);
+        var from = graph.findNode(edge.output().nodeId()).flatMap(n -> binding.types().find(n.typeId()))
+                .flatMap(t -> t.findPort(edge.output().portId())).orElse(null);
+        var to = graph.findNode(edge.input().nodeId()).flatMap(n -> binding.types().find(n.typeId()))
+                .flatMap(t -> t.findPort(edge.input().portId())).orElse(null);
+        return input != null && output != null && from != null && to != null
+                && input.direction() == com.vingame.glswing.node.model.GLPortDirection.INPUT
+                && output.direction() == com.vingame.glswing.node.model.GLPortDirection.OUTPUT
+                && from.direction() == com.vingame.glswing.node.model.GLPortDirection.OUTPUT
+                && to.direction() == com.vingame.glswing.node.model.GLPortDirection.INPUT
+                && input.maximumConnections() > 0 && output.maximumConnections() > 0
+                && binding.types().compatibleValueTypes(from.valueTypeId(),input.valueTypeId()) && binding.types().compatibleValueTypes(output.valueTypeId(),to.valueTypeId())
+                && binding.findNodeView(nodeId).isPresent()
+                && binding.findNodeView(edge.output().nodeId()).isPresent()
+                && binding.findNodeView(edge.input().nodeId()).isPresent();
+    }
+
+    /** Splits one wire and makes room in one history entry, including the preceding drag. */
+    public boolean insertIntoConnection(GLNodeId nodeId, GLNodeConnectionId connectionId, float startX, float startY) {
+        return insertIntoConnection(nodeId,connectionId,startX,startY,true);
+    }
+    private boolean insertIntoConnection(GLNodeId nodeId, GLNodeConnectionId connectionId, float startX, float startY, boolean recordHistory) {
+        if (!Float.isFinite(startX) || !Float.isFinite(startY) || !canInsertIntoConnection(nodeId, connectionId)) return false;
+        var beforeGraph = binding.graph().snapshot();
+        var currentView = binding.captureViewState();
+        var beforeBounds = new LinkedHashMap<>(currentView.nodes());
+        var node = beforeBounds.get(nodeId);
+        beforeBounds.put(nodeId, new GLNodeViewState(startX,startY,node.width(),node.height()));
+        var beforeView = new GLNodeEditorViewState(beforeBounds,currentView.auxiliaryNodes());
+        var edge = beforeGraph.findConnection(connectionId).orElseThrow();
+        var from = currentView.nodes().get(edge.output().nodeId());
+        var to = currentView.nodes().get(edge.input().nodeId());
+        float gap = binding.editor().getHorizontalNodeSpacing();
+        float left = from.x()+from.width()+gap;
+        float right = to.x()-gap-node.width();
+        float x = right >= left ? Math.max(left,Math.min(node.x(),right)) : left;
+        float shift = Math.max(0,x+node.width()+gap-to.x());
+        var afterBounds = new LinkedHashMap<>(currentView.nodes());
+        afterBounds.put(nodeId,new GLNodeViewState(x,node.y(),node.width(),node.height()));
+        if (shift > 0) {
+            var visited = new LinkedHashSet<GLNodeId>();
+            var pending = new java.util.ArrayDeque<GLNodeId>();
+            pending.add(edge.input().nodeId());
+            while (!pending.isEmpty()) {
+                var id = pending.removeFirst();
+                if (id.equals(edge.output().nodeId()) || id.equals(nodeId) || !visited.add(id)) continue;
+                var bounds = currentView.nodes().get(id);
+                if (bounds != null && bounds.x() >= to.x())
+                    afterBounds.put(id,new GLNodeViewState(bounds.x()+shift,bounds.y(),bounds.width(),bounds.height()));
+                for (var c : beforeGraph.connections()) {
+                    if (c.input().nodeId().equals(id)) pending.add(c.output().nodeId());
+                    if (c.output().nodeId().equals(id)) pending.add(c.input().nodeId());
+                }
+            }
+        }
+        var ports = binding.types().insertionPorts(beforeGraph.findNode(nodeId).orElseThrow().typeId()).orElseThrow();
+        var afterView = new GLNodeEditorViewState(afterBounds,currentView.auxiliaryNodes());
+        try {
+            binding.graph().edit("Insert node into connection", edit -> {
+                edit.removeConnection(connectionId);
+                edit.addConnection(new GLGraphConnection(GLNodeConnectionId.random(),edge.output(),new GLNodeEndpoint(nodeId,ports.inputPortId())));
+                edit.addConnection(new GLGraphConnection(GLNodeConnectionId.random(),new GLNodeEndpoint(nodeId,ports.outputPortId()),edge.input()));
+            });
+            binding.applyViewState(afterView);
+        } catch (RuntimeException failure) {
+            restore("Cancel node insertion",beforeGraph,beforeView);
+            throw failure;
+        }
+        if (recordHistory) {
+            if (!beforeView.equals(currentView)) record("Move node",beforeGraph,beforeView,beforeGraph,currentView);
+            record("Insert node into connection",beforeGraph,currentView,binding.graph().snapshot(),afterView);
+        }
+        return true;
+    }
 
 	public boolean hasClipboardContent() { return clipboard != null; }
 	public GLNodeGraphFragment clipboard() { return clipboard; }
 	public void setClipboard(GLNodeGraphFragment fragment) { clipboard = fragment; }
 
 	public GLNodeGraphFragment copySelection() {
+		float[] pointer = binding.editor().pointerGraphPosition();
+		return copySelection(pointer[0],pointer[1]);
+	}
+
+	public GLNodeGraphFragment copySelection(float pointerX, float pointerY) {
 		Set<GLNodeId> ids = selectedIds();
 		if (ids.isEmpty()) return null;
 		clipboard = GLNodeGraphFragment.capture(binding.graph().snapshot(),
-				binding.captureViewState(), ids);
+				binding.captureViewState(), ids).withPointerAnchor(pointerX,pointerY);
 		return clipboard;
 	}
 
@@ -73,7 +186,8 @@ public final class GLNodeGraphEditingSession {
 	}
 
 	public GLNodePlacement beginPaste(float x, float y) {
-		return clipboard == null ? null : beginPlacement("Paste nodes", clipboard, x, y);
+		return clipboard == null ? null : beginPlacement("Paste nodes", clipboard, x, y,
+                x-clipboard.pointerOffsetX(),y-clipboard.pointerOffsetY());
 	}
 
 	public PasteResult duplicateSelection(float offsetX, float offsetY) {
@@ -88,8 +202,8 @@ public final class GLNodeGraphEditingSession {
 	public GLNodePlacement beginDuplicate(float x, float y) {
 		Set<GLNodeId> ids = selectedIds();
 		if (ids.isEmpty()) return null;
-		return beginPlacement("Duplicate nodes", GLNodeGraphFragment.capture(
-				binding.graph().snapshot(), binding.captureViewState(), ids), x, y);
+		var fragment = GLNodeGraphFragment.capture(binding.graph().snapshot(), binding.captureViewState(), ids);
+		return beginPlacement("Duplicate nodes",fragment,x,y,fragment.minimumX(),fragment.minimumY());
 	}
 
 	public GLNodePlacement beginMoveSelection(float x, float y) {
@@ -132,11 +246,11 @@ public final class GLNodeGraphEditingSession {
 		if (history != null) history.record("Extract composite", () -> {
 			restore("Undo extract composite", beforeGraph, beforeView);
 			unregister(result, composites, catalog);
-			binding.refresh();
+			if (!binding.isClosed()) binding.refresh();
 		}, () -> {
 			register(result, composites, catalog, catalogEntry);
 			restore("Redo extract composite", afterGraph, result.viewState());
-			binding.refresh();
+			if (!binding.isClosed()) binding.refresh();
 		});
 		select(List.of(result.compositeNode().id()));
 		return result;
@@ -146,6 +260,78 @@ public final class GLNodeGraphEditingSession {
 		Set<GLNodeId> ids = selectedIds();
 		if (!ids.isEmpty()) removeNodes(ids.size() == 1 ? "Delete node" : "Delete nodes", ids);
 	}
+
+    public boolean canExcludeSelection() {
+        return !binding.isClosed() && com.vingame.glswing.node.model.GLNodeExclusion.plan(
+                binding.graph().snapshot(),binding.types(),binding.cyclePolicy(),selectedIds()).isPresent();
+    }
+    public void excludeSelection() {
+        var ids=selectedIds();
+        var beforeGraph=binding.graph().snapshot();
+        var planned=com.vingame.glswing.node.model.GLNodeExclusion.plan(beforeGraph,binding.types(),binding.cyclePolicy(),ids);
+        if (planned.isEmpty()) return;
+        var beforeView=binding.captureViewState();
+        var positions=new LinkedHashMap<>(beforeView.nodes());
+        ids.forEach(positions::remove);
+        closeLinearGap(beforeGraph,ids,beforeView,positions);
+        var afterView=new GLNodeEditorViewState(positions,beforeView.auxiliaryNodes());
+        try {
+            binding.graph().replace("Exclude nodes",planned.get());
+            binding.applyViewState(afterView);
+        } catch (RuntimeException failure) {
+            restore("Cancel exclusion",beforeGraph,beforeView); throw failure;
+        }
+        record("Exclude nodes",beforeGraph,beforeView,binding.graph().snapshot(),afterView);
+    }
+
+    private void closeLinearGap(GLNodeGraphSnapshot graph, Set<GLNodeId> removed,
+            GLNodeEditorViewState view, Map<GLNodeId,GLNodeViewState> positions) {
+        var entering=graph.connections().stream().filter(e->removed.contains(e.input().nodeId())&&!removed.contains(e.output().nodeId())).toList();
+        var leaving=graph.connections().stream().filter(e->removed.contains(e.output().nodeId())&&!removed.contains(e.input().nodeId())).toList();
+        if (entering.size()!=1 || leaving.size()!=1) return;
+        for (var id:removed) {
+            if (graph.connections().stream().filter(e->e.input().nodeId().equals(id)).count()!=1
+                    || graph.connections().stream().filter(e->e.output().nodeId().equals(id)).count()!=1) return;
+        }
+        var sourceId=entering.get(0).output().nodeId();
+        var targetId=leaving.get(0).input().nodeId();
+        var source=view.nodes().get(sourceId); var target=view.nodes().get(targetId);
+        if (source==null || target==null || graph.connections().stream().filter(e->e.output().nodeId().equals(sourceId)).count()!=1) return;
+        float gap=binding.editor().getHorizontalNodeSpacing();
+        for (var id:removed) {
+            var bounds=view.nodes().get(id);
+            if (bounds==null || bounds.x()<source.x()+source.width() || bounds.x()+bounds.width()>target.x()) return;
+        }
+        float shift=target.x()-source.x()-source.width()-gap;
+        if (shift<=0) return;
+        var chain=new LinkedHashSet<GLNodeId>();
+        var current=targetId;
+        float previousX=target.x()-1;
+        while (true) {
+            var bounds=positions.get(current);
+            if (bounds==null || bounds.x()<=previousX || !chain.add(current)) return;
+            previousX=bounds.x();
+            final var id=current;
+            if (graph.connections().stream().filter(e->e.input().nodeId().equals(id)).count()!=1) return;
+            var outgoing=graph.connections().stream().filter(e->e.output().nodeId().equals(id)).toList();
+            if (outgoing.size()>1) return;
+            if (outgoing.isEmpty()) break;
+            current=outgoing.get(0).input().nodeId();
+        }
+        // Leave the layout intact if closing the gap would collide with another branch.
+        for (var id:chain) {
+            var b=positions.get(id);
+            var moved=new java.awt.geom.Rectangle2D.Float(b.x()-shift,b.y(),b.width(),b.height());
+            for (var other:positions.entrySet()) if (!chain.contains(other.getKey())) {
+                var o=other.getValue();
+                if (moved.intersects(o.x(),o.y(),o.width(),o.height())) return;
+            }
+        }
+        for (var id:chain) {
+            var b=positions.get(id);
+            positions.put(id,new GLNodeViewState(b.x()-shift,b.y(),b.width(),b.height()));
+        }
+    }
 
 	public void toggleHiddenSelection() {
 		toggleSelectionState("Toggle hidden nodes", GLNodeState.HIDDEN,
@@ -185,10 +371,15 @@ public final class GLNodeGraphEditingSession {
 
 	private GLNodePlacement beginPlacement(String name, GLNodeGraphFragment fragment,
 			float x, float y) {
+		return beginPlacement(name,fragment,x,y,x,y);
+	}
+
+	private GLNodePlacement beginPlacement(String name, GLNodeGraphFragment fragment,
+			float x, float y, float placementX, float placementY) {
 		GLNodeGraphSnapshot beforeGraph = binding.graph().snapshot();
 		GLNodeEditorViewState beforeView = binding.captureViewState();
 		List<GLNodeId> beforeSelection = List.copyOf(selectedIds());
-		PasteResult result = insertUnrecorded(name, fragment, x, y, beforeView);
+		PasteResult result = insertUnrecorded(name, fragment, placementX, placementY, beforeView);
 		GLNodeGraphSnapshot afterGraph = binding.graph().snapshot();
 		GLNodeEditorViewState initialView = binding.captureViewState();
 		return new Placement(name, result.insertedNodes(), x, y, beforeGraph,
@@ -253,7 +444,8 @@ public final class GLNodeGraphEditingSession {
 	private void restore(String name, GLNodeGraphSnapshot graph,
 			GLNodeEditorViewState view) {
 		binding.graph().replace(name, graph);
-		binding.applyViewState(view);
+		if (binding.isClosed()) inactiveViewStateConsumer.accept(view);
+		else binding.applyViewState(view);
 	}
 
 	private Set<GLNodeId> selectedIds() {
@@ -264,6 +456,7 @@ public final class GLNodeGraphEditingSession {
 	}
 
 	private void select(java.util.Collection<GLNodeId> ids) {
+		if (binding.isClosed()) return;
 		binding.editor().setSelectedNodes(ids.stream().map(binding::findNodeView)
 				.flatMap(java.util.Optional::stream).toList());
 	}
@@ -305,14 +498,26 @@ public final class GLNodeGraphEditingSession {
 				binding.findNodeView(id).ifPresent(node ->
 						node.setLocation(state.x() + dx, state.y() + dy));
 			}
+            binding.editor().previewConnectionInsertion(nodes.size()==1 ? binding.findNodeView(nodes.get(0)).orElse(null) : null);
 		}
 
 		@Override public void confirm() {
 			if (finished) return;
 			finished = true;
+			var placedGraph = binding.graph().snapshot();
+			var placedView = binding.captureViewState();
+			if (!sameContent(beforeGraph,placedGraph) || !beforeView.equals(placedView))
+				record(name,beforeGraph,beforeView,placedGraph,placedView);
+			var candidate = binding.editor().getInsertionCandidate();
+			binding.editor().previewConnectionInsertion(null);
+			if (nodes.size()==1 && candidate!=null) {
+				var id=nodes.get(0); var start=initialView.nodes().get(id);
+				insertIntoConnection(id,candidate.getModelId(),start.x(),start.y(),false);
+			}
 			GLNodeEditorViewState finalView = binding.captureViewState();
-			if (!sameContent(beforeGraph, afterGraph) || !beforeView.equals(finalView))
-				record(name, beforeGraph, beforeView, afterGraph, finalView);
+			var finalGraph = binding.graph().snapshot();
+			if (!sameContent(placedGraph, finalGraph) || !placedView.equals(finalView))
+				record("Insert node into connection", placedGraph, placedView, finalGraph, finalView);
 			select(nodes);
 			binding.editor().requestGLFocus(binding.editor());
 		}
@@ -320,6 +525,7 @@ public final class GLNodeGraphEditingSession {
 		@Override public void cancel() {
 			if (finished) return;
 			finished = true;
+			binding.editor().previewConnectionInsertion(null);
 			restore("Cancel " + name, beforeGraph, beforeView);
 			select(cancelSelection);
 			binding.editor().requestGLFocus(binding.editor());

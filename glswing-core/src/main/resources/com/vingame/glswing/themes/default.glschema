@@ -476,3 +476,25 @@ comboBox.textShadow.offsetX=NUMBER, "ComboBox text-shadow horizontal offset."
 comboBox.textShadow.offsetY=NUMBER, "ComboBox text-shadow vertical offset."
 comboBox.textShadow.softness=NUMBER, "ComboBox text-shadow softness.", min=0
 comboBox.textShadow.offsetSpace=ENUM, "ComboBox text-shadow coordinate space.", values=screen|local
+nodeEditor.horizontalNodeSpacing=NUMBER, "Horizontal edge-to-edge spacing for insertion and automatic arrangement."
+nodeEditor.verticalNodeSpacing=NUMBER, "Vertical edge-to-edge spacing for automatic arrangement."
+
+curve.width=NUMBER, "Preferred standalone curve editor width."
+curve.height=NUMBER, "Expanded curve editor height."
+curve.previewHeight=NUMBER, "Read-only curve preview height."
+curve.inspectorHeight=NUMBER, "Large curve editor height in the inspector."
+curve.padding=NUMBER, "Inset around normalized curve coordinates."
+curve.pointRadius=NUMBER, "Curve anchor radius."
+curve.hitRadius=NUMBER, "Curve anchor and handle picking radius."
+curve.background=COLOR, "Curve background color."
+curve.grid=COLOR, "Curve grid color."
+curve.line=COLOR, "Curve line and anchor color."
+curve.handle=COLOR, "Selected point, axis and handle color."
+curve.marker=COLOR, "Curve position marker color."
+
+tooltip.shadow.color=COLOR, "Tooltip shadow color; inherits the popup shadow by default."
+tooltip.shadow.softness=NUMBER, "Tooltip shadow softness; inherits the popup shadow by default."
+tooltip.shadow.offsetX=NUMBER, "Tooltip shadow offsetX; inherits the popup shadow by default."
+tooltip.shadow.offsetY=NUMBER, "Tooltip shadow offsetY; inherits the popup shadow by default."
+
+node.portEventInnerScale=NUMBER, "Inner diamond radius relative to event port radius (0.15 to 0.65)."

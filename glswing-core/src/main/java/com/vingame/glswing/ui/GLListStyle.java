@@ -33,7 +33,7 @@ public record GLListStyle(GLFontSpec font, Color background,
 				values.getColor("palette.selection", theme.buttonStyle().focusColor()));
 		return new GLListStyle(label.font(),
 				values.getColor("list.background", theme.textEditorStyle().backgroundColor()),
-				values.getColor("list.rowBackground", new Color(0, 0, 0, 0)),
+				values.getColor("list.rowBackground"),
 				values.getColor("list.rowHoverBackground", theme.buttonStyle().hoverBackground()),
 				values.getColor("list.rowPressedBackground",
 						theme.buttonStyle().background(GLControlState.PRESSED)),

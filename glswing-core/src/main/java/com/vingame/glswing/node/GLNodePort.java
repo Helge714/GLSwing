@@ -12,6 +12,14 @@ import com.vingame.glswing.rendering.GLStroke;
 /** Pickable input or output socket positioned on a {@link GLNode} edge. */
 public final class GLNodePort extends GLContainer {
 	public enum Direction { INPUT, OUTPUT }
+	public enum Shape { CIRCLE, DIAMOND, DOUBLE_DIAMOND }
+	private Shape shape = Shape.CIRCLE;
+	public Shape getShape() { return shape; }
+	public void setShape(Shape shape) {
+		java.util.Objects.requireNonNull(shape);
+		if (this.shape == shape) return;
+		this.shape = shape; invalidateRecording();
+	}
 
 	@FunctionalInterface
 	public interface ConnectionValidator {
@@ -23,6 +31,30 @@ public final class GLNodePort extends GLContainer {
 	private GLNode node;
 	private Color localColor;
 	private boolean hovered;
+    private boolean socketVisible = true;
+    public boolean isSocketVisible() { return socketVisible; }
+    /** Keeps the model port and its editor row while hiding the connection handle. */
+    public void setSocketVisible(boolean visible) {
+        if (socketVisible == visible) return;
+        socketVisible = visible;
+        setVisible(visible);
+        if (node != null) node.inputPresentationChanged(this);
+    }
+    private boolean connectionDashed;
+    /** Presentation hint for resource/reference connections, including drag previews. */
+    public boolean isConnectionDashed() { return connectionDashed; }
+    public void setConnectionDashed(boolean dashed) {
+        if (connectionDashed == dashed) return;
+        connectionDashed = dashed;
+        invalidateRecording();
+        if (node != null && node.getGLParent() instanceof GLNodeEditor editor)
+            editor.invalidateRecording();
+    }
+    private String toolTipText;
+    public String getToolTipText(){return toolTipText;}
+    public void setToolTipText(String text){toolTipText=text==null||text.isBlank()?null:text;}
+    @Override public void mouseMoved(GLMouseEvent event){com.vingame.glswing.ui.GLToolTipManager.hover(this,event,toolTipText,null);}
+    @Override protected void detached(com.vingame.glswing.component.GLParent parent){com.vingame.glswing.ui.GLToolTipManager.detached(this);super.detached(parent);}
 	private boolean connectionCandidate;
 	private boolean contentHiddenWhenConnected;
 	private int maximumConnections;
@@ -65,6 +97,9 @@ public final class GLNodePort extends GLContainer {
 		this.maximumConnections = maximumConnections;
 	}
 
+    public int getActiveConnectionCount(){
+        return node!=null&&node.getGLParent() instanceof GLNodeEditor editor?editor.activeConnectionCount(this):0;
+    }
 	public int getConnectionCount() {
 		return node != null && node.getGLParent() instanceof GLNodeEditor editor
 				? editor.connectionCount(this) : 0;
@@ -90,7 +125,7 @@ public final class GLNodePort extends GLContainer {
 	}
 
 	public boolean isContentHiddenByConnection() {
-		return contentHiddenWhenConnected && getConnectionCount() > 0;
+		return contentHiddenWhenConnected && getActiveConnectionCount() > 0;
 	}
 
 	public void setConnectionValidator(ConnectionValidator validator) {
@@ -136,6 +171,21 @@ public final class GLNodePort extends GLContainer {
 		Color fill = hovered || connectionCandidate
 				? style.portHover() : getColor();
 		float diameter = Math.min(getWidth(), getHeight());
+		if (shape == Shape.DIAMOND || shape == Shape.DOUBLE_DIAMOND) {
+			float x = getWidth() / 2, y = getHeight() / 2, radius = diameter / 2 * 1.12f;
+			float[] points = {x, y - radius, x + radius, y, x, y + radius, x - radius, y};
+			var stroke = context.getStroke();
+			try {
+				context.fillPolygon(points, fill);
+				context.setStroke(new GLStroke(Math.max(1, style.borderWidth())).withWidthSpace(GLStroke.WidthSpace.SCREEN));
+				context.drawPolygon(points, style.portBorder());
+                if(shape == Shape.DOUBLE_DIAMOND){
+                    float inner=radius*Math.max(.15f,Math.min(.65f,getGLTheme().values().getFloat("node.portEventInnerScale",.36f)));
+                    context.fillPolygon(new float[]{x,y-inner,x+inner,y,x,y+inner,x-inner,y},style.portBorder());
+                }
+			} finally { context.setStroke(stroke); }
+			return;
+		}
 		context.fillAndDrawUIRoundRect(0, 0, getWidth(), getHeight(),
 				diameter * 0.5f, Math.max(1, style.borderWidth()), fill,
 				style.portBorder(), GLStroke.WidthSpace.SCREEN);
@@ -144,17 +194,20 @@ public final class GLNodePort extends GLContainer {
 	@Override
 	public void mouseEntered(GLMouseEvent event) {
 		hovered = true;
+        com.vingame.glswing.ui.GLToolTipManager.hover(this,event,toolTipText,null);
 		invalidateRecording();
 	}
 
 	@Override
 	public void mouseExited(GLMouseEvent event) {
 		hovered = false;
+        com.vingame.glswing.ui.GLToolTipManager.leave(this);
 		invalidateRecording();
 	}
 
 	@Override
 	public void mousePressed(GLMouseEvent event) {
+        com.vingame.glswing.ui.GLToolTipManager.leave(this);
 		if (node != null && event.getButton() == MouseEvent.BUTTON1) {
 			node.activateFromPort(event, false);
 			if (node.getGLParent() instanceof GLNodeEditor editor)

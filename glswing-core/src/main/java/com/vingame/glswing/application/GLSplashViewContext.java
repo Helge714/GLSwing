@@ -202,7 +202,7 @@ public final class GLSplashViewContext {
 				+ (message == null ? "" : " — " + message)));
 		progressBars.forEach(bar -> {
 			bar.setIndeterminate(false);
-			bar.setForeground(new Color(220, 68, 68));
+			bar.setForeground(com.vingame.glswing.ui.GLTheme.DEFAULT.values().getColor("splash.error"));
 		});
 	}
 

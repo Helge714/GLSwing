@@ -1,0 +1,40 @@
+# GLSwing Theme Studio starter document
+theme.name=Darkblue
+theme.extends=default
+
+# Shared palette
+palette.surface=rgb(49, 52, 66)
+palette.text=rgb(222, 224, 230)
+palette.textDisabled=rgb(122, 131, 152)
+palette.textSecondary=rgb(160, 166, 182)
+palette.border=rgb(33, 36, 43)
+
+# Shared control states
+state.normal=rgb(77, 83, 101)
+state.hover=rgb(96, 104, 125)
+state.disabled=rgb(42, 45, 54)
+
+# Sliders
+slider.pressed=rgb(109, 118, 142)
+
+# Text editors
+textEditor.background=rgb(36, 39, 46)
+
+# Menu bars
+menuBar.background=rgb(40, 43, 52)
+
+# Scroll bars and scroll panes
+scrollBar.track=rgb(33, 36, 43, 161)
+
+# Code editor base syntax
+codeEditor.background=rgb(40, 43, 52)
+codeEditor.inlay.background=rgb(60, 65, 77)
+codeEditor.inlay.border=rgb(81, 88, 105)
+
+# Node editor
+nodeEditor.background=rgb(31, 34, 41)
+
+# Nodes
+node.titleGradientLight=rgb(89, 96, 115)
+node.titleGradientDark=rgb(67, 72, 87)
+

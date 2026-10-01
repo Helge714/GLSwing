@@ -374,7 +374,7 @@ public final class GLCompositeExpansionSelfTest {
 				"composite.unbound"), unboundDescriptor.nodeType());
 		check(projected.getContents().stream().anyMatch(
 				com.vingame.glswing.ui.GLColorChooser.class::isInstance)
-				&& projected.getPorts().isEmpty(),
+				&& projected.getPorts().size() == 1 && !projected.getPorts().get(0).isSocketVisible(),
 				"Registered composite input editor was not projected as a control");
 	}
 
@@ -407,3 +407,4 @@ public final class GLCompositeExpansionSelfTest {
 		if (!condition) throw new AssertionError(message);
 	}
 }
+

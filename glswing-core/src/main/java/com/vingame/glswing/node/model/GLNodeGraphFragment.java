@@ -16,8 +16,17 @@ import com.vingame.glswing.node.binding.GLNodeViewState;
  */
 public record GLNodeGraphFragment(List<GLGraphNode> nodes,
 		List<GLGraphConnection> connections,
-		Map<GLNodeId, GLNodeViewState> viewStates) {
+		Map<GLNodeId, GLNodeViewState> viewStates, float pointerOffsetX, float pointerOffsetY) {
+	public GLNodeGraphFragment(List<GLGraphNode> nodes, List<GLGraphConnection> connections,
+			Map<GLNodeId, GLNodeViewState> viewStates) {
+		this(nodes,connections,viewStates,0,0);
+	}
+	public GLNodeGraphFragment withPointerAnchor(float x, float y) {
+		return new GLNodeGraphFragment(nodes,connections,viewStates,x-minimumX(),y-minimumY());
+	}
 	public GLNodeGraphFragment {
+		if (!Float.isFinite(pointerOffsetX) || !Float.isFinite(pointerOffsetY))
+			throw new IllegalArgumentException("Finite clipboard pointer anchor required");
 		if (nodes == null || nodes.isEmpty() || connections == null
 				|| viewStates == null)
 			throw new IllegalArgumentException("A non-empty graph fragment is required");

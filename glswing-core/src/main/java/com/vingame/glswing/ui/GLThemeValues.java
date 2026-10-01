@@ -43,6 +43,14 @@ public final class GLThemeValues {
 		return values;
 	}
 
+    /** Resolves a color from this theme, falling back to the bundled theme resource. */
+    public Color getColor(String key) {
+        Color fallback = GLThemeDefaults.values().getColor(key, null);
+        Color result = getColor(key, fallback);
+        if(result == null) throw new IllegalArgumentException("Missing theme color: " + key);
+        return result;
+    }
+
 	public boolean contains(String key) {
 		return values.containsKey(key);
 	}

@@ -69,6 +69,16 @@ public final class GLNodeInputEditorRegistry {
 		factories.put(descriptor.id(), factory);
 	}
 
+    /** Adds application value contracts to an existing editor without replacing its factory. */
+    public synchronized void addSupportedValueTypes(String editorId, java.util.Set<String> valueTypes) {
+        var previous=find(editorId).orElseThrow();
+        var supported=new java.util.LinkedHashSet<>(previous.supportedValueTypeIds());
+        supported.addAll(valueTypes);
+        entries.put(editorId,new GLNodeInputEditorDescriptor(previous.id(),previous.displayName(),supported,previous.defaultOptions()));
+    }
+
+	public synchronized void replace(GLNodeInputEditorDescriptor descriptor) { entries.put(descriptor.id(), descriptor); }
+    public synchronized void unregister(String id) { if(id.equals(NONE)||id.equals(SLIDER))throw new IllegalArgumentException("Built-in editor"); entries.remove(id); factories.remove(id); }
 	public synchronized Optional<GLNodeInputEditorDescriptor> find(String id) {
 		return Optional.ofNullable(entries.get(id));
 	}

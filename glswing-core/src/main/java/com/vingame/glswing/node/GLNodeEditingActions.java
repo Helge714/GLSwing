@@ -8,6 +8,9 @@ public interface GLNodeEditingActions {
 	default boolean canDuplicate() { return canCopy(); }
 	default boolean canExtractComposite() { return canCopy(); }
 	default boolean canDelete() { return true; }
+	default void arrangeAll() { }
+	default boolean canExclude() { return false; }
+	default void exclude() { }
 	default boolean canToggleHidden() { return true; }
 	default boolean canToggleMuted() { return true; }
 	void copy();

@@ -32,6 +32,24 @@ import com.vingame.glswing.ui.GLUiKeys;
  * Public convenience methods hide the internal row representation.
  */
 public class GLNode extends GLContainer {
+	private GLNodeConnectionStatus diagnosticStatus=GLNodeConnectionStatus.NORMAL;
+    private String diagnosticMessage;
+    public GLNodeConnectionStatus getDiagnosticStatus(){return diagnosticStatus;}
+    public String getDiagnosticMessage(){return diagnosticMessage;}
+    /** Transient validation decoration; never changes graph or node theme settings. */
+    public void setDiagnostic(GLNodeConnectionStatus status,String message){
+        java.util.Objects.requireNonNull(status);
+        String normalized=message==null||message.isBlank()?null:message;
+        if(status==diagnosticStatus&&java.util.Objects.equals(normalized,diagnosticMessage))return;
+        diagnosticStatus=status;diagnosticMessage=normalized;
+        com.vingame.glswing.ui.GLToolTipManager.leave(this);invalidateRecording();
+    }
+    public void clearDiagnostic(){setDiagnostic(GLNodeConnectionStatus.NORMAL,null);}
+    private java.awt.Color diagnosticColor(){
+        return getGLTheme().values().getColor(diagnosticStatus==GLNodeConnectionStatus.ERROR
+            ?"nodeEditor.errorConnectionBorder":"nodeEditor.warningConnectionBorder");
+    }
+    @Override protected void detached(GLParent parent){com.vingame.glswing.ui.GLToolTipManager.detached(this);super.detached(parent);}
 	private final CopyOnWriteArrayList<Runnable> activationListeners =
 			new CopyOnWriteArrayList<>();
 	private final List<Entry> entries = new ArrayList<>();
@@ -209,7 +227,8 @@ public class GLNode extends GLContainer {
 
 	/**
 	 * Sets the visual order used for port rows. Input/output rows remain stable
-	 * relative to other rows of the same kind.
+	 * relative to other rows of the same kind. OUTPUTS_FIRST moves output rows
+	 * to the front and preserves the joint declaration order of all remaining rows.
 	 */
 	public void setPortOrder(GLNodePortOrder order) {
 		if (order == null)
@@ -428,10 +447,10 @@ public class GLNode extends GLContainer {
 		}
 
 		GLNodeStyle style = getGLStyle();
-		if (style.borderWidth() > 0)
+		if (style.borderWidth() > 0 || diagnosticStatus!=GLNodeConnectionStatus.NORMAL)
 			context.drawUIRoundRect(0, 0, getWidth(), getHeight(),
-					style.cornerRadius(), style.borderWidth(),
-					activeSelected ? style.activeSelectedBorder()
+					style.cornerRadius(), diagnosticStatus==GLNodeConnectionStatus.NORMAL?style.borderWidth():Math.max(2,style.borderWidth()),
+					diagnosticStatus!=GLNodeConnectionStatus.NORMAL?diagnosticColor():activeSelected ? style.activeSelectedBorder()
 							: selected ? style.selectedBorder() : style.border(),
 					GLStroke.WidthSpace.SCREEN);
 
@@ -499,6 +518,7 @@ public class GLNode extends GLContainer {
 
 	@Override
 	public void mouseEntered(GLMouseEvent event) {
+        com.vingame.glswing.ui.GLToolTipManager.hover(this,event,diagnosticMessage,null);
 		hovered = true;
 		updateCollapseChevronHover(event);
 		updateCursor(event);
@@ -506,12 +526,14 @@ public class GLNode extends GLContainer {
 
 	@Override
 	public void mouseMoved(GLMouseEvent event) {
+        com.vingame.glswing.ui.GLToolTipManager.hover(this,event,diagnosticMessage,null);
 		updateCollapseChevronHover(event);
 		updateCursor(event);
 	}
 
 	@Override
 	public void mouseExited(GLMouseEvent event) {
+        com.vingame.glswing.ui.GLToolTipManager.leave(this);
 		hovered = false;
 		setCollapseChevronHovered(false);
 		if (gesture == Gesture.NONE)
@@ -520,6 +542,7 @@ public class GLNode extends GLContainer {
 
 	@Override
 	public void mousePressed(GLMouseEvent event) {
+        com.vingame.glswing.ui.GLToolTipManager.leave(this);
 		if (getGLParent() instanceof GLNodeEditor editor
 				&& editor.finishPlacementFromClick(event)) return;
 		if (event.getButton() == MouseEvent.BUTTON3) {
@@ -660,7 +683,11 @@ public class GLNode extends GLContainer {
 				: new GLLabel(content.getName());
 		if (input == null && output != null && content instanceof GLLabel label)
 			label.setAlignment(GLLabel.Alignment.RIGHT);
-		Entry entry = new Entry(content, input, output, connectedLabel);
+		if (connectedLabel != null)
+            connectedLabel.setVerticalAlignment(GLLabel.VerticalAlignment.CENTER);
+        if (content instanceof GLLabel label)
+            label.setVerticalAlignment(GLLabel.VerticalAlignment.CENTER);
+        Entry entry = new Entry(content, input, output, connectedLabel);
 		entries.add(entry);
 		addGL(content);
 		if (connectedLabel != null)
@@ -718,9 +745,12 @@ public class GLNode extends GLContainer {
 		float contentWidth = Math.max(0, getWidth() - padding.horizontal());
 		float y = style.titleHeight() + padding.top();
 		float diameter = style.portRadius() * 2;
+		float growTotal = 0;
+		for (Entry entry : shown) growTotal += entry.verticalGrow;
+		float extra = Math.max(0, getHeight() - computedMinimumHeight);
 		for (Entry entry : shown) {
 			GLSize preferred = entry.content.getPreferredGLSize();
-			float rowHeight = preferred.height();
+			float rowHeight = preferred.height() + (growTotal > 0 ? extra * entry.verticalGrow / growTotal : 0);
 			entry.content.setBounds(contentX, y, contentWidth, rowHeight);
 			if (entry.connectedLabel != null) {
 				syncConnectedLabel(entry);
@@ -742,6 +772,8 @@ public class GLNode extends GLContainer {
 	}
 
 	private boolean isEntryShown(Entry entry) {
+		if (!entry.explicitVisible && (entry.input == null || entry.input.getConnectionCount() == 0)
+				&& (entry.output == null || entry.output.getConnectionCount() == 0)) return false;
 		return !contentHidden || entry.alwaysVisible
 				|| entry.input != null && entry.input.getConnectionCount() > 0
 				|| entry.output != null && entry.output.getConnectionCount() > 0;
@@ -750,8 +782,8 @@ public class GLNode extends GLContainer {
 	private void setEntryVisible(Entry entry, boolean visible) {
 		entry.content.setVisible(visible);
 		if (entry.connectedLabel != null) entry.connectedLabel.setVisible(visible);
-		if (entry.input != null) entry.input.setVisible(visible);
-		if (entry.output != null) entry.output.setVisible(visible);
+		if (entry.input != null) entry.input.setVisible(visible && entry.input.isSocketVisible());
+		if (entry.output != null) entry.output.setVisible(visible && entry.output.isSocketVisible());
 	}
 
 	private void setAlwaysVisible(Entry entry, boolean value) {
@@ -759,6 +791,23 @@ public class GLNode extends GLContainer {
 		entry.alwaysVisible = value;
 		updateMetricsAndLayout();
 	}
+
+    /** Changes row visibility without replacing controls or interrupting pointer capture. Wired ports remain visible. */
+    public void setContentVisible(GLContainer content, boolean visible) {
+        var entry=entries.stream().filter(e->e.content==content).findFirst().orElseThrow();
+        if(entry.explicitVisible==visible) return;
+        entry.explicitVisible=visible;
+        updateMetricsAndLayout(); invalidateRecording();
+    }
+
+    /** Distributes surplus node height among opted-in rows, leaving preferred sizes unchanged. */
+    public void setContentVerticalGrow(GLContainer content, float weight) {
+        if (!Float.isFinite(weight) || weight < 0) throw new IllegalArgumentException("Non-negative grow weight required");
+        var entry = entries.stream().filter(e -> e.content == content).findFirst().orElseThrow();
+        if (entry.verticalGrow == weight) return;
+        entry.verticalGrow = weight;
+        layoutEntries(); invalidateRecording();
+    }
 
 
 	private List<Entry> orderedEntries() {
@@ -772,6 +821,7 @@ public class GLNode extends GLContainer {
 	private int rowOrder(Entry entry) {
 		boolean input = entry.input != null;
 		boolean output = entry.output != null;
+		if (portOrder == GLNodePortOrder.OUTPUTS_FIRST) return output ? 0 : 1;
 		if (input && output) return 1;
 		if (!input && !output) return 2;
 		boolean first = portOrder == GLNodePortOrder.INPUTS_FIRST ? input : output;
@@ -1156,7 +1206,7 @@ public class GLNode extends GLContainer {
 		gesture = Gesture.NONE;
 		if (finished == Gesture.MOVE
 				&& getGLParent() instanceof GLNodeEditor editor)
-			editor.endNodeMove(this);
+			editor.endNodeMove(this, event != null);
 		else if (finished != Gesture.NONE)
 			recordBoundsChange(finished == Gesture.MOVE
 					? "Move node" : "Resize node");
@@ -1215,6 +1265,8 @@ public class GLNode extends GLContainer {
 		private final GLNodePort output;
 		private final GLLabel connectedLabel;
 		private boolean alwaysVisible;
+		private boolean explicitVisible = true;
+		private float verticalGrow;
 
 		private Entry(GLContainer content, GLNodePort input,
 				GLNodePort output, GLLabel connectedLabel) {

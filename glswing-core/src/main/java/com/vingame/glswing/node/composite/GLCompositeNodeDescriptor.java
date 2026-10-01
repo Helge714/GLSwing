@@ -26,21 +26,19 @@ public record GLCompositeNodeDescriptor(String nodeTypeId, String assetId,
 		for (GLCompositePropertyDescriptor property : properties)
 			if (property == null || propertyIds.putIfAbsent(property.id(), property) != null)
 				throw new IllegalArgumentException("Composite public properties must be unique");
-		java.util.Set<String> mappedProperties = new java.util.LinkedHashSet<>();
 		java.util.Set<String> targets = new java.util.LinkedHashSet<>();
 		for (GLCompositePropertyMapping mapping : propertyMappings)
 			if (mapping == null || !propertyIds.containsKey(mapping.publicPropertyId()))
 				throw new IllegalArgumentException(
 						"Property mappings must reference a public property");
 			else {
-				mappedProperties.add(mapping.publicPropertyId());
 				String target = mapping.internalNodeId() + "/" + mapping.internalPropertyId();
 				if (!targets.add(target))
 					throw new IllegalArgumentException(
 							"An internal property can have only one public source");
 			}
-		if (!mappedProperties.containsAll(propertyIds.keySet()))
-			throw new IllegalArgumentException("Every public property requires a mapping");
+		// Unbound properties are valid while authoring an editor, or as inert
+		// compatibility fields after removal. Only mapped values affect DSP.
 	}
 
 	public GLCompositeNodeDescriptor(String nodeTypeId, String assetId,

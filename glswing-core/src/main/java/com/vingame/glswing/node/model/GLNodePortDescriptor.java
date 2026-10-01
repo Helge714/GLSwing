@@ -5,7 +5,7 @@ public record GLNodePortDescriptor(String id, GLPortDirection direction,
 		String valueTypeId, GLPortTiming timing, boolean required,
 		int maximumConnections) {
 	public GLNodePortDescriptor {
-		if (!validId(id) || direction == null || !validId(valueTypeId)
+		if (!validPortId(id) || direction == null || !validId(valueTypeId)
 				|| timing == null || maximumConnections < 1)
 			throw new IllegalArgumentException("Invalid node-port descriptor");
 		if (direction == GLPortDirection.OUTPUT && required)
@@ -28,6 +28,10 @@ public record GLNodePortDescriptor(String id, GLPortDirection direction,
 		return new GLNodePortDescriptor(id, GLPortDirection.OUTPUT, valueTypeId,
 				timing, false, maximumConnections);
 	}
+
+    private static boolean validPortId(String value) {
+        return value != null && value.equals(value.strip()) && value.matches("[A-Za-z0-9][A-Za-z0-9._ -]*");
+    }
 
 	private static boolean validId(String value) {
 		return value != null && value.matches("[A-Za-z0-9][A-Za-z0-9._-]*");

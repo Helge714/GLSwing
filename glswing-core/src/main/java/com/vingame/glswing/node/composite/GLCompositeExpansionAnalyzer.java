@@ -73,11 +73,13 @@ public final class GLCompositeExpansionAnalyzer {
 			GLNodeGraphAsset asset, GLNodeId origin, State state) {
 		for (GLCompositePortMapping mapping : descriptor.portMappings()) {
 			if (!mapping.isBound()) continue;
-			GLGraphNode internal = asset.graph().findNode(mapping.internalEndpoint().nodeId())
+			for(var endpoint : mapping.internalEndpoints()) {
+            GLGraphNode internal = asset.graph().findNode(endpoint.nodeId())
 					.orElse(null);
 			if (internal == null)
 				state.error("composite.port-node", "Public port "
 						+ mapping.publicPort().id() + " maps to a missing internal node", origin);
+            }
 		}
 	}
 

@@ -39,6 +39,8 @@ import com.vingame.glswing.rendering.GLStroke;
 
 /** Reusable single-line GPU text editor with selection and validation. */
 public class GLTextEditor extends GLControl implements GLEditingHistoryTarget {
+	@Override public boolean blocksGlobalShortcuts() { return true; }
+
 	public static final long DEFAULT_HISTORY_COALESCE_MILLIS = 750;
 
 	public enum ValidationFailureMode {
@@ -458,6 +460,11 @@ public class GLTextEditor extends GLControl implements GLEditingHistoryTarget {
 		float clipInset = layoutBorderWidth(style.borderWidth()) > 0
 				? layoutBorderWidth(style.borderWidth()) + 1 : 0;
 		context.beginLayer(0, 0, width, height, clipInset);
+		// Padding is outside the scrolling viewport (e.g. a slider's fixed unit).
+		float viewportLeft = Math.max(clipInset, padding.left());
+		float viewportRight = Math.max(viewportLeft, Math.min(width - clipInset, width - padding.right()));
+		context.beginClip(viewportLeft, clipInset, viewportRight - viewportLeft,
+				Math.max(0, height - 2 * clipInset));
 		float textOrigin = padding.left() - scrollX;
 		float baseline = (height - font.getLineHeight()) * 0.5f + font.getAscent();
 		if (isFocused() && anchor != caret) {
@@ -487,14 +494,15 @@ public class GLTextEditor extends GLControl implements GLEditingHistoryTarget {
 		float availableWidth = Math.max(0, width - padding.horizontal());
 		float textWidth = font.measureText(text);
 		float fadeWidth = Math.min(style.overflowFadeWidth(),
-				Math.max(0, width * 0.5f - clipInset));
+				Math.max(0, (viewportRight - viewportLeft) * .5f));
 		if (fadeWidth > 0 && scrollX > 0.01f)
-			drawOverflowFade(context, style, clipInset,
-					clipInset + fadeWidth, height, true);
+			drawOverflowFade(context, style, viewportLeft,
+					viewportLeft + fadeWidth, height, true);
 		if (fadeWidth > 0 && textWidth - scrollX > availableWidth + 0.01f)
 			drawOverflowFade(context, style,
-					width - clipInset - fadeWidth,
-					width - clipInset, height, false);
+					viewportRight - fadeWidth,
+					viewportRight, height, false);
+		context.endClip();
 		context.endLayer();
 	}
 
@@ -508,6 +516,10 @@ public class GLTextEditor extends GLControl implements GLEditingHistoryTarget {
 			// The framebuffer scissor rounds its left edge outward. Cover that
 			// possible physical-pixel sliver before starting the soft gradient.
 			context.fillUIRoundRect(x0 - 2, 0, 2.5f, height, 0, opaque);
+		} else {
+			// The right scissor edge also rounds outward. Extend the opaque end
+			// beyond the gradient so fractional viewport bounds cannot expose text.
+			context.fillUIRoundRect(x1 - .5f, 0, 2.5f, height, 0, opaque);
 		}
 		Color inner = leftEdge ? transparent : opaque;
 		Color outer = leftEdge ? opaque : transparent;

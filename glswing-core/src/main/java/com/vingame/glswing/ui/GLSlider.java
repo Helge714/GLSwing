@@ -74,6 +74,13 @@ public class GLSlider extends GLControl {
 	private final GLRenderParameters textParameters = new GLRenderParameters();
 	private final GLRenderParameters borderParameters = new GLRenderParameters();
 	private final Timer validationFeedbackTimer;
+	private final Timer arrowRepeat = new Timer(70, event -> repeatArrow());
+	private boolean arrowRepeated;
+	private void repeatArrow() {
+		if (!isEnabled() || !pressedPart.isArrow()) { arrowRepeat.stop(); return; }
+		arrowRepeated=true;
+		setValue(value + (pressedPart == HitPart.LEFT ? -step : step));
+	}
 
 	private String text;
 	private double minimum;
@@ -90,6 +97,17 @@ public class GLSlider extends GLControl {
 	private double preciseDragFactor = Double.NaN;
 	private double coarseDragFactor = Double.NaN;
 	private DoubleFunction<String> valueFormatter = GLSlider::defaultValueText;
+	private String unit = "";
+
+	/** Non-editable suffix, painted after the numeric value and outside its document. */
+	public final String getUnit() { return unit; }
+	public final void setUnit(String unit) {
+		if (unit == null || unit.indexOf('\n') >= 0 || unit.indexOf('\r') >= 0)
+			throw new IllegalArgumentException("A single-line slider unit is required");
+		if (this.unit.equals(unit)) return;
+		this.unit = unit;
+		syncValueEditorStyle(); layoutValueEditor(); invalidateRecording();
+	}
 	private GLSliderStyle localStyle;
 	private GLSliderStyle appliedStyle;
 	private HitPart hoverPart = HitPart.NONE;
@@ -108,7 +126,7 @@ public class GLSlider extends GLControl {
 	private boolean groupGesturePressed;
 	private double gestureStartValue;
 
-	private GLSlider(String text, Mode mode, Presentation presentation,
+	protected GLSlider(String text, Mode mode, Presentation presentation,
 			double minimum, double maximum, double displayMinimum,
 			double displayMaximum, double value) {
 		super(true);
@@ -163,6 +181,11 @@ public class GLSlider extends GLControl {
 				minimum, maximum, clamp(value, minimum, maximum));
 	}
 
+    /** Subclass entry point for unbounded controls with application gesture handling. */
+    protected GLSlider(String text, double value) {
+        this(text, Mode.FREE, Presentation.BUTTONS, Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0, 1, value);
+        requireFinite(value, "Value");
+    }
 	public static GLSlider free(String text, double value) {
 		return free(text, value, Presentation.BUTTONS);
 	}
@@ -535,6 +558,7 @@ public class GLSlider extends GLControl {
 
 	@Override
 	protected void record(GLContext2D context) {
+		if (isValueEditing()) return;
 		GLSliderStyle style = getGLStyle();
 		float width = getWidth();
 		float height = getHeight();
@@ -559,8 +583,7 @@ public class GLSlider extends GLControl {
 		if (presentation == Presentation.BAR) {
 			double barMinimum = getVisibleMinimum();
 			double barMaximum = getVisibleMaximum();
-			float progress = (float) ((value - barMinimum)
-					/ (barMaximum - barMinimum));
+			float progress = barProgress(value, barMinimum, barMaximum);
 			Color progressLight = sliderGroup == null ? style.progressLightColor()
 					: sliderGroup.progressColor(this, style.progressLightColor(),
 							style.progressDarkColor(), false);
@@ -681,6 +704,7 @@ public class GLSlider extends GLControl {
 			contentLeft += style.arrowInset() + style.arrowButtonWidth();
 			contentRight -= style.arrowInset() + style.arrowButtonWidth();
 		}
+		contentRight -= unitSpace();
 		String renderedValue = valueText();
 		float baseline = (height - font.getLineHeight()) * 0.5f + font.getAscent();
 		float labelX = contentLeft;
@@ -701,6 +725,36 @@ public class GLSlider extends GLControl {
 				context.drawUIText(font, renderedLabel, labelX, baseline, Color.WHITE);
 			context.drawUIText(font, finalValue, valueX, baseline, Color.WHITE);
 		});
+	}
+
+	private float unitRight() {
+		var style = getGLStyle();
+		return getWidth() - style.padding().right() - (!isValueEditing() && presentation == Presentation.BUTTONS
+				? style.arrowInset() + style.arrowButtonWidth() : 0);
+	}
+	private String visibleUnit() {
+		return GLTextFitter.ellipsize(getGLFont(getGLStyle().font()), unit,
+				Math.max(0, unitRight() - getGLStyle().padding().left() - 8));
+	}
+	private float unitSpace() {
+		String visible = visibleUnit();
+		return visible.isEmpty() ? 0 : getGLFont(getGLStyle().font()).measureText(visible) + 4;
+	}
+	@Override protected void renderChildren(GLContext2D context) {
+		super.renderChildren(context);
+		String visible = visibleUnit();
+		if (visible.isEmpty()) return;
+		var font = getGLFont(getGLStyle().font());
+		float x = Math.max(0, unitRight() - font.measureText(visible));
+		float baseline = (getHeight() - font.getLineHeight()) * .5f + font.getAscent();
+		var previous = context.getMouseTarget();
+		context.clearMouseTarget();
+		try {
+			context.drawUITextShadow(font, visible, x, baseline, getGLTheme().textShadow("slider"));
+			context.drawUIText(font, visible, x, baseline, getGLStyle().text(getControlState()));
+		} finally {
+			if (previous != null) context.setMouseTarget(previous, 0, 0);
+		}
 	}
 
 	@Override
@@ -727,7 +781,7 @@ public class GLSlider extends GLControl {
 			left += style.arrowInset() + style.arrowButtonWidth();
 			right -= style.arrowInset() + style.arrowButtonWidth();
 		}
-		float width = Math.max(0, right - left);
+		float width = Math.max(0, right - left - unitSpace());
 		String value = valueText();
 		if (GLTextFitter.overflowToolTip(font, value, width) != null) return value;
 		float valueWidth = font.measureText(value);
@@ -762,6 +816,9 @@ public class GLSlider extends GLControl {
 			return;
 		pressedPart = hitPart(event.getLocalX());
 		gestureStartValue = value;
+		arrowRepeated=false;
+		arrowRepeat.stop();
+		if (pressedPart.isArrow()) { arrowRepeat.setInitialDelay(350); arrowRepeat.start(); }
 		armedArrow = HitPart.NONE;
 		dragDistance = 0;
 		dragOccurred = false;
@@ -809,16 +866,17 @@ public class GLSlider extends GLControl {
 
 	@Override
 	protected void controlMouseReleased(GLMouseEvent event) {
+		arrowRepeat.stop();
 		if (presentation == Presentation.BUTTONS) {
 			HitPart releasedPart = event.hasLocalPosition()
 					? hitPart(event.getLocalX()) : HitPart.NONE;
-			if (!dragOccurred && pressedPart.isArrow()
+			if (!arrowRepeated && !dragOccurred && pressedPart.isArrow()
 					&& releasedPart == pressedPart)
 				armedArrow = pressedPart;
 			if (relativeDragging)
 				endRelativeDrag(event, true);
 		}
-		if (sliderGroup != null)
+		if (sliderGroup != null && !pressedPart.isArrow())
 			sliderGroup.pointerReleased(this, true);
 		else
 			recordValueChange(gestureStartValue, value, "Drag slider");
@@ -828,6 +886,7 @@ public class GLSlider extends GLControl {
 
 	@Override
 	protected void controlMouseCaptureLost(GLMouseEvent event) {
+		arrowRepeat.stop();
 		armedArrow = HitPart.NONE;
 		dragOccurred = false;
 		if (relativeDragging)
@@ -867,6 +926,7 @@ public class GLSlider extends GLControl {
 	@Override
 	protected void controlFocusChanged(boolean focused) {
 		if (!focused) {
+			arrowRepeat.stop();
 			if (relativeDragging)
 				endRelativeDrag(null, false);
 			if (sliderGroup != null)
@@ -913,6 +973,7 @@ public class GLSlider extends GLControl {
 
 	@Override
 	protected void detached(GLParent formerParent) {
+		arrowRepeat.stop();
 		super.detached(formerParent);
 		if (formerParent == sliderGroup) {
 			GLSliderGroup formerGroup = sliderGroup;
@@ -1003,11 +1064,22 @@ public class GLSlider extends GLControl {
 		return HitPart.CENTER;
 	}
 
+    /** Normalizes finite ranges without overflowing when their endpoints have opposite signs. */
+    static float barProgress(double value,double minimum,double maximum) {
+        if(value<=minimum)return 0;
+        if(value>=maximum)return 1;
+        double span=maximum-minimum;
+        double fraction=Double.isFinite(span)?(value-minimum)/span
+                :(value*.5-minimum*.5)/(maximum*.5-minimum*.5);
+        return (float)Math.max(0,Math.min(1,fraction));
+    }
+
 	private void setBarValue(float localX) {
 		float progress = Math.max(0, Math.min(1, localX / Math.max(1, getWidth())));
 		double barMinimum = getVisibleMinimum();
 		double barMaximum = getVisibleMaximum();
-		setValue(barMinimum + progress * (barMaximum - barMinimum));
+		setValue(progress<=0?barMinimum:progress>=1?barMaximum:
+                (1.0-progress)*barMinimum+progress*barMaximum);
 	}
 
 	private void layoutValueEditor() {
@@ -1023,10 +1095,12 @@ public class GLSlider extends GLControl {
 			return;
 		GLSliderStyle sliderStyle = getGLStyle();
 		GLTextEditorStyle editorStyle = getGLTheme().textEditorStyle();
+		GLInsets padding = sliderStyle.padding();
+		padding = new GLInsets(padding.top(), padding.left(), padding.bottom(), padding.right() + unitSpace());
 		editor.setGLStyle(editorStyle.withFont(sliderStyle.font())
 				.withGeometry(sliderStyle.cornerRadius(),
 				sliderStyle.borderWidth(), editorStyle.height(),
-				editorStyle.preferredWidth(), sliderStyle.padding()));
+				editorStyle.preferredWidth(), padding));
 		GLCornerRadii radii = sliderGroup == null
 				? GLCornerRadii.all(sliderStyle.cornerRadius())
 				: sliderGroup.cornerRadii(this, sliderStyle.cornerRadius());
@@ -1057,7 +1131,7 @@ public class GLSlider extends GLControl {
 		syncValueEditorStyle();
 		addGL(editor);
 		layoutValueEditor();
-		repaintGL();
+		invalidateRecording();
 		return editor;
 	}
 
@@ -1081,7 +1155,7 @@ public class GLSlider extends GLControl {
 			return;
 		valueEditor = null;
 		removeGL(editor);
-		repaintGL();
+		invalidateRecording();
 	}
 
 	void showValidationFailure() {
@@ -1348,3 +1422,5 @@ public class GLSlider extends GLControl {
 		}
 	}
 }
+
+

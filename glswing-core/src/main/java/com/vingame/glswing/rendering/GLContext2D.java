@@ -16,7 +16,7 @@ import com.vingame.glswing.rendering.internal.UIQuadInstanceFormat;
 /** Graphics2D-style state and drawing API for one renderer frame. */
 public final class GLContext2D {
 	public static final int NO_PICK_ID = 0;
-	public static final Color DEFAULT_CLEAR_COLOR = new Color(15, 20, 31);
+	public static final Color DEFAULT_CLEAR_COLOR = com.vingame.glswing.ui.GLTheme.DEFAULT.values().getColor("application.clearColor");
 	public static final float DEFAULT_TEXTURE_PICK_ALPHA_THRESHOLD = 0.1f;
 	private static final int MINIMUM_NONLINEAR_GRADIENT_SEGMENTS = 16;
 

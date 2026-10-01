@@ -16,18 +16,19 @@ import com.vingame.glswing.rendering.GLFont;
 import com.vingame.glswing.rendering.GLStroke;
 
 /** Shared delayed tooltip overlay for lightweight controls. */
-final class GLToolTipManager {
+public final class GLToolTipManager {
 	private static final Map<GLParent, Session> SESSIONS = new WeakHashMap<>();
 	private GLToolTipManager() { }
 
-	static void hover(GLControl owner, GLMouseEvent event, String text, Color color) {
-		GLParent host = root(owner);
+	public static void hover(GLContainer owner, GLMouseEvent event, String text, Color color) {
+		if(event==null)return;
+        GLParent host = root(owner);
 		if (host == null) return;
 		Session session;
 		synchronized (SESSIONS) { session = SESSIONS.computeIfAbsent(host, Session::new); }
 		session.hover(owner, event.getScreenX(), event.getScreenY(), text, color);
 	}
-	static void leave(GLControl owner) {
+	public static void leave(GLContainer owner) {
 		GLParent host = root(owner);
 		if (host == null) return;
 		synchronized (SESSIONS) {
@@ -36,7 +37,7 @@ final class GLToolTipManager {
 		}
 	}
 	/** Removes a pending or visible tooltip after its owner leaves the scene graph. */
-	static void detached(GLControl owner) {
+	public static void detached(GLContainer owner) {
 		synchronized (SESSIONS) {
 			for (Session session : SESSIONS.values())
 				session.leave(owner);
@@ -53,7 +54,7 @@ final class GLToolTipManager {
 		private final GLParent host;
 		private final Tip tip = new Tip();
 		private final Timer timer;
-		private GLControl owner;
+		private GLContainer owner;
 		private String text;
 		private Color color;
 		private float x, y;
@@ -63,7 +64,7 @@ final class GLToolTipManager {
 			timer = new Timer(500, event -> show());
 			timer.setRepeats(false);
 		}
-		private void hover(GLControl nextOwner, float nextX, float nextY,
+		private void hover(GLContainer nextOwner, float nextX, float nextY,
 				String nextText, Color nextColor) {
 			x = nextX; y = nextY;
 			if (nextText == null || nextText.isBlank()) { leave(nextOwner); return; }
@@ -73,7 +74,7 @@ final class GLToolTipManager {
 			if (shown) { update(); return; }
 			if (changed) timer.restart();
 		}
-		private void leave(GLControl leaving) {
+		private void leave(GLContainer leaving) {
 			if (owner != leaving) return;
 			timer.stop(); owner = null; text = null; color = null;
 			if (shown) { host.removeGL(tip); shown = false; }
@@ -98,7 +99,16 @@ final class GLToolTipManager {
 	}
 
 	private static final class Tip extends GLContainer {
-		private String text = "";
+		private Tip(){updateShadowOverflow();}
+        @Override protected void themeChanged(){super.themeChanged();updateShadowOverflow();invalidateRecording();}
+        private void updateShadowOverflow(){
+            var values=getGLTheme().values();
+            float softness=Math.max(0,values.getFloat("tooltip.shadow.softness",values.getFloat("menu.shadow.softness",9)));
+            float x=values.getFloat("tooltip.shadow.offsetX",values.getFloat("menu.shadow.offsetX",0));
+            float y=values.getFloat("tooltip.shadow.offsetY",values.getFloat("menu.shadow.offsetY",3));
+            setVisualOverflow(new com.vingame.glswing.layout.GLInsets(softness+Math.max(0,-y),softness+Math.max(0,-x),softness+Math.max(0,y),softness+Math.max(0,x)));
+        }
+        private String text = "";
 		private String[] lines = { "" };
 		private Color color;
 		private float wrapWidth = -1;
@@ -162,7 +172,12 @@ final class GLToolTipManager {
 		@Override protected boolean isMouseTargetEnabled() { return false; }
 		@Override protected void record(GLContext2D context) {
 			GLMenuStyle style = getGLTheme().menuStyle();
-			context.fillAndDrawUIRoundRect(0, 0, getWidth(), getHeight(),
+			var values=getGLTheme().values();
+            float softness=Math.max(0,values.getFloat("tooltip.shadow.softness",values.getFloat("menu.shadow.softness",9)));
+            Color shadow=values.getColor("tooltip.shadow.color",values.getColor("menu.shadow.color"));
+            if(softness>0&&shadow.getAlpha()>0)context.drawUIRoundRectShadow(0,0,getWidth(),getHeight(),Math.min(4,style.cornerRadius()),softness,
+                values.getFloat("tooltip.shadow.offsetX",values.getFloat("menu.shadow.offsetX",0)),values.getFloat("tooltip.shadow.offsetY",values.getFloat("menu.shadow.offsetY",3)),shadow);
+            context.fillAndDrawUIRoundRect(0, 0, getWidth(), getHeight(),
 					Math.min(4, style.cornerRadius()), Math.max(1, style.borderWidth()),
 					style.background(), style.borderColor(), GLStroke.WidthSpace.SCREEN);
 			GLFont font = getGLFont(style.font());

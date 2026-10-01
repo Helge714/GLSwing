@@ -534,6 +534,7 @@ public class GLMenuItem extends GLControl {
 	}
 
 	final void setKeyboardSelected(boolean selected) {
+		if (selected && ownerMenu != null) ownerMenu.revealKeyboardItem(this);
 		if (keyboardSelected == selected) return;
 		keyboardSelected = selected;
 		fireAccessibleStateChange(AccessibleState.SELECTED, selected);

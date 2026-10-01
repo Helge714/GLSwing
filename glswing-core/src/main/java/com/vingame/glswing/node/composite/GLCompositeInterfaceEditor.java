@@ -46,7 +46,6 @@ import com.vingame.glswing.ui.GLUiKeys;
  * low-level endpoint mappings and connection limits are maintained internally.
  */
 public final class GLCompositeInterfaceEditor extends GLContainer {
-	private static final Color SURFACE = new Color(36, 39, 43);
 	private final GLCompositeGraphRegistry composites;
 	private final GLNodeTypeRegistry types;
 	private final GLNodeValueTypeRegistry valueTypes;
@@ -98,6 +97,38 @@ public final class GLCompositeInterfaceEditor extends GLContainer {
 	private final GLLabel defaultLabel = new GLLabel("Default value");
 	private final GLNumberSpinner defaultValue = new GLNumberSpinner(0);
 	private final GLLabel status = new GLLabel("");
+    private GLContainer applicationGeneral, applicationEditors;
+    private final com.vingame.glswing.ui.GLTabbedPane sections=new com.vingame.glswing.ui.GLTabbedPane();
+    private boolean sectionsReady;
+    private boolean sectionTabsVisible=true;
+    public void setSectionTabsVisible(boolean visible){sectionTabsVisible=visible;sections.setVisible(visible);updateEditorOptionVisibility();}
+    public void setGeneralSettings(GLContainer content){if(applicationGeneral!=null)removeGL(applicationGeneral);applicationGeneral=content;if(content!=null)addGL(content);updateEditorOptionVisibility();}
+    public void setEditorSettings(GLContainer content){if(applicationEditors!=null)removeGL(applicationEditors);applicationEditors=content;if(content!=null)addGL(content);updateEditorOptionVisibility();}
+    public void selectSection(int index){sections.setSelectedIndex(index);}
+    public int selectedSection(){return sections.getSelectedIndex();}
+    private GLContainer applicationSettings;
+    private Runnable applicationRefresh=()->{};
+    /** Optional application controls; the Core does not interpret their metadata. */
+    public void setApplicationSettings(GLContainer content,Runnable refresh){
+        if(applicationSettings!=null)removeGL(applicationSettings);
+        applicationSettings=content;applicationRefresh=refresh==null?()->{}:refresh;
+        if(content!=null)addGL(content);applicationRefresh.run();invalidateGLLayout();
+    }
+    private boolean applicationOwnsInputEditors;
+    public void setApplicationOwnsInputEditors(boolean value){applicationOwnsInputEditors=value;updateEditorOptionVisibility();}
+    public void updateSelectedPort(GLCompositePortMapping replacement){
+        if(selectedPort()==null)return;
+        GLCompositeInterfaceTransactions.updatePort(composites,types,assetId,editingPortId,replacement,dependentGraphs.get(),history,"Change input presentation");
+        refresh();changeListener.run();
+    }
+    public GLCompositePortMapping selectedPort(){return findMapping(editingPortId);}
+    public void updateSelectedEditorOptions(Map<String,GLNodeValue> options){
+        var current=selectedPort();if(current==null)return;
+        var replacement=new GLCompositePortMapping(current.publicPort(),current.internalEndpoint(),
+            new GLCompositePortPresentation(current.presentation().inputEditorId(),current.presentation().socketVisible(),options),current.additionalEndpoints());
+        GLCompositeInterfaceTransactions.updatePort(composites,types,assetId,editingPortId,replacement,dependentGraphs.get(),history,"Change input editor options");
+        refresh();changeListener.run();
+    }
 	private String assetId;
 	private String editingPortId;
 	private GLPortDirection editingDirection;
@@ -193,7 +224,10 @@ public final class GLCompositeInterfaceEditor extends GLContainer {
 		defaultValue.addChangeListener(event -> applyPortLive());
 		portId.addActionListener(event -> applyPort());
 		compositeName.addActionListener(event -> commitCompositeName());
-		addGL(title); addGL(compositeNameLabel); addGL(compositeName);
+		addGL(sections);
+        for(String caption:List.of("General","Inputs / Outputs","Editors"))sections.addTab(caption,new GLContainer(){@Override protected void record(GLContext2D context){}});
+        sectionsReady=true;sections.addSelectionListener((source,before,after)->updateEditorOptionVisibility());
+        addGL(title); addGL(compositeNameLabel); addGL(compositeName);
 		addGL(inputsLabel); addGL(inputListGroup);
 		addGL(outputsLabel); addGL(outputListGroup);
 		addGL(settingsLabel); addGL(nameLabel); addGL(portId); addGL(typeLabel);
@@ -267,6 +301,7 @@ public final class GLCompositeInterfaceEditor extends GLContainer {
 			if (asset != null && asset.compositeDescriptor() != null)
 				for (GLCompositePortMapping mapping
 						: asset.compositeDescriptor().portMappings()) {
+					if(mapping.presentation().applicationManaged())continue;
 					ensureValueType(mapping.publicPort().valueTypeId());
 					if (mapping.publicPort().direction() == GLPortDirection.INPUT)
 						inputModel.addElement(mapping);
@@ -274,7 +309,7 @@ public final class GLCompositeInterfaceEditor extends GLContainer {
 				}
 			refreshValueTypes();
 			GLCompositePortMapping selected = findMapping(editingPortId);
-			if (selected != null) {
+			if (selected != null && !selected.presentation().applicationManaged()) {
 				GLList<GLCompositePortMapping> list = editingDirection
 						== GLPortDirection.INPUT ? inputs : outputs;
 				list.setSelectedIndex(indexOf(list, selected));
@@ -285,14 +320,21 @@ public final class GLCompositeInterfaceEditor extends GLContainer {
 				outputs.setSelectedIndex(0); loadPort(outputs.getSelectedValue());
 			} else clearEditor();
 		} finally { synchronizing = false; }
-		updateEnabledState();
+		updateEnabledState(); applicationRefresh.run(); updateEditorOptionVisibility();
 	}
 
 	@Override protected void resized(float width, float height) {
 		float pad = 12, content = Math.max(0, width - pad * 2), y = 10;
-		title.setBounds(pad, y, content, 26); y += 31;
-		compositeNameLabel.setBounds(pad, y, content, 18); y += 20;
-		compositeName.setBounds(pad, y, content, 30); y += 36;
+		sections.setBounds(pad,0,content,38);y=sectionTabsVisible?46:8;
+        if(sections.getSelectedIndex()==2){
+            if(applicationEditors!=null){float h=applicationEditors.getPreferredGLSize().height();applicationEditors.setBounds(pad,y,content,h);y+=h;}
+            setIntrinsicPreferredGLSize(new GLSize(320,y+pad));return;
+        }
+        if(sections.getSelectedIndex()==0){
+            compositeNameLabel.setBounds(pad,y,content,18);y+=20;compositeName.setBounds(pad,y,content,30);y+=36;
+            if(applicationGeneral!=null){float h=applicationGeneral.getPreferredGLSize().height();applicationGeneral.setBounds(pad,y,content,h);y+=h;}
+            setIntrinsicPreferredGLSize(new GLSize(320,y+pad));return;
+        }
 		inputsLabel.setBounds(pad, y, content, 20); y += 22;
 		inputListGroup.setBounds(pad, y, content, 80); y += 88;
 		outputsLabel.setBounds(pad, y, content, 20); y += 22;
@@ -305,8 +347,9 @@ public final class GLCompositeInterfaceEditor extends GLContainer {
 		if (editorLabel.isVisible()) {
 			editorLabel.setBounds(pad, y, content, 18); y += 20;
 			inputEditor.setBounds(pad, y, content, 30); y += 35;
-			socketVisible.setBounds(pad, y, content, 28); y += 33;
+
 		}
+		if(socketVisible.isVisible()){socketVisible.setBounds(pad,y,content,28);y+=33;}
 		if (numericTypeLabel.isVisible()) {
 			numericTypeLabel.setBounds(pad, y, content, 18); y += 20;
 			numericType.setBounds(pad, y, content, 30); y += 35;
@@ -319,13 +362,14 @@ public final class GLCompositeInterfaceEditor extends GLContainer {
 			defaultLabel.setBounds(pad, y, content, 18); y += 20;
 			defaultValue.setBounds(pad, y, content, 30); y += 36;
 		}
+        if(applicationSettings!=null){float h=applicationSettings.getPreferredGLSize().height();applicationSettings.setBounds(pad,y,content,h);y+=h+8;}
 		status.setBounds(pad, y, content, 22); y += 22 + pad;
 		setIntrinsicPreferredGLSize(new GLSize(320, y));
 	}
 
 	@Override protected void record(GLContext2D context) {
 		context.fillUIRoundRect(0, 0, getWidth(), getHeight(), 6,
-				getGLTheme().values().getColor("palette.surface.raised", SURFACE));
+				getGLTheme().values().getColor("compositeInterface.background"));
 	}
 
 	@Override protected void localizerChanged() { updateLocalizedText(); }
@@ -353,7 +397,7 @@ public final class GLCompositeInterfaceEditor extends GLContainer {
 				.ifPresent(inputEditor::setSelectedItem);
 		socketVisible.setSelected(mapping.presentation().socketVisible());
 		loadEditorOptions(mapping.presentation().editorOptions());
-		updateEditorOptionVisibility(); updateEnabledState(); status.setText("");
+		updateEditorOptionVisibility(); updateEnabledState(); status.setText(""); applicationRefresh.run(); updateEditorOptionVisibility();
 	}
 
 	private void beginNew(GLPortDirection direction) {
@@ -372,6 +416,12 @@ public final class GLCompositeInterfaceEditor extends GLContainer {
 		applyPort();
 		portId.requestGLFocus(portId); portId.selectAll();
 	}
+
+    private java.util.function.UnaryOperator<GLCompositePortMapping> portPresentationTransform = java.util.function.UnaryOperator.identity();
+    /** Application metadata normalization, applied before the undoable interface transaction. */
+    public void setPortPresentationTransform(java.util.function.UnaryOperator<GLCompositePortMapping> transform) {
+        portPresentationTransform = java.util.Objects.requireNonNull(transform);
+    }
 
 	private void applyPortLive() {
 		if (!synchronizing && editingPortId != null) applyPort();
@@ -402,7 +452,9 @@ public final class GLCompositeInterfaceEditor extends GLContainer {
 					selectedType.id(), GLPortTiming.CURRENT, required, limit);
 			Map<String, GLNodeValue> options = editorOptions(selectedEditor);
 			GLCompositePortMapping mapping = new GLCompositePortMapping(port, endpoint,
-					new GLCompositePortPresentation(editorId, showSocket, options));
+					new GLCompositePortPresentation(editorId, showSocket, options),
+                    current == null ? List.of() : current.additionalEndpoints());
+            mapping = portPresentationTransform.apply(mapping);
 			if (editingPortId == null)
 				GLCompositeInterfaceTransactions.addPort(composites, types, assetId,
 						mapping, history, "Add composite port");
@@ -449,10 +501,16 @@ public final class GLCompositeInterfaceEditor extends GLContainer {
 	}
 
 	private void updateEditorOptionVisibility() {
-		boolean input = editingDirection == GLPortDirection.INPUT;
-		editorLabel.setVisible(input); inputEditor.setVisible(input);
+		boolean ports=!sectionsReady||sections.getSelectedIndex()==1;
+        title.setVisible(false);compositeNameLabel.setVisible(!ports&&sections.getSelectedIndex()==0);compositeName.setVisible(compositeNameLabel.isVisible());
+        for(GLContainer control:List.of(inputsLabel,inputListGroup,outputsLabel,outputListGroup,settingsLabel,nameLabel,portId,typeLabel,valueType,status))control.setVisible(ports);
+        if(applicationGeneral!=null)applicationGeneral.setVisible(sections.getSelectedIndex()==0);
+        if(applicationEditors!=null)applicationEditors.setVisible(sections.getSelectedIndex()==2);
+        if(applicationSettings!=null)applicationSettings.setVisible(ports);
+        boolean input = ports&&editingDirection == GLPortDirection.INPUT;
+		editorLabel.setVisible(input&&!applicationOwnsInputEditors); inputEditor.setVisible(editorLabel.isVisible());
 		socketVisible.setVisible(input);
-		boolean slider = input && inputEditor.getSelectedItem() != null
+		boolean slider = input && !applicationOwnsInputEditors && inputEditor.getSelectedItem() != null
 				&& GLNodeInputEditorRegistry.SLIDER.equals(inputEditor.getSelectedItem().id());
 		numericTypeLabel.setVisible(slider); numericType.setVisible(slider);
 		sliderPresentationLabel.setVisible(slider); sliderPresentation.setVisible(slider);
@@ -460,10 +518,9 @@ public final class GLCompositeInterfaceEditor extends GLContainer {
 		maximumLabel.setVisible(slider); maximumGroup.setVisible(slider);
 		defaultLabel.setVisible(slider); defaultValue.setVisible(slider);
 		updateSliderBoundsState();
-		// Visibility can change without this component receiving new bounds. Publish
-		// the new height immediately so the enclosing scroll pane can expose the rows.
-		setIntrinsicPreferredGLSize(new GLSize(320,
-				slider ? 796 : input ? 520 : 432));
+        // A section change also needs to position its controls when the enclosing
+        // viewport keeps this editor at the same size (e.g. a tall sidebar).
+        resized(getWidth(), getHeight());
 		invalidateGLLayout();
 	}
 
@@ -481,7 +538,7 @@ public final class GLCompositeInterfaceEditor extends GLContainer {
 		GLCompositePortMapping current = findMapping(editingPortId);
 		if (current != null && current.presentation().inputEditorId().equals(editor.id()))
 			result.putAll(current.presentation().editorOptions());
-		if (GLNodeInputEditorRegistry.SLIDER.equals(editor.id())) {
+		if (!applicationOwnsInputEditors && GLNodeInputEditorRegistry.SLIDER.equals(editor.id())) {
 			double min = minimum.getValue();
 			double max = maximum.getValue();
 			if (!Double.isFinite(min) || !Double.isFinite(max) || min >= max)
@@ -596,6 +653,9 @@ public final class GLCompositeInterfaceEditor extends GLContainer {
 		} else {
 			ordered.addAll(inputModel.elements()); ordered.addAll(directional);
 		}
+		var editable = ordered.iterator();
+        ordered = asset().compositeDescriptor().portMappings().stream()
+                .map(p -> p.presentation().applicationManaged() ? p : editable.next()).toList();
 		try {
 			GLCompositeInterfaceTransactions.replacePorts(composites, types, assetId,
 					ordered, history, "Reorder composite ports");
@@ -616,7 +676,7 @@ public final class GLCompositeInterfaceEditor extends GLContainer {
 					old.valueTypeId(), old.timing(), old.required(),
 					old.maximumConnections());
 			GLCompositePortMapping replacement = new GLCompositePortMapping(renamed,
-					mapping.internalEndpoint(), mapping.presentation());
+					mapping.internalEndpoint(), mapping.presentation(), mapping.additionalEndpoints());
 			GLCompositeInterfaceTransactions.updatePort(composites, types, assetId,
 					old.id(), replacement, dependentGraphs.get(), history,
 					"Rename composite port");

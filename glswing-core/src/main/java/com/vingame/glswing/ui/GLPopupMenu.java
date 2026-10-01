@@ -55,6 +55,7 @@ public class GLPopupMenu extends GLContainer {
 			new WeakHashMap<>();
 
 	private final List<GLContainer> rows = new ArrayList<>();
+	private float rowsViewportHeight;
 	private final Map<GLContainer, GLSize> customRowSizes = new IdentityHashMap<>();
 	private Predicate<? super GLMenuItem> itemFilter = item -> true;
 	private final CopyOnWriteArrayList<GLPopupMenuListener> popupMenuListeners =
@@ -575,8 +576,7 @@ public class GLPopupMenu extends GLContainer {
 				values.getFloat("menu.shadow.softness", 9));
 		float shadowOffsetX = values.getFloat("menu.shadow.offsetX", 0);
 		float shadowOffsetY = values.getFloat("menu.shadow.offsetY", 3);
-		Color shadowColor = values.getColor("menu.shadow.color",
-				new Color(0, 0, 0, 105));
+		Color shadowColor = values.getColor("menu.shadow.color");
 		if (shadowSoftness > 0 && shadowColor.getAlpha() > 0)
 			context.drawUIRoundRectShadow(0, 0, width, height,
 					style.cornerRadius(), shadowSoftness,
@@ -780,6 +780,7 @@ public class GLPopupMenu extends GLContainer {
 		scrollOffset = Math.min(scrollOffset, maximumScrollOffset);
 		float viewportHeight = scrollable
 				? availableRowsHeight : naturalRowsHeight;
+		rowsViewportHeight = viewportHeight;
 		ellipsisActive = textOverflow == GLPopupTextOverflow.ELLIPSIS
 				&& contentWidth > viewportWidth + 0.01f;
 		maximumHorizontalScrollOffset = horizontalScrollable
@@ -937,6 +938,23 @@ public class GLPopupMenu extends GLContainer {
 		return ellipsisActive;
 	}
 
+    /** Keep keyboard selection visible without moving rows that are already fully visible. */
+    final void revealKeyboardItem(GLMenuItem item) {
+        if (rowsViewportHeight <= 0 || !rows.contains(item) || !included(item)) return;
+        float top = 0;
+        for (GLContainer row : rows) {
+            if (!included(row)) continue;
+            float height = rowHeight(row, getGLStyle());
+            if (row == item) {
+                if (top < scrollOffset || height > rowsViewportHeight)
+                    scrollToOffset(top);
+                else if (top + height > scrollOffset + rowsViewportHeight)
+                    scrollToOffset(top + height - rowsViewportHeight);
+                return;
+            }
+            top += height;
+        }
+    }
 	private void scrollToOffset(float offset) {
 		float next = Math.max(0, Math.min(maximumScrollOffset, offset));
 		if (Math.abs(next - scrollOffset) < 0.01f)

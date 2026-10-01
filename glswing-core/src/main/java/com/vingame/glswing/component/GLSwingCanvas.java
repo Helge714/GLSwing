@@ -103,7 +103,7 @@ public abstract class GLSwingCanvas extends GLCanvas implements GLEventListener 
 			throw new IllegalArgumentException("Swap interval must not be negative");
 		requestedAntialiasingSamples = antialiasingSamples;
 		this.swapInterval = swapInterval;
-		setBackground(Color.BLACK);
+		setBackground(com.vingame.glswing.ui.GLTheme.DEFAULT.values().getColor("application.clearColor"));
 		addGLEventListener(this);
 	}
 

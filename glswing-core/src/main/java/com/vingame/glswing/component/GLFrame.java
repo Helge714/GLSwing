@@ -82,7 +82,7 @@ public class GLFrame extends JFrame implements GLParent, AutoCloseable {
 	private volatile RenderingSettings renderingSettings;
 	private final AtomicBoolean closing = new AtomicBoolean();
 	private final CompletableFuture<Void> closedFuture = new CompletableFuture<>();
-	private volatile Color clearColor = Color.BLACK;
+	private volatile Color clearColor;
 
 	public GLFrame() {
 		this("", RenderingSettings.DEFAULT);
@@ -101,8 +101,8 @@ public class GLFrame extends JFrame implements GLParent, AutoCloseable {
 				settings.swapInterval());
 		animator = new FPSAnimator(glCanvas, settings.targetFps(), true);
 		super.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
-		glCanvas.setBackground(clearColor);
-		super.getContentPane().setBackground(clearColor);
+		glCanvas.setBackground(getGLClearColor());
+		super.getContentPane().setBackground(getGLClearColor());
 		super.getContentPane().setLayout(new java.awt.BorderLayout());
 		super.getContentPane().add(glCanvas, java.awt.BorderLayout.CENTER);
 		super.addWindowListener(new WindowAdapter() {
@@ -198,7 +198,7 @@ public class GLFrame extends JFrame implements GLParent, AutoCloseable {
 	}
 
 	public final Color getGLClearColor() {
-		return clearColor;
+		return clearColor!=null?clearColor:getGLTheme().values().getColor("application.clearColor");
 	}
 
 	public final void setGLClearColor(Color color) {
@@ -412,7 +412,7 @@ public class GLFrame extends JFrame implements GLParent, AutoCloseable {
 
 		@Override
 		protected void renderContainer(GLContext2D context) {
-			context.clear(clearColor);
+			context.clear(getGLClearColor());
 		}
 	}
 }

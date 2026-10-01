@@ -221,7 +221,7 @@ public final class GLApplication {
 		private int height = 720;
 		private int minimumWidth = 640;
 		private int minimumHeight = 420;
-		private Color clearColor = new Color(18, 21, 26);
+		private Color clearColor; // null follows application.clearColor from the active theme
 		private RenderingSettings renderingSettings = RenderingSettings.DEFAULT;
 		private GLSplashConfiguration splash = GLSplashConfiguration.builder().build();
 		private GLSplashViewFactory splashViewFactory;

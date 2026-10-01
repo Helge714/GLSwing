@@ -244,7 +244,7 @@ public final class GuiShowcaseDemo {
 				.minimumSize(760, 520)
 				.clearColor(new Color(12, 17, 27))
 				.theme(showcaseThemeDirectory().resolve("dark.gltheme"),
-						GLThemes.DARK)
+						GLThemes.BLUE)
 				.locale(Locale.GERMAN)
 				.localizationBundle(
 						"com.vingame.glswing.demo.languages.Showcase")
@@ -369,7 +369,7 @@ public final class GuiShowcaseDemo {
 			zoomLayer.addGL(surface);
 			addGL(zoomLayer);
 			addGL(surface.menuBar());
-			watchShowcaseTheme("dark.gltheme", GLThemes.DARK,
+			watchShowcaseTheme("dark.gltheme", GLThemes.BLUE,
 					"showcase.theme.dark", false);
 			setLanguage(Locale.GERMAN);
 			addMouseWheelListener(event -> {

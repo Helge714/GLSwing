@@ -29,6 +29,20 @@ public record GLGraphNode(GLNodeId id, String typeId, int typeVersion,
 		this(id, typeId, 1, Map.of());
 	}
 
+    /** Persisted provenance; unmarked existing values remain explicit for compatibility. */
+    public static final String AUTOMATIC_PREFIX = "__automatic.";
+    public static final String AUTOMATIC_DEFAULT_PREFIX = "__automaticDefault.";
+    public boolean isPropertyAutomatic(String key) {
+        return properties.get(AUTOMATIC_PREFIX+key) instanceof GLNodeValue.BooleanValue value
+                ? value.value() && (!properties.containsKey(AUTOMATIC_DEFAULT_PREFIX+key) || java.util.Objects.equals(properties.get(key),properties.get(AUTOMATIC_DEFAULT_PREFIX+key))) : !properties.containsKey(key);
+    }
+    public GLGraphNode withExplicitProperty(String key, GLNodeValue value) {
+        return withProperty(key,value).withProperty(AUTOMATIC_PREFIX+key,GLNodeValue.of(false));
+    }
+    public GLGraphNode withAutomaticProperty(String key, GLNodeValue value) {
+        return withProperty(key,value).withProperty(AUTOMATIC_PREFIX+key,GLNodeValue.of(true)).withProperty(AUTOMATIC_DEFAULT_PREFIX+key,value);
+    }
+
 	public GLGraphNode withProperty(String key, GLNodeValue value) {
 		LinkedHashMap<String, GLNodeValue> next = new LinkedHashMap<>(properties);
 		if (key == null || key.isBlank() || value == null)

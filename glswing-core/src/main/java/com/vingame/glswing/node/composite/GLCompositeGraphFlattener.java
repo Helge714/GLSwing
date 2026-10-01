@@ -30,7 +30,8 @@ public final class GLCompositeGraphFlattener {
 		if (!estimate.isValid()) return failed(estimate.diagnostics());
 		Context context = new Context(root);
 		expand(root, registry, List.of(), true, context);
-		if (!context.diagnostics.isEmpty()) return failed(context.diagnostics);
+		if(context.connections.size()>limits.maximumConnections()) context.error("composite.limit", "Expanded fanout exceeds the connection limit", null);
+        if (!context.diagnostics.isEmpty()) return failed(context.diagnostics);
 		GLNodeGraphSnapshot graph = new GLNodeGraphSnapshot(root.graph().graphId(),
 				root.graph().revision(), context.nodes, context.connections);
 		return new GLCompositeFlattenResult(Optional.of(graph), context.origins, List.of());
@@ -49,7 +50,7 @@ public final class GLCompositeGraphFlattener {
 						node.properties());
 				context.nodes.add(leaf);
 				context.origins.put(id, new GLCompositeOrigin(path, asset.id(), node.id()));
-				endpoints.put(node.id(), port -> new GLNodeEndpoint(id, port));
+				endpoints.put(node.id(), port -> List.of(new GLNodeEndpoint(id, port)));
 				continue;
 			}
 			GLNodeGraphAsset nested = registry.findAsset(descriptor.assetId()).orElseThrow();
@@ -58,20 +59,19 @@ public final class GLCompositeGraphFlattener {
 			nestedPath.add(new GLCompositeOrigin.Instance(node.id(), node.typeId(), nested.id()));
 			ExpandedGraph expanded = expand(configured, registry, List.copyOf(nestedPath),
 					false, context);
-			Map<String, GLNodeEndpoint> publicEndpoints = new LinkedHashMap<>();
+			Map<String, List<GLNodeEndpoint>> publicEndpoints = new LinkedHashMap<>();
 			for (GLCompositePortMapping mapping : descriptor.portMappings()) {
-				if (!mapping.isBound()) continue;
-				GLNodeEndpoint resolved = expanded.resolve(mapping.internalEndpoint());
-				if (resolved == null)
-					context.error("composite.port-target", "Cannot resolve internal target for public port "
-							+ mapping.publicPort().id(), node.id());
-				else publicEndpoints.put(mapping.publicPort().id(), resolved);
+				if (!mapping.isBound()) { publicEndpoints.put(mapping.publicPort().id(), List.of()); continue; }
+                List<GLNodeEndpoint> resolved = new ArrayList<>();
+                for(var endpoint : mapping.internalEndpoints()) { var targets = expanded.resolve(endpoint); if (targets == null) context.error("composite.port-target", "Cannot resolve internal target for public port " + mapping.publicPort().id(), node.id()); else resolved.addAll(targets); }
+                // An empty nested mapping is a valid, disconnected public port.
+                publicEndpoints.put(mapping.publicPort().id(), List.copyOf(resolved));
 			}
 			endpoints.put(node.id(), publicEndpoints::get);
 		}
 		for (GLGraphConnection connection : asset.graph().connections()) {
-			GLNodeEndpoint output = resolve(endpoints, connection.output());
-			GLNodeEndpoint input = resolve(endpoints, connection.input());
+			List<GLNodeEndpoint> output = resolve(endpoints, connection.output());
+			List<GLNodeEndpoint> input = resolve(endpoints, connection.input());
 			if (output == null || input == null) {
 				GLNodeId origin = output == null ? connection.output().nodeId()
 						: connection.input().nodeId();
@@ -81,7 +81,10 @@ public final class GLCompositeGraphFlattener {
 			}
 			GLNodeConnectionId id = root ? connection.id()
 					: derivedConnectionId(path, asset.id(), connection.id());
-			context.connections.add(new GLGraphConnection(id, output, input));
+			for (var out : output) for (var in : input) {
+                var wireId = output.size()==1 && input.size()==1 ? id : new GLNodeConnectionId(UUID.nameUUIDFromBytes((id+"/"+out+"/"+in).getBytes(StandardCharsets.UTF_8)));
+                context.connections.add(new GLGraphConnection(wireId, out, in));
+            }
 		}
 		return new ExpandedGraph(endpoints);
 	}
@@ -91,7 +94,7 @@ public final class GLCompositeGraphFlattener {
 			Context context) {
 		Map<GLNodeId, GLGraphNode> nodes = new LinkedHashMap<>(nested.graph().nodesById());
 		for (String property : instance.properties().keySet())
-			if (descriptor.findProperty(property).isEmpty())
+			if (!property.startsWith(GLGraphNode.AUTOMATIC_PREFIX) && !property.startsWith(GLGraphNode.AUTOMATIC_DEFAULT_PREFIX) && descriptor.findProperty(property).isEmpty())
 				context.error("composite.property-unknown", "Unknown composite property: "
 						+ property, instance.id());
 		for (GLCompositePropertyDescriptor property : descriptor.properties()) {
@@ -110,7 +113,9 @@ public final class GLCompositeGraphFlattener {
 							+ " maps to a missing internal node", instance.id());
 					continue;
 				}
-				nodes.put(target.id(), target.withProperty(mapping.internalPropertyId(), value));
+				var mapped=mapping.mappedValue(value);
+                if(mapped==null){context.error("composite.property-choice","No mapped value for "+property.id(),instance.id());continue;}
+                nodes.put(target.id(), target.withProperty(mapping.internalPropertyId(), mapped));
 			}
 		}
 		GLNodeGraphSnapshot graph = new GLNodeGraphSnapshot(nested.graph().graphId(),
@@ -119,10 +124,11 @@ public final class GLCompositeGraphFlattener {
 				nested.viewState(), nested.metadata(), nested.compositeDescriptor());
 	}
 
-	private static GLNodeEndpoint resolve(Map<GLNodeId, EndpointResolver> endpoints,
+	private static List<GLNodeEndpoint> resolve(Map<GLNodeId, EndpointResolver> endpoints,
 			GLNodeEndpoint endpoint) {
 		EndpointResolver resolver = endpoints.get(endpoint.nodeId());
-		return resolver == null ? null : resolver.resolve(endpoint.portId());
+		var result = resolver == null ? null : resolver.resolve(endpoint.portId());
+        return result; // null means unknown; an empty list means intentionally disconnected.
 	}
 	private static GLNodeId derivedNodeId(List<GLCompositeOrigin.Instance> path,
 			String assetId, GLNodeId source) {
@@ -147,10 +153,10 @@ public final class GLCompositeGraphFlattener {
 	}
 
 	@FunctionalInterface private interface EndpointResolver {
-		GLNodeEndpoint resolve(String portId);
+		List<GLNodeEndpoint> resolve(String portId);
 	}
 	private record ExpandedGraph(Map<GLNodeId, EndpointResolver> endpoints) {
-		private GLNodeEndpoint resolve(GLNodeEndpoint endpoint) {
+		private List<GLNodeEndpoint> resolve(GLNodeEndpoint endpoint) {
 			return GLCompositeGraphFlattener.resolve(endpoints, endpoint);
 		}
 	}

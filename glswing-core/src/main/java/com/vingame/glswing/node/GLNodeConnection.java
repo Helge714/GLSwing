@@ -16,6 +16,13 @@ public final class GLNodeConnection implements GLMouseTarget {
 	private GLNodeConnectionId modelId;
 	private GLNodeConnectionStatus status = GLNodeConnectionStatus.NORMAL;
 	private String diagnosticMessage;
+    private boolean active=true;
+    public boolean isActive(){return active;}
+    /** Runtime eligibility; keeps the saved wire and connection limits intact. */
+    public void setActive(boolean active){
+        if(this.active==active)return;this.active=active;
+        input.getNode().inputPresentationChanged(input);changed();
+    }
 
 	public GLNodeConnection(GLNodePort output, GLNodePort input) {
 		if (output == null || output.getDirection() != GLNodePort.Direction.OUTPUT)
@@ -25,6 +32,8 @@ public final class GLNodeConnection implements GLMouseTarget {
 		this.output = output;
 		this.input = input;
 	}
+
+	public boolean isDashed() { return output.isConnectionDashed() || input.isConnectionDashed(); }
 
 	public GLNodePort getOutput() { return output; }
 	public GLNodePort getInput() { return input; }
@@ -46,6 +55,7 @@ public final class GLNodeConnection implements GLMouseTarget {
 		if (this.status == status
 				&& java.util.Objects.equals(diagnosticMessage, normalized))
 			return;
+		if(editor!=null)com.vingame.glswing.ui.GLToolTipManager.leave(editor);
 		this.status = status;
 		diagnosticMessage = normalized;
 		changed();
@@ -91,12 +101,17 @@ public final class GLNodeConnection implements GLMouseTarget {
 	}
 
 	void detachFrom(GLNodeEditor editor) {
+        com.vingame.glswing.ui.GLToolTipManager.leave(editor);
 		if (this.editor == editor)
 			this.editor = null;
 	}
 
+	@Override public void mouseEntered(GLMouseEvent event){mouseMoved(event);}
+    @Override public void mouseMoved(GLMouseEvent event){if(editor!=null)com.vingame.glswing.ui.GLToolTipManager.hover(editor,event,diagnosticMessage,null);}
+    @Override public void mouseExited(GLMouseEvent event){if(editor!=null)com.vingame.glswing.ui.GLToolTipManager.leave(editor);}
 	@Override
 	public void mousePressed(GLMouseEvent event) {
+        if(editor!=null)com.vingame.glswing.ui.GLToolTipManager.leave(editor);
 		if (editor == null || event.getButton() != MouseEvent.BUTTON1
 				&& event.getButton() != MouseEvent.BUTTON3)
 			return;

@@ -33,6 +33,8 @@ public final class GLCompositeInterfaceTransactions {
 				new IllegalArgumentException("Unknown composite asset: " + assetId));
 		GLCompositeNodeDescriptor descriptor = before.composite().orElseThrow(() ->
 				new IllegalArgumentException("Asset is not a composite: " + assetId));
+        for(var fixed:descriptor.portMappings())if(fixed.presentation().applicationManaged()&&!ports.contains(fixed))
+            throw new IllegalArgumentException("Application-managed port cannot be changed or removed");
 		validateMappings(before, types, ports);
 		GLCompositeNodeDescriptor nextDescriptor = new GLCompositeNodeDescriptor(
 				descriptor.nodeTypeId(), descriptor.assetId(),
@@ -70,6 +72,7 @@ public final class GLCompositeInterfaceTransactions {
 			}
 		if (index < 0) throw new IllegalArgumentException(
 				"Unknown composite port: " + currentPortId);
+		if(ports.get(index).presentation().applicationManaged())throw new IllegalArgumentException("Application-managed port cannot be edited");
 		ports.set(index, port);
 		return replacePorts(composites, types, assetId, ports, history, editName);
 	}
@@ -91,6 +94,7 @@ public final class GLCompositeInterfaceTransactions {
 			GLNodeTypeRegistry types, String assetId, String portId,
 			GLHistoryManager history, String editName) {
 		GLCompositeNodeDescriptor descriptor = descriptor(composites, assetId);
+        if(descriptor.portMappings().stream().anyMatch(p->p.publicPort().id().equals(portId)&&p.presentation().applicationManaged()))throw new IllegalArgumentException("Application-managed port cannot be removed");
 		List<GLCompositePortMapping> ports = descriptor.portMappings().stream()
 				.filter(port -> !port.publicPort().id().equals(portId)).toList();
 		if (ports.size() == descriptor.portMappings().size()) return false;
@@ -189,19 +193,21 @@ public final class GLCompositeInterfaceTransactions {
 			if (mapping == null) throw new IllegalArgumentException(
 					"Composite port mappings must not contain null");
 			if (!mapping.isBound()) continue;
-			GLGraphNode node = asset.graph().findNode(mapping.internalEndpoint().nodeId())
+			for (var endpoint : mapping.internalEndpoints()) {
+            GLGraphNode node = asset.graph().findNode(endpoint.nodeId())
 					.orElseThrow(() -> new IllegalArgumentException(
 							"Composite port references an unknown internal node"));
 			GLNodeTypeDescriptor type = types.find(node.typeId()).orElseThrow(() ->
 					new IllegalArgumentException("Unknown internal node type: " + node.typeId()));
 			GLNodePortDescriptor internal = type.findPort(
-					mapping.internalEndpoint().portId()).orElseThrow(() ->
+					endpoint.portId()).orElseThrow(() ->
 							new IllegalArgumentException(
 									"Composite port references an unknown internal port"));
 			if (internal.direction() != mapping.publicPort().direction())
 				throw new IllegalArgumentException(
 						"Public and internal port directions must match");
-			// Type mismatches are retained as diagnosable authoring state. This lets
+			}
+            // Type mismatches are retained as diagnosable authoring state. This lets
 			// users change a public contract without silently rewiring its graph.
 		}
 	}

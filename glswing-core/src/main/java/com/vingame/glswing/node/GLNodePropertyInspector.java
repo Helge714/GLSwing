@@ -8,6 +8,7 @@ import java.util.Map;
 import com.vingame.glswing.component.GLContainer;
 import com.vingame.glswing.node.binding.GLNodeEditorBinding;
 import com.vingame.glswing.node.model.GLBooleanNodeProperty;
+import com.vingame.glswing.node.model.GLCustomNodeProperty;
 import com.vingame.glswing.node.model.GLEnumNodeProperty;
 import com.vingame.glswing.node.model.GLGraphNode;
 import com.vingame.glswing.node.model.GLNodeId;
@@ -68,17 +69,17 @@ public final class GLNodePropertyInspector extends GLContainer
 		for (GLNodePropertyDescriptor descriptor : common.values()) {
 			GLContainer control = createControl(descriptor, selected);
 			if (control == null) continue;
-			boolean selfLabelled = descriptor instanceof GLBooleanNodeProperty
+			boolean selfLabelled = descriptor instanceof GLCustomNodeProperty || descriptor instanceof GLBooleanNodeProperty
 					|| descriptor instanceof GLNumberNodeProperty number
 							&& number.editor() == GLNumberNodeProperty.Editor.SLIDER;
 			GLLabel label = selfLabelled ? null : new GLLabel(descriptor.displayName());
-			rows.add(new Row(label, control));
+			rows.add(new Row(label, control, descriptor));
 			if (label != null) addGL(label);
 			addGL(control);
 		}
 		if (rows.isEmpty()) addGL(empty);
-		setPreferredGLSize(220, PADDING * 2 + Math.max(1, rows.size())
-				* ROW_HEIGHT + Math.max(0, rows.size() - 1) * GAP);
+		setPreferredGLSize(220, PADDING * 2 + (float)rows.stream().mapToDouble(this::rowHeight).sum()
+				+ Math.max(0, rows.size() - 1) * GAP);
 		resized(getWidth(), getHeight());
 	}
 
@@ -118,6 +119,8 @@ public final class GLNodePropertyInspector extends GLContainer
 	private GLContainer createControl(GLNodePropertyDescriptor descriptor,
 			List<GLGraphNode> selected) {
 		GLNodeValue first = selected.get(0).properties().get(descriptor.id());
+        if (descriptor instanceof GLCustomNodeProperty custom)
+            return custom.create().apply(selected.get(0), value -> apply(descriptor.id(), value));
 		if (descriptor instanceof GLNumberNodeProperty number) {
 			double value = numeric(first);
 			if (!Double.isFinite(value)) return null;
@@ -125,13 +128,19 @@ public final class GLNodePropertyInspector extends GLContainer
 				GLNumberSpinner spinner = new GLNumberSpinner(number.minimum(),
 						number.maximum(), value);
 				spinner.setStep(number.step());
+                if (!number.unit().isEmpty()) {
+                    var format = spinner.getValueFormatter();
+                    spinner.setValueFormatter(v -> format.apply(v) + " " + number.unit());
+                }
 				spinner.setIntegerValuesOnly(number.integer());
 				spinner.addChangeListener(event -> applyNumber(number, spinner.getValue()));
 				return spinner;
 			}
 			GLSlider slider = GLSlider.fixed(number.displayName(), number.minimum(),
-					number.maximum(), value);
+					number.maximum(), value, number.presentation());
+            slider.setDragSensitivity(number.step());
 			slider.setStep(number.step());
+            slider.setUnit(number.unit());
 			slider.setIntegerValuesOnly(number.integer());
 			slider.addChangeListener(event -> applyNumber(number, slider.getValue()));
 			return slider;
@@ -139,6 +148,7 @@ public final class GLNodePropertyInspector extends GLContainer
 		if (descriptor instanceof GLEnumNodeProperty enumeration
 				&& first instanceof GLNodeValue.TextValue text) {
 			GLComboBox<String> combo = new GLComboBox<>(enumeration.values());
+            combo.setToolTipText(enumeration.toolTipText());
 			if (enumeration.values().contains(text.value())) combo.setSelectedItem(text.value());
 			combo.addActionListener(event -> apply(descriptor.id(),
 					new GLNodeValue.TextValue(combo.getSelectedItem())));
@@ -168,8 +178,8 @@ public final class GLNodePropertyInspector extends GLContainer
 		if (ids.isEmpty()) return;
 		binding.graph().edit("Change " + property, edit -> ids.forEach(id ->
 				binding.graph().snapshot().findNode(id).filter(node ->
-						node.properties().containsKey(property))
-						.ifPresent(node -> edit.setProperty(id, property, value))));
+						node.properties().containsKey(property) || property.startsWith(GLGraphNode.AUTOMATIC_PREFIX))
+						.ifPresent(node -> {if(property.startsWith(GLGraphNode.AUTOMATIC_PREFIX)){edit.removeProperty(id,GLGraphNode.AUTOMATIC_DEFAULT_PREFIX+property.substring(GLGraphNode.AUTOMATIC_PREFIX.length()));edit.setProperty(id,property,value);}else edit.setExplicitProperty(id, property, value);})));
 	}
 
 	private static double numeric(GLNodeValue value) {
@@ -187,15 +197,37 @@ public final class GLNodePropertyInspector extends GLContainer
 			if (row.label != null) {
 				row.label.setBounds(PADDING, y, labelWidth, ROW_HEIGHT);
 				controlX += labelWidth + GAP;
-				controlWidth -= labelWidth + GAP;
+				controlWidth = Math.max(0, controlWidth-labelWidth-GAP);
 			}
-			row.control.setBounds(controlX, y, controlWidth, ROW_HEIGHT);
-			y += ROW_HEIGHT + GAP;
+			row.control.setBounds(controlX, y, controlWidth, rowHeight(row));
+			y += rowHeight(row) + GAP;
 		}
 		empty.setBounds(PADDING, PADDING, Math.max(0, width - PADDING * 2), ROW_HEIGHT);
 	}
 
 	@Override protected void record(GLContext2D context) { }
 
-	private record Row(GLLabel label, GLContainer control) { }
+    /** Apply a companion property from an application editor (for example a unit menu).
+     * Uses the same selection, synchronization guard and model transaction as built-in controls. */
+    public void setSelectedProperty(String property, GLNodeValue value) {
+        java.util.Objects.requireNonNull(property); java.util.Objects.requireNonNull(value);
+        apply(property, value);
+    }
+
+    /** Refresh custom controls without replacing a pointer-captured editor. */
+    public void synchronizeCustomProperties() {
+        var selected = selectedModels();
+        if (selected.isEmpty()) return;
+        synchronizing = true;
+        try { for (var row : rows) if (row.descriptor instanceof GLCustomNodeProperty custom) {
+            var value = selected.get(0).properties().get(custom.id());
+            if (value != null) custom.update().accept(row.control, selected.get(0));
+        }} finally { synchronizing = false; }
+    }
+    private float rowHeight(Row row) { return row.descriptor instanceof GLCustomNodeProperty
+            ? Math.max(ROW_HEIGHT, row.control.getPreferredGLSize().height()) : ROW_HEIGHT; }
+	private record Row(GLLabel label, GLContainer control, GLNodePropertyDescriptor descriptor) { }
 }
+
+
+

@@ -29,7 +29,7 @@ public final class GLConfigurationEditorSelfTest {
 		Path directory = Files.createTempDirectory("glswing-theme-editor-");
 		Path file = directory.resolve("user.gltheme");
 		try {
-			GLThemeEditor editor = GLThemeEditor.from(GLThemes.DARK)
+			GLThemeEditor editor = GLThemeEditor.from(GLThemes.DEFAULT)
 					.setColor("palette.accent", new Color(12, 34, 56, 200))
 					.set("button.cornerRadius", 9);
 			check(editor.isOverridden("palette.accent"),
@@ -46,7 +46,7 @@ public final class GLConfigurationEditorSelfTest {
 			GLThemeEditor loaded = GLThemeEditor.loadOrCreate(file, GLThemes.DEFAULT);
 			loaded.unset("button.cornerRadius");
 			check(loaded.build().buttonStyle().cornerRadius()
-					== GLThemes.DARK.buttonStyle().cornerRadius(),
+					== GLThemes.DEFAULT.buttonStyle().cornerRadius(),
 					"Unsetting a theme override did not restore inheritance");
 		} finally {
 			deleteTree(directory);

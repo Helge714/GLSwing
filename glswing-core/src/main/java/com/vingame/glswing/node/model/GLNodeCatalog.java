@@ -13,6 +13,9 @@ import java.util.Set;
 
 /** Thread-safe searchable node catalog with favorites, recents, and port filtering. */
 public final class GLNodeCatalog {
+    private java.util.function.BiPredicate<String,String> valueTypeCompatibility=String::equals;
+    public synchronized void setValueTypeCompatibility(java.util.function.BiPredicate<String,String> policy){valueTypeCompatibility=java.util.Objects.requireNonNull(policy);}
+
 	private final Map<String, GLNodeCatalogEntry> entries = new LinkedHashMap<>();
 	private final Set<String> favorites = new LinkedHashSet<>();
 	private final ArrayDeque<String> recent = new ArrayDeque<>();
@@ -100,10 +103,10 @@ public final class GLNodeCatalog {
 		if (entry == null) throw new IllegalArgumentException("Unknown node type: " + typeId);
 		return entry;
 	}
-	private static boolean compatible(GLNodePortDescriptor left,
+	private boolean compatible(GLNodePortDescriptor left,
 			GLNodePortDescriptor right) {
 		return left.direction() != right.direction()
-				&& left.valueTypeId().equals(right.valueTypeId());
+				&& valueTypeCompatibility.test(left.valueTypeId(),right.valueTypeId());
 	}
 	private static String searchText(GLNodeCatalogEntry entry) {
 		return (entry.displayName() + " " + entry.category() + " "

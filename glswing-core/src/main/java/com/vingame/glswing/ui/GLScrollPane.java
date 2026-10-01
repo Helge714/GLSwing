@@ -348,7 +348,8 @@ public final class GLScrollPane extends GLContainer {
 	private final class Viewport extends GLContainer {
 		@Override
 		protected void record(GLContext2D context) {
-			context.addUIHitArea(0, 0, getWidth(), getHeight());
+			if (getWidth() > 0 && getHeight() > 0)
+                context.addUIHitArea(0, 0, getWidth(), getHeight());
 		}
 
 		@Override

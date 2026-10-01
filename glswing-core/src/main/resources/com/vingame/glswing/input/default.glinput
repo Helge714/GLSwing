@@ -68,6 +68,8 @@ key.code.rename=F2
 key.code.actions=ALT+ENTER
 
 key.node.delete-selection=DELETE, BACK_SPACE
+key.node.exclude-selection=CTRL+DELETE
+key.node.arrange-all=CTRL+SHIFT+L
 key.node.edit-title=F2
 key.node.copy=shortcut+C
 key.node.cut=shortcut+X

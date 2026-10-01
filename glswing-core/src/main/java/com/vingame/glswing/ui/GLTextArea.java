@@ -45,6 +45,8 @@ import com.vingame.glswing.rendering.GLStroke;
 
 /** Multiline GPU text editor with wrapping, selection, scrolling and local history. */
 public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
+	@Override public boolean blocksGlobalShortcuts() { return true; }
+
 	private GLTextDocument document;
 	private final GLTextDocument.Listener documentListener = this::documentChanged;
 	private final GLHistoryManager editingHistory = new GLHistoryManager();

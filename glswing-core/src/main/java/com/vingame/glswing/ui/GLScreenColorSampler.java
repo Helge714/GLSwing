@@ -44,14 +44,14 @@ final class GLScreenColorSampler {
 						Color color=new Color(capture.getRGB(Math.min(capture.getWidth()-1,pointer[0]*capture.getWidth()/Math.max(1,getWidth())),
 								Math.min(capture.getHeight()-1,pointer[1]*capture.getHeight()/Math.max(1,getHeight()))));
 						paintPreview(g, preview, color, pointer[0], pointer[1], getWidth(), getHeight(),
-								source.getGLTheme().values().getColor("palette.surface",Color.DARK_GRAY),
-								source.getGLTheme().values().getColor("palette.text",Color.WHITE));
+								source.getGLTheme().values().getColor("palette.surface"),
+								source.getGLTheme().values().getColor("palette.text"));
 					}
 				};
 				image.addMouseMotionListener(new MouseMotionAdapter() {
 					@Override public void mouseMoved(MouseEvent e) { pointer[0]=e.getX(); pointer[1]=e.getY(); image.repaint(); }
 				});
-				image.setCursor(eyedropperCursor());
+				image.setCursor(eyedropperCursor(source.getGLTheme()));
 				image.addMouseListener(new MouseAdapter() {
 					@Override public void mouseExited(MouseEvent e) { pointer[0]=-1; image.repaint(); }
 					@Override public void mousePressed(MouseEvent e) {
@@ -97,7 +97,7 @@ final class GLScreenColorSampler {
 		int baseline=y+(height-lines.size()*metrics.getHeight())/2+metrics.getAscent();
 		for(String line:lines) { g.drawString(line,x+6+swatch+gap,baseline); baseline+=metrics.getHeight(); }
 	}
-	private static Cursor eyedropperCursor() {
+	private static Cursor eyedropperCursor(GLTheme theme) {
 		Toolkit toolkit=Toolkit.getDefaultToolkit(); Dimension size=toolkit.getBestCursorSize(32,32);
 		if(size.width==0 || size.height==0) return Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR);
 		BufferedImage glyph=GLSvgDocument.loadResource("com/vingame/glswing/icons/eyedropper.svg")
@@ -107,7 +107,7 @@ final class GLScreenColorSampler {
 		try {
 			// The cursor uses the same SVG silhouette as the picker button. A dark
 			// one-pixel halo keeps the white icon visible over bright pixels.
-			BufferedImage outline=tinted(glyph,Color.BLACK);
+			BufferedImage outline=tinted(glyph,theme.values().getColor("colorPicker.samplerOutline"));
 			for(int dx=-1;dx<=1;dx++)for(int dy=-1;dy<=1;dy++)
 				if(dx!=0||dy!=0)g.drawImage(outline,2+dx,2+dy,null);
 			g.drawImage(glyph,2,2,null);

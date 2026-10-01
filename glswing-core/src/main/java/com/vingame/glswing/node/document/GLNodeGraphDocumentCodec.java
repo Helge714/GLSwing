@@ -71,7 +71,7 @@ public final class GLNodeGraphDocumentCodec
 	@Override public Class<GLNodeGraphDocument> contentType() {
 		return GLNodeGraphDocument.class;
 	}
-	@Override public int currentSchemaVersion() { return 6; }
+	@Override public int currentSchemaVersion() { return 8; }
 	@Override public Set<String> fileExtensions() { return Set.of("glgraph"); }
 	@Override public boolean supportsSchemaVersion(int version) {
 		return version >= 1 && version <= currentSchemaVersion();
@@ -198,6 +198,8 @@ public final class GLNodeGraphDocumentCodec
 			output.writeBoolean(port.required()); output.writeInt(port.maximumConnections());
 			output.writeBoolean(mapping.isBound());
 			if (mapping.isBound()) writeEndpoint(output, mapping.internalEndpoint());
+            writeCount(output, mapping.additionalEndpoints().size(), "additional port target");
+            for (var endpoint : mapping.additionalEndpoints()) writeEndpoint(output, endpoint);
 			writeString(output, mapping.presentation().inputEditorId());
 			output.writeBoolean(mapping.presentation().socketVisible());
 			writeCount(output, mapping.presentation().editorOptions().size(),
@@ -224,6 +226,8 @@ public final class GLNodeGraphDocumentCodec
 			writeString(output, mapping.publicPropertyId());
 			writeUuid(output, mapping.internalNodeId().value());
 			writeString(output, mapping.internalPropertyId());
+            writeCount(output,mapping.values().size(),"property choice mapping");
+            for(var entry:new java.util.TreeMap<>(mapping.values()).entrySet()){writeString(output,entry.getKey());writeValue(output,entry.getValue(),0);}
 		}
 	}
 
@@ -246,7 +250,9 @@ public final class GLNodeGraphDocumentCodec
 			GLNodeEndpoint endpoint = schemaVersion >= 5
 					? (input.readBoolean() ? readEndpoint(input) : null)
 					: readEndpoint(input);
-			GLCompositePortPresentation presentation =
+			List<GLNodeEndpoint> additional = new ArrayList<>();
+            if (schemaVersion >= 7) { int count=readCount(input,"additional port target"); for(int n=0;n<count;n++) additional.add(readEndpoint(input)); }
+            GLCompositePortPresentation presentation =
 					GLCompositePortPresentation.socketOnly();
 			if (schemaVersion >= 4) {
 				String editorId = readString(input);
@@ -264,7 +270,7 @@ public final class GLNodeGraphDocumentCodec
 			}
 			ports.add(new GLCompositePortMapping(new GLNodePortDescriptor(id, direction,
 					valueType, timing, required, maximumConnections), endpoint,
-					presentation));
+					presentation, additional));
 		}
 		int propertyCount = readCount(input, "composite property");
 		List<GLCompositePropertyDescriptor> properties = new ArrayList<>(propertyCount);
@@ -280,9 +286,12 @@ public final class GLNodeGraphDocumentCodec
 		}
 		int mappingCount = readCount(input, "composite property mapping");
 		List<GLCompositePropertyMapping> mappings = new ArrayList<>(mappingCount);
-		for (int index = 0; index < mappingCount; index++)
-			mappings.add(new GLCompositePropertyMapping(readString(input),
-					new GLNodeId(readUuid(input)), readString(input)));
+		for (int index = 0; index < mappingCount; index++){
+            String property=readString(input);var node=new GLNodeId(readUuid(input));String target=readString(input);
+            Map<String,GLNodeValue> values=new LinkedHashMap<>();
+            if(schemaVersion>=8){int count=readCount(input,"property choice mapping");for(int n=0;n<count;n++){String key=readString(input);if(values.putIfAbsent(key,readValue(input,0))!=null)throw new GLDocumentFormatException("Duplicate choice mapping");}}
+            mappings.add(new GLCompositePropertyMapping(property,node,target,values));
+        }
 		return new GLCompositeNodeDescriptor(typeId, assetId, minimumVersion,
 				ports, properties, mappings);
 	}

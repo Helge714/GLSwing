@@ -122,7 +122,8 @@ public final class GLNodePalette extends GLContainer {
 			Predicate<GLNodeCatalogEntry> popupAllowed,
 			GLNodePortDescriptor popupCompatiblePort,
 			Consumer<GLNodeCatalogEntry> insertion) {
-		Objects.requireNonNull(owner, "Popup owner");
+
+        Objects.requireNonNull(owner, "Popup owner");
 		Predicate<GLNodeCatalogEntry> filter = popupAllowed == null
 				? entry -> true : popupAllowed;
 		Consumer<GLNodeCatalogEntry> target = insertion == null ? activation : insertion;
@@ -151,7 +152,7 @@ public final class GLNodePalette extends GLContainer {
 					event -> use(entry, target, filter));
 			item.setMnemonicEnabled(false); flat.put(item, entry);
 		}
-		menu.setItemFilter(categories::contains);
+        menu.setItemFilter(categories::contains);
 		popupSearch.addTextChangeListener(event -> {
 			Set<String> matching = available(popupSearch.getText(), filter,
 					popupCompatiblePort).stream()
