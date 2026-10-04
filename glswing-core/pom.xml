@@ -36,6 +36,17 @@
     <build>
         <plugins>
             <plugin>
+                <groupId>org.codehaus.mojo</groupId><artifactId>exec-maven-plugin</artifactId><version>3.5.0</version>
+                <executions><execution><id>package-build-identity</id><phase>prepare-package</phase><goals><goal>exec</goal></goals>
+                    <configuration><executable>${java.home}/bin/java</executable><arguments>
+                        <argument>${project.basedir}/../scripts/BuildMetadata.java</argument>
+                        <argument>${project.basedir}/..</argument>
+                        <argument>${project.build.outputDirectory}/META-INF/glswing/build.properties</argument>
+                        <argument>${project.version}</argument><argument>${project.artifactId}</argument>
+                    </arguments></configuration>
+                </execution></executions>
+            </plugin>
+            <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
             </plugin>
@@ -74,6 +85,7 @@
             <id>api-compatibility</id>
             <build>
                 <plugins>
+            
                     <plugin>
                         <groupId>com.github.siom79.japicmp</groupId>
                         <artifactId>japicmp-maven-plugin</artifactId>
@@ -85,6 +97,17 @@
             <id>release</id>
             <build>
                 <plugins>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId><artifactId>exec-maven-plugin</artifactId><version>3.5.0</version>
+                <executions><execution><id>package-build-identity</id><phase>prepare-package</phase><goals><goal>exec</goal></goals>
+                    <configuration><executable>${java.home}/bin/java</executable><arguments>
+                        <argument>${project.basedir}/../scripts/BuildMetadata.java</argument>
+                        <argument>${project.basedir}/..</argument>
+                        <argument>${project.build.outputDirectory}/META-INF/glswing/build.properties</argument>
+                        <argument>${project.version}</argument><argument>${project.artifactId}</argument>
+                    </arguments></configuration>
+                </execution></executions>
+            </plugin>
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-javadoc-plugin</artifactId>
