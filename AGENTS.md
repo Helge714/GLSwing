@@ -39,3 +39,19 @@
 - Keep developer setup, historical decisions and debugging accounts separate from
   user instructions. Node details belong in a linked reference, not the quick start.
 - Preserve manual edits and keep GLSwing an external Maven dependency.
+
+## Commits
+
+- Commit completed, coherent changes regularly and autonomously after relevant
+  checks pass. Prefer one focused commit per logical feature or fix; do not wait
+  for a reminder or accumulate unrelated completed work into a large commit.
+- Review the diff and stage explicit files or hunks. Preserve user edits and
+  existing staged work; do not sweep unrelated changes into a commit. Split mixed
+  changes where safe, and leave uncertain pre-existing work untouched.
+- Use concise English commit messages describing the change and its purpose.
+  Keep EasyKnack and GLSwing commits separate, with required library changes
+  committed before their consumer changes when practical.
+- Do not commit generated binaries, caches, local settings or secrets. Record
+  relevant validation and disclose any checks that could not be completed.
+- Local commits are authorized by this agreement. Pushing, creating release tags
+  and publishing artifacts still require explicit user scope.
