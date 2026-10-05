@@ -2,6 +2,9 @@
 
 ## 0.2.0-SNAPSHOT — Unreleased
 
+- Reference connection dash settings are now recognized by theme validation.
+  Theme regression tests follow the current presets and configured metrics.
+
 - Added optional full-area label tooltips, component image capture, PNG/JPEG
   export, themed image previews and a remembering file-dialog decorator.
 - Added neutral group-editor capabilities, choice-template storage and nested
