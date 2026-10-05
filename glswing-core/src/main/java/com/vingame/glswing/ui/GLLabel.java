@@ -11,11 +11,37 @@ import com.vingame.glswing.rendering.GLFont;
 import com.vingame.glswing.rendering.GLRenderParameters;
 
 /** A lightweight text label with optional read-only selection and theme inheritance. */
-public class GLLabel extends com.vingame.glswing.component.GLContainer implements com.vingame.glswing.input.GLKeyTarget {
+public class GLLabel extends com.vingame.glswing.component.GLContainer implements com.vingame.glswing.input.GLKeyTarget, GLToolTipTarget {
 	public enum Alignment { LEFT, CENTER, RIGHT }
 	public enum VerticalAlignment { TOP, CENTER, BOTTOM }
 
 	private String text;
+    private String toolTipText;
+    public final String getToolTipText() { return toolTipText; }
+    /** A non-empty tooltip enables picking over the entire label without enabling focus. */
+    public final void setToolTipText(String value) {
+        String next = value == null || value.isBlank() ? null : value;
+        if (java.util.Objects.equals(next, toolTipText)) return;
+        GLToolTipManager.leave(this);
+        toolTipText = next;
+        invalidateRecording();
+    }
+    @Override public void mouseEntered(com.vingame.glswing.input.GLMouseEvent event) {
+        GLToolTipManager.hover(this, event, toolTipText, null);
+    }
+    @Override public void mouseMoved(com.vingame.glswing.input.GLMouseEvent event) {
+        GLToolTipManager.hover(this, event, toolTipText, null);
+    }
+    @Override public void mouseExited(com.vingame.glswing.input.GLMouseEvent event) {
+        GLToolTipManager.leave(this);
+    }
+    @Override protected void detached(com.vingame.glswing.component.GLParent parent) {
+        GLToolTipManager.detached(this);
+        super.detached(parent);
+    }
+    /** Layout-specific inset policy; text rendering and hit testing remain shared. */
+    protected GLInsets textPadding(GLFont font) { return getGLStyle().padding(); }
+
     private boolean selectable;
     private int anchor,caret;
     private float selectionScroll;
@@ -42,11 +68,11 @@ public class GLLabel extends com.vingame.glswing.component.GLContainer implement
     }
     @Override public boolean isFocusTraversable(){return selectable&&isVisible();}
     private float textX(GLFont font){
-        var padding=getGLStyle().padding();float available=Math.max(0,getWidth()-padding.horizontal()),width=font.measureText(text);
+        var padding=textPadding(font);float available=Math.max(0,getWidth()-padding.horizontal()),width=font.measureText(text);
         return padding.left()+switch(alignment){case LEFT->0;case CENTER->Math.max(0,(available-width)/2);case RIGHT->Math.max(0,available-width);}-selectionScroll;
     }
     private void ensureCaretVisible(){
-        var font=measurementFont(getGLStyle().font());var padding=getGLStyle().padding();float available=Math.max(0,getWidth()-padding.horizontal());
+        var font=measurementFont(getGLStyle().font());var padding=textPadding(font);float available=Math.max(0,getWidth()-padding.horizontal());
         float x=font.measureText(text.substring(0,caret));
         selectionScroll=Math.max(0,Math.min(selectionScroll,Math.max(0,font.measureText(text)-available)));
         if(x<selectionScroll)selectionScroll=x;else if(x>selectionScroll+available)selectionScroll=x-available;
@@ -146,7 +172,7 @@ public class GLLabel extends com.vingame.glswing.component.GLContainer implement
 	protected void record(GLContext2D context) {
 		GLLabelStyle style = getGLStyle();
 		GLFont font = getGLFont(style.font());
-		GLInsets padding = style.padding();
+		GLInsets padding = textPadding(font);
 		String renderedText = selectable?text:GLTextFitter.ellipsize(font, text,
 				Math.max(0, getWidth() - padding.horizontal()));
 		float available=Math.max(0,getWidth()-padding.horizontal());
@@ -158,9 +184,11 @@ public class GLLabel extends com.vingame.glswing.component.GLContainer implement
 		float baseline=padding.top()+switch(verticalAlignment) {
 			case TOP -> 0;case CENTER -> verticalSpace/2;case BOTTOM -> verticalSpace;
 		}+font.getAscent();
-        if(selectable){
+        if(isMouseTargetEnabled()){
             boolean color=context.isColorRenderingEnabled();context.setColorRenderingEnabled(false);
             context.fillRect(0,0,getWidth(),getHeight(),Color.WHITE);context.setColorRenderingEnabled(color);
+        }
+        if(selectable){
             context.beginClip(padding.left(),0,Math.max(0,getWidth()-padding.horizontal()),getHeight());
             if(anchor!=caret){float a=font.measureText(text.substring(0,Math.min(anchor,caret))),b=font.measureText(text.substring(0,Math.max(anchor,caret)));
                 context.fillRect(x+a,baseline-font.getAscent(),b-a,font.getLineHeight(),getGLTheme().textEditorStyle().selectionColor());}
@@ -183,7 +211,7 @@ public class GLLabel extends com.vingame.glswing.component.GLContainer implement
 
 	@Override
 	protected boolean isMouseTargetEnabled() {
-		return selectable;
+		return selectable || toolTipText != null;
 	}
 
 	@Override

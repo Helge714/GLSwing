@@ -15,7 +15,7 @@ import com.vingame.glswing.input.GLMouseEvent;
  * the responsibility of subclasses; this class only translates input into the
  * familiar normal, hovered, pressed and disabled states.
  */
-public abstract class GLControl extends GLContainer implements GLKeyTarget {
+public abstract class GLControl extends GLContainer implements GLKeyTarget, GLToolTipTarget {
 
 	private boolean enabled = true;
 	private boolean focusable = true;
