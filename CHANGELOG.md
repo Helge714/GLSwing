@@ -2,6 +2,12 @@
 
 ## 0.2.0-SNAPSHOT — Unreleased
 
+- Added optional full-area label tooltips, component image capture, PNG/JPEG
+  export, themed image previews and a remembering file-dialog decorator.
+- Added neutral group-editor capabilities, choice-template storage and nested
+  graph copying with application metadata hooks. Existing document contracts
+  remain unchanged. See docs/application-services.md.
+
 - Added reusable `GLImageExportDimensions` for raster size, aspect locking and
   inside/outside padding, with independent geometry regression tests.
 
