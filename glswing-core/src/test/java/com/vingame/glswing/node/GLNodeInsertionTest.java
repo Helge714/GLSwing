@@ -107,7 +107,7 @@ class GLNodeInsertionTest {
             f.editor.setSelectedNodes(List.of(f.view(f.b)));
             assertTrue(f.session.canExcludeSelection()); f.session.excludeSelection();
             assertTrue(f.graph.snapshot().findNode(f.b).isEmpty());
-            assertEquals(320,f.view(f.c).getX());
+            assertEquals(200,f.view(f.c).getX()); // Source width 140 + theme spacing 60.
             assertTrue(f.graph.snapshot().connections().stream().anyMatch(e->e.output().nodeId().equals(f.a)&&e.input().nodeId().equals(f.c)));
             f.history.undo(); assertEquals(before.connections(),f.graph.snapshot().connections()); assertEquals(520,f.view(f.c).getX());
             f.graph.edit("Branch",e->e.addConnection(new GLGraphConnection(GLNodeConnectionId.random(),new GLNodeEndpoint(f.b,"out"),new GLNodeEndpoint(f.unrelated,"in"))));

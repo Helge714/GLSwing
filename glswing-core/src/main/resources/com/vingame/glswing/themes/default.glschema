@@ -234,6 +234,8 @@ nodeEditor.connectionSnapDistance=NUMBER, "Value of the nodeEditor.connectionSna
 nodeEditor.connectionCurveTolerance=NUMBER, "Value of the nodeEditor.connectionCurveTolerance theme property."
 nodeEditor.connectionHandleFactor=NUMBER, "Value of the nodeEditor.connectionHandleFactor theme property."
 nodeEditor.minimumConnectionHandleLength=NUMBER, "Value of the nodeEditor.minimumConnectionHandleLength theme property."
+nodeEditor.connectionDashLength=NUMBER, "Length of reference connection dashes.", min=1
+nodeEditor.connectionDashGap=NUMBER, "Gap between reference connection dashes.", min=1
 nodeEditor.connectionWidth=NUMBER, "Value of the nodeEditor.connectionWidth theme property."
 nodeEditor.connectionBorder=COLOR, "Value of the nodeEditor.connectionBorder theme property."
 nodeEditor.selectedConnectionBorder=COLOR, "Value of the nodeEditor.selectedConnectionBorder theme property."

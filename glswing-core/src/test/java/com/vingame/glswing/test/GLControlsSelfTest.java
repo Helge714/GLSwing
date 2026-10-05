@@ -56,11 +56,11 @@ public final class GLControlsSelfTest {
 				"Default button radius or border width is invalid");
 		GLButton button = new GLButton("Default");
 		check(button.isFocusable(), "Buttons are not focusable by default");
-		check(button.getPreferredGLSize().height() == GLButton.DEFAULT_HEIGHT,
-				"Default button height is not 14 pixels");
+		check(button.getPreferredGLSize().height() == GLTheme.DEFAULT.buttonStyle().height(),
+				"Default button height does not follow its theme");
 		check(GLTheme.DEFAULT.checkBoxStyle().boxSize()
-				== GLCheckBox.DEFAULT_BOX_SIZE,
-				"Default check box does not use its size constant");
+				== GLTheme.DEFAULT.values().getFloat("checkBox.boxSize", -1),
+				"Default check box does not use its theme size");
 
 		GLTheme rounded = GLTheme.DEFAULT.withCornerRadius(9);
 		check(rounded.buttonStyle().cornerRadius() == 9

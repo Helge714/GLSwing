@@ -60,7 +60,7 @@ public final class GLThemeCodeSupportSelfTest {
 			check(GLThemeCodeSupport.schema().property(key) != null
 					&& GLThemeCodeSupport.schema().property(key).type() == ValueType.INSETS,
 					"Inset property was inferred as the wrong value type: " + key);
-		for (String name : List.of("default", "dark", "light")) {
+		for (String name : List.of("default", "blue", "darkblue", "light")) {
 			String resource = "/com/vingame/glswing/themes/" + name + ".gltheme";
 			try (var stream = GLThemeCodeSupportSelfTest.class.getResourceAsStream(resource)) {
 				check(stream != null, "Missing built-in theme " + resource);

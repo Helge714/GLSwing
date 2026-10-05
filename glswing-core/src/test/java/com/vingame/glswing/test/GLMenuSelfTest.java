@@ -96,7 +96,7 @@ public final class GLMenuSelfTest {
 		tall.show(host, 10, host.getHeight() - 1);
 		long visibleItems = tall.getItems().stream()
 				.filter(GLMenuItem::isVisible).count();
-		if (Math.abs(tall.getHeight() - (host.getHeight() - 1)) > 0.01f
+		if (Math.abs(tall.getHeight() - (host.getHeight() - Math.max(1, tall.getGLStyle().borderWidth()))) > 0.01f
 				|| visibleItems <= 0 || visibleItems >= tall.getItems().size())
 			throw new AssertionError(
 					"Oversized popup did not fill its available viewport");

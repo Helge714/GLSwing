@@ -139,7 +139,7 @@ public final class GLLocalizationThemeSelfTest {
 		GLTheme dark = GLThemes.BLUE;
 		GLTheme light = GLThemes.LIGHT;
 		check("Default".equals(defaults.values().get("theme.name", ""))
-				&& "Dark".equals(dark.values().get("theme.name", ""))
+				&& "Blue".equals(dark.values().get("theme.name", ""))
 				&& "Light".equals(light.values().get("theme.name", "")),
 				"Bundled themes were not loaded as resources");
 		check(dark.buttonStyle().pressedLightColor()
@@ -164,24 +164,18 @@ public final class GLLocalizationThemeSelfTest {
 				"Active node-selection border did not reach its style");
 		check(nodeEditor.connectionSnapDistance() == 18
 				&& nodeEditor.gridVisible()
-				&& nodeEditor.gridSpacing() == 24
+				&& nodeEditor.gridSpacing() == defaults.values().getFloat("nodeEditor.gridSpacing", -1)
 				&& nodeEditor.majorGridInterval() == 4
 				&& nodeEditor.gridLineWidth() == 1
 				&& nodeEditor.connectionColorInterpolator()
 						== GLColorInterpolation.SRGB
 				&& nodeEditor.connectionCurveTolerance() == 0.01f
-				&& nodeEditor.connectionHandleFactor() == 0.55f
-				&& nodeEditor.minimumConnectionHandleLength() == 50
+				&& nodeEditor.connectionHandleFactor() == defaults.values().getFloat("nodeEditor.connectionHandleFactor", -1)
+				&& nodeEditor.minimumConnectionHandleLength() == defaults.values().getFloat("nodeEditor.minimumConnectionHandleLength", -1)
 				&& nodeEditor.connectionWidth() == 3
-				&& nodeEditor.connectionBorderWidth() == 1
+				&& nodeEditor.connectionBorderWidth() == defaults.values().getFloat("nodeEditor.connectionBorderWidth", -1)
 				&& nodeEditor.marqueeBorderWidth() == 1
-				&& nodeEditor.marqueeFill().equals(new Color(
-						defaults.values().getColor("palette.selection", Color.BLACK)
-								.getRed(),
-						defaults.values().getColor("palette.selection", Color.BLACK)
-								.getGreen(),
-						defaults.values().getColor("palette.selection", Color.BLACK)
-								.getBlue(), 96))
+				&& nodeEditor.marqueeFill().equals(defaults.values().getColor("nodeEditor.marqueeFill", Color.BLACK))
 				&& nodeEditor.connectionBorder().equals(
 						defaults.values().getColor("palette.border", Color.BLACK))
 				&& nodeEditor.selectedConnectionBorder().equals(
@@ -228,6 +222,7 @@ public final class GLLocalizationThemeSelfTest {
 					button.cornerRadius=11 # Compact button geometry
 					button.borderWidth=${metrics.borderWidth} + 1
 					button.padding=12
+					textShadow.on=true
 					textShadow.color=rgba(0, 0, 0, 160)
 					textShadow.offsetX=1.5
 					textShadow.offsetY=2
@@ -286,7 +281,7 @@ public final class GLLocalizationThemeSelfTest {
 							+ loaded.sliderStyle().pressedBackground());
 			check(loaded.buttonStyle().cornerRadius() == 11,
 					"Component-specific corner radius was not applied");
-			check(loaded.buttonStyle().borderWidth() == 2,
+			check(loaded.buttonStyle().borderWidth() == loaded.values().getFloat("metrics.borderWidth", -1) + 1,
 					"Referenced metric expression was not evaluated");
 			check(loaded.buttonStyle().padding().top() == 12
 					&& loaded.buttonStyle().padding().left() == 12

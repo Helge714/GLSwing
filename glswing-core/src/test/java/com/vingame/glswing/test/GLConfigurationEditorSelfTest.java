@@ -38,7 +38,7 @@ public final class GLConfigurationEditorSelfTest {
 					"Theme preview did not rebuild typed styles");
 			editor.save(file);
 			String saved = Files.readString(file);
-			check(saved.contains("theme.extends=dark")
+			check(saved.contains("theme.extends=default")
 					&& !saved.contains("button.height="),
 					"Theme editor did not save a minimal override file");
 			check(GLThemeLoader.load(file).buttonStyle().cornerRadius() == 9,

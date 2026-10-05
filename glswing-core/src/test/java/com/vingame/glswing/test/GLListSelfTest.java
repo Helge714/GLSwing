@@ -86,14 +86,14 @@ public final class GLListSelfTest {
 		hoveredCell.mouseEntered(mouse(hoveredCell, 5, 5));
 		check(list.getHoveredIndex() == 0,
 				"Cell hover did not reach the list model");
-		pane.setScrollOffset(0, 28 * 5_000);
+		pane.setScrollOffset(0, list.getRowHeight() * 5_000);
 		check(list.getFirstVisibleIndex() >= 4_999
 				&& list.getFirstVisibleIndex() <= 5_001
 				&& list.getLastVisibleIndex() <= 5_009,
 				"Visible cell range did not follow the viewport");
 		check(list.getGLChildren().size() < 20,
 				"Scrolling grew the attached cell count");
-		int expectedHover = (int) Math.floor((28 * 5_000
+		int expectedHover = (int) Math.floor((list.getRowHeight() * 5_000
 				+ pointerViewportY - list.getGLStyle().borderWidth())
 				/ list.getRowHeight());
 		check(list.getHoveredIndex() == expectedHover,
