@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.0-SNAPSHOT — Unreleased
+
+- Added reusable `GLImageExportDimensions` for raster size, aspect locking and
+  inside/outside padding, with independent geometry regression tests.
+
 ## 0.1.0 — 2026-08-21
 
 First public preview of GLSwing. The API remains under active development and
