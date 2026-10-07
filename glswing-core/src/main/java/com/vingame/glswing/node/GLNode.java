@@ -661,9 +661,12 @@ public class GLNode extends GLContainer {
 		Entry entry = entryFor(input);
 		if (entry == null)
 			return;
-		syncConnectedLabel(entry);
-		updateMetricsAndLayout();
-		repaintAndRebuildPicking(this);
+        float previousMinimum = computedMinimumHeight;
+        syncConnectedLabel(entry);
+        updateMetricsAndLayout();
+        if (entry.portAnchor != null && getHeight() > 0)
+            setSize(getWidth(), Math.max(computedMinimumHeight, getHeight() + computedMinimumHeight - previousMinimum));
+        repaintAndRebuildPicking(this);
 	}
 
 	private void addEntry(GLContainer content, GLNodePort input,
@@ -718,7 +721,7 @@ public class GLNode extends GLContainer {
 		float rowsHeight = 0;
 		List<Entry> shown = shownEntries();
 		for (Entry entry : shown) {
-			GLSize preferred = entry.content.getPreferredGLSize();
+			GLSize preferred = rowPreferredSize(entry);
 			widest = Math.max(widest,
 					preferred.width() + style.contentPadding().horizontal());
 			rowsHeight += preferred.height();
@@ -749,14 +752,16 @@ public class GLNode extends GLContainer {
 		for (Entry entry : shown) growTotal += entry.verticalGrow;
 		float extra = Math.max(0, getHeight() - computedMinimumHeight);
 		for (Entry entry : shown) {
-			GLSize preferred = entry.content.getPreferredGLSize();
+			GLSize preferred = rowPreferredSize(entry);
 			float rowHeight = preferred.height() + (growTotal > 0 ? extra * entry.verticalGrow / growTotal : 0);
 			entry.content.setBounds(contentX, y, contentWidth, rowHeight);
 			if (entry.connectedLabel != null) {
 				syncConnectedLabel(entry);
 				entry.connectedLabel.setBounds(contentX, y, contentWidth, rowHeight);
 			}
-			float portY = y + (rowHeight - diameter) * 0.5f;
+			float center = entry.portAnchor != null && presentedContent(entry) == entry.content
+                    ? entry.portAnchor.getY() + entry.portAnchor.getHeight() * .5f : rowHeight * .5f;
+            float portY = y + center - diameter * .5f;
 			if (entry.input != null)
 				entry.input.setBounds(-style.portRadius(), portY,
 						diameter, diameter);
@@ -766,6 +771,22 @@ public class GLNode extends GLContainer {
 			y += rowHeight + style.rowGap();
 		}
 	}
+
+    /** Anchors a compound row to one direct child. When connected, the row collapses
+     * to that child's preferred height. Pass null to restore the full-row anchor. */
+    public void setContentPortAnchor(GLContainer content, GLContainer anchor) {
+        var entry = entries.stream().filter(e -> e.content == content).findFirst().orElseThrow();
+        if (anchor != null && anchor.getGLParent() != content)
+            throw new IllegalArgumentException("Port anchor must be a direct child of the row");
+        entry.portAnchor = anchor;
+        updateMetricsAndLayout();
+    }
+
+    private GLSize rowPreferredSize(Entry entry) {
+        var size = entry.content.getPreferredGLSize();
+        return entry.portAnchor != null && presentedContent(entry) != entry.content
+                ? new GLSize(size.width(), entry.portAnchor.getPreferredGLSize().height()) : size;
+    }
 
 	private List<Entry> shownEntries() {
 		return orderedEntries().stream().filter(this::isEntryShown).toList();
@@ -1267,6 +1288,7 @@ public class GLNode extends GLContainer {
 		private boolean alwaysVisible;
 		private boolean explicitVisible = true;
 		private float verticalGrow;
+        private GLContainer portAnchor;
 
 		private Entry(GLContainer content, GLNodePort input,
 				GLNodePort output, GLLabel connectedLabel) {

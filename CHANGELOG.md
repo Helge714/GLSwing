@@ -2,6 +2,8 @@
 
 ## 0.2.0-SNAPSHOT — Unreleased
 
+- Compound node rows can anchor their sockets to a child editor and collapse to one row while connected.
+
 - Reference connection dash settings are now recognized by theme validation.
   Theme regression tests follow the current presets and configured metrics.
 
