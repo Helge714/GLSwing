@@ -11,5 +11,5 @@ public record GLNodeEditorCapabilities(Kind kind, boolean copyable, boolean stan
     public GLNodeEditorCapabilities {
         Objects.requireNonNull(kind); Objects.requireNonNull(defaultValue); options = Map.copyOf(options);
     }
-    public boolean linkable() { return copyable && standalone && kind != Kind.CUSTOM; }
+    public boolean linkable() { return copyable && standalone; }
 }

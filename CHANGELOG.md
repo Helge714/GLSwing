@@ -1,5 +1,7 @@
 # Changelog
 
+- Explicitly copyable custom editors can participate in standalone editor coupling.
+
 - Node ports can provide context menus on sockets and row labels, including connected inputs.
 
 ## 0.2.0-SNAPSHOT — Unreleased
