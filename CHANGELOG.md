@@ -1,5 +1,7 @@
 # Changelog
 
+- Node ports can provide context menus on sockets and row labels, including connected inputs.
+
 ## 0.2.0-SNAPSHOT — Unreleased
 
 - Compound node rows can anchor their sockets to a child editor and collapse to one row while connected.
