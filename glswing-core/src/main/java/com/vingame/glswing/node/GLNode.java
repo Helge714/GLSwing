@@ -545,6 +545,15 @@ public class GLNode extends GLContainer {
         com.vingame.glswing.ui.GLToolTipManager.leave(this);
 		if (getGLParent() instanceof GLNodeEditor editor
 				&& editor.finishPlacementFromClick(event)) return;
+        if (event.getButton() == MouseEvent.BUTTON3 && event.hasLocalPosition()) {
+            for (Entry entry : shownEntries()) {
+                var row=presentedContent(entry);float x=event.getLocalX(),y=event.getLocalY();
+                if(x>=row.getX() && x<row.getX()+row.getWidth() && y>=row.getY() && y<row.getY()+row.getHeight()) {
+                    var port=entry.input!=null?entry.input:entry.output;
+                    if(port!=null && port.showContextMenu(event))return;
+                }
+            }
+        }
 		if (event.getButton() == MouseEvent.BUTTON3) {
 			activateFromPort(event, true);
 			showContextMenu(event);

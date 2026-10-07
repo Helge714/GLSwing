@@ -205,9 +205,23 @@ public final class GLNodePort extends GLContainer {
 		invalidateRecording();
 	}
 
+    private com.vingame.glswing.ui.GLPopupMenu contextMenu;
+    /** Optional application menu, shared by the socket and its row label. */
+    public void setContextMenu(com.vingame.glswing.ui.GLPopupMenu menu){contextMenu=menu;}
+    public com.vingame.glswing.ui.GLPopupMenu getContextMenu(){return contextMenu;}
+    boolean showContextMenu(GLMouseEvent event){
+        if(contextMenu==null)return false;
+        var host=getGLParent();
+        while(host instanceof com.vingame.glswing.component.GLContainer parent && parent.getGLParent()!=null)host=parent.getGLParent();
+        if(host==null)return false;
+        com.vingame.glswing.ui.GLToolTipManager.leave(this);
+        contextMenu.show(host,event.getScreenX(),event.getScreenY());event.consume();return true;
+    }
+
 	@Override
 	public void mousePressed(GLMouseEvent event) {
         com.vingame.glswing.ui.GLToolTipManager.leave(this);
+        if(event.getButton()==MouseEvent.BUTTON3 && showContextMenu(event))return;
 		if (node != null && event.getButton() == MouseEvent.BUTTON1) {
 			node.activateFromPort(event, false);
 			if (node.getGLParent() instanceof GLNodeEditor editor)
