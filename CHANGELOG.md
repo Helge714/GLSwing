@@ -1,5 +1,7 @@
 # Changelog
 
+- Allow applications to extend the curve-editor context menu while retaining the standard point and segment actions.
+
 - Keep event-driven Canvas surfaces repainting while modal dialogs are open, without adding a continuous animator.
 
 - Center ungrouped contents on the former instance bounds, excluding boundary projections and stale view entries.

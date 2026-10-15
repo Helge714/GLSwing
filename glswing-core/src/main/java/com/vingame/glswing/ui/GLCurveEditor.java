@@ -13,6 +13,8 @@ public class GLCurveEditor extends GLControl {
     private GLFunctionCurve curve=GLFunctionCurve.identity();
     private GLFunctionCurve resetCurve=GLFunctionCurve.identity();
     private Consumer<GLFunctionCurve> changed=c->{};
+    private Consumer<GLPopupMenu> contextMenuCustomizer=menu->{};
+    public void setContextMenuCustomizer(Consumer<GLPopupMenu> customizer){contextMenuCustomizer=java.util.Objects.requireNonNull(customizer);}
     private Runnable beginEdit=()->{},endEdit=()->{};
     private boolean preview,large,gesture;
     private int selected=-1,dragHandle;
@@ -104,6 +106,7 @@ public class GLCurveEditor extends GLControl {
                 .setEnabled(curve.points().stream().noneMatch(p->p.mode()==GLFunctionCurve.Mode.STEP)
                         &&curve.points().stream().filter(p->p.x()<.5-.00011).count()<=31);
         menu.addItem("Reset curve",event->edit(()->{selected=-1;change(resetCurve);}));
+        contextMenuCustomizer.accept(menu);
         menu.show(root,e.getScreenX(),e.getScreenY());
     }
 }
