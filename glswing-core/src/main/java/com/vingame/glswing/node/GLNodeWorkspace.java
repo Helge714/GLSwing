@@ -593,6 +593,41 @@ public final class GLNodeWorkspace extends GLContainer
 				showCreationMenu(x, y, screenX, screenY));
 	}
 
+    /** Expand a configured instance as a single undo step; its definition stays registered. */
+    public void ungroup(GLGraphNode instance,GLNodeGraphAsset configured) {
+        ungroup(instance,configured,(parent,result)->parent);
+    }
+    /** The adapter can remap application-owned interface metadata before committing. */
+    public void ungroup(GLGraphNode instance,GLNodeGraphAsset configured,
+            java.util.function.BiFunction<GLNodeGraphAsset,com.vingame.glswing.node.composite.GLCompositeUngroup.Result,GLNodeGraphAsset> adapter) {
+        if(binding==null)return;
+        var document=documents.peekLast();var before=document.graph.snapshot();var beforeView=captureActiveViewState();
+        var parent=document.assetId==null?null:composites.findAsset(document.assetId).orElseThrow();
+        var result=com.vingame.glswing.node.composite.GLCompositeUngroup.expand(before,beforeView,instance,configured);
+        var afterParent=parent==null?null:adapter.apply(new GLNodeGraphAsset(parent.id(),parent.version(),parent.kind(),result.graph(),result.viewState(),parent.metadata(),
+            result.remap(parent.compositeDescriptor(),instance.id(),configured.compositeDescriptor())),result);
+        var selection=editor.getSelectedNodes().stream().flatMap(n->binding.findNodeId(n).stream()).toList();
+        var afterSelection=List.copyOf(result.nodeIds().values());
+        try { restoreUngroup(document,result.graph(),result.viewState(),afterParent,afterSelection); }
+        catch(RuntimeException failure){restoreUngroup(document,before,beforeView,parent,selection);throw failure;}
+        if(history!=null)history.record("Ungroup",()->restoreUngroup(document,before,beforeView,parent,selection),
+            ()->restoreUngroup(document,result.graph(),result.viewState(),afterParent,afterSelection));
+    }
+    private void restoreUngroup(Document document,com.vingame.glswing.node.model.GLNodeGraphSnapshot graph,
+            GLNodeEditorViewState view,GLNodeGraphAsset parent,List<GLNodeId> selection) {
+        synchronizingAsset=true;
+        try {
+            document.viewState=view;document.selection=selection;
+            document.graph.replace("Ungroup",graph);
+            if(parent!=null)composites.replaceAsset(parent);
+            if(documents.peekLast()==document&&binding!=null){
+                binding.refresh();binding.applyViewState(view);refreshRegisteredInterface();
+                editor.setSelectedNodes(selection.stream().map(binding::findNodeView).flatMap(java.util.Optional::stream).toList());
+            }
+        } finally {synchronizingAsset=false;}
+        changeListener.run();
+    }
+
 	/** Arrange the current graph, including boundary projections, as one view-only undo step. */
     public void arrangeAll() {
         if(binding==null||editor.getNodes().isEmpty())return;
