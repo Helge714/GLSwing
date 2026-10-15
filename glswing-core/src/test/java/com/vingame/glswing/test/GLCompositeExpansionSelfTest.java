@@ -251,6 +251,7 @@ public final class GLCompositeExpansionSelfTest {
 			GLNodeGraphAsset workspaceRootAsset = new GLNodeGraphAsset("workspace.root", 1,
 					GLNodeGraphAssetKind.PROJECT, workspaceRoot.snapshot(),
 					GLNodeEditorViewState.empty());
+			workspace.setGLTheme(workspace.getGLTheme().withValues(workspace.getGLTheme().values().with("node.minimumWidth", "40")));
 			workspace.openDocument("Root", new GLNodeGraphDocument(workspaceRootAsset,
 					Map.of(nested.id(), nested), List.of()));
 			workspace.editor().setSelectedNode(workspace.editor().getNodes().get(0));
@@ -265,6 +266,15 @@ public final class GLCompositeExpansionSelfTest {
 			GLNode groupOutput = workspace.editor().getNodes().stream()
 					.filter(node -> "Group Output".equals(node.getTitle()))
 					.findFirst().orElseThrow();
+            var innerNodes = workspace.editor().getNodes().stream()
+                    .filter(n -> n != groupInput && n != groupOutput).toList();
+            double left = innerNodes.stream().mapToDouble(GLNode::getX).min().orElseThrow();
+            double right = innerNodes.stream().mapToDouble(n -> n.getX() + n.getWidth()).max().orElseThrow();
+            float spacing = workspace.editor().getHorizontalNodeSpacing();
+            check(groupInput.getX() + groupInput.getWidth() <= left - spacing + .01,
+                    "Initial group input overlaps the internal graph with a narrow theme");
+            check(groupOutput.getX() >= right + spacing - .01,
+                    "Initial group output is not beyond the internal graph");
 			groupInput.setLocation(137, 211);
 			groupOutput.setLocation(643, 277);
 			GLCompositePortMapping sourceMapping = registry.findAsset(nested.id())

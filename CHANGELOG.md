@@ -490,3 +490,5 @@ may change in subsequent `0.x` releases.
 - Opt-in source and binary API compatibility checks for release candidates;
   implementation-only rendering packages are excluded from the supported API.
 - Apache License 2.0.
+
+- Initial composite input placement uses the boundary node's actual width, preserving theme spacing before internal nodes. Saved and manually adjusted boundary positions remain unchanged.

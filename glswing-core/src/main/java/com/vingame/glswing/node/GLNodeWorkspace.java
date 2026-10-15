@@ -692,18 +692,25 @@ public final class GLNodeWorkspace extends GLContainer
 		}
 		GLNodeViewState storedInput = boundaryViewState(BOUNDARY_INPUT_VIEW);
 		GLNodeViewState storedOutput = boundaryViewState(BOUNDARY_OUTPUT_VIEW);
+        var inner=editor.getNodes().stream().filter(n->!(n instanceof BoundaryNode)).toList();
+        float minX=(float)inner.stream().mapToDouble(GLNode::getX).min().orElse(300);
+        float maxX=(float)inner.stream().mapToDouble(n->n.getX()+n.getWidth()).max().orElse(600);
+        float top=(float)inner.stream().mapToDouble(GLNode::getY).min().orElse(80);
+        float width=editor.getGLTheme().values().getFloat("node.minimumWidth",190),gap=editor.getHorizontalNodeSpacing();
 		float inputX = previousInput != null ? previousInput.getX()
-				: storedInput == null ? 24 : storedInput.x();
+				: storedInput == null ? minX-width-gap : storedInput.x();
 		float inputY = previousInput != null ? previousInput.getY()
-				: storedInput == null ? 80 : storedInput.y();
+				: storedInput == null ? top : storedInput.y();
 		float outputX = previousOutput != null ? previousOutput.getX()
-				: storedOutput == null ? Math.max(300, editor.getWidth() - 220)
+				: storedOutput == null ? maxX+gap
 						: storedOutput.x();
 		float outputY = previousOutput != null ? previousOutput.getY()
-				: storedOutput == null ? 80 : storedOutput.y();
+				: storedOutput == null ? top : storedOutput.y();
 		if (previousInput != null) editor.removeNode(previousInput);
 		if (previousOutput != null) editor.removeNode(previousOutput);
-		addBoundaryNode(descriptor, GLPortDirection.INPUT, inputX, inputY);
+		var inputBoundary = addBoundaryNode(descriptor, GLPortDirection.INPUT, inputX, inputY);
+        if (previousInput == null && storedInput == null)
+            inputBoundary.setLocation(minX - inputBoundary.getWidth() - gap, inputY);
 		addBoundaryNode(descriptor, GLPortDirection.OUTPUT, outputX, outputY);
 		} finally { rebuildingBoundaries = false; }
 	}
@@ -761,7 +768,7 @@ public final class GLNodeWorkspace extends GLContainer
 		return result.stream().distinct().toList();
 	}
 
-	private void addBoundaryNode(GLCompositeNodeDescriptor descriptor,
+	private BoundaryNode addBoundaryNode(GLCompositeNodeDescriptor descriptor,
 			GLPortDirection direction, float x, float y) {
 		BoundaryNode node = new BoundaryNode(direction);
 		List<GLNodePort[]> connections = new ArrayList<>();
@@ -797,6 +804,7 @@ public final class GLNodeWorkspace extends GLContainer
 						"Public and internal port value types do not match");
 			}
 		}
+        return node;
 	}
 
 	private String valueTypeOf(GLNodePort port) {
