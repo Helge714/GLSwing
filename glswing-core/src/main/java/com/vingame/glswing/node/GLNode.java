@@ -70,6 +70,12 @@ public class GLNode extends GLContainer {
 	private boolean dragAnywhere;
 	private boolean titleEditable = true;
 	private boolean titleGradientEnabled;
+    private boolean groupIndicatorVisible;
+    /** Draw a geometric group marker, independent of title text and font glyph coverage. */
+    public void setGroupIndicatorVisible(boolean visible){
+        if(groupIndicatorVisible==visible)return;groupIndicatorVisible=visible;invalidateRecording();
+    }
+    public boolean isGroupIndicatorVisible(){return groupIndicatorVisible;}
 	private boolean contentHidden;
 	private boolean muted;
 	private Map<String, String> muteBypassMappings = Map.of();
@@ -421,6 +427,12 @@ public class GLNode extends GLContainer {
 				textX += hitSize;
 				available = Math.max(0, available - hitSize);
 			}
+            if(groupIndicatorVisible){
+                float size=Math.min(16,style.titleHeight()*.55f), y=(style.titleHeight()-size)*.5f;
+                context.drawUIRoundRect(textX+size*.25f,y,size*.75f,size*.75f,1,1,style.titleText());
+                context.drawUIRoundRect(textX,y+size*.25f,size*.75f,size*.75f,1,1,style.titleText());
+                textX+=size+5;available=Math.max(0,available-size-5);
+            }
 			String visibleTitle = GLTextFitter.ellipsize(font, title, available);
 			float baseline = Math.max(font.getAscent(),
 					(style.titleHeight() - font.getLineHeight()) * 0.5f

@@ -1891,10 +1891,18 @@ public class GLNodeEditor extends GLContainer
 			case NORMAL -> connection == selectedConnection || connection == insertionCandidate
 					? getSelectedConnectionBorder() : getConnectionBorder();
 		};
+        Color start=output.getColor(),end=input.getColor();
+        if(!connection.isActive() && connection.getStatus()!=GLNodeConnectionStatus.ERROR){
+            float opacity=Math.max(0,Math.min(1,getGLTheme().values().getFloat("node.mutedOpacity",.62f)));
+            border=connection==selectedConnection||connection==insertionCandidate?getSelectedConnectionBorder():getConnectionBorder();
+            start=withOpacity(start,opacity);end=withOpacity(end,opacity);border=withOpacity(border,opacity);
+        }
 		drawConnectionCurve(context, portX(output), portY(output),
 				portX(input), portY(input), connection.getWidth(),
-				output.getColor(), input.getColor(), border, connection, connection.isDashed());
+				start, end, border, connection, connection.isDashed());
 	}
+
+    private static Color withOpacity(Color color,float opacity){return new Color(color.getRed(),color.getGreen(),color.getBlue(),Math.round(color.getAlpha()*opacity));}
 
 	private void drawConnectionPreview(GLContext2D context) {
 		if (fixedGesturePort.getDirection() == GLNodePort.Direction.OUTPUT) {
