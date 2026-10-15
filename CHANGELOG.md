@@ -1,5 +1,7 @@
 # Changelog
 
+- Add `GLNodeEditor.fitAllNodes()` to center and fit all visible nodes, including large graphs and group boundaries, without changing layout.
+
 - Explicitly copyable custom editors can participate in standalone editor coupling.
 
 - Node ports can provide context menus on sockets and row labels, including connected inputs.

@@ -781,6 +781,24 @@ public class GLNodeEditor extends GLContainer
 		wheelPanDistance = distance;
 	}
 
+	/** Fits all visible nodes, including group boundaries, without moving them.
+	 * May zoom below the interactive minimum to fit very large graphs. */
+	public void fitAllNodes() {
+		var visible = nodes.stream().filter(GLNode::isVisible).toList();
+		if (visible.isEmpty()) { resetView(); return; }
+		if (getWidth() <= 0 || getHeight() <= 0) return;
+		double left = visible.stream().mapToDouble(GLNode::getX).min().orElse(0);
+		double top = visible.stream().mapToDouble(GLNode::getY).min().orElse(0);
+		double right = visible.stream().mapToDouble(n -> n.getX() + n.getWidth()).max().orElse(left);
+		double bottom = visible.stream().mapToDouble(n -> n.getY() + n.getHeight()).max().orElse(top);
+		double margin = Math.min(32, Math.min(getWidth(), getHeight()) * .1);
+		zoom = (float) Math.min(maximumZoom, Math.min((getWidth() - 2 * margin) / Math.max(1, right - left),
+				(getHeight() - 2 * margin) / Math.max(1, bottom - top)));
+		panX = (float) (zoom * (getWidth() * .5 - (left + right) * .5));
+		panY = (float) (zoom * (getHeight() * .5 - (top + bottom) * .5));
+		repaintViewport(true);
+	}
+
 	public void resetView() {
 		boolean changed = Float.compare(zoom, 1) != 0
 				|| Float.compare(panX, 0) != 0 || Float.compare(panY, 0) != 0;
