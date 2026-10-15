@@ -444,14 +444,14 @@ public class GLNodeEditor extends GLContainer
 				&& Float.compare(connectionHandleFactor, factor) == 0)
 			return;
 		connectionHandleFactor = factor;
-		invalidateRecording();repaintAndRebuildPicking(this);
+		repaintAndRebuildPicking(this);
 	}
 
 	public void clearConnectionHandleFactor() {
 		if (connectionHandleFactor == null)
 			return;
 		connectionHandleFactor = null;
-		invalidateRecording();repaintAndRebuildPicking(this);
+		repaintAndRebuildPicking(this);
 	}
 
 	/** Minimum Bezier handle length measured in logical node coordinates. */
@@ -469,14 +469,14 @@ public class GLNodeEditor extends GLContainer
 				&& Float.compare(minimumConnectionHandleLength, length) == 0)
 			return;
 		minimumConnectionHandleLength = length;
-		invalidateRecording();repaintAndRebuildPicking(this);
+		repaintAndRebuildPicking(this);
 	}
 
 	public void clearMinimumConnectionHandleLength() {
 		if (minimumConnectionHandleLength == null)
 			return;
 		minimumConnectionHandleLength = null;
-		invalidateRecording();repaintAndRebuildPicking(this);
+		repaintAndRebuildPicking(this);
 	}
 
 	/** Default screen-space width used by connections without a local width. */

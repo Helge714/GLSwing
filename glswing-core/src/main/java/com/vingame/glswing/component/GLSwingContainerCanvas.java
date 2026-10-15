@@ -43,10 +43,11 @@ public abstract class GLSwingContainerCanvas extends GLSwingCanvas
 	private final Map<GLFontSpec, GLFont> themedFonts = new LinkedHashMap<>();
 	private final GLContainerInputDispatcher inputDispatcher;
 	private final GLDamageTracker damageTracker = new GLDamageTracker();
+    private final java.util.concurrent.atomic.AtomicBoolean displayQueued = new java.util.concurrent.atomic.AtomicBoolean();
 	private final GLInteractiveRepaintController interactiveRepaint =
 			new GLInteractiveRepaintController(() -> {
 				damageTracker.repaintAll(true);
-				super.repaint();
+				requestDisplay();
 			});
 	private volatile GLTheme theme = GLTheme.DEFAULT;
 	private volatile GLLocalizer localizer = GLLocalizer.DEFAULT;
@@ -315,31 +316,46 @@ public abstract class GLSwingContainerCanvas extends GLSwingCanvas
 			requestGLFocus(null);
 	}
 
+    /** Coalesce explicit GL redraws on the EDT, including modal AWT event loops.
+     * Heavyweight Canvas repaint events alone need not reach a modal-blocked owner.
+     * Animated canvases keep their existing frame scheduler.
+     */
+    private void requestDisplay() {
+        super.repaint();
+        // AWT can invoke repaint while this object's superclass is being constructed.
+        if(displayQueued==null || !displayQueued.compareAndSet(false,true))return;
+        java.awt.EventQueue.invokeLater(()->{
+            displayQueued.set(false);
+            var animator=getAnimator();
+            if(isShowing() && isRealized() && (animator==null || !animator.isAnimating()))display();
+        });
+    }
+
 	@Override
 	public final void repaintGL() {
 		interactiveRepaint.cancel();
 		damageTracker.repaintAll(true);
-		super.repaint();
+		requestDisplay();
 	}
 
 	@Override
 	public final void repaintGL(GLContainer source) {
 		damageTracker.repaint(source, false);
-		super.repaint();
+		requestDisplay();
 	}
 
 	@Override
 	public final void repaintAndRebuildPicking(GLContainer source) {
 		interactiveRepaint.cancel();
 		damageTracker.repaint(source, true);
-		super.repaint();
+		requestDisplay();
 	}
 
 	@Override
 	public final void repaintInteractively(GLContainer source,
 			Runnable settledCallback) {
 		damageTracker.repaint(source, false);
-		super.repaint();
+		requestDisplay();
 		int delay = (int) Math.round(inputMap.getValue(
 				GLInputActions.RENDER_INTERACTION_SETTLE_MILLIS, 75));
 		interactiveRepaint.request(source, delay, settledCallback);
@@ -356,12 +372,12 @@ public abstract class GLSwingContainerCanvas extends GLSwingCanvas
 			interactiveRepaint.cancel();
 		if (damageTracker != null)
 			damageTracker.repaintAll(true);
-		super.repaint();
+		requestDisplay();
 	}
 
 	final void repaintColorOnly() {
 		damageTracker.repaintAll(false);
-		super.repaint();
+		requestDisplay();
 	}
 
 	@Override

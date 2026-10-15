@@ -1,5 +1,7 @@
 # Changelog
 
+- Keep event-driven Canvas surfaces repainting while modal dialogs are open, without adding a continuous animator.
+
 - Center ungrouped contents on the former instance bounds, excluding boundary projections and stale view entries.
 
 - Add one-level composite ungrouping with undo, endpoint/property rebinding and preserved reusable definitions. Connection-handle changes invalidate cached geometry immediately.
