@@ -1,5 +1,7 @@
 # Changelog
 
+- Center ungrouped contents on the former instance bounds, excluding boundary projections and stale view entries.
+
 - Add one-level composite ungrouping with undo, endpoint/property rebinding and preserved reusable definitions. Connection-handle changes invalidate cached geometry immediately.
 
 - Render inactive connections using the theme muted opacity while retaining diagnostic tooltips, and provide a geometric group-title indicator.

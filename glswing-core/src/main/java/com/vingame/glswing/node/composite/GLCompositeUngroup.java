@@ -73,14 +73,22 @@ public final class GLCompositeUngroup {
         }
         var positions=new LinkedHashMap<>(view.nodes());var origin=positions.remove(instance.id());
         if(origin==null)origin=new GLNodeViewState(0,0);
+        // Boundary projections live in auxiliaryNodes and are intentionally excluded.
         float minX=Float.POSITIVE_INFINITY,minY=Float.POSITIVE_INFINITY;
-        for(var b:asset.viewState().nodes().values()){minX=Math.min(minX,b.x());minY=Math.min(minY,b.y());}
-        if(!Float.isFinite(minX)){minX=0;minY=0;}
+        float maxX=Float.NEGATIVE_INFINITY,maxY=Float.NEGATIVE_INFINITY;
+        for(var id:ids.keySet()){
+            var b=asset.viewState().nodes().get(id);if(b==null)continue;
+            minX=Math.min(minX,b.x());minY=Math.min(minY,b.y());
+            maxX=Math.max(maxX,b.x()+b.width());maxY=Math.max(maxY,b.y()+b.height());
+        }
+        if(!Float.isFinite(minX)){minX=0;minY=0;maxX=0;maxY=0;}
+        float offsetX=origin.x()+origin.width()/2-(minX+maxX)/2;
+        float offsetY=origin.y()+origin.height()/2-(minY+maxY)/2;
         int missing=0;
         for(var entry:ids.entrySet()){
             var b=asset.viewState().nodes().get(entry.getKey());
             if(b==null)b=new GLNodeViewState(minX-240,minY+100*missing++);
-            positions.put(entry.getValue(),new GLNodeViewState(origin.x()+b.x()-minX,origin.y()+b.y()-minY,b.width(),b.height()));
+            positions.put(entry.getValue(),new GLNodeViewState(offsetX+b.x(),offsetY+b.y(),b.width(),b.height()));
         }
         return new Result(new GLNodeGraphSnapshot(parent.graphId(),parent.revision(),nodes,wires),
             new GLNodeEditorViewState(positions,view.auxiliaryNodes()),Map.copyOf(ids),Map.copyOf(ports));
