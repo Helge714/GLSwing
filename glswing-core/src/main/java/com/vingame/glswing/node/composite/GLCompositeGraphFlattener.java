@@ -28,9 +28,12 @@ public final class GLCompositeGraphFlattener {
 		GLCompositeExpansionResult estimate = GLCompositeExpansionAnalyzer.analyze(
 				root, registry, limits);
 		if (!estimate.isValid()) return failed(estimate.diagnostics());
-		Context context = new Context(root);
+		root=GLCompositeForwarding.materialize(root);
+        Context context = new Context(root);
 		expand(root, registry, List.of(), true, context);
-		if(context.connections.size()>limits.maximumConnections()) context.error("composite.limit", "Expanded fanout exceeds the connection limit", null);
+		try{var collapsed=GLCompositeForwarding.collapse(context.connections,context.forwarding,limits.maximumConnections());context.connections.clear();context.connections.addAll(collapsed);}
+        catch(IllegalArgumentException e){context.error("composite.limit",e.getMessage(),null);}
+        if(context.connections.size()>limits.maximumConnections()) context.error("composite.limit", "Expanded fanout exceeds the connection limit", null);
         if (!context.diagnostics.isEmpty()) return failed(context.diagnostics);
 		GLNodeGraphSnapshot graph = new GLNodeGraphSnapshot(root.graph().graphId(),
 				root.graph().revision(), context.nodes, context.connections);
@@ -48,12 +51,13 @@ public final class GLCompositeGraphFlattener {
 				GLNodeId id = root ? node.id() : derivedNodeId(path, asset.id(), node.id());
 				GLGraphNode leaf = new GLGraphNode(id, node.typeId(), node.typeVersion(),
 						node.properties());
-				context.nodes.add(leaf);
-				context.origins.put(id, new GLCompositeOrigin(path, asset.id(), node.id()));
+				if(node.typeId().equals(GLCompositeForwarding.TYPE))context.forwarding.add(id);else context.nodes.add(leaf);
+				if(!node.typeId().equals(GLCompositeForwarding.TYPE))context.origins.put(id, new GLCompositeOrigin(path, asset.id(), node.id()));
 				endpoints.put(node.id(), port -> List.of(new GLNodeEndpoint(id, port)));
 				continue;
 			}
-			GLNodeGraphAsset nested = registry.findAsset(descriptor.assetId()).orElseThrow();
+			GLNodeGraphAsset nested = GLCompositeForwarding.materialize(registry.findAsset(descriptor.assetId()).orElseThrow());
+            descriptor=nested.compositeDescriptor();
 			GLNodeGraphAsset configured = applyProperties(node, descriptor, nested, context);
 			List<GLCompositeOrigin.Instance> nestedPath = new ArrayList<>(path);
 			nestedPath.add(new GLCompositeOrigin.Instance(node.id(), node.typeId(), nested.id()));
@@ -162,6 +166,7 @@ public final class GLCompositeGraphFlattener {
 	}
 	private static final class Context {
 		private final List<GLGraphNode> nodes = new ArrayList<>();
+        private final Set<GLNodeId> forwarding=new java.util.HashSet<>();
 		private final List<GLGraphConnection> connections = new ArrayList<>();
 		private final Map<GLNodeId, GLCompositeOrigin> origins = new LinkedHashMap<>();
 		private final List<GLGraphDiagnostic> diagnostics = new ArrayList<>();

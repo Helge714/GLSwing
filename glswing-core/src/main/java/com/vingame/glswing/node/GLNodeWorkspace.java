@@ -31,6 +31,7 @@ import com.vingame.glswing.node.composite.GLCompositeNodeDescriptor;
 import com.vingame.glswing.node.composite.GLCompositeNodeViewFactory;
 import com.vingame.glswing.node.composite.GLNodeInputEditorRegistry;
 import com.vingame.glswing.node.composite.GLCompositePortMapping;
+import com.vingame.glswing.node.composite.GLCompositeForwarding;
 import com.vingame.glswing.node.document.GLNodeGraphAsset;
 import com.vingame.glswing.node.document.GLNodeGraphDocument;
 import com.vingame.glswing.node.model.GLGraphNode;
@@ -797,7 +798,11 @@ public final class GLNodeWorkspace extends GLContainer
 				boundaryPort = connection.getInput(); internalPort = connection.getOutput();
 			} else continue;
 			if (!boundaryPort.getId().equals(mapping.publicPort().id())) continue;
-			GLNodeId node = binding.findNodeId(internalPort.getNode()).orElse(null);
+			if(internalPort.getNode() instanceof BoundaryNode other){
+                if(mapping.publicPort().direction()==GLPortDirection.OUTPUT&&other.direction==GLPortDirection.INPUT)result.add(GLCompositeForwarding.input(internalPort.getId()));
+                continue;
+            }
+            GLNodeId node = binding.findNodeId(internalPort.getNode()).orElse(null);
 			if (node != null) result.add(new GLNodeEndpoint(node, internalPort.getId()));
 		}
 		return result.stream().distinct().toList();
@@ -818,8 +823,9 @@ public final class GLNodeWorkspace extends GLContainer
 					types.compatibleValueTypes(mapping.publicPort().valueTypeId(),valueTypeOf(other)));
 			if (!mapping.isBound()) continue;
 			for (var endpoint : mapping.internalEndpoints()) {
-            GLNode internal = binding.findNodeView(endpoint.nodeId())
-					.orElse(null);
+            GLNode internal = GLCompositeForwarding.isInput(endpoint)
+                    ? editor.getNodes().stream().filter(n->n instanceof BoundaryNode b&&b.direction==GLPortDirection.INPUT).findFirst().orElse(null)
+                    : binding.findNodeView(endpoint.nodeId()).orElse(null);
 			GLNodePort internalPort = internal == null ? null
 					: internal.findPort(endpoint.portId());
 			if (internalPort == null) continue;
@@ -854,6 +860,7 @@ public final class GLNodeWorkspace extends GLContainer
 
 	private void saveActiveAsset() {
 		if (synchronizingAsset || binding == null) return;
+        if(boundarySyncScheduled&&!rebuildingBoundaries&&!editor.isConnectionGestureActive()){boundarySyncScheduled=false;synchronizeBoundaryBindings();}
 		Document current = documents.peekLast();
 		if (current == null) return;
 		current.viewState = captureActiveViewState();

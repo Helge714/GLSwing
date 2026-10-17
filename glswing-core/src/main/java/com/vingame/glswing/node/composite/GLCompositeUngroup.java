@@ -34,11 +34,21 @@ public final class GLCompositeUngroup {
                 }
             }
             return new GLCompositeNodeDescriptor(parent.nodeTypeId(),parent.assetId(),parent.minimumAssetVersion(),
-                parent.portMappings().stream().map(p->p.withEndpoints(p.internalEndpoints().stream().flatMap(e->resolve(e,instance).stream()).toList())).toList(),parent.properties(),mappings);
+                parent.portMappings().stream().map(p->p.withEndpoints(p.internalEndpoints().stream().flatMap(e->{
+                    var targets=resolve(e,instance);
+                    if(!e.nodeId().equals(instance))return targets.stream();
+                    return targets.stream().flatMap(target->{
+                        if(!GLCompositeForwarding.isInput(target))return java.util.stream.Stream.of(target);
+                        return parent.portMappings().stream().filter(input->input.publicPort().direction()==GLPortDirection.INPUT
+                            &&input.internalEndpoints().contains(new GLNodeEndpoint(instance,target.portId())))
+                            .map(input->GLCompositeForwarding.input(input.publicPort().id()));
+                    });
+                }).toList())).toList(),parent.properties(),mappings);
         }
     }
     public static Result expand(GLNodeGraphSnapshot parent,GLNodeEditorViewState view,
             GLGraphNode instance,GLNodeGraphAsset asset) {
+        asset=GLCompositeForwarding.materialize(asset);
         var descriptor=Objects.requireNonNull(asset.compositeDescriptor());
         if(!instance.typeId().equals(descriptor.nodeTypeId())||parent.findNode(instance.id()).isEmpty())
             throw new IllegalArgumentException("Instance does not match composite");
@@ -70,6 +80,24 @@ public final class GLCompositeUngroup {
             var outs=output?ports.getOrDefault(c.output().portId(),List.of()):List.of(c.output());
             var ins=input?ports.getOrDefault(c.input().portId(),List.of()):List.of(c.input());
             for(var o:outs)for(var i:ins)wires.add(new GLGraphConnection(GLNodeConnectionId.random(),o,i));
+        }
+        var anchors=nodes.stream().filter(n->n.typeId().equals(GLCompositeForwarding.TYPE)).map(GLGraphNode::id).collect(java.util.stream.Collectors.toSet());
+        if(!anchors.isEmpty()){
+            var raw=List.copyOf(wires);
+            for(var p:descriptor.portMappings()){
+                var resolved=ports.get(p.publicPort().id()).stream().flatMap(e->GLCompositeForwarding.resolve(e,raw,anchors,p.publicPort().direction()==GLPortDirection.INPUT).stream()).distinct().toList();
+                // Parent boundary mappings are not graph wires. Retain their forwarding reference
+                // until remap can translate the child's public input to the parent's input.
+                if(resolved.isEmpty()&&p.publicPort().direction()==GLPortDirection.OUTPUT&&p.isBound()
+                        &&anchors.contains(ids.get(p.internalEndpoint().nodeId()))){
+                    var source=descriptor.portMappings().stream().filter(input->input.publicPort().direction()==GLPortDirection.INPUT
+                        &&input.internalEndpoints().stream().anyMatch(e->e.nodeId().equals(p.internalEndpoint().nodeId()))).findFirst();
+                    if(source.isPresent())resolved=List.of(GLCompositeForwarding.input(source.get().publicPort().id()));
+                }
+                ports.put(p.publicPort().id(),resolved);
+            }
+            var collapsed=GLCompositeForwarding.collapse(wires,anchors,100000);wires.clear();wires.addAll(collapsed);
+            nodes.removeIf(n->anchors.contains(n.id()));ids.entrySet().removeIf(e->anchors.contains(e.getValue()));
         }
         var positions=new LinkedHashMap<>(view.nodes());var origin=positions.remove(instance.id());
         if(origin==null)origin=new GLNodeViewState(0,0);

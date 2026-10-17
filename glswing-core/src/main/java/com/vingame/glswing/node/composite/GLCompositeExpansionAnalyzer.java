@@ -74,6 +74,10 @@ public final class GLCompositeExpansionAnalyzer {
 		for (GLCompositePortMapping mapping : descriptor.portMappings()) {
 			if (!mapping.isBound()) continue;
 			for(var endpoint : mapping.internalEndpoints()) {
+            if(GLCompositeForwarding.isInput(endpoint)){
+                if(!GLCompositeForwarding.valid(mapping,descriptor.portMappings()))state.error("composite.forward-input","Unknown public input forwarding target",origin);
+                continue;
+            }
             GLGraphNode internal = asset.graph().findNode(endpoint.nodeId())
 					.orElse(null);
 			if (internal == null)

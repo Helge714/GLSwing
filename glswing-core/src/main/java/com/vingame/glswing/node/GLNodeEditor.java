@@ -1400,6 +1400,8 @@ public class GLNodeEditor extends GLContainer
 				candidate.bringToFront();
 	}
 
+	public boolean isConnectionGestureActive(){return gestureSource!=null;}
+
 	void beginConnectionGesture(GLNodePort source, GLMouseEvent event) {
 		cancelConnectionGesture(true);
 		connectionGestureBefore = List.copyOf(connections);

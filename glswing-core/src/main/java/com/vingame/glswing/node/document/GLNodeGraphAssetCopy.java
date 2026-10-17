@@ -16,7 +16,7 @@ public final class GLNodeGraphAssetCopy {
         public Context { ids=Map.copyOf(ids); nodeIds=Map.copyOf(nodeIds); }
         public String id(String old) { return ids.getOrDefault(old,old); }
         public GLNodeEndpoint endpoint(GLNodeEndpoint endpoint) {
-            if(endpoint==null)return null;
+            if(endpoint==null||GLCompositeForwarding.isInput(endpoint))return endpoint;
             var id=nodeIds.get(endpoint.nodeId());
             if(id==null)throw new IllegalArgumentException("Endpoint refers to a node outside its asset: "+endpoint);
             return new GLNodeEndpoint(id,endpoint.portId());

@@ -1,5 +1,7 @@
 # Changelog
 
+- Persist direct composite input-to-output routes across navigation, history and document copying. Flatten forwarding routes without execution nodes. Documents using these routes require this Core version; the current development version covers the change.
+
 - Allow applications to extend the curve-editor context menu while retaining the standard point and segment actions.
 
 - Keep event-driven Canvas surfaces repainting while modal dialogs are open, without adding a continuous animator.

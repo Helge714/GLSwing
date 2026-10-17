@@ -35,7 +35,9 @@ public final class GLCompositeInterfaceTransactions {
 				new IllegalArgumentException("Asset is not a composite: " + assetId));
         for(var fixed:descriptor.portMappings())if(fixed.presentation().applicationManaged()&&!ports.contains(fixed))
             throw new IllegalArgumentException("Application-managed port cannot be changed or removed");
-		validateMappings(before, types, ports);
+		var inputIds=ports.stream().filter(p->p.publicPort().direction()==com.vingame.glswing.node.model.GLPortDirection.INPUT).map(p->p.publicPort().id()).collect(java.util.stream.Collectors.toSet());
+        ports=ports.stream().map(p->GLCompositeForwarding.isInput(p.internalEndpoint())&&!inputIds.contains(p.internalEndpoint().portId())?p.withEndpoints(List.of()):p).toList();
+        validateMappings(before, types, ports);
 		GLCompositeNodeDescriptor nextDescriptor = new GLCompositeNodeDescriptor(
 				descriptor.nodeTypeId(), descriptor.assetId(),
 				descriptor.minimumAssetVersion(), ports, descriptor.properties(),
@@ -74,6 +76,9 @@ public final class GLCompositeInterfaceTransactions {
 				"Unknown composite port: " + currentPortId);
 		if(ports.get(index).presentation().applicationManaged())throw new IllegalArgumentException("Application-managed port cannot be edited");
 		ports.set(index, port);
+        if(!currentPortId.equals(port.publicPort().id()))for(int i=0;i<ports.size();i++){
+            var p=ports.get(i);if(GLCompositeForwarding.isInput(p.internalEndpoint())&&p.internalEndpoint().portId().equals(currentPortId))ports.set(i,p.withEndpoints(List.of(GLCompositeForwarding.input(port.publicPort().id()))));
+        }
 		return replacePorts(composites, types, assetId, ports, history, editName);
 	}
 
@@ -194,6 +199,10 @@ public final class GLCompositeInterfaceTransactions {
 					"Composite port mappings must not contain null");
 			if (!mapping.isBound()) continue;
 			for (var endpoint : mapping.internalEndpoints()) {
+            if(GLCompositeForwarding.isInput(endpoint)){
+                if(!GLCompositeForwarding.valid(mapping,mappings))throw new IllegalArgumentException("Invalid public input forwarding target");
+                continue;
+            }
             GLGraphNode node = asset.graph().findNode(endpoint.nodeId())
 					.orElseThrow(() -> new IllegalArgumentException(
 							"Composite port references an unknown internal node"));
