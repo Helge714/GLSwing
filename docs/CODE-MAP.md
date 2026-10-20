@@ -1,0 +1,55 @@
+# GLSwing code map
+
+Developer navigation index. Use the relevant row before repository-wide searches;
+verify current code before editing. Update affected rows when files move or
+subsystem ownership changes. This is not a complete inventory or an API contract.
+
+## Modules and ownership
+
+- `glswing-core/`: reusable UI, rendering, node graph and application infrastructure.
+- `glswing-lsp/`: language-server integration, separate from application languages.
+- `glswing-filedialogs-swt/`: optional SWT file-dialog backend.
+- `glswing-examples/`: examples and demos.
+- `glswing-consumer-smoke/`: external-consumer build validation.
+- `pom.xml`: parent build and module/dependency setup.
+
+Core must remain independent of EasyKnack, audio node IDs, physical-unit policy,
+DSP protocols and application migrations. Consumer applications use Maven
+artifacts. The sibling checkout layout is a development convenience only.
+
+## Entry points
+
+Paths below are relative to
+`glswing-core/src/main/java/com/vingame/glswing/`.
+
+| Task | Start here | Responsibility |
+| --- | --- | --- |
+| Startup / windows / splash | `application/GLApplication.java`, `application/GLStartupEngine.java`, `application/GLStartupPlan.java` | Application surfaces and startup execution/progress. |
+| Graph editor / gestures | `node/GLNodeEditor.java`, `node/GLNode.java`, `node/GLNodePort.java`, `node/GLNodeConnection.java` | Visual nodes, connections, selection, gestures, layout and picking. |
+| Workspace / commands / inspector | `node/GLNodeWorkspace.java`, `node/GLNodeEditingActions.java`, `node/GLNodePropertyInspector.java` | Model/view workspace, navigation, editor actions and property UI. |
+| Graph model / catalog | `node/model/GLNodeGraph.java`, `node/model/GLNodeTypeRegistry.java`, `node/model/GLNodeCatalog.java`, `node/model/GLNodeValueTypeRegistry.java` | Model snapshots/mutations, node and value types, catalog entries. |
+| Binding | `node/binding/` | Synchronize model nodes with views and capture editor view state. |
+| Group interface / validation | `node/composite/GLCompositeNodeDescriptor.java`, `node/composite/GLCompositeInterfaceEditor.java`, `node/composite/GLCompositeInterfaceTransactions.java`, `node/composite/GLCompositeGraphRegistry.java` | Reusable group contracts, interface controls, undoable edits and asset registry. |
+| Group execution / forwarding / ungroup | `node/composite/GLCompositeGraphFlattener.java`, `node/composite/GLCompositeExpansionAnalyzer.java`, `node/composite/GLCompositeForwarding.java`, `node/composite/GLCompositeUngroup.java` | Expand groups, validate limits, resolve direct boundary routes and unpack instances. |
+| Graph documents / asset copies | `node/document/`, `node/document/GLNodeGraphAssetCopy.java` | Graph document/asset data and structural dependency copying. |
+| Editor templates / capabilities | `node/composite/GLNodeEditorTemplateLibrary.java`, `node/composite/GLNodeEditorCapabilities.java`, `node/composite/GLNodeEditorSourceCatalog.java` | Generic editor-template storage and copy/link capability descriptions. |
+| Execution / mute / history | `node/execution/`, `history/` | Generic graph execution/mute mechanisms and undo/redo; no audio DSP policy. |
+| Controls / shared editing | `ui/GLLabel.java`, `ui/GLSlider.java`, `ui/GLUnitSlider.java`, `ui/GLNumberSpinner.java`, `ui/GLInputGroup.java`, `ui/GLSliderGroup.java`, `ui/GLNumberSpinnerGroup.java`, `ui/GLTabbedPane.java` | Text, sliders/spinners, grouped editing and tab controls. |
+| Code editor / theme | `ui/GLCodeEditor.java`, `ui/GLCodeLanguage.java`, `ui/GLTheme.java`, `ui/GLThemeLoader.java`, `ui/GLThemeDefaults.java` | Code editor UI/language integration and theme parsing/defaults. |
+| Rendering / events / layout | `rendering/`, `component/`, `input/`, `layout/` | Rendering implementation, component tree, event dispatch and layout infrastructure. |
+| Application documents / recovery / dialogs | `document/`, `document/GLDocumentAutosaveCoordinator.java`, `file/` | Generic document lifecycle, asynchronous autosave and file-dialog infrastructure. |
+
+## Tests, resources and supporting documentation
+
+- `glswing-core/src/test/java/`: focused JUnit tests; find the nearest feature/package.
+- `glswing-core/src/main/resources/`: bundled themes, schemas and other toolkit resources.
+- `docs/node-wire-insertion.md`: node insertion behavior.
+- `docs/ui-framework.md`, `docs/graphics-pipeline.md`: deeper UI/rendering references.
+- `docs/application-services.md`: reusable application services.
+- `CHANGELOG.md`: public changes; `TODO.md`: pending work; `AGENTS.md`: working agreements.
+- `target/` directories: generated output, not authoritative source.
+
+For a small change, inspect the owning class, relevant callers and nearest tests.
+Assemble the change before broader builds; repeat only for a new failure, change
+or unresolved concern. Documentation-only navigation changes need path/link and
+diff checks, not a full build.
