@@ -1177,20 +1177,23 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 		if (cached != null && Float.compare(cachedRowsWidth, available) == 0)
 			return cached;
 		List<Row> result = new ArrayList<>();
+        // A document snapshot and iterator per layout, not a full text copy for
+        // every character tested while wrapping a large document.
+        String text = document.getText();
+        BreakIterator characters = BreakIterator.getCharacterInstance(Locale.getDefault());
+        characters.setText(text);
 		for (int line = 0; line < document.getLineCount(); line++) {
 			if (!isLogicalLineVisible(line)) continue;
 			int start = document.getLineStart(line), end = document.getLineEnd(line);
 			if (!lineWrap || start == end) { result.add(new Row(start, end, false, line)); continue; }
 			int rowStart = start;
 			while (rowStart < end) {
-				BreakIterator characters = BreakIterator.getCharacterInstance(Locale.getDefault());
-				characters.setText(document.getText());
 				int rowEnd = characters.following(rowStart), lastFit = rowEnd;
 				int wordBreak = -1;
 				while (rowEnd != BreakIterator.DONE && rowEnd <= end
 						&& measureRange(rowStart, rowEnd) <= available) {
 					lastFit = rowEnd;
-					int preceding = document.getText().codePointBefore(rowEnd);
+					int preceding = text.codePointBefore(rowEnd);
 					if (Character.isWhitespace(preceding) || preceding == '-')
 						wordBreak = rowEnd;
 					rowEnd = characters.following(rowEnd);
@@ -1198,10 +1201,9 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 				int chosen;
 				boolean trailingSeparatorWrap = false;
 				if (lastFit > rowStart && lastFit < end
-						&& Character.isWhitespace(document.getText().codePointAt(lastFit))) {
+						&& Character.isWhitespace(text.codePointAt(lastFit))) {
 					// Exactly the first separator after a fitting word may act as the
 					// visual wrap delimiter. Later spaces belong to the continuation.
-					String text = document.getText();
 					int previous = text.codePointBefore(lastFit);
 					if (Character.isWhitespace(previous)) {
 						chosen = lastFit;

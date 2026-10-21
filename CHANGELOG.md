@@ -1,5 +1,7 @@
 # Changelog
 
+- Reuse one text snapshot and grapheme iterator per multiline layout. Avoid document-size copies for every wrapped character when displaying large read-only texts.
+
 - Persist direct composite input-to-output routes across navigation, history and document copying. Flatten forwarding routes without execution nodes. Documents using these routes require this Core version; the current development version covers the change.
 
 - Allow applications to extend the curve-editor context menu while retaining the standard point and segment actions.
