@@ -17,6 +17,15 @@ import com.vingame.glswing.input.GLMouseEvent;
  */
 public abstract class GLControl extends GLContainer implements GLKeyTarget, GLToolTipTarget {
 
+    private GLDriverTarget driverTarget;
+    private java.util.function.Supplier<GLPopupMenu> driverMenu;
+    private boolean driverAssigned;
+    private String driverColor="palette.accent";
+    public final GLDriverTarget getDriverTarget(){return driverTarget;}
+    public final void setDriverTarget(GLDriverTarget target){driverTarget=target;}
+    public final void setDriverContextMenu(java.util.function.Supplier<GLPopupMenu> menu){driverMenu=menu;}
+    public final void setDriverIndicator(boolean assigned,String themeColor){driverAssigned=assigned;driverColor=java.util.Objects.requireNonNull(themeColor);repaintGL();}
+    public final boolean hasDriverIndicator(){return driverAssigned;}
 	private boolean enabled = true;
 	private boolean focusable = true;
 	private boolean hovered;
@@ -34,6 +43,10 @@ public abstract class GLControl extends GLContainer implements GLKeyTarget, GLTo
 	}
 	@Override protected void render(com.vingame.glswing.rendering.GLContext2D context) {
 		super.render(context);
+        if(driverAssigned)context.drawUIRoundRect(1,1,Math.max(0,getWidth()-2),Math.max(0,getHeight()-2),
+            getGLTheme().sliderStyle().cornerRadius(),getGLTheme().values().getFloat("driver.borderWidth",1.5f),
+            getGLTheme().values().getColor(driverColor,getGLTheme().values().getColor("palette.accent")),
+            com.vingame.glswing.rendering.GLStroke.WidthSpace.SCREEN);
 		if(isFocused() && getConnectedShape()!=null && !insideHighlightedLayoutGroup())
 			context.drawUIRoundRect(0,0,getWidth(),getHeight(),getConnectedShape(),1.5f,
 					getGLTheme().values().getColor("palette.accent"),
@@ -171,6 +184,9 @@ public abstract class GLControl extends GLContainer implements GLKeyTarget, GLTo
 
 	@Override
 	public final void mouseClicked(GLMouseEvent event) {
+        if(event.getButton()==MouseEvent.BUTTON3&&driverMenu!=null){
+            var menu=driverMenu.get();if(menu!=null){GLParent host=getGLParent();while(host instanceof GLContainer parent&&parent.getGLParent()!=null)host=parent.getGLParent();if(host!=null){menu.show(host,event.getScreenX(),event.getScreenY());event.consume();return;}}
+        }
 		controlMouseClicked(event);
 	}
 

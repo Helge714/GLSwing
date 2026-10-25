@@ -573,3 +573,6 @@ node.portEventInnerScale=.36
 @COLOR tabbedPane.closeHover=rgb(255,255,255,34)
 @COLOR line.color=${palette.border}
 @COLOR colorPicker.samplerOutline=#000000
+
+# Remote editor drivers
+driver.borderWidth=1.5

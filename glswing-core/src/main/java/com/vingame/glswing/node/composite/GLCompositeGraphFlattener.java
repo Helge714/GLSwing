@@ -98,7 +98,7 @@ public final class GLCompositeGraphFlattener {
 			Context context) {
 		Map<GLNodeId, GLGraphNode> nodes = new LinkedHashMap<>(nested.graph().nodesById());
 		for (String property : instance.properties().keySet())
-			if (!property.startsWith(GLGraphNode.AUTOMATIC_PREFIX) && !property.startsWith(GLGraphNode.AUTOMATIC_DEFAULT_PREFIX) && descriptor.findProperty(property).isEmpty())
+			if (!property.startsWith(com.vingame.glswing.ui.GLDriverTarget.PROPERTY_PREFIX) && !property.startsWith(GLGraphNode.AUTOMATIC_PREFIX) && !property.startsWith(GLGraphNode.AUTOMATIC_DEFAULT_PREFIX) && descriptor.findProperty(property).isEmpty())
 				context.error("composite.property-unknown", "Unknown composite property: "
 						+ property, instance.id());
 		for (GLCompositePropertyDescriptor property : descriptor.properties()) {

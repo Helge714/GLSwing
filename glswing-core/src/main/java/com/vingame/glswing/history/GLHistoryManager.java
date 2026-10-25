@@ -30,6 +30,10 @@ public final class GLHistoryManager {
 	private long currentStateId;
 	private long persistedStateId;
 	private boolean applying;
+    private long externalRevision,persistedExternalRevision;
+    /** Marks persisted data changed without adding an undo edit or clearing redo. */
+    public void markExternalChange(){boolean wasModified=isModified();externalRevision++;if(!wasModified)fireChanged();}
+
 
 	public GLHistoryManager() {
 		this(DEFAULT_HISTORY_LIMIT);
@@ -69,7 +73,7 @@ public final class GLHistoryManager {
 
 	/** Whether the current history position differs from the persisted checkpoint. */
 	public boolean isModified() {
-		return currentStateId != persistedStateId || !transactions.isEmpty();
+		return currentStateId != persistedStateId || externalRevision!=persistedExternalRevision || !transactions.isEmpty();
 	}
 
 	/** @deprecated Use {@link #isModified()}. */
@@ -92,6 +96,7 @@ public final class GLHistoryManager {
 			throw new IllegalStateException(
 					"Cannot persist a partially recorded transaction");
 		persistedStateId = currentStateId;
+        persistedExternalRevision=externalRevision;
 		fireChanged();
 	}
 
@@ -111,6 +116,7 @@ public final class GLHistoryManager {
 		undo.clear();
 		redo.clear();
 		currentStateId = persistedStateId = ++nextStateId;
+        externalRevision=persistedExternalRevision=0;
 		fireChanged();
 	}
 

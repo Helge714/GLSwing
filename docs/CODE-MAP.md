@@ -34,6 +34,7 @@ Paths below are relative to
 | Graph documents / asset copies | `node/document/`, `node/document/GLNodeGraphAssetCopy.java` | Graph document/asset data and structural dependency copying. |
 | Editor templates / capabilities | `node/composite/GLNodeEditorTemplateLibrary.java`, `node/composite/GLNodeEditorCapabilities.java`, `node/composite/GLNodeEditorSourceCatalog.java` | Generic editor-template storage and copy/link capability descriptions. |
 | Execution / mute / history | `node/execution/`, `history/` | Generic graph execution/mute mechanisms and undo/redo; no audio DSP policy. |
+| Remote editor drivers | `ui/GLDriverTarget.java`, `ui/GLDriverMapping.java`, `ui/GLControl.java` | Transport-neutral targets, absolute mapping/soft takeover, driver context menus and theme-colored indicators. Applications own protocols and persistent assignments. |
 | Controls / shared editing | `ui/GLLabel.java`, `ui/GLTextArea.java`, `ui/GLTextDocument.java`, `ui/GLSlider.java`, `ui/GLUnitSlider.java`, `ui/GLNumberSpinner.java`, `ui/GLInputGroup.java`, `ui/GLSliderGroup.java`, `ui/GLNumberSpinnerGroup.java`, `ui/GLTabbedPane.java` | Text, sliders/spinners, grouped editing and tab controls. |
 | Code editor / theme | `ui/GLCodeEditor.java`, `ui/GLCodeLanguage.java`, `ui/GLTheme.java`, `ui/GLThemeLoader.java`, `ui/GLThemeDefaults.java` | Code editor UI/language integration and theme parsing/defaults. |
 | Rendering / events / layout | `rendering/`, `component/`, `input/`, `layout/` | Rendering implementation, component tree, event dispatch and layout infrastructure. |

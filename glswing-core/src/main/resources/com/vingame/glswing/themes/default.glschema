@@ -500,3 +500,5 @@ tooltip.shadow.offsetX=NUMBER, "Tooltip shadow offsetX; inherits the popup shado
 tooltip.shadow.offsetY=NUMBER, "Tooltip shadow offsetY; inherits the popup shadow by default."
 
 node.portEventInnerScale=NUMBER, "Inner diamond radius relative to event port radius (0.15 to 0.65)."
+
+driver.borderWidth=NUMBER, "Screen-space width of an external-driver control indicator."
