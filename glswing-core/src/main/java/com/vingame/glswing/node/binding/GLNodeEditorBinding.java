@@ -273,6 +273,7 @@ public final class GLNodeEditorBinding implements AutoCloseable {
 		float x = state == null ? 40 + index % 4 * 260 : state.x();
 		float y = state == null ? 40 + index / 4 * 180 : state.y();
 		editor.addNode(view, x, y);
+        if(state!=null)view.setCustomTitle(state.customTitle());
 		if (state != null && state.width() > 0 && state.height() > 0) {
 			if (growRebuiltViews.remove(node.id())) {
 				var preferred = view.getPreferredGLSize();
@@ -402,6 +403,7 @@ public final class GLNodeEditorBinding implements AutoCloseable {
 			return;
 		}
 		node.setLocation(state.x(), state.y());
+        node.setCustomTitle(state.customTitle());
 		if (state.width() > 0 && state.height() > 0)
 			node.setSize(state.width(), state.height());
 	}

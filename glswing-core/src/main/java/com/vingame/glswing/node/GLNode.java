@@ -64,6 +64,7 @@ public class GLNode extends GLContainer {
 	private GLMenuItem muteMenuItem;
 	private GLMenuItem deleteNodeMenuItem;
 	private String title;
+    private String defaultTitle, customTitle, titleSuffix="";
 	private GLNodeStyle localStyle;
 	private GLNodePortOrder portOrder = GLNodePortOrder.INPUTS_FIRST;
 	private GLNodeResizeMode resizeMode = GLNodeResizeMode.BOTH;
@@ -100,6 +101,7 @@ public class GLNode extends GLContainer {
 
 	public GLNode(String title) {
 		this.title = requireTitle(title);
+        defaultTitle=this.title;
 		titleEditor = new GLTextEditor(title);
 		titleEditor.setHistoryEnabled(false);
 		titleEditor.setVisible(false);
@@ -119,7 +121,16 @@ public class GLNode extends GLContainer {
 		return title;
 	}
 
-	public void setTitle(String title) {
+	/** Updates the default label without replacing a user-entered name. */
+    public void setTitle(String title) {setDefaultTitle(title);}
+    public void setDefaultTitle(String title){defaultTitle=requireTitle(title);refreshTitle();}
+    public String getCustomTitle(){return customTitle;}
+    /** Null restores the default label. Empty strings are valid custom titles. */
+    public void setCustomTitle(String title){customTitle=title;refreshTitle();}
+    /** Non-editable presentation annotation, never included in the saved name. */
+    public void setTitleSuffix(String suffix){titleSuffix=java.util.Objects.requireNonNull(suffix);refreshTitle();}
+    private void refreshTitle(){applyTitle((customTitle==null?defaultTitle:customTitle)+titleSuffix);}
+    private void applyTitle(String title) {
 		title = requireTitle(title);
 		if (this.title.equals(title))
 			return;
@@ -164,8 +175,8 @@ public class GLNode extends GLContainer {
 	public void editTitle() {
 		if (!titleEditable || titleEditor.isVisible())
 			return;
-		titleBeforeEditing = title;
-		titleEditor.setText(title);
+		titleBeforeEditing = customTitle;
+		titleEditor.setText(customTitle==null?defaultTitle:customTitle);
 		configureTitleEditor(getGLStyle());
 		titleEditor.setVisible(true);
 		layoutTitleEditor();
@@ -955,21 +966,21 @@ public class GLNode extends GLContainer {
 	private void finishTitleEditing(boolean commit) {
 		if (!titleEditor.isVisible())
 			return;
-		String before = titleBeforeEditing == null ? title : titleBeforeEditing;
+		String before = titleBeforeEditing;
 		if (commit)
-			setTitle(titleEditor.getText());
+			setCustomTitle(before==null&&titleEditor.getText().equals(defaultTitle)?null:titleEditor.getText());
 		else
 			titleEditor.setText(title);
 		titleEditor.setVisible(false);
 		titleBeforeEditing = null;
 		requestGLFocus(null);
 		invalidateRecording();
-		if (commit && !before.equals(title)) {
-			String after = title;
+		if (commit && !java.util.Objects.equals(before,customTitle)) {
+			String after = customTitle;
 			var manager = getGLHistoryManager();
 			if (manager != null)
-				manager.record("Edit node title", () -> setTitle(before),
-						() -> setTitle(after));
+				manager.record("Edit node title", () -> setCustomTitle(before),
+						() -> setCustomTitle(after));
 		}
 	}
 

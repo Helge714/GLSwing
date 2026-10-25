@@ -109,7 +109,7 @@ public final class GLNodeGraphEditingSession {
         var currentView = binding.captureViewState();
         var beforeBounds = new LinkedHashMap<>(currentView.nodes());
         var node = beforeBounds.get(nodeId);
-        beforeBounds.put(nodeId, new GLNodeViewState(startX,startY,node.width(),node.height()));
+        beforeBounds.put(nodeId, new GLNodeViewState(startX,startY,node.width(),node.height(),node.customTitle()));
         var beforeView = new GLNodeEditorViewState(beforeBounds,currentView.auxiliaryNodes());
         var edge = beforeGraph.findConnection(connectionId).orElseThrow();
         var from = currentView.nodes().get(edge.output().nodeId());
@@ -120,7 +120,7 @@ public final class GLNodeGraphEditingSession {
         float x = right >= left ? Math.max(left,Math.min(node.x(),right)) : left;
         float shift = Math.max(0,x+node.width()+gap-to.x());
         var afterBounds = new LinkedHashMap<>(currentView.nodes());
-        afterBounds.put(nodeId,new GLNodeViewState(x,node.y(),node.width(),node.height()));
+        afterBounds.put(nodeId,new GLNodeViewState(x,node.y(),node.width(),node.height(),node.customTitle()));
         if (shift > 0) {
             var visited = new LinkedHashSet<GLNodeId>();
             var pending = new java.util.ArrayDeque<GLNodeId>();
@@ -130,7 +130,7 @@ public final class GLNodeGraphEditingSession {
                 if (id.equals(edge.output().nodeId()) || id.equals(nodeId) || !visited.add(id)) continue;
                 var bounds = currentView.nodes().get(id);
                 if (bounds != null && bounds.x() >= to.x())
-                    afterBounds.put(id,new GLNodeViewState(bounds.x()+shift,bounds.y(),bounds.width(),bounds.height()));
+                    afterBounds.put(id,new GLNodeViewState(bounds.x()+shift,bounds.y(),bounds.width(),bounds.height(),bounds.customTitle()));
                 for (var c : beforeGraph.connections()) {
                     if (c.input().nodeId().equals(id)) pending.add(c.output().nodeId());
                     if (c.output().nodeId().equals(id)) pending.add(c.input().nodeId());
@@ -329,7 +329,7 @@ public final class GLNodeGraphEditingSession {
         }
         for (var id:chain) {
             var b=positions.get(id);
-            positions.put(id,new GLNodeViewState(b.x()-shift,b.y(),b.width(),b.height()));
+            positions.put(id,new GLNodeViewState(b.x()-shift,b.y(),b.width(),b.height(),b.customTitle()));
         }
     }
 
@@ -404,7 +404,7 @@ public final class GLNodeGraphEditingSession {
 		for (Map.Entry<GLNodeId, GLNodeId> entry : ids.entrySet()) {
 			GLNodeViewState source = fragment.viewStates().get(entry.getKey());
 			nextViews.put(entry.getValue(), new GLNodeViewState(source.x() + dx,
-					source.y() + dy, source.width(), source.height()));
+					source.y() + dy, source.width(), source.height(),source.customTitle()));
 		}
 		graph.edit(name, edit -> {
 			for (GLGraphNode node : fragment.nodes())

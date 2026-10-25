@@ -1,5 +1,7 @@
 # Changelog
 
+- Preserve custom node names separately from default labels and title annotations, including graph navigation, copying and Undo. Graph document schema 9 stores custom names and still reads versions 1–8; newly saved documents require the updated Core. Covered by the current development version.
+
 - Add transport-independent editor driver targets, range mapping/soft takeover, driver menus and indicators. Add non-undoable dirty-state tracking and allow driver metadata on composite instances. Covered by the current development version.
 
 - Reuse one text snapshot and grapheme iterator per multiline layout. Avoid document-size copies for every wrapped character when displaying large read-only texts.

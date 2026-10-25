@@ -116,7 +116,7 @@ public final class GLCompositeUngroup {
         for(var entry:ids.entrySet()){
             var b=asset.viewState().nodes().get(entry.getKey());
             if(b==null)b=new GLNodeViewState(minX-240,minY+100*missing++);
-            positions.put(entry.getValue(),new GLNodeViewState(offsetX+b.x(),offsetY+b.y(),b.width(),b.height()));
+            positions.put(entry.getValue(),new GLNodeViewState(offsetX+b.x(),offsetY+b.y(),b.width(),b.height(),b.customTitle()));
         }
         return new Result(new GLNodeGraphSnapshot(parent.graphId(),parent.revision(),nodes,wires),
             new GLNodeEditorViewState(positions,view.auxiliaryNodes()),Map.copyOf(ids),Map.copyOf(ports));
