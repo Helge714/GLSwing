@@ -234,12 +234,12 @@ public final class GLNodeWorkspace extends GLContainer
 			}
 			@Override public void connectionAdded(GLNodeEditor source,
 					GLNodeConnection connection) {
-				if (!rebuildingBoundaries && touchesBoundary(connection))
+				if (!rebuildingBoundaries && (binding==null||!binding.isSynchronizing()) && touchesBoundary(connection))
 					scheduleBoundaryBindingSync();
 			}
 			@Override public void connectionRemoved(GLNodeEditor source,
 					GLNodeConnection connection) {
-				if (!rebuildingBoundaries && touchesBoundary(connection))
+				if (!rebuildingBoundaries && (binding==null||!binding.isSynchronizing()) && touchesBoundary(connection))
 					scheduleBoundaryBindingSync();
 			}
 		});
@@ -485,6 +485,7 @@ public final class GLNodeWorkspace extends GLContainer
 		if (document == null) { updateHeader(); return; }
 		binding = new GLNodeEditorBinding(document.graph, types, editor, viewFactory,
 				cyclePolicy, document.viewState);
+        binding.addProjectionListener(this::restoreProjectedBoundaryConnections);
 		if (propertyInspector != null) propertyInspector.close();
 		if (propertyScroll != null) {
 			propertyInspector = new GLNodePropertyInspector(binding, propertySchemas);
@@ -755,6 +756,21 @@ public final class GLNodeWorkspace extends GLContainer
 		return connection != null && (connection.getOutput().getNode() instanceof BoundaryNode
 				|| connection.getInput().getNode() instanceof BoundaryNode);
 	}
+
+    private void restoreProjectedBoundaryConnections() {
+        if(closed||rebuildingBoundaries||binding==null||currentAssetId()==null)return;
+        var descriptor=composites.findAsset(currentAssetId()).map(GLNodeGraphAsset::compositeDescriptor).orElse(null);
+        boolean deletedTarget=descriptor!=null&&descriptor.portMappings().stream().flatMap(p->p.internalEndpoints().stream())
+            .anyMatch(e->{
+                if(GLCompositeForwarding.isInput(e))return false;
+                var node=binding.graph().snapshot().findNode(e.nodeId()).orElse(null);
+                return node==null||types.find(node.typeId()).map(t->t.findPort(e.portId()).isEmpty()).orElse(false);
+            });
+        if(descriptor!=null&&descriptor.portMappings().stream().filter(p->!p.presentation().applicationManaged())
+            .anyMatch(p->!new java.util.HashSet<>(p.internalEndpoints()).equals(new java.util.HashSet<>(visibleBoundaryEndpoints(p)))))
+            rebuildBoundaryNodes(descriptor);
+        if(deletedTarget)scheduleBoundaryBindingSync();
+    }
 
 	private void scheduleBoundaryBindingSync() {
 		if (boundarySyncScheduled) return;

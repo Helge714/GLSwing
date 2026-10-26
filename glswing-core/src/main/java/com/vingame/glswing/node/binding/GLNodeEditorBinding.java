@@ -49,6 +49,14 @@ public final class GLNodeEditorBinding implements AutoCloseable {
 	private final Map<GLNode, GLNodeId> nodeIds = new LinkedHashMap<>();
 	private final Map<GLNode, GLGraphNode> detachedNodeModels =
 			new IdentityHashMap<>();
+    private final Map<GLNodeConnection,GLGraphConnection> connectionModels = new java.util.WeakHashMap<>();
+    private final CopyOnWriteArrayList<Runnable> projectionListeners = new CopyOnWriteArrayList<>();
+    /** Endpoint snapshots remain valid after the corresponding visual ports are rebuilt. */
+    public List<GLGraphConnection> captureConnections(List<GLNodeConnection> views) {
+        return views.stream().map(connectionModels::get).filter(java.util.Objects::nonNull).toList();
+    }
+    public boolean isSynchronizing(){return synchronizing;}
+    public void addProjectionListener(Runnable listener){projectionListeners.add(java.util.Objects.requireNonNull(listener));}
 	private final Map<GLNodeConnectionId, GLNodeConnection> connectionViews =
 			new LinkedHashMap<>();
 	private final Map<GLNodeId, String> projectedTypes = new LinkedHashMap<>();
@@ -259,6 +267,7 @@ public final class GLNodeEditorBinding implements AutoCloseable {
 			synchronizing = false;
 		}
 		projectedSnapshot = snapshot;
+        projectionListeners.forEach(Runnable::run);
         validate();
 	}
 
@@ -333,6 +342,7 @@ public final class GLNodeEditorBinding implements AutoCloseable {
 			return;
 		GLNodeConnection view = new GLNodeConnection(output, input);
 		view.setModelId(connection.id());
+        connectionModels.put(view,connection);
 		editor.addProjectedConnection(view);
 		connectionViews.put(connection.id(), view);
 	}
@@ -447,6 +457,7 @@ public final class GLNodeEditorBinding implements AutoCloseable {
 				return;
 			}
 			connection.setModelId(id);
+            connectionModels.put(connection,new GLGraphConnection(id,new GLNodeEndpoint(outputNode,connection.getOutput().getId()),new GLNodeEndpoint(inputNode,connection.getInput().getId())));
 			connectionViews.put(id, connection);
 			try {
 				graph.edit("Create connection", edit -> edit.addConnection(

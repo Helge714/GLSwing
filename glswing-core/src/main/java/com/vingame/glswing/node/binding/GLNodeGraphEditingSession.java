@@ -61,6 +61,18 @@ public final class GLNodeGraphEditingSession {
 		this.history = history;
 		this.inactiveViewStateConsumer = inactiveViewStateConsumer == null
 				? state -> { } : inactiveViewStateConsumer;
+        binding.editor().setConnectionHistoryHandler((before,after)->{
+            var previous=binding.captureConnections(before);var next=binding.captureConnections(after);
+            if(previous.equals(next))return; // Boundary wires have their own interface transaction.
+            var snapshot=binding.graph().snapshot();var view=binding.captureViewState();
+            // Unknown/plugin node types may have model wires without any visual projection.
+            var restored=new LinkedHashMap<GLNodeConnectionId,GLGraphConnection>();
+            snapshot.connections().forEach(c->restored.put(c.id(),c));
+            next.forEach(c->restored.remove(c.id()));previous.forEach(c->restored.put(c.id(),c));
+            record("Change node connection",
+                new GLNodeGraphSnapshot(snapshot.graphId(),snapshot.revision(),snapshot.nodes(),List.copyOf(restored.values())),view,
+                snapshot,view);
+        });
         binding.editor().setConnectionInsertionHandler(new com.vingame.glswing.node.GLNodeEditor.ConnectionInsertionHandler() {
             public boolean canInsert(GLNode node, com.vingame.glswing.node.GLNodeConnection connection) {
                 return canInsertIntoConnection(binding.findNodeId(node).orElse(null), connection.getModelId());

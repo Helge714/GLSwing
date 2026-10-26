@@ -88,6 +88,11 @@ public class GLNodeEditor extends GLContainer
 	private GLNodeConnection detachedConnection;
 	private List<GLNodeConnection> connectionGestureBefore = List.of();
 	private boolean connectionDragging;
+    private java.util.function.BiConsumer<List<GLNodeConnection>,List<GLNodeConnection>> connectionHistoryHandler;
+    /** Model-backed editors record immutable graph endpoints instead of visual port instances. */
+    public void setConnectionHistoryHandler(java.util.function.BiConsumer<List<GLNodeConnection>,List<GLNodeConnection>> handler) {
+        connectionHistoryHandler=handler;
+    }
 	private float connectionPressScreenX;
 	private float connectionPressScreenY;
 	private float connectionPointerX;
@@ -1781,6 +1786,7 @@ public class GLNodeEditor extends GLContainer
 			List<GLNodeConnection> after) {
 		if (before.equals(after))
 			return;
+        if(connectionHistoryHandler!=null){connectionHistoryHandler.accept(before,after);return;}
 		var manager = getGLHistoryManager();
 		if (manager != null)
 			manager.record("Change node connection",
