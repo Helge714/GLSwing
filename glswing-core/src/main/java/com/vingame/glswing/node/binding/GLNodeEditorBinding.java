@@ -283,6 +283,13 @@ public final class GLNodeEditorBinding implements AutoCloseable {
 		float y = state == null ? 40 + index / 4 * 180 : state.y();
 		editor.addNode(view, x, y);
         if(state!=null)view.setCustomTitle(state.customTitle());
+
+		nodeViews.put(node.id(), view);
+		nodeIds.put(view, node.id());
+		projectedTypes.put(node.id(), node.typeId());
+		viewFactory.updateNode(view, node, type);
+		applyBuiltInState(view, node, type);
+		// Hide changes row metrics; restore persisted bounds after applying model presentation.
 		if (state != null && state.width() > 0 && state.height() > 0) {
 			if (growRebuiltViews.remove(node.id())) {
 				var preferred = view.getPreferredGLSize();
@@ -290,11 +297,6 @@ public final class GLNodeEditorBinding implements AutoCloseable {
 						Math.max(state.height(), preferred.height()));
 			} else view.setSize(state.width(), state.height());
 		} else growRebuiltViews.remove(node.id());
-		nodeViews.put(node.id(), view);
-		nodeIds.put(view, node.id());
-		projectedTypes.put(node.id(), node.typeId());
-		viewFactory.updateNode(view, node, type);
-		applyBuiltInState(view, node, type);
 		return view;
 	}
 

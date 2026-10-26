@@ -1,5 +1,7 @@
 # Changelog
 
+- Restore saved node dimensions after applying hidden presentation so graph navigation retains custom sizes. Covered by the current development version; persistence contracts are unchanged.
+
 - Record bound-editor connection Undo with immutable model endpoints instead of visual port references. Preserve composite boundary bindings when node views are rebuilt, and let boundary rewiring use its single interface transaction. The current development version covers these compatible fixes; document formats are unchanged.
 
 - Preserve custom node names separately from default labels and title annotations, including graph navigation, copying and Undo. Graph document schema 9 stores custom names and still reads versions 1–8; newly saved documents require the updated Core. Covered by the current development version.
