@@ -13,6 +13,13 @@ public interface GLNodeViewFactory {
 	default boolean isViewCurrent(GLNode view, GLGraphNode node,
 			GLNodeTypeDescriptor type) { return true; }
 
+    /** Transfers application-owned transient state when the same model identity
+     * receives a replacement view, including type/port-layout changes. Invoked
+     * after creation/port validation and before model presentation is updated.
+     * Initial views and newly inserted identities do not invoke this callback. */
+    default void transferViewState(GLNode previous, GLNode replacement,
+            GLGraphNode node, GLNodeTypeDescriptor type) { }
+
 	/** Called when the same model node receives updated properties. */
 	default void updateNode(GLNode view, GLGraphNode node,
 			GLNodeTypeDescriptor type) {

@@ -162,8 +162,49 @@ public final class GLNodeEditorBindingSelfTest {
 					&& inactiveView.get() != null,
 					"Undo through a closed binding did not restore offline state");
 		}
+		transfersRuntimeStateOnReplacement();
 		System.out.println("GL node-editor binding self-test passed.");
 	}
+
+    private static void transfersRuntimeStateOnReplacement() {
+        var types=new GLNodeTypeRegistry();
+        types.register(new GLNodeTypeDescriptor("test.transfer.a"));
+        types.register(new GLNodeTypeDescriptor("test.transfer.b"));
+        var id=GLNodeId.random();var graph=new GLNodeGraph();
+        graph.edit("Create",e->e.addNode(new GLGraphNode(id,"test.transfer.a")));
+        int[] transfers={0};
+        var factory=new com.vingame.glswing.node.binding.GLNodeViewFactory(){
+            public GLNode createNode(GLGraphNode model,GLNodeTypeDescriptor type){
+                var view=createView(type);view.addContent(new GLLabel("initial"));
+                view.setName(model.properties().getOrDefault("revision",GLNodeValue.of(0)).toJavaValue().toString());return view;
+            }
+            public boolean isViewCurrent(GLNode view,GLGraphNode model,GLNodeTypeDescriptor type){
+                return view.getName().equals(model.properties().getOrDefault("revision",GLNodeValue.of(0)).toJavaValue().toString());
+            }
+            public void transferViewState(GLNode previous,GLNode next,GLGraphNode model,GLNodeTypeDescriptor type){
+                ((GLLabel)next.getContents().get(0)).setText(((GLLabel)previous.getContents().get(0)).getText());transfers[0]++;
+            }
+        };
+        try(var binding=new GLNodeEditorBinding(graph,types,new GLNodeEditor(),factory,GLGraphCyclePolicy.ACYCLIC)){
+            check(transfers[0]==0,"Initial projection transferred nonexistent state");
+            ((GLLabel)binding.findNodeView(id).orElseThrow().getContents().get(0)).setText("frozen");
+            graph.edit("Rebuild",e->e.setProperty(id,"revision",GLNodeValue.of(1)));
+            check(transfers[0]==1&&((GLLabel)binding.findNodeView(id).orElseThrow().getContents().get(0)).getText().equals("frozen"),"Property replacement lost runtime state");
+            binding.findNodeView(id).orElseThrow().setBounds(137,42,311,241);
+            graph.edit("Change type",e->{e.removeNode(id);e.addNode(new GLGraphNode(id,"test.transfer.b"));});
+            check(transfers[0]==2&&((GLLabel)binding.findNodeView(id).orElseThrow().getContents().get(0)).getText().equals("frozen"),"Type replacement lost runtime state");
+            var rebuilt=binding.findNodeView(id).orElseThrow();
+            check(rebuilt.getX()==137 && rebuilt.getY()==42 && rebuilt.getWidth()==311 && rebuilt.getHeight()==241,"Type replacement lost view bounds");
+        }
+        var wrapped=new com.vingame.glswing.node.composite.GLCompositeNodeViewFactory(
+            new GLCompositeGraphRegistry(),new com.vingame.glswing.node.composite.GLNodeInputEditorRegistry(),factory);
+        try(var binding=new GLNodeEditorBinding(graph,types,new GLNodeEditor(),wrapped,GLGraphCyclePolicy.ACYCLIC)){
+            ((GLLabel)binding.findNodeView(id).orElseThrow().getContents().get(0)).setText("wrapped");
+            graph.edit("Wrapped type change",e->{e.removeNode(id);e.addNode(new GLGraphNode(id,"test.transfer.a"));});
+            check(transfers[0]==3&&((GLLabel)binding.findNodeView(id).orElseThrow().getContents().get(0)).getText().equals("wrapped"),"Composite factory did not forward leaf view state");
+        }
+
+    }
 
 	private static GLNode createView(GLNodeTypeDescriptor type) {
 		GLNode node = new GLNode(type.id());

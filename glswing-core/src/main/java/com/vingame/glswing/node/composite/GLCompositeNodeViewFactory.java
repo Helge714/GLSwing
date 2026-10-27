@@ -88,6 +88,14 @@ public final class GLCompositeNodeViewFactory implements GLNodeViewFactory {
 						&& composite.portOrder == portOrder;
 	}
 
+    @Override public void transferViewState(GLNode previous, GLNode replacement,
+            GLGraphNode node, GLNodeTypeDescriptor type) {
+        if (composites.findComposite(type.id()).isEmpty())
+            leafFactory.transferViewState(previous,replacement,node,type);
+        else if (applicationFactory != null)
+            applicationFactory.transferViewState(previous,replacement,node,type);
+    }
+
 	@Override public void updateNode(GLNode view, GLGraphNode node,
 			GLNodeTypeDescriptor type) {
         if(composites.findComposite(type.id()).isPresent()&&applicationFactory!=null){applicationFactory.updateNode(view,node,type);return;}

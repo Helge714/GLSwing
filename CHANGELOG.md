@@ -1,5 +1,7 @@
 # Changelog
 
+- Add an optional view-factory state-transfer callback for model-identity-preserving view replacements, including changed types and port layouts. Existing factories remain source/binary compatible through the default implementation; persistence contracts are unchanged. Covered by the current development version.
+
 - Restore saved node dimensions after applying hidden presentation so graph navigation retains custom sizes. Covered by the current development version; persistence contracts are unchanged.
 
 - Record bound-editor connection Undo with immutable model endpoints instead of visual port references. Preserve composite boundary bindings when node views are rebuilt, and let boundary rewiring use its single interface transaction. The current development version covers these compatible fixes; document formats are unchanged.

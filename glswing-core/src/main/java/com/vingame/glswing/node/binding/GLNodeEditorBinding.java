@@ -229,12 +229,15 @@ public final class GLNodeEditorBinding implements AutoCloseable {
                 if(!topologyChanged && node.equals(previousNodes.get(node.id()))) { index++; continue; }
 				GLNodeTypeDescriptor type = types.find(node.typeId()).orElse(null);
 				GLNode existing = nodeViews.get(node.id());
+                GLNode previous = existing;
 				if (type == null) {
 					if (existing != null) removeNodeView(node.id());
 					index++;
 					continue;
 				}
 				if (existing != null && !node.typeId().equals(projectedTypes.get(node.id()))) {
+                    pendingViewState.put(node.id(), GLNodeViewState.capture(existing));
+                    growRebuiltViews.add(node.id());
 					removeNodeView(node.id());
 					existing = null;
 				}
@@ -245,7 +248,7 @@ public final class GLNodeEditorBinding implements AutoCloseable {
 					existing = null;
 				}
 				try {
-					if (existing == null) existing = addNodeView(node, type, index);
+					if (existing == null) existing = addNodeView(node, type, index, previous);
 					else {
 						viewFactory.updateNode(existing, node, type);
 						applyBuiltInState(existing, node, type);
@@ -272,12 +275,13 @@ public final class GLNodeEditorBinding implements AutoCloseable {
 	}
 
 	private GLNode addNodeView(GLGraphNode node, GLNodeTypeDescriptor type,
-			int index) {
+			int index, GLNode previous) {
 		GLNode view = viewFactory.createNode(node, type);
 		if (view == null)
 			throw new IllegalStateException("Node view factory returned null for "
 					+ node.typeId());
 		validatePorts(view, type);
+        if (previous != null) viewFactory.transferViewState(previous, view, node, type);
 		GLNodeViewState state = pendingViewState.get(node.id());
 		float x = state == null ? 40 + index % 4 * 260 : state.x();
 		float y = state == null ? 40 + index / 4 * 180 : state.y();
