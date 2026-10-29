@@ -68,6 +68,16 @@ public class GLNodeEditor extends GLContainer
         boolean insert(GLNode node, GLNodeConnection connection, float startX, float startY);
     }
     private ConnectionInsertionHandler insertionHandler;
+    public ConnectionInsertionHandler getConnectionInsertionHandler(){return insertionHandler;}
+    /** Optional editor-owned target for creating a connection endpoint on a node body. */
+    public interface ConnectionBodyDropHandler {
+        void preview(GLNodePort fixed,float x,float y);
+        default GLNodePort previewPort(){return null;}
+        boolean drop(GLNodePort fixed,float x,float y);
+        void clear();
+    }
+    private ConnectionBodyDropHandler bodyDropHandler;
+    public void setConnectionBodyDropHandler(ConnectionBodyDropHandler handler){bodyDropHandler=handler;}
     public void setConnectionInsertionHandler(ConnectionInsertionHandler handler) {
         insertionHandler = handler;
         insertionCandidate = null;
@@ -1440,6 +1450,7 @@ public class GLNodeEditor extends GLContainer
 		}
 		updateConnectionPointer(source, event);
 		updateCandidate(candidateAt(event.getScreenX(), event.getScreenY()));
+		if(bodyDropHandler!=null){if(candidatePort==null)bodyDropHandler.preview(fixedGesturePort,connectionPointerX,connectionPointerY);else bodyDropHandler.clear();}
 		repaintInteractiveCurves();
 		event.consume();
 	}
@@ -1451,6 +1462,7 @@ public class GLNodeEditor extends GLContainer
 		if (connectionDragging && !captureLost) {
 			updateConnectionPointer(source, event);
 			updateCandidate(candidateAt(event.getScreenX(), event.getScreenY()));
+            if(bodyDropHandler!=null){if(candidatePort==null)bodyDropHandler.preview(fixedGesturePort,connectionPointerX,connectionPointerY);else bodyDropHandler.clear();}
 		}
 		GLNodePort fixed = fixedGesturePort;
 		GLNodePort target = !captureLost && connectionDragging
@@ -1460,7 +1472,7 @@ public class GLNodeEditor extends GLContainer
 		float screenX = event == null ? Float.NaN : event.getScreenX();
 		float screenY = event == null ? Float.NaN : event.getScreenY();
 		GLNodeConnection detached = detachedConnection;
-		clearConnectionGestureState();
+		clearConnectionGestureState(false);
 		if (target != null) {
 			GLNodePort output = outputOf(fixed, target);
 			GLNodePort input = inputOf(fixed, target);
@@ -1472,10 +1484,13 @@ public class GLNodeEditor extends GLContainer
 		} else if (captureLost && detached != null) {
 			addConnection(detached);
 		}
+		boolean bodyDrop=emptyDrop&&fixed!=null&&bodyDropHandler!=null&&bodyDropHandler.drop(fixed,dropX,dropY);
+        if(bodyDrop)emptyDrop=false;
+		if(bodyDropHandler!=null)bodyDropHandler.clear();
 		if (emptyDrop && fixed != null && emptyConnectionDropListener != null)
 			emptyConnectionDropListener.connectionDropped(this, fixed, dropX, dropY,
 					screenX, screenY);
-		recordConnectionChange(connectionGestureBefore,
+		if(!bodyDrop)recordConnectionChange(connectionGestureBefore,
 				List.copyOf(connections));
 		connectionGestureBefore = List.of();
 		finishInteractiveCurves();
@@ -1544,7 +1559,10 @@ public class GLNodeEditor extends GLContainer
 		connectionGestureBefore = List.of();
 	}
 
-	private void clearConnectionGestureState() {
+	private void clearConnectionGestureState() {clearConnectionGestureState(true);}
+	private void clearConnectionGestureState(boolean clearPreview) {
+        boolean wasActive=isConnectionGestureActive();
+        if(clearPreview&&bodyDropHandler!=null)bodyDropHandler.clear();
 		if (candidatePort != null)
 			candidatePort.setConnectionCandidate(false);
 		gestureSource = null;
@@ -1552,6 +1570,7 @@ public class GLNodeEditor extends GLContainer
 		candidatePort = null;
 		detachedConnection = null;
 		connectionDragging = false;
+        if(wasActive)for(var listener:listeners)listener.connectionGestureFinished(this);
 	}
 
 	private GLNodeConnection firstConnection(GLNodePort port) {
@@ -1913,26 +1932,27 @@ public class GLNodeEditor extends GLContainer
     private static Color withOpacity(Color color,float opacity){return new Color(color.getRed(),color.getGreen(),color.getBlue(),Math.round(color.getAlpha()*opacity));}
 
 	private void drawConnectionPreview(GLContext2D context) {
+        GLNodePort previewTarget=candidatePort!=null?candidatePort:bodyDropHandler==null?null:bodyDropHandler.previewPort();
 		if (fixedGesturePort.getDirection() == GLNodePort.Direction.OUTPUT) {
 			Color start = fixedGesturePort.getColor();
-			Color end = candidatePort == null ? faded(start)
-					: candidatePort.getColor();
-			float endX = candidatePort == null ? connectionPointerX
-					: portX(candidatePort);
-			float endY = candidatePort == null ? connectionPointerY
-					: portY(candidatePort);
+			Color end = previewTarget == null ? faded(start)
+					: previewTarget.getColor();
+			float endX = previewTarget == null ? connectionPointerX
+					: portX(previewTarget);
+			float endY = previewTarget == null ? connectionPointerY
+					: portY(previewTarget);
 			drawConnectionCurve(context, portX(fixedGesturePort),
 					portY(fixedGesturePort), endX, endY,
 					getConnectionWidth(), start, end,
 					getConnectionBorder(), null, fixedGesturePort.isConnectionDashed());
 		} else {
 			Color end = fixedGesturePort.getColor();
-			Color start = candidatePort == null ? faded(end)
-					: candidatePort.getColor();
-			float startX = candidatePort == null ? connectionPointerX
-					: portX(candidatePort);
-			float startY = candidatePort == null ? connectionPointerY
-					: portY(candidatePort);
+			Color start = previewTarget == null ? faded(end)
+					: previewTarget.getColor();
+			float startX = previewTarget == null ? connectionPointerX
+					: portX(previewTarget);
+			float startY = previewTarget == null ? connectionPointerY
+					: portY(previewTarget);
 			drawConnectionCurve(context, startX,
 					startY, portX(fixedGesturePort),
 					portY(fixedGesturePort), getConnectionWidth(), start, end,

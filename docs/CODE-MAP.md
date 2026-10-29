@@ -26,7 +26,7 @@ Paths below are relative to
 | --- | --- | --- |
 | Startup / windows / splash | `application/GLApplication.java`, `application/GLStartupEngine.java`, `application/GLStartupPlan.java` | Application surfaces and startup execution/progress. |
 | Graph editor / gestures | `node/GLNodeEditor.java`, `node/GLNode.java`, `node/GLNodePort.java`, `node/GLNodeConnection.java` | Visual nodes, connections, selection, gestures, layout and picking. |
-| Workspace / commands / inspector | `node/GLNodeWorkspace.java`, `node/GLNodeEditingActions.java`, `node/GLNodePropertyInspector.java` | Model/view workspace, navigation, editor actions and property UI. |
+| Workspace / commands / inspector | `node/GLNodeWorkspace.java`, `node/GLNodeEditingActions.java`, `node/GLNodePropertyInspector.java` | Model/view workspace, navigation, boundary-wire insertion/body-drop port creation, editor actions and projected/read-only property UI. |
 | Graph model / catalog | `node/model/GLNodeGraph.java`, `node/model/GLNodeTypeRegistry.java`, `node/model/GLNodeCatalog.java`, `node/model/GLNodeValueTypeRegistry.java` | Model snapshots/mutations, node and value types, catalog entries. |
 | Binding | `node/binding/` | Synchronize model nodes with views, capture immutable connection history and editor state; projection notifications let the workspace restore composite boundary wires. |
 | Group interface / validation | `node/composite/GLCompositeNodeDescriptor.java`, `node/composite/GLCompositeInterfaceEditor.java`, `node/composite/GLCompositeInterfaceTransactions.java`, `node/composite/GLCompositeGraphRegistry.java` | Reusable group contracts, interface controls, undoable edits and asset registry. |

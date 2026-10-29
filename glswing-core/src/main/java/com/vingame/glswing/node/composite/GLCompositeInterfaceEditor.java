@@ -400,12 +400,15 @@ public final class GLCompositeInterfaceEditor extends GLContainer {
 		updateEditorOptionVisibility(); updateEnabledState(); status.setText(""); applicationRefresh.run(); updateEditorOptionVisibility();
 	}
 
+    private String defaultValueType;
+    public void setDefaultValueType(String id){defaultValueType=id;}
 	private void beginNew(GLPortDirection direction) {
 		editingPortId = null; editingDirection = direction;
 		inputs.setSelectedIndex(-1); outputs.setSelectedIndex(-1);
 		portId.setText(nextPortId(direction));
 		refreshValueTypes();
 		if (!valueType.getItems().isEmpty()) valueType.setSelectedIndex(0);
+        if(defaultValueType!=null)valueTypes.find(defaultValueType).ifPresent(valueType::setSelectedItem);
 		refreshCompatibleEditors();
 		if (direction == GLPortDirection.INPUT)
 			inputEditor.setSelectedItem(inputEditors.find(GLNodeInputEditorRegistry.NONE)
@@ -419,6 +422,7 @@ public final class GLCompositeInterfaceEditor extends GLContainer {
 
     private java.util.function.UnaryOperator<GLCompositePortMapping> portPresentationTransform = java.util.function.UnaryOperator.identity();
     /** Application metadata normalization, applied before the undoable interface transaction. */
+    public GLCompositePortMapping transformPortPresentation(GLCompositePortMapping mapping){return portPresentationTransform.apply(mapping);}
     public void setPortPresentationTransform(java.util.function.UnaryOperator<GLCompositePortMapping> transform) {
         portPresentationTransform = java.util.Objects.requireNonNull(transform);
     }

@@ -522,13 +522,18 @@ public final class GLNodeGraphEditingSession {
 				record(name,beforeGraph,beforeView,placedGraph,placedView);
 			var candidate = binding.editor().getInsertionCandidate();
 			binding.editor().previewConnectionInsertion(null);
+            boolean projectionInsertion=false;
 			if (nodes.size()==1 && candidate!=null) {
 				var id=nodes.get(0); var start=initialView.nodes().get(id);
-				insertIntoConnection(id,candidate.getModelId(),start.x(),start.y(),false);
+                if(candidate.getModelId()==null){
+                    var view=binding.findNodeView(id).orElseThrow();
+                    var handler=binding.editor().getConnectionInsertionHandler();
+                    projectionInsertion=handler!=null&&handler.insert(view,candidate,view.getX(),view.getY());
+                }else insertIntoConnection(id,candidate.getModelId(),start.x(),start.y(),false);
 			}
 			GLNodeEditorViewState finalView = binding.captureViewState();
 			var finalGraph = binding.graph().snapshot();
-			if (!sameContent(placedGraph, finalGraph) || !placedView.equals(finalView))
+			if (!projectionInsertion&&(!sameContent(placedGraph, finalGraph) || !placedView.equals(finalView)))
 				record("Insert node into connection", placedGraph, placedView, finalGraph, finalView);
 			select(nodes);
 			binding.editor().requestGLFocus(binding.editor());

@@ -30,7 +30,7 @@ public record GLNodePortDescriptor(String id, GLPortDirection direction,
 	}
 
     private static boolean validPortId(String value) {
-        return value != null && value.equals(value.strip()) && value.matches("[A-Za-z0-9][A-Za-z0-9._ -]*");
+        return value != null && value.equals(value.strip()) && value.matches("[\\p{L}\\p{N}][\\p{L}\\p{N}\\p{M}._ -]*");
     }
 
 	private static boolean validId(String value) {

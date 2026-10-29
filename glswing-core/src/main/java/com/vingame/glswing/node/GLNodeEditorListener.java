@@ -16,6 +16,9 @@ public interface GLNodeEditorListener {
 			GLNodeConnection connection) {
 	}
 
+	/** A wire drag ended or was cancelled; final connection notifications may follow. */
+	default void connectionGestureFinished(GLNodeEditor editor) {}
+
 	/** Query the editor for its current node or connection selection. */
 	default void selectionChanged(GLNodeEditor editor) {
 	}

@@ -20,6 +20,15 @@ public final class GLNodeCatalog {
 	private final Set<String> favorites = new LinkedHashSet<>();
 	private final ArrayDeque<String> recent = new ArrayDeque<>();
 	private int recentLimit = 12;
+    private List<String> categoryOrder = List.of();
+    /** Explicit category order; unlisted categories follow alphabetically. Empty restores the default. */
+    public synchronized void setCategoryOrder(List<String> categories) {
+        categoryOrder = List.copyOf(categories);
+    }
+    private int categoryIndex(String category) {
+        int index = categoryOrder.indexOf(category);
+        return index < 0 ? Integer.MAX_VALUE : index;
+    }
 
 	public synchronized void register(GLNodeCatalogEntry entry) {
 		if (entry == null) throw new IllegalArgumentException("Catalog entry required");
@@ -80,6 +89,7 @@ public final class GLNodeCatalog {
 		result.sort(Comparator
 				.comparing((GLNodeCatalogEntry entry) -> !favorites.contains(entry.type().id()))
 				.thenComparingInt(entry -> recentIndex(entry.type().id()))
+				.thenComparingInt(entry -> categoryIndex(entry.category()))
 				.thenComparing(GLNodeCatalogEntry::category, String.CASE_INSENSITIVE_ORDER)
 				.thenComparing(GLNodeCatalogEntry::displayName,
 						String.CASE_INSENSITIVE_ORDER));

@@ -46,6 +46,20 @@
 - Added reusable `GLImageExportDimensions` for raster size, aspect locking and
   inside/outside padding, with independent geometry regression tests.
 
+- Node catalogs support an explicit category order; unspecified categories retain
+  alphabetical ordering.
+
+- Composite boundary reconciliation waits for connection gestures to finish,
+  preserving detached-wire dragging and cancellation.
+
+- Composite boundary nodes initially bracket the inner graph and remain available
+  when empty. Dragging connections onto their bodies previews and creates ports;
+  applications can provide editor metadata for those ports.
+- Insertion into composite boundary wires supports graph editing, layout spacing
+  and separate movement/insertion undo, including placement actions.
+- Port identifiers accept Unicode letters and marks. Applications may select the
+  default composite value type and provide read-only reasons for inspector fields.
+
 ## 0.1.0 — 2026-08-21
 
 First public preview of GLSwing. The API remains under active development and

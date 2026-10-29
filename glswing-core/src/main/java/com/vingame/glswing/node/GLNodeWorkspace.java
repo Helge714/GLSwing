@@ -237,6 +237,9 @@ public final class GLNodeWorkspace extends GLContainer
 				if (!rebuildingBoundaries && (binding==null||!binding.isSynchronizing()) && touchesBoundary(connection))
 					scheduleBoundaryBindingSync();
 			}
+			@Override public void connectionGestureFinished(GLNodeEditor source){
+                if(boundarySyncScheduled){boundarySyncScheduled=false;scheduleBoundaryBindingSync();}
+            }
 			@Override public void connectionRemoved(GLNodeEditor source,
 					GLNodeConnection connection) {
 				if (!rebuildingBoundaries && (binding==null||!binding.isSynchronizing()) && touchesBoundary(connection))
@@ -497,6 +500,7 @@ public final class GLNodeWorkspace extends GLContainer
 					persistDocumentAsset(document);
 				});
 		if (clipboard != null) editing.setClipboard(clipboard);
+        installBoundaryEditing();
 		if (!document.selection.isEmpty()) editor.setSelectedNodes(document.selection
 				.stream().map(binding::findNodeView)
 				.flatMap(java.util.Optional::stream).toList());
@@ -752,6 +756,100 @@ public final class GLNodeWorkspace extends GLContainer
 		} finally { rebuildingBoundaries = false; }
 	}
 
+    private java.util.function.BiFunction<GLCompositePortMapping,GLNodeEndpoint,GLCompositePortMapping> boundaryPortFactory=(p,e)->p;
+    public void setBoundaryPortFactory(java.util.function.BiFunction<GLCompositePortMapping,GLNodeEndpoint,GLCompositePortMapping> factory){boundaryPortFactory=Objects.requireNonNull(factory);}
+    private void installBoundaryEditing(){
+        var ordinary=editor.getConnectionInsertionHandler();
+        editor.setConnectionInsertionHandler(new GLNodeEditor.ConnectionInsertionHandler(){
+            public boolean canInsert(GLNode node,GLNodeConnection edge){return touchesBoundary(edge)?canInsertBoundary(node,edge):ordinary.canInsert(node,edge);}
+            public boolean insert(GLNode node,GLNodeConnection edge,float x,float y){return touchesBoundary(edge)?insertBoundary(node,edge,x,y):ordinary.insert(node,edge,x,y);}
+        });
+        editor.setConnectionBodyDropHandler(new GLNodeEditor.ConnectionBodyDropHandler(){
+            BoundaryNode preview;GLLabel label;GLNodePort ghost;float originalHeight;
+            public GLNodePort previewPort(){return ghost;}
+            public void clear(){if(preview!=null){preview.removeContent(label);preview.setSize(preview.getWidth(),originalHeight);preview=null;label=null;ghost=null;}}
+            public void preview(GLNodePort fixed,float x,float y){
+                var target=boundaryAt(fixed,x,y);if(target==preview)return;clear();if(target==null)return;
+                preview=target;originalHeight=target.getHeight();label=new GLLabel("+ "+fixed.getId());
+                String ghostId="__new_port__";while(target.findPort(ghostId)!=null)ghostId+="_";
+                var port=target.direction==GLPortDirection.INPUT?target.addOutput(ghostId,label):target.addInput(ghostId,label);
+                ghost=port;port.setConnectionCandidate(true);port.setColor(fixed.getColor());port.setShape(fixed.getShape());port.setConnectionValidator((a,b)->false);
+                target.setSize(target.getWidth(),Math.max(originalHeight,target.getPreferredGLSize().height()));
+            }
+            public boolean drop(GLNodePort fixed,float x,float y){var target=boundaryAt(fixed,x,y);clear();return target!=null&&createBoundaryPort(fixed,target);}
+        });
+    }
+    private BoundaryNode boundaryAt(GLNodePort fixed,float x,float y){
+        if(fixed==null||fixed.getNode() instanceof BoundaryNode)return null;
+        var direction=fixed.getDirection()==GLNodePort.Direction.INPUT?GLPortDirection.INPUT:GLPortDirection.OUTPUT;
+        float margin=editor.getConnectionSnapDistance()/editor.getZoom();
+        for(var n:editor.getNodes())if(n instanceof BoundaryNode b&&b.direction==direction&&x>=n.getX()-margin&&x<=n.getX()+n.getWidth()+margin&&y>=n.getY()-margin&&y<=n.getY()+n.getHeight()+margin)return b;
+        return null;
+    }
+    private boolean createBoundaryPort(GLNodePort fixed,BoundaryNode boundary){
+        var document=documents.peekLast();if(document==null||document.assetId==null)return false;
+        var descriptor=composites.findAsset(document.assetId).orElseThrow().compositeDescriptor();
+        var id=binding.findNodeId(fixed.getNode()).orElse(null);if(id==null)return false;
+        String base=fixed.getId(),name=base;int suffix=2;
+        var names=descriptor.portMappings().stream().map(p->p.publicPort().id()).collect(java.util.stream.Collectors.toSet());
+        while(names.contains(name))name=base+" "+suffix++;
+        var port=boundary.direction==GLPortDirection.INPUT?GLNodePortDescriptor.input(name,valueTypeOf(fixed),false,1):GLNodePortDescriptor.output(name,valueTypeOf(fixed));
+        var endpoint=new GLNodeEndpoint(id,fixed.getId());
+        var mapping=boundaryPortFactory.apply(new GLCompositePortMapping(port,endpoint),endpoint);
+        GLCompositeInterfaceTransactions.addPort(composites,types,document.assetId,mapping,history,"Create group port from connection");
+        refreshRegisteredInterface();changeListener.run();return true;
+    }
+    private GLCompositePortMapping boundaryMapping(GLNodePort port){
+        if(!(port.getNode() instanceof BoundaryNode)||documents.peekLast()==null)return null;
+        var asset=composites.findAsset(documents.peekLast().assetId).orElse(null);
+        return asset==null||asset.compositeDescriptor()==null?null:asset.compositeDescriptor().portMappings().stream().filter(p->p.publicPort().id().equals(port.getId())).findFirst().orElse(null);
+    }
+    private boolean canInsertBoundary(GLNode node,GLNodeConnection edge){
+        if(binding==null||binding.findNodeId(node).isEmpty()||editor.getConnections().stream().anyMatch(c->c.getInput().getNode()==node||c.getOutput().getNode()==node))return false;
+        var model=binding.graph().snapshot().findNode(binding.findNodeId(node).orElseThrow()).orElseThrow();
+        var ports=types.insertionPorts(model.typeId()).orElse(null);if(ports==null)return false;
+        var in=node.findPort(ports.inputPortId());var out=node.findPort(ports.outputPortId());
+        return in!=null&&out!=null&&types.compatibleValueTypes(valueTypeOf(edge.getOutput()),valueTypeOf(in))&&types.compatibleValueTypes(valueTypeOf(out),valueTypeOf(edge.getInput()));
+    }
+    private boolean insertBoundary(GLNode node,GLNodeConnection edge,float startX,float startY){
+        if(!canInsertBoundary(node,edge))return false;
+        var document=documents.peekLast();var graph=binding.graph();var before=graph.snapshot();var current=captureActiveViewState();
+        var id=binding.findNodeId(node).orElseThrow();var pair=types.insertionPorts(before.findNode(id).orElseThrow().typeId()).orElseThrow();
+        var boundary=edge.getOutput().getNode() instanceof BoundaryNode?edge.getOutput():edge.getInput();
+        var mapping=boundaryMapping(boundary);if(mapping==null)return false;
+        var internal=boundary==edge.getOutput()?edge.getInput():edge.getOutput();
+        if(internal.getNode() instanceof BoundaryNode){
+            var inputMapping=boundaryMapping(edge.getOutput());var outputMapping=boundaryMapping(edge.getInput());
+            var targets=new ArrayList<>(inputMapping.internalEndpoints());targets.add(new GLNodeEndpoint(id,pair.inputPortId()));
+            var d=composites.findAsset(document.assetId).orElseThrow().compositeDescriptor();
+            GLCompositeInterfaceTransactions.replacePorts(composites,types,document.assetId,d.portMappings().stream().map(p->p==inputMapping? p.withEndpoints(targets):p==outputMapping?p.withEndpoints(List.of(new GLNodeEndpoint(id,pair.outputPortId()))):p).toList(),history,"Insert node into group connection");
+            refreshRegisteredInterface();saveActiveAsset();changeListener.run();return true;
+        }
+        var oldEndpoint=new GLNodeEndpoint(binding.findNodeId(internal.getNode()).orElseThrow(),internal.getId());
+        var endpoint=new GLNodeEndpoint(id,boundary==edge.getOutput()?pair.inputPortId():pair.outputPortId());
+        var replacement=mapping.withEndpoints(mapping.internalEndpoints().stream().map(e->e.equals(oldEndpoint)?endpoint:e).toList());
+        var downstream=new LinkedHashSet<GLNode>();var pending=new java.util.ArrayDeque<GLNode>();pending.add(edge.getInput().getNode());
+        while(!pending.isEmpty()){
+            var next=pending.removeFirst();if(next==node||next==edge.getOutput().getNode()||!downstream.add(next))continue;
+            for(var wire:editor.getConnections())if(wire.getOutput().getNode()==next)pending.add(wire.getInput().getNode());
+        }
+        var beforeBounds=new LinkedHashMap<>(current.nodes());var bounds=beforeBounds.get(id);
+        beforeBounds.put(id,new GLNodeViewState(startX,startY,bounds.width(),bounds.height(),bounds.customTitle()));
+        var start=new GLNodeEditorViewState(beforeBounds,current.auxiliaryNodes());
+        if(!start.equals(current))history.record("Move node",()->restoreArrangement(document,start),()->restoreArrangement(document,current));
+        try(var transaction=history.beginTransaction("Insert node into group connection")){
+            graph.edit("Insert node",e->e.addConnection(new com.vingame.glswing.node.model.GLGraphConnection(com.vingame.glswing.node.model.GLNodeConnectionId.random(),boundary==edge.getOutput()?new GLNodeEndpoint(id,pair.outputPortId()):oldEndpoint,boundary==edge.getOutput()?oldEndpoint:new GLNodeEndpoint(id,pair.inputPortId()))));
+            var after=graph.snapshot();history.record("Connect inserted node",()->graph.replace("Undo insertion",before),()->graph.replace("Redo insertion",after));
+            var descriptor=composites.findAsset(document.assetId).orElseThrow().compositeDescriptor();
+            GLCompositeInterfaceTransactions.replacePorts(composites,types,document.assetId,descriptor.portMappings().stream().map(p->p.publicPort().id().equals(mapping.publicPort().id())?replacement:p).toList(),history,"Reconnect group boundary");
+            float gap=editor.getHorizontalNodeSpacing();var from=edge.getOutput().getNode();var to=edge.getInput().getNode();
+            float x=Math.max(from.getX()+from.getWidth()+gap,node.getX());node.setLocation(x,node.getY());
+            float shift=Math.max(0,x+node.getWidth()+gap-to.getX());
+            if(shift>0){float threshold=to.getX();for(var n:downstream)if(n.getX()>=threshold)n.setLocation(n.getX()+shift,n.getY());}
+            var placed=captureActiveViewState();history.record("Make room",()->restoreArrangement(document,current),()->restoreArrangement(document,placed));
+        }
+        refreshRegisteredInterface();saveActiveAsset();changeListener.run();return true;
+    }
 	private static boolean touchesBoundary(GLNodeConnection connection) {
 		return connection != null && (connection.getOutput().getNode() instanceof BoundaryNode
 				|| connection.getInput().getNode() instanceof BoundaryNode);
@@ -776,6 +874,7 @@ public final class GLNodeWorkspace extends GLContainer
 		if (boundarySyncScheduled) return;
 		boundarySyncScheduled = true;
 		java.awt.EventQueue.invokeLater(() -> {
+			if(editor.isConnectionGestureActive())return;
 			boundarySyncScheduled = false;
 			if (!closed && !rebuildingBoundaries) synchronizeBoundaryBindings();
 		});
@@ -788,7 +887,7 @@ public final class GLNodeWorkspace extends GLContainer
 				? null : composites.findComposite(currentCompositeType()).orElse(null);
 		if (descriptor == null) return;
 		List<GLCompositePortMapping> replacements = descriptor.portMappings().stream()
-				.map(mapping -> mapping.withEndpoints(visibleBoundaryEndpoints(mapping))).toList();
+				.map(mapping -> interfaceEditor.transformPortPresentation(mapping.withEndpoints(visibleBoundaryEndpoints(mapping)))).toList();
 		if (replacements.equals(descriptor.portMappings())) return;
 		try {
 			GLCompositeInterfaceTransactions.replacePorts(composites, types,
@@ -850,7 +949,6 @@ public final class GLNodeWorkspace extends GLContainer
 					: new GLNodePort[] { internalPort, boundaryPort });
             }
 		}
-		if (node.getPorts().isEmpty()) return;
 		editor.addNode(node, x, y);
 		for (GLNodePort[] ports : connections) {
 			GLNodeConnection connection = new GLNodeConnection(ports[0], ports[1]);
@@ -866,6 +964,7 @@ public final class GLNodeWorkspace extends GLContainer
 
 	private String valueTypeOf(GLNodePort port) {
 		if (port == null || binding == null) return "";
+        var mapping=boundaryMapping(port);if(mapping!=null)return mapping.publicPort().valueTypeId();
 		GLNodeId id = binding.findNodeId(port.getNode()).orElse(null);
 		GLGraphNode node = id == null ? null
 				: binding.graph().snapshot().findNode(id).orElse(null);

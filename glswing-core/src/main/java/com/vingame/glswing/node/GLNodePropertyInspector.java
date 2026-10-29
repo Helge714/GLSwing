@@ -43,6 +43,14 @@ public final class GLNodePropertyInspector extends GLContainer
 	private final GLLabel empty = new GLLabel("No editable properties");
 	private boolean synchronizing;
 	private boolean closed;
+    private java.util.function.UnaryOperator<GLGraphNode> presentationModel=java.util.function.UnaryOperator.identity();
+    /** Read-only display projection; graph values and writes remain unchanged. */
+    public void setPresentationModel(java.util.function.UnaryOperator<GLGraphNode> projection){presentationModel=java.util.Objects.requireNonNull(projection);refresh();}
+    private java.util.function.BiFunction<GLGraphNode,String,String> readOnlyReason=(node,property)->null;
+    /** Return a reason to disable an editor, or null to allow editing. */
+    public void setReadOnlyReason(java.util.function.BiFunction<GLGraphNode,String,String> reason){
+        readOnlyReason=java.util.Objects.requireNonNull(reason);refresh();
+    }
 
 	public GLNodePropertyInspector(GLNodeEditorBinding binding,
 			GLNodePropertySchemaRegistry schemas) {
@@ -59,7 +67,7 @@ public final class GLNodePropertyInspector extends GLContainer
 		if (closed) return;
 		removeAllGL();
 		rows.clear();
-		List<GLGraphNode> selected = selectedModels();
+		List<GLGraphNode> selected = selectedModels().stream().map(presentationModel).toList();
 		if (selected.isEmpty()) {
 			addGL(empty);
 			resized(getWidth(), getHeight());
@@ -69,6 +77,8 @@ public final class GLNodePropertyInspector extends GLContainer
 		for (GLNodePropertyDescriptor descriptor : common.values()) {
 			GLContainer control = createControl(descriptor, selected);
 			if (control == null) continue;
+            String reason=selected.stream().map(n->readOnlyReason.apply(n,descriptor.id())).filter(java.util.Objects::nonNull).findFirst().orElse(null);
+            if(reason!=null)disable(control,reason);
 			boolean selfLabelled = descriptor instanceof GLCustomNodeProperty || descriptor instanceof GLBooleanNodeProperty
 					|| descriptor instanceof GLNumberNodeProperty number
 							&& number.editor() == GLNumberNodeProperty.Editor.SLIDER;
@@ -173,6 +183,7 @@ public final class GLNodePropertyInspector extends GLContainer
 
 	private void apply(String property, GLNodeValue value) {
 		if (synchronizing || value == null) return;
+        if(selectedModels().stream().anyMatch(n->readOnlyReason.apply(n,property)!=null))return;
 		List<GLNodeId> ids = binding.editor().getSelectedNodes().stream()
 				.map(binding::findNodeId).flatMap(java.util.Optional::stream).toList();
 		if (ids.isEmpty()) return;
@@ -187,6 +198,10 @@ public final class GLNodePropertyInspector extends GLContainer
 		if (value instanceof GLNodeValue.DecimalValue decimal) return decimal.value();
 		return Double.NaN;
 	}
+    private static void disable(GLContainer component,String reason){
+        if(component instanceof com.vingame.glswing.ui.GLControl control){control.setEnabled(false);control.setToolTipText(reason);}
+        component.getGLChildren().forEach(child->disable(child,reason));
+    }
 
 	@Override protected void resized(float width, float height) {
 		float y = PADDING;
