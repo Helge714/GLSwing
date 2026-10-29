@@ -532,3 +532,5 @@ may change in subsequent `0.x` releases.
 - Apache License 2.0.
 
 - Initial composite input placement uses the boundary node's actual width, preserving theme spacing before internal nodes. Saved and manually adjusted boundary positions remain unchanged.
+
+- Bound multiline wrapping measurements with exponential bracketing and binary search over grapheme boundaries. Preserve word wrapping while avoiding per-character prefix layout allocations. Full Core suite: 132 tests, no failures, one optional skip. Covered by the current development version.

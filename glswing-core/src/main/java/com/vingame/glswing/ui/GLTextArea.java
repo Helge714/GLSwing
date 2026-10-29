@@ -1182,22 +1182,32 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
         String text = document.getText();
         BreakIterator characters = BreakIterator.getCharacterInstance(Locale.getDefault());
         characters.setText(text);
+        int[] boundaries=new int[text.length()+1];int boundaryCount=0;
+        for(int offset=characters.first();offset!=BreakIterator.DONE;offset=characters.next())boundaries[boundaryCount++]=offset;
 		for (int line = 0; line < document.getLineCount(); line++) {
 			if (!isLogicalLineVisible(line)) continue;
 			int start = document.getLineStart(line), end = document.getLineEnd(line);
 			if (!lineWrap || start == end) { result.add(new Row(start, end, false, line)); continue; }
 			int rowStart = start;
 			while (rowStart < end) {
-				int rowEnd = characters.following(rowStart), lastFit = rowEnd;
-				int wordBreak = -1;
-				while (rowEnd != BreakIterator.DONE && rowEnd <= end
-						&& measureRange(rowStart, rowEnd) <= available) {
-					lastFit = rowEnd;
-					int preceding = text.codePointBefore(rowEnd);
-					if (Character.isWhitespace(preceding) || preceding == '-')
-						wordBreak = rowEnd;
-					rowEnd = characters.following(rowEnd);
-				}
+                int first=java.util.Arrays.binarySearch(boundaries,0,boundaryCount,rowStart);
+                int limit=java.util.Arrays.binarySearch(boundaries,0,boundaryCount,end);
+                int fit=first+1,probe=fit;
+                // Exponential bracketing keeps measurements local to this row;
+                // binary search avoids laying out every growing character prefix.
+                while(measureRange(rowStart,boundaries[probe])<=available){
+                    fit=probe;if(probe==limit)break;
+                    probe=Math.min(limit,first+2*(probe-first));
+                }
+                int low=fit+1,high=probe-1;
+                while(low<=high){int middle=(low+high)>>>1;
+                    if(measureRange(rowStart,boundaries[middle])<=available){fit=middle;low=middle+1;}else high=middle-1;
+                }
+                int lastFit=boundaries[fit],wordBreak=-1;
+                for(int at=first+1;at<=fit;at++){
+                    int preceding=text.codePointBefore(boundaries[at]);
+                    if(Character.isWhitespace(preceding)||preceding=='-')wordBreak=boundaries[at];
+                }
 				int chosen;
 				boolean trailingSeparatorWrap = false;
 				if (lastFit > rowStart && lastFit < end
