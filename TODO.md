@@ -10,6 +10,18 @@ Items are removed when completed or intentionally rejected.
 - Build a future `GLTable` control on the list selection model when an
   application use case justifies the additional column and header APIs.
 
+## Markdown and documentation views
+
+- Provide a standardized, reusable native Markdown viewer with a defined supported
+  subset: headings, paragraphs, lists, tables, code, emphasis and inline links with
+  anchors. Support read-only selection/copy, theme-derived fonts/colors/spacing and
+  Core pointer feedback. Keep application resource lookup, node IDs, navigation
+  policy and document-language preferences outside Core.
+- Cache parsed content and text layout; reflow only for relevant content, width or
+  theme changes. Avoid full-page re-recording on hover and unnecessary offscreen
+  work. Validate dense tables, Unicode, link picking, scrolling and lifecycle
+  cleanup. Migrate EasyKnack's temporary documentation drawing to this control.
+
 ## Application startup
 
 - Add opt-in lazy tab-content factories for applications whose measured startup
