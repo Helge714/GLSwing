@@ -1,5 +1,7 @@
 # Changelog
 
+- Include common Greek and mathematical symbols in the default font atlas so native scientific documentation renders ranges and equations without replacement boxes. Explicit custom repertoires are unchanged. Covered by the current development version.
+
 - Add an optional view-factory state-transfer callback for model-identity-preserving view replacements, including changed types and port layouts. Existing factories remain source/binary compatible through the default implementation; persistence contracts are unchanged. Covered by the current development version.
 
 - Restore saved node dimensions after applying hidden presentation so graph navigation retains custom sizes. Covered by the current development version; persistence contracts are unchanged.

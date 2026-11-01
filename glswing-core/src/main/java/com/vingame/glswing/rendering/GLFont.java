@@ -422,6 +422,9 @@ public final class GLFont {
 			characters.append((char) codePoint);
 		// Non-Latin-1 symbols used by built-in UI and diagnostic presentation.
 		characters.append("Δ–—…›←→✓");
+		// Scientific text and formulas in native document views.
+		characters.append("ΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩαβγδεζηθικλμνξοπρστυφχψω∞≈≠≤≥∈∉⊂⊆∪∩√∑∏∫⊙∂∇⁰¹²³⁴⁵⁶⁷⁸⁹⁻₀₁₂₃₄₅₆₇₈₉•↔↦");
+		characters.append("\u1d62\u2019\u201c\u201d\u201e\u202f\u2212\u2500");
 		characters.append('\ufffd');
 		return characters.toString();
 	}
