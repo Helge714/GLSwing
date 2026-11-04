@@ -36,6 +36,8 @@ import com.vingame.glswing.node.model.GLPortDirection;
  * {@link GLNodeGraph}. Graph semantics and editor-only bounds remain separate.
  */
 public final class GLNodeEditorBinding implements AutoCloseable {
+	private static final java.util.logging.Logger LOG = java.util.logging.Logger.getLogger(GLNodeEditorBinding.class.getName());
+	private final Map<String, String> loggedProjectionFailures = new LinkedHashMap<>();
 	@FunctionalInterface public interface ValidationListener {
 		void validationChanged(GLNodeEditorBinding binding,
 				GLNodeGraphValidationResult result);
@@ -253,8 +255,9 @@ public final class GLNodeEditorBinding implements AutoCloseable {
 						viewFactory.updateNode(existing, node, type);
 						applyBuiltInState(existing, node, type);
 					}
+                    loggedProjectionFailures.remove("node " + node.id() + " (" + node.typeId() + ")");
 				} catch (RuntimeException failure) {
-					lastProjectionFailure = failure;
+                    recordProjectionFailure("node " + node.id() + " (" + node.typeId() + ")", failure);
 				}
 				index++;
 			}
@@ -263,8 +266,9 @@ public final class GLNodeEditorBinding implements AutoCloseable {
 				if (!connectionViews.containsKey(connection.id()))
 					try {
 						addConnectionView(connection);
+                        loggedProjectionFailures.remove("connection " + connection.id());
 					} catch (RuntimeException failure) {
-						lastProjectionFailure = failure;
+                        recordProjectionFailure("connection " + connection.id(), failure);
 					}
 		} finally {
 			synchronizing = false;
@@ -273,6 +277,14 @@ public final class GLNodeEditorBinding implements AutoCloseable {
         projectionListeners.forEach(Runnable::run);
         validate();
 	}
+
+    private void recordProjectionFailure(String element, RuntimeException failure) {
+        lastProjectionFailure = failure;
+        String signature = failure.getClass().getName() + ": " + failure.getMessage();
+        if (!signature.equals(loggedProjectionFailures.put(element, signature)))
+            LOG.log(java.util.logging.Level.WARNING,
+                    "Cannot project " + element + " in graph " + graph.snapshot().graphId(), failure);
+    }
 
 	private GLNode addNodeView(GLGraphNode node, GLNodeTypeDescriptor type,
 			int index, GLNode previous) {
@@ -473,7 +485,7 @@ public final class GLNodeEditorBinding implements AutoCloseable {
 								new GLNodeEndpoint(inputNode,
 										connection.getInput().getId()))));
 			} catch (RuntimeException failure) {
-				lastProjectionFailure = failure;
+                recordProjectionFailure("connection " + id, failure);
 				connectionViews.remove(id);
 				synchronizing = true;
 				try { editor.removeConnection(connection); }

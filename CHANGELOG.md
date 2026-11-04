@@ -1,5 +1,10 @@
 # Changelog
 
+- Log failed node and connection projections with graph/element identity and the
+  original exception stack trace. Repeated failures are suppressed until recovery
+  or a changed error. Other nodes remain available. Compatible diagnostic fix
+  covered by the current development version.
+
 - Include common Greek and mathematical symbols in the default font atlas so native scientific documentation renders ranges and equations without replacement boxes. Explicit custom repertoires are unchanged. Covered by the current development version.
 
 - Add an optional view-factory state-transfer callback for model-identity-preserving view replacements, including changed types and port layouts. Existing factories remain source/binary compatible through the default implementation; persistence contracts are unchanged. Covered by the current development version.
