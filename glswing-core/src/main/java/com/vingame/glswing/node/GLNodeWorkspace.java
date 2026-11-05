@@ -262,6 +262,15 @@ public final class GLNodeWorkspace extends GLContainer
     public void setCompositeViewFactory(GLNodeViewFactory factory){viewFactory.setApplicationFactory(factory);if(binding!=null)binding.refresh();}
 	public GLNodeEditor editor() { return editor; }
 	public GLCompositeInterfaceEditor interfaceEditor() { return interfaceEditor; }
+    /** Stops persisting an unused asset and drops stale forward navigation to it.
+     * Applications own reference checks and registry/catalog removal. */
+    public void excludeEmbeddedAsset(String id){
+        ensureOpen();
+        if(openAssetIds().contains(id))throw new IllegalArgumentException("Cannot remove an open asset");
+        embeddedAssetIds.remove(id);
+        if(forwardDocuments.stream().anyMatch(d->id.equals(d.assetId)))forwardDocuments.clear();
+        updateHeader();
+    }
     /** Include an already registered application-created composite in document snapshots. */
     public void includeEmbeddedAsset(String id){ensureOpen();if(composites.findAsset(id).isEmpty())throw new IllegalArgumentException("Unknown embedded asset: "+id);embeddedAssetIds.add(id);}
 

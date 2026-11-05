@@ -1,5 +1,9 @@
 # Changelog
 
+- Allow applications to exclude unused embedded assets from persistence while clearing
+  stale forward navigation. Active breadcrumb assets remain protected. Compatible
+  addition covered by 0.2.0-SNAPSHOT; no document-format change.
+
 ## Unreleased UI fixes
 
 - Preserve reentrant graph projections, expose explicit view refresh, and allow application icons in node creation menus.
