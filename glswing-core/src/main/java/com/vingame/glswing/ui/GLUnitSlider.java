@@ -120,7 +120,7 @@ public class GLUnitSlider<U extends GLUnit> extends GLSlider {
     public void setGestureHistory(Supplier<GLHistoryManager> supplier){history=Objects.requireNonNull(supplier);}
     private void begin(){var manager=history.get();if(gesture==null&&manager!=null)gesture=manager.beginTransaction("Change "+getText());}
     private void finish(){if(gesture!=null){var transaction=gesture;gesture=null;transaction.close();}}
-    @Override protected void controlMousePressed(GLMouseEvent e){begin();super.controlMousePressed(e);}
+    @Override protected void controlMousePressed(GLMouseEvent e){if(isEnabled()&&e.getButton()==java.awt.event.MouseEvent.BUTTON1)begin();super.controlMousePressed(e);}
     @Override protected void controlMouseReleased(GLMouseEvent e){try{super.controlMouseReleased(e);}finally{finish();}}
     @Override protected void controlMouseCaptureLost(GLMouseEvent e){try{super.controlMouseCaptureLost(e);}finally{finish();}}
     @Override protected void controlKeyPressed(GLKeyEvent e){begin();try{super.controlKeyPressed(e);}finally{finish();}}

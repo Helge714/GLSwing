@@ -9,6 +9,13 @@ import com.vingame.glswing.node.binding.*;
 import com.vingame.glswing.node.document.*;
 import com.vingame.glswing.node.model.*;
 class GLNodeTitleTest {
+ @Test void resettingTitleUsesCurrentDefaultAndIsUndoable(){
+  var node=new GLNode("Original");var history=new GLHistoryManager();node.setGLHistoryManager(history);node.setCustomTitle("Custom");node.setDefaultTitle("Translated");
+  node.resetTitle();assertNull(node.getCustomTitle());assertEquals("Translated",node.getTitle());assertTrue(history.undo());assertEquals("Custom",node.getTitle());assertTrue(history.redo());assertEquals("Translated",node.getTitle());
+ }
+ @Test void tooltipsIncludeTheCurrentControlName(){
+  class Button extends com.vingame.glswing.ui.GLButton {Button(){super("First");}String tip(){return toolTipTextAt(null);}} var control=new Button();control.setToolTipText("Description");assertEquals("First\nDescription",control.tip());control.setText("Second");assertEquals("Second\nDescription",control.tip());
+ }
  @Test void renameSurvivesDefaultUpdatesAndUndoWithoutCopyingAnnotations()throws Exception{
   var node=new GLNode("Oscillator");var history=new GLHistoryManager();node.setGLHistoryManager(history);node.setTitleSuffix(" [Shared]");
   node.editTitle();var editor=(GLTextEditor)node.getGLChildren().stream().filter(c->c instanceof GLTextEditor).findFirst().orElseThrow();

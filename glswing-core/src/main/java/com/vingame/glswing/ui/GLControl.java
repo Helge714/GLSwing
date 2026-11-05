@@ -105,7 +105,11 @@ public abstract class GLControl extends GLContainer implements GLKeyTarget, GLTo
 		toolTipText = text == null || text.isBlank() ? null : text;
 	}
 	/** Returns the tooltip at the current pointer position, or {@code null}. */
-	protected String toolTipTextAt(GLMouseEvent event) { return toolTipText; }
+	protected String toolTipTextAt(GLMouseEvent event) {
+        String name=getName();
+        if(toolTipText==null)return name;
+        return toolTipText.equals(name)||toolTipText.startsWith(name+"\n")?toolTipText:name+"\n"+toolTipText;
+    }
 	/** Optional tooltip text color; {@code null} uses the active theme. */
 	protected java.awt.Color toolTipTextColorAt(GLMouseEvent event) { return null; }
 

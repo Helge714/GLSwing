@@ -127,6 +127,10 @@ public class GLNode extends GLContainer {
     public String getCustomTitle(){return customTitle;}
     /** Null restores the default label. Empty strings are valid custom titles. */
     public void setCustomTitle(String title){customTitle=title;refreshTitle();}
+    public void resetTitle(){
+        String before=customTitle;if(before==null)return;setCustomTitle(null);
+        var manager=getGLHistoryManager();if(manager!=null)manager.record("Reset node title",()->setCustomTitle(before),()->setCustomTitle(null));
+    }
     /** Non-editable presentation annotation, never included in the saved name. */
     public void setTitleSuffix(String suffix){titleSuffix=java.util.Objects.requireNonNull(suffix);refreshTitle();}
     private void refreshTitle(){applyTitle((customTitle==null?defaultTitle:customTitle)+titleSuffix);}
@@ -991,7 +995,8 @@ public class GLNode extends GLContainer {
 		editTitleMenuItem = contextMenu.addItem(
 				getGLLocalizer().text(GLUiKeys.NODE_EDIT_TITLE),
 				event -> editTitle());
-		contextMenu.addSeparator();
+		contextMenu.addItem(getGLLocalizer().text("glswing.node.resetTitle"),event->resetTitle());
+        contextMenu.addSeparator();
 		copyMenuItem = contextMenu.addItem(getGLLocalizer().text(GLUiKeys.NODE_COPY),
 				event -> invokeEditingAction(GLNodeEditingActions::copy));
 		cutMenuItem = contextMenu.addItem(getGLLocalizer().text(GLUiKeys.NODE_CUT),

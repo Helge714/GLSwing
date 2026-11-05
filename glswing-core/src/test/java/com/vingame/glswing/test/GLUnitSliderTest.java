@@ -13,6 +13,18 @@ class GLUnitSliderTest {
         public String id(){return name();} public String displayName(){return name();}public String suffix(){return suffix;}
         public Object dimension(){return dimension;}public double toBase(double v){return v*scale;}public double fromBase(double v){return v/scale;}
     }
+    @Test void rightClickAndDisabledPressDoNotBlockHistory(){
+        var history=new com.vingame.glswing.history.GLHistoryManager();
+        var slider=new GLUnitSlider<>("Length",1.,0.,2.,.01,false,GLSlider.Presentation.BAR,formats(),Unit.METRE);
+        slider.setGestureHistory(()->history);
+        for(int button:new int[]{java.awt.event.MouseEvent.BUTTON3,java.awt.event.MouseEvent.BUTTON1}){
+            slider.setEnabled(button!=java.awt.event.MouseEvent.BUTTON1);
+            var awt=new java.awt.event.MouseEvent(new java.awt.Canvas(),java.awt.event.MouseEvent.MOUSE_PRESSED,0,0,2,2,1,false,button);
+            slider.mousePressed(new com.vingame.glswing.input.GLMouseEvent(awt,new com.vingame.glswing.input.GLPickResult(1,slider,2,2,2,2,1,0,0,1,0,0),0,0));
+            assertFalse(history.isInTransaction());
+        }
+        history.record("Change",()->{},()->{});assertTrue(history.undo());
+    }
     @Test void oneSidedBoundsHaveNonzeroDisplayRanges(){
         var lower=new GLUnitSlider<>("Premul",1.,1.,null,.01,false,GLSlider.Presentation.BAR,formats(),Unit.METRE);
         assertTrue(lower.getVisibleMaximum()>lower.getVisibleMinimum());

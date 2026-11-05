@@ -98,6 +98,7 @@ public final class GLNodeWorkspace extends GLContainer
         /** Return true when an application-specific entry was handled. */
         boolean create(GLNodeCatalogEntry entry,float x,float y);
     }
+    public void setNodeCatalogIconProvider(java.util.function.Function<GLNodeCatalogEntry,com.vingame.glswing.rendering.GLIcon> provider){nodePalette.setIconProvider(provider);}
     private NodeCreationHandler nodeCreationHandler=(entry,x,y)->false;
     public void setNodeCreationFilter(java.util.function.Predicate<GLNodeCatalogEntry> filter){
         nodeCreationFilter=filter==null?entry->true:filter;
@@ -257,6 +258,7 @@ public final class GLNodeWorkspace extends GLContainer
     public void setAdditionalGraphDiagnostics(java.util.List<com.vingame.glswing.node.model.GLGraphDiagnostic> diagnostics,java.util.Set<com.vingame.glswing.node.model.GLNodeConnectionId> inactive){if(binding!=null)binding.setAdditionalDiagnostics(diagnostics,inactive);}
     /** Set application diagnostics for the currently displayed graph. */
     public void setAdditionalGraphDiagnostics(java.util.List<com.vingame.glswing.node.model.GLGraphDiagnostic> diagnostics){if(binding!=null)binding.setAdditionalDiagnostics(diagnostics);}
+    public void refreshNodeViews(){if(binding!=null)binding.refresh();}
     public void setCompositeViewFactory(GLNodeViewFactory factory){viewFactory.setApplicationFactory(factory);if(binding!=null)binding.refresh();}
 	public GLNodeEditor editor() { return editor; }
 	public GLCompositeInterfaceEditor interfaceEditor() { return interfaceEditor; }

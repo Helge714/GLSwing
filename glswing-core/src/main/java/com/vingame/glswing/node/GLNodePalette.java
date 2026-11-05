@@ -41,6 +41,8 @@ public final class GLNodePalette extends GLContainer {
 	private GLNodePortDescriptor compatiblePort;
 	private Consumer<GLNodeCatalogEntry> activation = entry -> { };
 	private String selectedTypeId;
+    private java.util.function.Function<GLNodeCatalogEntry,com.vingame.glswing.rendering.GLIcon> icons=entry->null;
+    public void setIconProvider(java.util.function.Function<GLNodeCatalogEntry,com.vingame.glswing.rendering.GLIcon> provider){icons=Objects.requireNonNull(provider);}
 
 	public GLNodePalette(GLNodeCatalog catalog) {
 		this.catalog = Objects.requireNonNull(catalog, "Node catalog");
@@ -142,7 +144,7 @@ public final class GLNodePalette extends GLContainer {
 			for (GLNodeCatalogEntry entry : category.getValue()) {
 				var item = submenu.addItem(entry.displayName(),
 						event -> use(entry, target, filter));
-				item.setMnemonicEnabled(false);
+				item.setMnemonicEnabled(false);item.setIcon(icons.apply(entry));
 			}
 			var item = menu.addSubMenu(category.getKey(), submenu);
 			item.setMnemonicEnabled(false); categories.add(item);
@@ -150,7 +152,7 @@ public final class GLNodePalette extends GLContainer {
 		for (GLNodeCatalogEntry entry : entries) {
 			var item = menu.addItem(entry.category() + " / " + entry.displayName(),
 					event -> use(entry, target, filter));
-			item.setMnemonicEnabled(false); flat.put(item, entry);
+			item.setMnemonicEnabled(false);item.setIcon(icons.apply(entry)); flat.put(item, entry);
 		}
         menu.setItemFilter(categories::contains);
 		popupSearch.addTextChangeListener(event -> {

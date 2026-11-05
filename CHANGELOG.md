@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased UI fixes
+
+- Preserve reentrant graph projections, expose explicit view refresh, and allow application icons in node creation menus.
+- Add undoable node-name reset and include control names in tooltips.
+- Do not open slider history transactions on right-click or disabled controls.
+- Covered by 0.2.0-SNAPSHOT; compatible APIs, no document-format change.
+
 - Log failed node and connection projections with graph/element identity and the
   original exception stack trace. Repeated failures are suppressed until recovery
   or a changed error. Other nodes remain available. Compatible diagnostic fix

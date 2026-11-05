@@ -74,6 +74,7 @@ public final class GLNodeEditorBinding implements AutoCloseable {
 	private GLNodeGraphValidationResult validationResult;
 	private RuntimeException lastProjectionFailure;
 	private boolean synchronizing;
+    private GLNodeGraphSnapshot pendingSnapshot;
 	private boolean closed;
     private GLNodeGraphSnapshot projectedSnapshot;
 
@@ -208,7 +209,8 @@ public final class GLNodeEditorBinding implements AutoCloseable {
 	}
 
 	private void synchronize(GLNodeGraphSnapshot snapshot) {
-		if (closed || synchronizing) return;
+		if (closed) return;
+        if(synchronizing){pendingSnapshot=snapshot;return;}
 		synchronizing = true;
 		lastProjectionFailure = null;
 		try {
@@ -228,7 +230,7 @@ public final class GLNodeEditorBinding implements AutoCloseable {
                 || !projectedSnapshot.nodes().stream().map(n->List.of(n.id(),n.typeId())).toList().equals(snapshot.nodes().stream().map(n->List.of(n.id(),n.typeId())).toList());
             int index = 0;
 			for (GLGraphNode node : snapshot.nodes()) {
-                if(!topologyChanged && node.equals(previousNodes.get(node.id()))) { index++; continue; }
+                if(!topologyChanged && nodeViews.containsKey(node.id()) && node.equals(previousNodes.get(node.id()))) { index++; continue; }
 				GLNodeTypeDescriptor type = types.find(node.typeId()).orElse(null);
 				GLNode existing = nodeViews.get(node.id());
                 GLNode previous = existing;
@@ -274,6 +276,7 @@ public final class GLNodeEditorBinding implements AutoCloseable {
 			synchronizing = false;
 		}
 		projectedSnapshot = snapshot;
+        if(pendingSnapshot!=null){var pending=pendingSnapshot;pendingSnapshot=null;synchronize(pending);return;}
         projectionListeners.forEach(Runnable::run);
         validate();
 	}
