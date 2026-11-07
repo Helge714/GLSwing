@@ -1301,6 +1301,7 @@ public abstract class GLSwingPanel extends GLJPanel
 	private void updateHover(MouseEvent event, GLPickResult next, boolean sendMoved) {
 		GLMouseTarget previousTarget = hoverPick.getTarget();
 		GLMouseTarget nextTarget = next.getTarget();
+        com.vingame.glswing.ui.GLToolTipManager.pointerTarget(this,nextTarget);
 		if (previousTarget != nextTarget) {
 			if (previousTarget != null)
 				previousTarget.mouseExited(mouseEvent(event,
@@ -1316,6 +1317,7 @@ public abstract class GLSwingPanel extends GLJPanel
 	}
 
 	private void leaveHover(MouseEvent event) {
+        com.vingame.glswing.ui.GLToolTipManager.pointerTarget(this,null);
 		if (hoverPick.hasTarget()) {
 			hoverPick.getTarget().mouseExited(mouseEvent(event,
 					hoverPick.at(event.getX(), event.getY()), 0, 0));

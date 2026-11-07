@@ -1,5 +1,12 @@
 # Changelog
 
+- Add opt-in graph-local Undo/Redo scopes with document-wide persisted state and
+  retained group documents. Preserve boundary insertion atomically, clear tooltip
+  ownership on hidden/detached ancestors and pointer changes on both canvas backends,
+  ignore filtered menu icons for column sizing, and let unchanged text fields pass
+  Escape to their container. Sidebar Escape dismisses the focused inspector before
+  group navigation. Covered by the existing 0.2.0 development version; no format change.
+
 - Allow applications to exclude unused embedded assets from persistence while clearing
   stale forward navigation. Active breadcrumb assets remain protected. Compatible
   addition covered by 0.2.0-SNAPSHOT; no document-format change.

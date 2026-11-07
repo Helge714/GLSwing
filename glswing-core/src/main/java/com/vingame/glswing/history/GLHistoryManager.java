@@ -20,15 +20,30 @@ public final class GLHistoryManager {
 
 	public static final int DEFAULT_HISTORY_LIMIT = 100;
 
-	private final Deque<Entry> undo = new ArrayDeque<>();
-	private final Deque<Entry> redo = new ArrayDeque<>();
+	private static final class Scope {
+        final Deque<Entry> undo=new ArrayDeque<>(),redo=new ArrayDeque<>();
+        long currentStateId,persistedStateId;
+    }
+    private final java.util.Map<Object,Scope> scopes=new java.util.LinkedHashMap<>();
+    private Object activeScope="default";
+    private Scope scope(){return scopes.computeIfAbsent(activeScope,key->new Scope());}
+    /** Select a local Undo/Redo stack while retaining one document-wide save checkpoint. */
+    public void setActiveScope(Object scope){
+        java.util.Objects.requireNonNull(scope);
+        if(activeScope.equals(scope))return;
+        activeScope=scope;scope();fireChanged();
+    }
+    public Object getActiveScope(){return activeScope;}
+    /** Synchronize an already-accounted-for model change without recording a second edit. */
+    public void withoutRecording(Runnable action){
+        java.util.Objects.requireNonNull(action);boolean previous=applying;applying=true;
+        try{action.run();}finally{applying=previous;}
+    }
 	private final Deque<Transaction> transactions = new ArrayDeque<>();
 	private final CopyOnWriteArrayList<GLHistoryManagerListener> listeners =
 			new CopyOnWriteArrayList<>();
 	private int historyLimit;
 	private long nextStateId;
-	private long currentStateId;
-	private long persistedStateId;
 	private boolean applying;
     private long externalRevision,persistedExternalRevision;
     /** Marks persisted data changed without adding an undo edit or clearing redo. */
@@ -56,11 +71,11 @@ public final class GLHistoryManager {
 	}
 
 	public boolean canUndo() {
-		return !undo.isEmpty();
+		return !scope().undo.isEmpty();
 	}
 
 	public boolean canRedo() {
-		return !redo.isEmpty();
+		return !scope().redo.isEmpty();
 	}
 
 	public boolean isApplying() {
@@ -73,7 +88,7 @@ public final class GLHistoryManager {
 
 	/** Whether the current history position differs from the persisted checkpoint. */
 	public boolean isModified() {
-		return currentStateId != persistedStateId || externalRevision!=persistedExternalRevision || !transactions.isEmpty();
+		return scopes.values().stream().anyMatch(s->s.currentStateId!=s.persistedStateId) || externalRevision!=persistedExternalRevision || !transactions.isEmpty();
 	}
 
 	/** @deprecated Use {@link #isModified()}. */
@@ -83,11 +98,11 @@ public final class GLHistoryManager {
 	}
 
 	public String getUndoName() {
-		return canUndo() ? undo.peekLast().edit.name() : null;
+		return canUndo() ? scope().undo.peekLast().edit.name() : null;
 	}
 
 	public String getRedoName() {
-		return canRedo() ? redo.peekLast().edit.name() : null;
+		return canRedo() ? scope().redo.peekLast().edit.name() : null;
 	}
 
 	/** Marks the current history position as successfully persisted. */
@@ -95,7 +110,7 @@ public final class GLHistoryManager {
 		if (isInTransaction())
 			throw new IllegalStateException(
 					"Cannot persist a partially recorded transaction");
-		persistedStateId = currentStateId;
+		scopes.values().forEach(s->s.persistedStateId=s.currentStateId);
         persistedExternalRevision=externalRevision;
 		fireChanged();
 	}
@@ -113,9 +128,7 @@ public final class GLHistoryManager {
 	public void reset() {
 		if (isInTransaction())
 			throw new IllegalStateException("Cannot reset during a transaction");
-		undo.clear();
-		redo.clear();
-		currentStateId = persistedStateId = ++nextStateId;
+		scopes.clear();scope();
         externalRevision=persistedExternalRevision=0;
 		fireChanged();
 	}
@@ -158,11 +171,12 @@ public final class GLHistoryManager {
 	public boolean undo() {
 		if (!canUndo() || isInTransaction())
 			return false;
-		Entry entry = undo.peekLast();
+		Scope state=scope();
+        Entry entry = state.undo.peekLast();
 		apply(entry.edit::undo);
-		undo.removeLast();
-		redo.addLast(entry);
-		currentStateId = entry.beforeStateId;
+		state.undo.removeLast();
+        state.redo.addLast(entry);
+        state.currentStateId=entry.beforeStateId;
 		fireChanged();
 		return true;
 	}
@@ -170,11 +184,12 @@ public final class GLHistoryManager {
 	public boolean redo() {
 		if (!canRedo() || isInTransaction())
 			return false;
-		Entry entry = redo.peekLast();
+		Scope state=scope();
+        Entry entry = state.redo.peekLast();
 		apply(entry.edit::redo);
-		redo.removeLast();
-		undo.addLast(entry);
-		currentStateId = entry.afterStateId;
+		state.redo.removeLast();
+        state.undo.addLast(entry);
+        state.currentStateId=entry.afterStateId;
 		fireChanged();
 		return true;
 	}
@@ -220,18 +235,17 @@ public final class GLHistoryManager {
 	}
 
 	private void append(GLUndoableEdit edit) {
-		long before = currentStateId;
+		long before = scope().currentStateId;
 		long after = ++nextStateId;
-		undo.addLast(new Entry(edit, before, after));
-		currentStateId = after;
-		redo.clear();
+		scope().undo.addLast(new Entry(edit, before, after));
+		scope().currentStateId = after;
+		scope().redo.clear();
 		trimUndoHistory();
 		fireChanged();
 	}
 
 	private void trimUndoHistory() {
-		while (undo.size() > historyLimit)
-			undo.removeFirst();
+		for(var state:scopes.values())while(state.undo.size()>historyLimit)state.undo.removeFirst();
 	}
 
 	private void apply(Runnable action) {
@@ -257,7 +271,11 @@ public final class GLHistoryManager {
 		}
 		GLUndoableEdit edit = new CompoundEdit(transaction.name,
 				List.copyOf(transaction.edits));
-		record(edit);
+        if(!transactions.isEmpty())record(edit);
+        else {
+            Object current=activeScope;activeScope=transaction.scope;
+            try{append(edit);}finally{activeScope=current;}
+        }
 	}
 
 	private void fireChanged() {
@@ -267,6 +285,7 @@ public final class GLHistoryManager {
 
 	public final class Transaction implements AutoCloseable {
 		private final String name;
+        private final Object scope=activeScope;
 		private final List<GLUndoableEdit> edits = new ArrayList<>();
 		private boolean closed;
 

@@ -282,7 +282,7 @@ public class GLPopupMenu extends GLContainer {
 	}
 
 	final boolean hasIconColumn() {
-		return getItems().stream().anyMatch(item -> item.getIcon() != null
+		return getItems().stream().filter(itemFilter).anyMatch(item -> item.getIcon() != null
 				|| item.getDisabledIcon() != null || item.hasSelectionMarker());
 	}
 

@@ -823,6 +823,7 @@ public abstract class GLContainer implements GLParent, GLMouseTarget, Accessible
 	}
 
 	final void setGLParent(GLParent parent) {
+        if(glParent!=null && glParent!=parent)com.vingame.glswing.ui.GLToolTipManager.detached(this);
 		if (glParent != parent && connectedShapeOwner != null)
 			setConnectedShape(connectedShapeOwner, null);
 		glParent = parent;
@@ -946,6 +947,7 @@ public abstract class GLContainer implements GLParent, GLMouseTarget, Accessible
 		if (this.visible == visible)
 			return;
 		this.visible = visible;
+        if(!visible)com.vingame.glswing.ui.GLToolTipManager.detached(this);
 		fireAccessibleStateChange(AccessibleState.VISIBLE, visible);
 		if (!visible)
 			clearGLFocus(this);

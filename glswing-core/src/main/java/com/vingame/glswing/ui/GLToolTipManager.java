@@ -43,7 +43,17 @@ public final class GLToolTipManager {
 				session.leave(owner);
 		}
 	}
-	private static GLParent root(GLContainer child) {
+	private static boolean within(GLContainer child, GLContainer ancestor) {
+        for(GLParent current=child;current instanceof GLContainer container;current=container.getGLParent())
+            if(current==ancestor)return true;
+        return false;
+    }
+    /** Discard stale hover state before dispatching a new pointer target. */
+    public static void pointerTarget(GLParent host, Object target) {
+        synchronized(SESSIONS){var session=SESSIONS.get(host);if(session!=null && session.owner!=null
+            && (!(target instanceof GLContainer container)||!within(container,session.owner)))session.leave(session.owner);}
+    }
+    private static GLParent root(GLContainer child) {
 		GLParent host = child.getGLParent();
 		while (host instanceof GLContainer container && container.getGLParent() != null)
 			host = container.getGLParent();
@@ -75,12 +85,14 @@ public final class GLToolTipManager {
 			if (changed) timer.restart();
 		}
 		private void leave(GLContainer leaving) {
-			if (owner != leaving) return;
+			if (!within(owner, leaving)) return;
 			timer.stop(); owner = null; text = null; color = null;
 			if (shown) { host.removeGL(tip); shown = false; }
 		}
 		private void show() {
 			if (owner == null || owner.getGLParent() == null || text == null) return;
+            for(GLParent parent=owner;parent instanceof GLContainer container;parent=container.getGLParent())
+                if(!container.isVisible()){leave(owner);return;}
 			if (!shown) { host.addGL(tip, GLConstraints.overlay()); shown = true; }
 			update();
 		}

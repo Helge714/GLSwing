@@ -658,6 +658,7 @@ final class GLContainerInputDispatcher {
 			boolean sendMoved) {
 		GLMouseTarget previousTarget = hoverPick.getTarget();
 		GLMouseTarget nextTarget = next.getTarget();
+        com.vingame.glswing.ui.GLToolTipManager.pointerTarget(host, nextTarget);
 		if (previousTarget != nextTarget) {
 			if (previousTarget != null)
 				previousTarget.mouseExited(mouseEvent(event,
@@ -673,6 +674,7 @@ final class GLContainerInputDispatcher {
 	}
 
 	private void leaveHover(MouseEvent event) {
+        com.vingame.glswing.ui.GLToolTipManager.pointerTarget(host, null);
 		if (!hoverPick.hasTarget())
 			return;
 		hoverPick.getTarget().mouseExited(mouseEvent(event,

@@ -348,6 +348,7 @@ public final class GLNodeWorkspace extends GLContainer
 			throw new IllegalArgumentException("Root graph and view state required");
 		closeActiveDocument();
 		documents.clear();
+        historyDocuments.clear();
 		forwardDocuments.clear();
 		embeddedAssetIds.clear();
 		sourceDocument = null;
@@ -366,6 +367,7 @@ public final class GLNodeWorkspace extends GLContainer
 		if (document == null) throw new IllegalArgumentException("Graph document required");
 		closeActiveDocument();
 		documents.clear();
+        historyDocuments.clear();
 		forwardDocuments.clear();
 		embeddedAssetIds.clear();
 		embeddedAssetIds.addAll(document.embeddedAssets().keySet());
@@ -413,9 +415,10 @@ public final class GLNodeWorkspace extends GLContainer
 			return false;
 		closeActiveDocument();
 		forwardDocuments.clear();
-		documents.addLast(new Document(assetId,
-				asset.compositeDescriptor().nodeTypeId(),
-				new GLNodeGraph(asset.graph()), asset.viewState()));
+		Document opened=graphHistoryEnabled?historyDocuments.get(assetId):null;
+        if(opened==null){opened=new Document(assetId,asset.compositeDescriptor().nodeTypeId(),new GLNodeGraph(asset.graph()),asset.viewState());if(graphHistoryEnabled)historyDocuments.put(assetId,opened);}
+        else {var retained=opened;history.withoutRecording(()->retained.graph.replace("Refresh group",asset.graph()));opened.viewState=asset.viewState();}
+        documents.addLast(opened);
 		activateCurrent();
 		return true;
 	}
@@ -470,8 +473,14 @@ public final class GLNodeWorkspace extends GLContainer
 				getGLTheme().values().getColor("nodeWorkspace.background"));
 	}
 
+    private boolean sidebarFocused(){
+        var target=getGLFocusOwner();
+        for(GLParent parent=target instanceof GLContainer container?container:null;parent instanceof GLContainer container;parent=container.getGLParent())
+            if(parent==inspectorTabs || parent==interfaceScroll)return inspectorVisible;
+        return false;
+    }
 	@Override public boolean capturesKeyPress(GLKeyEvent event) {
-		return canNavigateBack() && getGLInputMap().matches(GLInputActions.CANCEL, event);
+		return getGLInputMap().matches(GLInputActions.CANCEL,event) && (sidebarFocused() || canNavigateBack());
 	}
 
 	@Override public void keyPressed(GLKeyEvent event) {
@@ -479,7 +488,7 @@ public final class GLNodeWorkspace extends GLContainer
             editor.keyPressed(event); return;
         }
 		if (capturesKeyPress(event)) {
-			navigateBack(); event.consume(); return;
+            if(sidebarFocused()){setInspectorVisible(false);editor.requestGLFocus(editor);}else navigateBack(); event.consume(); return;
 		}
 	}
 
@@ -491,10 +500,16 @@ public final class GLNodeWorkspace extends GLContainer
 		history.removeListener(historyListener);
 		closeActiveDocument();
 		documents.clear();
+        historyDocuments.clear();
 		forwardDocuments.clear();
 	}
 
-	private void activateCurrent() {
+	private boolean graphHistoryEnabled;
+    private final java.util.Map<String,Document> historyDocuments=new java.util.HashMap<>();
+    /** Use independent stacks per graph definition; modified state covers all graphs. */
+    public void setGraphHistoryEnabled(boolean enabled){graphHistoryEnabled=enabled;if(enabled)selectHistoryScope();}
+    private void selectHistoryScope(){var current=documents.peekLast();if(current!=null)history.setActiveScope(current.assetId==null?"workspace.root":current.assetId);}
+    private void activateCurrent() {
 		Document document = documents.peekLast();
 		if (document == null) { updateHeader(); return; }
 		binding = new GLNodeEditorBinding(document.graph, types, editor, viewFactory,
@@ -521,6 +536,7 @@ public final class GLNodeWorkspace extends GLContainer
 		};
 		document.graph.addListener(graphListener);
 		configureEditingActions();
+        if(graphHistoryEnabled)selectHistoryScope();
 		refreshRegisteredInterface();
 		updateHeader();
 		refreshCompositeEditor();
@@ -683,7 +699,7 @@ public final class GLNodeWorkspace extends GLContainer
 	}
 
 	private void refreshRegisteredInterface() {
-		if (closed || binding == null) return;
+		if (closed || binding == null || rebuildingBoundaries) return;
 		Document current = documents.peekLast();
 		GLCompositeNodeDescriptor descriptor = current == null || current.assetId == null
 				? null : composites.findAsset(current.assetId)
@@ -824,6 +840,11 @@ public final class GLNodeWorkspace extends GLContainer
     }
     private boolean insertBoundary(GLNode node,GLNodeConnection edge,float startX,float startY){
         if(!canInsertBoundary(node,edge))return false;
+        rebuildingBoundaries=true;
+        try { return insertBoundaryModel(node,edge,startX,startY); }
+        finally { rebuildingBoundaries=false; refreshRegisteredInterface();saveActiveAsset();changeListener.run(); }
+    }
+    private boolean insertBoundaryModel(GLNode node,GLNodeConnection edge,float startX,float startY){
         var document=documents.peekLast();var graph=binding.graph();var before=graph.snapshot();var current=captureActiveViewState();
         var id=binding.findNodeId(node).orElseThrow();var pair=types.insertionPorts(before.findNode(id).orElseThrow().typeId()).orElseThrow();
         var boundary=edge.getOutput().getNode() instanceof BoundaryNode?edge.getOutput():edge.getInput();
@@ -833,8 +854,8 @@ public final class GLNodeWorkspace extends GLContainer
             var inputMapping=boundaryMapping(edge.getOutput());var outputMapping=boundaryMapping(edge.getInput());
             var targets=new ArrayList<>(inputMapping.internalEndpoints());targets.add(new GLNodeEndpoint(id,pair.inputPortId()));
             var d=composites.findAsset(document.assetId).orElseThrow().compositeDescriptor();
-            GLCompositeInterfaceTransactions.replacePorts(composites,types,document.assetId,d.portMappings().stream().map(p->p==inputMapping? p.withEndpoints(targets):p==outputMapping?p.withEndpoints(List.of(new GLNodeEndpoint(id,pair.outputPortId()))):p).toList(),history,"Insert node into group connection");
-            refreshRegisteredInterface();saveActiveAsset();changeListener.run();return true;
+            GLCompositeInterfaceTransactions.replacePorts(composites,types,document.assetId,d.portMappings().stream().map(p->p.publicPort().id().equals(inputMapping.publicPort().id())? p.withEndpoints(targets):p.publicPort().id().equals(outputMapping.publicPort().id())?p.withEndpoints(List.of(new GLNodeEndpoint(id,pair.outputPortId()))):p).toList(),history,"Insert node into group connection");
+            return true;
         }
         var oldEndpoint=new GLNodeEndpoint(binding.findNodeId(internal.getNode()).orElseThrow(),internal.getId());
         var endpoint=new GLNodeEndpoint(id,boundary==edge.getOutput()?pair.inputPortId():pair.outputPortId());
@@ -859,7 +880,7 @@ public final class GLNodeWorkspace extends GLContainer
             if(shift>0){float threshold=to.getX();for(var n:downstream)if(n.getX()>=threshold)n.setLocation(n.getX()+shift,n.getY());}
             var placed=captureActiveViewState();history.record("Make room",()->restoreArrangement(document,current),()->restoreArrangement(document,placed));
         }
-        refreshRegisteredInterface();saveActiveAsset();changeListener.run();return true;
+        return true;
     }
 	private static boolean touchesBoundary(GLNodeConnection connection) {
 		return connection != null && (connection.getOutput().getNode() instanceof BoundaryNode

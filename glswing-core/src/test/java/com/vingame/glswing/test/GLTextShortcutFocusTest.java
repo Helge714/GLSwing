@@ -46,7 +46,11 @@ class GLTextShortcutFocusTest {
         var parent=new Parent();var code=new GLCodeEditor();parent.addGL(code);
         dispatch(code,awt(KeyEvent.VK_ESCAPE,0));assertEquals(1,parent.keys);assertEquals(0,parent.captures);
         var text=new GLTextEditor();parent.addGL(text);text.focusGained();
-        try{dispatch(text,awt(KeyEvent.VK_ESCAPE,0));assertEquals(1,parent.keys);}finally{text.focusLost();}
+        try{
+            text.keyTyped(new GLKeyEvent(new KeyEvent(new Canvas(),KeyEvent.KEY_TYPED,0,0,KeyEvent.VK_UNDEFINED,'n')));
+            dispatch(text,awt(KeyEvent.VK_ESCAPE,0));assertEquals(1,parent.keys);assertEquals("",text.getText());
+            dispatch(text,awt(KeyEvent.VK_ESCAPE,0));assertEquals(2,parent.keys);
+        }finally{text.focusLost();}
     }
     @Test void ordinaryControlsStillBubble()throws Exception{
         var parent=new Parent();var button=new GLButton("Focus");parent.addGL(button);

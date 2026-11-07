@@ -592,8 +592,10 @@ public class GLTextEditor extends GLControl implements GLEditingHistoryTarget {
 			deleteForward();
 		else if (getGLInputMap().matches(GLInputActions.TEXT_COMMIT, event))
 			commit();
-		else if (getGLInputMap().matches(GLInputActions.CANCEL, event))
-			cancel();
+		else if (getGLInputMap().matches(GLInputActions.CANCEL, event)) {
+            if(!hasUncommittedChanges())return;
+            cancel();
+        }
 		else
 			return;
 			event.consume();
