@@ -890,7 +890,7 @@ public final class GLNodeWorkspace extends GLContainer
 	}
 
     private void restoreProjectedBoundaryConnections() {
-        if(closed||rebuildingBoundaries||binding==null||currentAssetId()==null)return;
+        if(closed||rebuildingBoundaries||boundarySyncScheduled||editor.isConnectionGestureActive()||binding==null||currentAssetId()==null)return;
         var descriptor=composites.findAsset(currentAssetId()).map(GLNodeGraphAsset::compositeDescriptor).orElse(null);
         boolean deletedTarget=descriptor!=null&&descriptor.portMappings().stream().flatMap(p->p.internalEndpoints().stream())
             .anyMatch(e->{

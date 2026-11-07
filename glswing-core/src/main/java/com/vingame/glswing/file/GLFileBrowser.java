@@ -96,6 +96,7 @@ public final class GLFileBrowser extends GLContainer {
 	private long refreshGeneration;
 	private long revealGeneration;
 	private boolean synchronizingTree;
+    private javax.swing.Timer pendingTreeNavigation;
 
 	/** Creates a browser rooted at the current user's home directory. */
 	public GLFileBrowser() { this(userHome()); }
@@ -106,11 +107,7 @@ public final class GLFileBrowser extends GLContainer {
 		tree.setItemTextProvider(GLFileSystemTreeModel.Node::label);
 		tree.setItemIconProvider(this::nodeIcon);
 		tree.getSelectionModel().setSelectionMode(GLListSelectionModel.SelectionMode.SINGLE);
-		tree.getSelectionModel().addSelectionListener((source, oldValue, newValue) -> {
-			GLFileSystemTreeModel.Node node = tree.getSelectedValue();
-			if (!synchronizingTree && node != null && node.path() != null)
-				setDirectory(node.path());
-		});
+        tree.addClickListener((source,node,event)->directoryClicked(node.path(),event));
 		tree.addExpansionListener((source, node, expanded) -> {
 			if (expanded) treeModel.loadChildren(node);
 		});
@@ -173,6 +170,16 @@ public final class GLFileBrowser extends GLContainer {
 				: GLListSelectionModel.SelectionMode.SINGLE);
 	}
 	public boolean isMultipleSelection() { return multipleSelection; }
+    private void directoryClicked(Path path,GLMouseEvent event){
+        if(pendingTreeNavigation!=null)pendingTreeNavigation.stop();
+        if(path==null||event.getButton()!=java.awt.event.MouseEvent.BUTTON1||event.completesDoubleClick())return;
+        Object delay=java.awt.Toolkit.getDefaultToolkit().getDesktopProperty("awt.multiClickInterval");
+        pendingTreeNavigation=new javax.swing.Timer(delay instanceof Number n?n.intValue():500,e->setDirectory(path));
+        pendingTreeNavigation.setRepeats(false);pendingTreeNavigation.start();
+    }
+    @Override protected void detached(com.vingame.glswing.component.GLParent parent){
+        if(pendingTreeNavigation!=null)pendingTreeNavigation.stop();super.detached(parent);
+    }
 	/** Returns the selected paths in model order. */
 	public List<Path> getSelectedPaths() {
 		return entryList.getSelectedValues().stream().map(Entry::path).toList();
@@ -190,7 +197,6 @@ public final class GLFileBrowser extends GLContainer {
 	/** Refreshes and selects a path if it remains visible in the resulting entries. */
 	public CompletionStage<List<Entry>> refresh(Path selectAfterRefresh) {
 		long generation = ++refreshGeneration;
-		reveal(directory);
 		CompletableFuture<List<Entry>> completion = new CompletableFuture<>();
 		Path requestedDirectory = directory;
 		GLFileFilter requestedFilter = filter;

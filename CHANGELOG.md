@@ -1,5 +1,12 @@
 # Changelog
 
+- Defer composite boundary reprojection while user wire changes await interface
+  synchronization, preserving alternate-input relocation. Add tree row click
+  notifications independent of selection restoration. File-browser single clicks
+  navigate the main pane, double clicks expand the tree without navigating, and
+  main-pane navigation no longer reveals folders in the sidebar. Compatible changes
+  covered by 0.2.0-SNAPSHOT; no document-format change.
+
 - Persist a world-space camera center per graph while keeping zoom shared. Document
   schema 10 remains readable alongside schemas 1–9; older readers cannot load newly
   saved schema-10 documents. Retain camera metadata through copies and Undo.

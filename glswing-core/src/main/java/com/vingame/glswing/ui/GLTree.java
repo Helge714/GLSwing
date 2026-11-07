@@ -57,6 +57,11 @@ public final class GLTree<T> extends GLContainer {
 	private final GLList<Row<T>> list = new GLList<>(rows);
 	private final GLScrollPane scrollPane = new GLScrollPane(list);
 	private final Set<T> expanded = new LinkedHashSet<>();
+    /** Actual row clicks, independent of selection restoration during expansion. */
+    @FunctionalInterface public interface ClickListener<T>{void clicked(GLTree<T> tree,T value,GLMouseEvent event);}
+    private final CopyOnWriteArrayList<ClickListener<T>> clickListeners=new CopyOnWriteArrayList<>();
+    public void addClickListener(ClickListener<T> listener){clickListeners.addIfAbsent(java.util.Objects.requireNonNull(listener));}
+    public void removeClickListener(ClickListener<T> listener){clickListeners.remove(listener);}
 	private final CopyOnWriteArrayList<ActivationListener<T>> activationListeners =
 			new CopyOnWriteArrayList<>();
 	private final CopyOnWriteArrayList<ExpansionListener<T>> expansionListeners =
@@ -101,6 +106,7 @@ public final class GLTree<T> extends GLContainer {
 		list.addItemMouseListener(new GLList.ItemMouseListener<>() {
 			@Override public void itemClicked(GLList.ItemEvent<Row<T>> event) {
 				GLTree.this.itemClicked(event);
+                if(!event.mouseEvent().isConsumed())for(var listener:clickListeners)listener.clicked(GLTree.this,event.item().value(),event.mouseEvent());
 			}
 			@Override public void itemPressed(GLList.ItemEvent<Row<T>> event) {
 				GLTree.this.itemPressed(event);
