@@ -1,5 +1,13 @@
 # Changelog
 
+- Arrange graphs using actual port anchors, deterministic strongly connected
+  feedback regions and compact skyline packing. Keep short source branches near
+  their consumers and remove unnecessary width inherited from unrelated columns.
+  Explicit input/output boundary roles keep group interfaces at the outer edges.
+  Crossing reduction and local row swaps have bounded search budgets; repeated
+  arrangement is stable and changes locations only. Compatible API additions are
+  covered by 0.2.0-SNAPSHOT; document and execution contracts are unchanged.
+
 - Defer composite boundary reprojection while user wire changes await interface
   synchronization, preserving alternate-input relocation. Add tree row click
   notifications independent of selection restoration. File-browser single clicks

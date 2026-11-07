@@ -71,6 +71,9 @@ public class GLNode extends GLContainer {
 	private boolean dragAnywhere;
 	private boolean titleEditable = true;
 	private boolean titleGradientEnabled;
+    private GLNodeAutoLayout.Role autoLayoutRole=GLNodeAutoLayout.Role.NORMAL;
+    public GLNodeAutoLayout.Role getAutoLayoutRole(){return autoLayoutRole;}
+    public void setAutoLayoutRole(GLNodeAutoLayout.Role role){autoLayoutRole=java.util.Objects.requireNonNull(role);}
     private java.util.function.BiFunction<GLNodeConnection,GLNodeConnection,GLNodePort> connectionReplacementRouter;
     /** Optional destination for a displaced input wire; the editor checks availability and compatibility. */
     public void setConnectionReplacementRouter(java.util.function.BiFunction<GLNodeConnection,GLNodeConnection,GLNodePort> router){connectionReplacementRouter=router;}

@@ -1151,6 +1151,7 @@ public final class GLNodeWorkspace extends GLContainer
 		private BoundaryNode(GLPortDirection direction) {
 			super(direction == GLPortDirection.INPUT ? "Group Input" : "Group Output");
 			this.direction = direction;
+            setAutoLayoutRole(direction==GLPortDirection.INPUT?GLNodeAutoLayout.Role.INPUT_BOUNDARY:GLNodeAutoLayout.Role.OUTPUT_BOUNDARY);
 			setTitleEditable(false);
 			setResizeMode(GLNodeResizeMode.NONE);
 		}
