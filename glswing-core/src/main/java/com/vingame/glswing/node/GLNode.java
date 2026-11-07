@@ -71,6 +71,10 @@ public class GLNode extends GLContainer {
 	private boolean dragAnywhere;
 	private boolean titleEditable = true;
 	private boolean titleGradientEnabled;
+    private java.util.function.BiFunction<GLNodeConnection,GLNodeConnection,GLNodePort> connectionReplacementRouter;
+    /** Optional destination for a displaced input wire; the editor checks availability and compatibility. */
+    public void setConnectionReplacementRouter(java.util.function.BiFunction<GLNodeConnection,GLNodeConnection,GLNodePort> router){connectionReplacementRouter=router;}
+    GLNodePort routeReplacedConnection(GLNodeConnection previous,GLNodeConnection incoming){return connectionReplacementRouter==null?null:connectionReplacementRouter.apply(previous,incoming);}
     private boolean groupIndicatorVisible;
     /** Draw a geometric group marker, independent of title text and font glyph coverage. */
     public void setGroupIndicatorVisible(boolean visible){

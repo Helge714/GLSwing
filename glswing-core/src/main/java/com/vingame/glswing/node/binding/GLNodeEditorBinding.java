@@ -161,7 +161,7 @@ public final class GLNodeEditorBinding implements AutoCloseable {
 					: GLNodeViewState.capture(view);
 			if (state != null) result.put(model.id(), state);
 		}
-		return new GLNodeEditorViewState(result);
+		return new GLNodeEditorViewState(result,Map.of(),editor.getWidth()>0&&editor.getHeight()>0?new GLNodeCameraState(editor.getWidth()*.5f-editor.getPanX()/editor.getZoom(),editor.getHeight()*.5f-editor.getPanY()/editor.getZoom()):null);
 	}
 
 	public void applyViewState(GLNodeEditorViewState state) {

@@ -71,7 +71,7 @@ public final class GLNodeGraphDocumentCodec
 	@Override public Class<GLNodeGraphDocument> contentType() {
 		return GLNodeGraphDocument.class;
 	}
-	@Override public int currentSchemaVersion() { return 9; }
+	@Override public int currentSchemaVersion() { return 10; }
 	@Override public Set<String> fileExtensions() { return Set.of("glgraph"); }
 	@Override public boolean supportsSchemaVersion(int version) {
 		return version >= 1 && version <= currentSchemaVersion();
@@ -380,6 +380,8 @@ public final class GLNodeGraphDocumentCodec
             output.writeBoolean(value.customTitle()!=null);
             if(value.customTitle()!=null)writeString(output,value.customTitle());
 		}
+        output.writeBoolean(state.camera()!=null);
+        if(state.camera()!=null){output.writeFloat(state.camera().x());output.writeFloat(state.camera().y());}
 	}
 
 	private static GLNodeEditorViewState readViewState(DataInputStream input,
@@ -408,7 +410,7 @@ public final class GLNodeGraphDocumentCodec
 							"Duplicate auxiliary node view: " + id);
 			}
 		}
-		return new GLNodeEditorViewState(values, auxiliary);
+		return new GLNodeEditorViewState(values, auxiliary,schemaVersion>=10&&input.readBoolean()?new com.vingame.glswing.node.binding.GLNodeCameraState(input.readFloat(),input.readFloat()):null);
 	}
 
 	private static void writeEndpoint(DataOutputStream output,

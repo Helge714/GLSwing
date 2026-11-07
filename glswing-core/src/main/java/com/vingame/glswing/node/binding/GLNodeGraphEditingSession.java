@@ -122,7 +122,7 @@ public final class GLNodeGraphEditingSession {
         var beforeBounds = new LinkedHashMap<>(currentView.nodes());
         var node = beforeBounds.get(nodeId);
         beforeBounds.put(nodeId, new GLNodeViewState(startX,startY,node.width(),node.height(),node.customTitle()));
-        var beforeView = new GLNodeEditorViewState(beforeBounds,currentView.auxiliaryNodes());
+        var beforeView = currentView.withNodes(beforeBounds);
         var edge = beforeGraph.findConnection(connectionId).orElseThrow();
         var from = currentView.nodes().get(edge.output().nodeId());
         var to = currentView.nodes().get(edge.input().nodeId());
@@ -150,7 +150,7 @@ public final class GLNodeGraphEditingSession {
             }
         }
         var ports = binding.types().insertionPorts(beforeGraph.findNode(nodeId).orElseThrow().typeId()).orElseThrow();
-        var afterView = new GLNodeEditorViewState(afterBounds,currentView.auxiliaryNodes());
+        var afterView = currentView.withNodes(afterBounds);
         try {
             binding.graph().edit("Insert node into connection", edit -> {
                 edit.removeConnection(connectionId);
@@ -286,7 +286,7 @@ public final class GLNodeGraphEditingSession {
         var positions=new LinkedHashMap<>(beforeView.nodes());
         ids.forEach(positions::remove);
         closeLinearGap(beforeGraph,ids,beforeView,positions);
-        var afterView=new GLNodeEditorViewState(positions,beforeView.auxiliaryNodes());
+        var afterView=beforeView.withNodes(positions);
         try {
             binding.graph().replace("Exclude nodes",planned.get());
             binding.applyViewState(afterView);
@@ -426,7 +426,7 @@ public final class GLNodeGraphEditingSession {
 				edit.addConnection(new GLGraphConnection(GLNodeConnectionId.random(),
 						remap(connection.output(), ids), remap(connection.input(), ids)));
 		});
-		GLNodeEditorViewState afterView = new GLNodeEditorViewState(nextViews);
+		GLNodeEditorViewState afterView = beforeView.withNodes(nextViews);
 		binding.applyViewState(afterView);
 		select(ids.values());
 		return new PasteResult(ids, List.copyOf(ids.values()));
@@ -440,7 +440,7 @@ public final class GLNodeGraphEditingSession {
 		LinkedHashMap<GLNodeId, GLNodeViewState> remaining =
 				new LinkedHashMap<>(beforeView.nodes());
 		ids.forEach(remaining::remove);
-		GLNodeEditorViewState afterView = new GLNodeEditorViewState(remaining);
+		GLNodeEditorViewState afterView = beforeView.withNodes(remaining);
 		binding.applyViewState(afterView);
 		record(name, beforeGraph, beforeView, graph.snapshot(), afterView);
 	}

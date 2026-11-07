@@ -314,8 +314,14 @@ public class GLNodeEditor extends GLContainer
 					"Node ports reject this connection or reached their capacity");
 		if (input.getMaximumConnections() == 1)
 			for (GLNodeConnection existing : List.copyOf(connections))
-				if (existing.getInput() == input)
-					removeConnection(existing);
+                if (existing.getInput() == input){
+                    GLNodePort alternative=validate&&connection.getModelId()==null?input.getNode().routeReplacedConnection(existing,connection):null;
+                    boolean relocate=alternative!=null&&alternative!=input&&alternative.getNode()==input.getNode()
+                        &&alternative.getDirection()==GLNodePort.Direction.INPUT&&connectionCount(alternative)==0
+                        &&alternative.getMaximumConnections()>0&&existing.getOutput().canConnectTo(alternative)&&alternative.canConnectTo(existing.getOutput());
+                    removeConnection(existing);
+                    if(relocate)addConnection(new GLNodeConnection(existing.getOutput(),alternative));
+                }
 		connection.attachTo(this);
 		connections.add(connection);
 		input.connectionStateChanged();

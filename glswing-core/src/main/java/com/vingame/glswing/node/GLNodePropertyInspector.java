@@ -112,13 +112,13 @@ public final class GLNodePropertyInspector extends GLContainer
 			List<GLGraphNode> selected) {
 		LinkedHashMap<String, GLNodePropertyDescriptor> result = new LinkedHashMap<>();
 		for (GLNodePropertyDescriptor property : schemas.properties(selected.get(0).typeId()))
-			if (selected.get(0).properties().containsKey(property.id()))
+			if (property instanceof GLCustomNodeProperty || selected.get(0).properties().containsKey(property.id()))
 				result.put(property.id(), property);
 		for (int index = 1; index < selected.size(); index++) {
 			GLGraphNode node = selected.get(index);
 			Map<String, GLNodePropertyDescriptor> available = new LinkedHashMap<>();
 			for (GLNodePropertyDescriptor property : schemas.properties(node.typeId()))
-				if (node.properties().containsKey(property.id()))
+				if (property instanceof GLCustomNodeProperty || node.properties().containsKey(property.id()))
 					available.put(property.id(), property);
 			result.entrySet().removeIf(entry ->
 					!entry.getValue().equals(available.get(entry.getKey())));
@@ -189,7 +189,7 @@ public final class GLNodePropertyInspector extends GLContainer
 		if (ids.isEmpty()) return;
 		binding.graph().edit("Change " + property, edit -> ids.forEach(id ->
 				binding.graph().snapshot().findNode(id).filter(node ->
-						node.properties().containsKey(property) || property.startsWith(GLGraphNode.AUTOMATIC_PREFIX))
+						node.properties().containsKey(property) || schemas.properties(node.typeId()).stream().anyMatch(p->p instanceof GLCustomNodeProperty&&p.id().equals(property)) || property.startsWith(GLGraphNode.AUTOMATIC_PREFIX))
 						.ifPresent(node -> {if(property.startsWith(GLGraphNode.AUTOMATIC_PREFIX)){edit.removeProperty(id,GLGraphNode.AUTOMATIC_DEFAULT_PREFIX+property.substring(GLGraphNode.AUTOMATIC_PREFIX.length()));edit.setProperty(id,property,value);}else edit.setExplicitProperty(id, property, value);})));
 	}
 
@@ -236,7 +236,7 @@ public final class GLNodePropertyInspector extends GLContainer
         synchronizing = true;
         try { for (var row : rows) if (row.descriptor instanceof GLCustomNodeProperty custom) {
             var value = selected.get(0).properties().get(custom.id());
-            if (value != null) custom.update().accept(row.control, selected.get(0));
+            custom.update().accept(row.control, selected.get(0));
         }} finally { synchronizing = false; }
     }
     private float rowHeight(Row row) { return row.descriptor instanceof GLCustomNodeProperty

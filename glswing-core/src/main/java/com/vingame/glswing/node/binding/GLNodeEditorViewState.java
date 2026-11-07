@@ -8,7 +8,7 @@ import com.vingame.glswing.node.model.GLNodeId;
 
 /** Immutable rendering-only state for a node-editor projection. */
 public record GLNodeEditorViewState(Map<GLNodeId, GLNodeViewState> nodes,
-		Map<String, GLNodeViewState> auxiliaryNodes) {
+		Map<String, GLNodeViewState> auxiliaryNodes, GLNodeCameraState camera) {
 	public GLNodeEditorViewState {
 		if (nodes == null || auxiliaryNodes == null)
 			throw new IllegalArgumentException("Node view-state maps required");
@@ -28,6 +28,9 @@ public record GLNodeEditorViewState(Map<GLNodeId, GLNodeViewState> nodes,
 		auxiliaryNodes = Collections.unmodifiableMap(auxiliaryCopy);
 	}
 
+    public GLNodeEditorViewState(Map<GLNodeId,GLNodeViewState> nodes,Map<String,GLNodeViewState> auxiliaryNodes){this(nodes,auxiliaryNodes,null);}
+    public GLNodeEditorViewState withNodes(Map<GLNodeId,GLNodeViewState> nodes){return new GLNodeEditorViewState(nodes,auxiliaryNodes,camera);}
+    public GLNodeEditorViewState withCamera(GLNodeCameraState camera){return new GLNodeEditorViewState(nodes,auxiliaryNodes,camera);}
 	/** Creates view state without editor-owned auxiliary projections. */
 	public GLNodeEditorViewState(Map<GLNodeId, GLNodeViewState> nodes) {
 		this(nodes, Map.of());

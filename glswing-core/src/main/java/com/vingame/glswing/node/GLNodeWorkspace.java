@@ -509,9 +509,11 @@ public final class GLNodeWorkspace extends GLContainer
     /** Use independent stacks per graph definition; modified state covers all graphs. */
     public void setGraphHistoryEnabled(boolean enabled){graphHistoryEnabled=enabled;if(enabled)selectHistoryScope();}
     private void selectHistoryScope(){var current=documents.peekLast();if(current!=null)history.setActiveScope(current.assetId==null?"workspace.root":current.assetId);}
+    private boolean restoreCameraPending;
     private void activateCurrent() {
 		Document document = documents.peekLast();
 		if (document == null) { updateHeader(); return; }
+        restoreCameraPending=true;
 		binding = new GLNodeEditorBinding(document.graph, types, editor, viewFactory,
 				cyclePolicy, document.viewState);
         binding.addProjectionListener(this::restoreProjectedBoundaryConnections);
@@ -522,7 +524,7 @@ public final class GLNodeWorkspace extends GLContainer
 		}
 		editing = new GLNodeGraphEditingSession(binding, history,
 				state -> {
-					document.viewState = new GLNodeEditorViewState(state.nodes(), captureActiveViewState().auxiliaryNodes());
+					var currentView=captureActiveViewState();document.viewState = new GLNodeEditorViewState(state.nodes(),currentView.auxiliaryNodes(),currentView.camera());
 					persistDocumentAsset(document);
 				});
 		if (clipboard != null) editing.setClipboard(clipboard);
@@ -867,7 +869,7 @@ public final class GLNodeWorkspace extends GLContainer
         }
         var beforeBounds=new LinkedHashMap<>(current.nodes());var bounds=beforeBounds.get(id);
         beforeBounds.put(id,new GLNodeViewState(startX,startY,bounds.width(),bounds.height(),bounds.customTitle()));
-        var start=new GLNodeEditorViewState(beforeBounds,current.auxiliaryNodes());
+        var start=current.withNodes(beforeBounds);
         if(!start.equals(current))history.record("Move node",()->restoreArrangement(document,start),()->restoreArrangement(document,current));
         try(var transaction=history.beginTransaction("Insert node into group connection")){
             graph.edit("Insert node",e->e.addConnection(new com.vingame.glswing.node.model.GLGraphConnection(com.vingame.glswing.node.model.GLNodeConnectionId.random(),boundary==edge.getOutput()?new GLNodeEndpoint(id,pair.outputPortId()):oldEndpoint,boundary==edge.getOutput()?oldEndpoint:new GLNodeEndpoint(id,pair.inputPortId()))));
@@ -1037,7 +1039,7 @@ public final class GLNodeWorkspace extends GLContainer
 					? BOUNDARY_INPUT_VIEW : BOUNDARY_OUTPUT_VIEW,
 					GLNodeViewState.capture(node));
 		}
-		return new GLNodeEditorViewState(projected.nodes(), auxiliary);
+		return new GLNodeEditorViewState(projected.nodes(), auxiliary,restoreCameraPending&&current!=null?current.viewState.camera():projected.camera());
 	}
 
 	private GLNodeViewState boundaryViewState(String id) {
@@ -1109,7 +1111,12 @@ public final class GLNodeWorkspace extends GLContainer
 		breadcrumb.setBounds(84, 6, Math.max(0, editorWidth - 92), 28);
 		editor.setBounds(0, header, editorWidth,
 				Math.max(0, height - header));
-		if(compositeEditor!=null)compositeEditor.setBounds(0,header,editorWidth,Math.max(0,height-header));
+		if(restoreCameraPending&&editorWidth>0&&editor.getHeight()>0){
+            var document=documents.peekLast();var camera=document==null?null:document.viewState.camera();
+            editor.setPan(camera==null?0:editor.getZoom()*(editorWidth*.5f-camera.x()),camera==null?0:editor.getZoom()*(editor.getHeight()*.5f-camera.y()));
+            restoreCameraPending=false;
+        }
+        if(compositeEditor!=null)compositeEditor.setBounds(0,header,editorWidth,Math.max(0,height-header));
         GLContainer sidebarControl = inspectorTabs == null ? interfaceScroll : inspectorTabs;
 		sidebarControl.setVisible(showInspector);
 		if (showInspector) sidebarControl.setBounds(width - sidebar, header,

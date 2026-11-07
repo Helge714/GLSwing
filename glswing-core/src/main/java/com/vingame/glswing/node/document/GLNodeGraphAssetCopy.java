@@ -75,7 +75,7 @@ public final class GLNodeGraphAssetCopy {
             asset.viewState().nodes().forEach((id,state)->{if(nodeIds.containsKey(id))positions.put(nodeIds.get(id),state);});
             var wires=asset.graph().connections().stream().map(c->new GLGraphConnection(GLNodeConnectionId.random(),context.endpoint(c.output()),context.endpoint(c.input()))).toList();
             result.add(new GLNodeGraphAsset(context.id(asset.id()),asset.version(),GLNodeGraphAssetKind.COMPOSITE,
-                new GLNodeGraphSnapshot(GLNodeGraphId.random(),0,nodes,wires),new GLNodeEditorViewState(positions,asset.viewState().auxiliaryNodes()),policy.metadata(asset,context),descriptor));
+                new GLNodeGraphSnapshot(GLNodeGraphId.random(),0,nodes,wires),new GLNodeEditorViewState(positions,asset.viewState().auxiliaryNodes(),asset.viewState().camera()),policy.metadata(asset,context),descriptor));
         }
         return new Result(result.stream().filter(a->a.id().equals(ids.get(plan.selectedId()))).findFirst().orElseThrow(),result);
     }

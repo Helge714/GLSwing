@@ -1,5 +1,14 @@
 # Changelog
 
+- Persist a world-space camera center per graph while keeping zoom shared. Document
+  schema 10 remains readable alongside schemas 1–9; older readers cannot load newly
+  saved schema-10 documents. Retain camera metadata through copies and Undo.
+- Arrange disconnected graph components separately and reduce crossing/vertical
+  wire paths with layered barycentric ordering and non-overlapping compaction.
+  Add an opt-in connection replacement router for free compatible alternate inputs.
+- Show application custom inspector editors even when their values are inherited
+  defaults rather than explicit instance properties. Covered by 0.2.0-SNAPSHOT.
+
 - Add opt-in graph-local Undo/Redo scopes with document-wide persisted state and
   retained group documents. Preserve boundary insertion atomically, clear tooltip
   ownership on hidden/detached ancestors and pointer changes on both canvas backends,
