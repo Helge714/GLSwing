@@ -12,15 +12,20 @@ Items are removed when completed or intentionally rejected.
 
 ## Markdown and documentation views
 
-- Provide a standardized, reusable native Markdown viewer with a defined supported
-  subset: headings, paragraphs, lists, tables, code, emphasis and inline links with
-  anchors. Support read-only selection/copy, theme-derived fonts/colors/spacing and
-  Core pointer feedback. Keep application resource lookup, node IDs, navigation
-  policy and document-language preferences outside Core.
-- Cache parsed content and text layout; reflow only for relevant content, width or
-  theme changes. Avoid full-page re-recording on hover and unnecessary offscreen
-  work. Validate dense tables, Unicode, link picking, scrolling and lifecycle
-  cleanup. Migrate EasyKnack's temporary documentation drawing to this control.
+`GLMarkdown` and `GLMarkdownView` now provide shared escaped HTML rendering and
+native headings, paragraphs, lists, tables, code, emphasis, anchors and link
+picking. EasyKnack uses the Core view; discovery and language policy stay in the
+application. Unicode, tables and links have Core and consumer regressions.
+
+Remaining hardening:
+
+- Add read-only text selection/copy to the control and expose spacing through
+  theme metrics. The application currently provides whole-document copying.
+- Add bounded shared parse/layout caching and reflow only for relevant content,
+  width or theme changes. Profile hover invalidation and offscreen work before
+  introducing further caches. Preserve each viewer's navigation/layout state.
+- Stabilize the public content model before a stable API release; prefer typed,
+  immutable blocks over exposing mutable parser builders.
 
 ## Application startup
 
