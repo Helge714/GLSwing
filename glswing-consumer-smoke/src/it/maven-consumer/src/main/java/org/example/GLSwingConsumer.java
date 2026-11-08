@@ -16,7 +16,7 @@ public final class GLSwingConsumer {
     public static void main(String[] args) {
         GLButton button = new GLButton("Ready");
         require("Ready".equals(button.getText()), "Core controls are unavailable");
-        require(GLThemes.DEFAULT != null && GLThemes.DARK != null && GLThemes.LIGHT != null,
+        require(GLThemes.DEFAULT != null && GLThemes.DARK_BLUE != null && GLThemes.LIGHT != null,
                 "Bundled themes are unavailable");
         require(GLInputMaps.DEFAULT != null, "The bundled input map is unavailable");
 

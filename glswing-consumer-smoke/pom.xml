@@ -78,6 +78,7 @@
                         <phase>verify</phase>
                         <goals><goal>run</goal></goals>
                         <configuration>
+                            <filterProperties><glswingVersion>${project.version}</glswingVersion></filterProperties>
                             <projectsDirectory>${project.basedir}/src/it</projectsDirectory>
                             <cloneProjectsTo>${project.build.directory}/consumer-projects</cloneProjectsTo>
                             <localRepositoryPath>${consumer.repository}</localRepositoryPath>

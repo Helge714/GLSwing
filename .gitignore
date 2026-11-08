@@ -64,3 +64,9 @@ Desktop.ini
 *.swp
 *.swo
 *~
+
+# Maven repository debris must never be stored in the checkout
+/com/
+/org/
+/.codex-tmp/
+/.theme-studio-staging/

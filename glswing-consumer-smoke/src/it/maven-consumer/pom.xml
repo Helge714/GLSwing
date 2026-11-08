@@ -17,17 +17,17 @@
         <dependency>
             <groupId>com.vingame</groupId>
             <artifactId>glswing</artifactId>
-            <version>0.1.0</version>
+            <version>@glswingVersion@</version>
         </dependency>
         <dependency>
             <groupId>com.vingame</groupId>
             <artifactId>glswing-lsp</artifactId>
-            <version>0.1.0</version>
+            <version>@glswingVersion@</version>
         </dependency>
         <dependency>
             <groupId>com.vingame</groupId>
             <artifactId>glswing-filedialogs-swt</artifactId>
-            <version>0.1.0</version>
+            <version>@glswingVersion@</version>
         </dependency>
     </dependencies>
 
