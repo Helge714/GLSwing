@@ -1,5 +1,13 @@
 # Changelog
 
+- Add reusable escaped Markdown HTML rendering and a themed retained Markdown view
+  with tables, anchors and full-area link picking. Applications retain navigation policy.
+- Isolate code text operations, connection tessellation caching and workspace view
+  snapshots; keep public editor APIs and document formats unchanged.
+- Move external showcase theme assets under the examples module. Remove tracked
+  Maven cache debris and validate consumer artifacts against the current build.
+  Additive APIs remain covered by 0.2.0-SNAPSHOT.
+
 - Prefer horizontal node flow in multi-column auto-layouts, accepting modestly
   angled wires instead of accumulating port offsets along long chains. Preserve
   exact two-column port alignment and compact branch/theme clearances. No API or

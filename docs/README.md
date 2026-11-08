@@ -1,6 +1,6 @@
 # GLSwing User Guide
 
-This guide documents GLSwing 0.1.0 from an application developer's
+This guide documents GLSwing from an application developer's
 perspective. It covers the rendering pipeline, retained UI framework, resource
 lifecycle, extension points, and the behavior of the standard controls.
 

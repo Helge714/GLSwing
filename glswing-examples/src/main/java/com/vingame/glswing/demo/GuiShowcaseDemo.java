@@ -184,7 +184,7 @@ public final class GuiShowcaseDemo {
 
 	static final float DESIGN_WIDTH = 1180;
 	static final float DESIGN_HEIGHT = 790;
-	private static final Path THEME_RELATIVE_DIRECTORY = Path.of("resources",
+	private static final Path THEME_RELATIVE_DIRECTORY = Path.of("glswing-examples", "resources",
 			"com", "vingame", "glswing", "themes");
 	private static List<String> lspCommand = List.of();
 

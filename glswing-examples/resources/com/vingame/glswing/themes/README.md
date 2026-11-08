@@ -1,6 +1,6 @@
 # Showcase theme bundle
 
-These files are intentionally stored outside the application classpath. Run
+These files are intentionally stored outside the application classpath, under `glswing-examples/resources`. Run
 the showcase from the repository root and use **Theme → Colors** and **Theme →
 Metrics** to demonstrate independent filesystem-based theme composition.
 

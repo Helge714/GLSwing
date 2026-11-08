@@ -50,11 +50,7 @@ public class GLNodeEditor extends GLContainer
 	private static final float MARQUEE_DRAG_THRESHOLD = 3;
 	private final List<GLNode> nodes = new ArrayList<>();
 	private final List<GLNodeConnection> connections = new ArrayList<>();
-	private final Map<GLNodeConnection, CachedConnectionCurve> connectionCurveCache =
-			new IdentityHashMap<>();
-	private volatile int lastCurveTessellations;
-	private volatile int lastCurveCacheHits;
-	private volatile int lastCurveSegments;
+	private final GLNodeConnectionCurves connectionCurves = new GLNodeConnectionCurves();
 	private final LinkedHashSet<GLNode> selectedNodes = new LinkedHashSet<>();
 	private final CopyOnWriteArrayList<GLNodeEditorListener> listeners =
 			new CopyOnWriteArrayList<>();
@@ -336,7 +332,7 @@ public class GLNodeEditor extends GLContainer
 		if (selectedConnection == connection)
 			setSelectedConnection(null);
 		connections.remove(connection);
-		connectionCurveCache.remove(connection);
+		connectionCurves.remove(connection);
 		connection.detachFrom(this);
 		connection.getInput().connectionStateChanged();
 		repaintGL();
@@ -350,13 +346,13 @@ public class GLNodeEditor extends GLContainer
 	}
 
 	/** Number of retained connection curves tessellated in the latest frame. */
-	public int getLastCurveTessellationCount() { return lastCurveTessellations; }
+	public int getLastCurveTessellationCount() { return connectionCurves.tessellations; }
 
 	/** Number of retained connection curves reused in the latest frame. */
-	public int getLastCurveCacheHitCount() { return lastCurveCacheHits; }
+	public int getLastCurveCacheHitCount() { return connectionCurves.hits; }
 
 	/** Total cached line segments submitted for retained curves in the latest frame. */
-	public int getLastCurveSegmentCount() { return lastCurveSegments; }
+	public int getLastCurveSegmentCount() { return connectionCurves.segments; }
 
 	public GLNodeConnection getSelectedConnection() {
 		return selectedConnection;
@@ -1869,9 +1865,9 @@ public class GLNodeEditor extends GLContainer
 	private enum WorkspaceGesture { NONE, PAN, MARQUEE }
 
 	private void drawConnections(GLContext2D context) {
-		lastCurveTessellations = 0;
-		lastCurveCacheHits = 0;
-		lastCurveSegments = 0;
+		connectionCurves.tessellations = 0;
+		connectionCurves.hits = 0;
+		connectionCurves.segments = 0;
 		GLStroke previous = context.getStroke();
 		float previousCurveTolerance = context.getCurveTolerance();
 		try {
@@ -2013,30 +2009,10 @@ public class GLNodeEditor extends GLContainer
 		}
 	}
 
-	private float[] connectionCurvePoints(GLContext2D context,
-			GLNodeConnection connection, float x0, float y0, float c1x, float c1y,
-			float c2x, float c2y, float x1, float y1, int minimumSegments) {
-		if (connection == null)
-			return context.tessellateCubicBezier(x0, y0, c1x, c1y,
-					c2x, c2y, x1, y1, minimumSegments);
-		float tolerance = context.getCurveTolerance();
-		float scale = context.getTransform().getMaximumScale();
-		CachedConnectionCurve cached = connectionCurveCache.get(connection);
-		if (cached != null && cached.matches(x0, y0, c1x, c1y,
-				c2x, c2y, x1, y1, tolerance, scale, minimumSegments)) {
-			lastCurveCacheHits++;
-			lastCurveSegments += cached.points().length / 2 - 1;
-			return cached.points();
-		}
-		float[] points = context.tessellateCubicBezier(x0, y0, c1x, c1y,
-				c2x, c2y, x1, y1, minimumSegments);
-		connectionCurveCache.put(connection, new CachedConnectionCurve(
-				x0, y0, c1x, c1y, c2x, c2y, x1, y1,
-				tolerance, scale, minimumSegments, points));
-		lastCurveTessellations++;
-		lastCurveSegments += points.length / 2 - 1;
-		return points;
-	}
+    private float[] connectionCurvePoints(GLContext2D context,GLNodeConnection connection,
+            float x0,float y0,float c1x,float c1y,float c2x,float c2y,float x1,float y1,int minimumSegments) {
+        return connectionCurves.points(context,connection,x0,y0,c1x,c1y,c2x,c2y,x1,y1,minimumSegments);
+    }
 
 	private static Color[] connectionCurveColors(int count, Color start,
 			Color end, GLColorInterpolator interpolation) {
@@ -2047,19 +2023,7 @@ public class GLNodeEditor extends GLContainer
 		return colors;
 	}
 
-	private record CachedConnectionCurve(float x0, float y0, float c1x,
-			float c1y, float c2x, float c2y, float x1, float y1,
-			float tolerance, float scale, int minimumSegments, float[] points) {
-		boolean matches(float nextX0, float nextY0, float nextC1x, float nextC1y,
-				float nextC2x, float nextC2y, float nextX1, float nextY1,
-				float nextTolerance, float nextScale, int nextMinimumSegments) {
-			return x0 == nextX0 && y0 == nextY0 && c1x == nextC1x
-					&& c1y == nextC1y && c2x == nextC2x && c2y == nextC2y
-					&& x1 == nextX1 && y1 == nextY1
-					&& tolerance == nextTolerance && scale == nextScale
-					&& minimumSegments == nextMinimumSegments;
-		}
-	}
+
 
 	private GLStroke connectionStroke(float width, boolean dashed) {
 		GLStroke stroke = new GLStroke(width).withCap(dashed ? GLStroke.Cap.BUTT : GLStroke.Cap.ROUND)

@@ -1028,19 +1028,13 @@ public final class GLNodeWorkspace extends GLContainer
 		} finally { synchronizingAsset = false; }
 	}
 
-	private GLNodeEditorViewState captureActiveViewState() {
-		GLNodeEditorViewState projected = binding.captureViewState();
-		Document current = documents.peekLast();
-		Map<String, GLNodeViewState> auxiliary = new LinkedHashMap<>(current == null
-				? Map.of() : current.viewState.auxiliaryNodes());
-		for (GLNode node : editor.getNodes()) {
-			if (!(node instanceof BoundaryNode boundary)) continue;
-			auxiliary.put(boundary.direction == GLPortDirection.INPUT
-					? BOUNDARY_INPUT_VIEW : BOUNDARY_OUTPUT_VIEW,
-					GLNodeViewState.capture(node));
-		}
-		return new GLNodeEditorViewState(projected.nodes(), auxiliary,restoreCameraPending&&current!=null?current.viewState.camera():projected.camera());
-	}
+    private GLNodeEditorViewState captureActiveViewState() {
+        Document current=documents.peekLast();
+        return GLNodeWorkspaceViews.capture(binding.captureViewState(),current==null?null:current.viewState,
+            editor.getNodes(),node -> node instanceof BoundaryNode boundary
+                ? boundary.direction==GLPortDirection.INPUT?BOUNDARY_INPUT_VIEW:BOUNDARY_OUTPUT_VIEW:null,
+            restoreCameraPending);
+    }
 
 	private GLNodeViewState boundaryViewState(String id) {
 		Document current = documents.peekLast();
