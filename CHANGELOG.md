@@ -1,5 +1,10 @@
 # Changelog
 
+- Prefer horizontal node flow in multi-column auto-layouts, accepting modestly
+  angled wires instead of accumulating port offsets along long chains. Preserve
+  exact two-column port alignment and compact branch/theme clearances. No API or
+  serialization change; covered by the current 0.2.0-SNAPSHOT development version.
+
 - Arrange graphs using actual port anchors, deterministic strongly connected
   feedback regions and compact skyline packing. Keep short source branches near
   their consumers and remove unnecessary width inherited from unrelated columns.

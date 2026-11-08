@@ -150,7 +150,7 @@ public final class GLNodeAutoLayout {
                 if(!returns.contains(v)) {
                     var targets=v.in.stream().filter(e->e.a.block==block&&!returns.contains(e.a)&&index.get(e.a)<index.get(v))
                         .mapToDouble(e->e.a.ly+e.ay-e.by).toArray();
-                    v.ly=median(targets,0);minY=Math.min(minY,v.ly);bottom=Math.max(bottom,v.ly+v.h);
+                    v.ly=median(targets,0)/(block.nodes.size()>2?3:1);minY=Math.min(minY,v.ly);bottom=Math.max(bottom,v.ly+v.h);
                 }
             }
             for(var v:ordered)v.ly=returns.contains(v)?bottom-minY+vg:v.ly-minY;
@@ -195,17 +195,17 @@ public final class GLNodeAutoLayout {
             for(var layer:c.layers){double y=0,width=0;for(var b:layer){b.x=x;b.y=y;y+=b.h+vg;width=Math.max(width,b.w);}x+=width+hg;}
             for(int pass=0;pass<12;pass++) {
                 var sweep=new ArrayList<>(c.layers);if(pass%2==1)Collections.reverse(sweep);
-                for(var layer:sweep)compactY(layer);
+                for(var layer:sweep)compactY(layer,c.layers.size()>2?.05:1);
                 double top=c.blocks.stream().mapToDouble(b->b.y).min().orElse(0);for(var b:c.blocks)b.y-=top;
             }
         }
 
         /** Weighted isotonic projection keeps row order and theme clearance. */
-        void compactY(List<Block> layer) {
+        void compactY(List<Block> layer,double portAlignment) {
             int n=layer.size(),pools=0;double[] offset=new double[n],mean=new double[n],weight=new double[n];int[] count=new int[n];
             for(int i=0;i<n;i++) {
                 var b=layer.get(i);if(i>0)offset[i]=offset[i-1]+layer.get(i-1).h+vg;
-                double sum=0;for(var e:b.in)sum+=e.a.y+e.ay()-e.by();for(var e:b.out)sum+=e.b.y+e.by()-e.ay();
+                double sum=0;for(var e:b.in)sum+=e.a.y+portAlignment*(e.ay()-e.by());for(var e:b.out)sum+=e.b.y+portAlignment*(e.by()-e.ay());
                 double degree=b.in.size()+b.out.size();mean[pools]=(degree==0?b.y:sum/degree)-offset[i];weight[pools]=Math.max(1,degree);count[pools]=1;pools++;
                 while(pools>1&&mean[pools-2]>mean[pools-1]){int a=pools-2,z=pools-1;mean[a]=(mean[a]*weight[a]+mean[z]*weight[z])/(weight[a]+weight[z]);weight[a]+=weight[z];count[a]+=count[z];pools--;}
             }
@@ -226,6 +226,9 @@ public final class GLNodeAutoLayout {
 
         Score score(Component c) {
             double length=0;for(var e:c.links)length+=Math.abs(e.a.x+e.ax()-e.b.x-e.bx())+Math.abs(e.a.y+e.ay()-e.b.y-e.by());
+            // A small wire-length increase is preferable to a steadily rising
+            // chain. Port distance still matters; horizontal node flow matters too.
+            for(var e:c.links)length+=.75*Math.abs(e.a.y+e.edge.a.ly-e.b.y-e.edge.b.ly);
             int crossings=0,stride=Math.max(1,(c.links.size()+255)/256);
             for(int i=0;i<c.links.size();i+=stride)for(int j=i+stride;j<c.links.size();j+=stride)if(crosses(c.links.get(i),c.links.get(j)))crossings++;
             double height=c.blocks.stream().mapToDouble(b->b.y+b.h).max().orElse(0);

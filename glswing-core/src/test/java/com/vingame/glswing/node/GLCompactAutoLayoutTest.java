@@ -80,6 +80,13 @@ class GLCompactAutoLayoutTest {
  @Test void variedDisconnectedSizesHaveABoundedPackingCost(){
   assertTimeout(Duration.ofSeconds(15),()->{var e=new GLNodeEditor();e.setBounds(0,0,1200,800);for(int i=0;i<600;i++)node(e,"Loose "+i,120+(i*37)%360,80+(i*53)%420);GLNodeAutoLayout.arrange(e);clearances(e);repeat(e);});
  }
+ @Test void aLongChainDoesNotClimbOnePortOffsetPerNode(){
+  var e=new GLNodeEditor();var chain=new ArrayList<GLNode>();
+  for(int i=0;i<12;i++){var n=node(e,"N"+i,160,120);chain.add(n);if(i>0)wire(e,chain.get(i-1),n);}
+  for(var n:chain){n.findPort("out").setBounds(154,20,12,12);n.findPort("in").setBounds(-6,80,12,12);}
+  GLNodeAutoLayout.arrange(e);double min=chain.stream().mapToDouble(GLNode::getY).min().orElseThrow(),max=chain.stream().mapToDouble(GLNode::getY).max().orElseThrow();
+  assertTrue(max-min<60,"Horizontal flow should accept angled wires instead of a 660-pixel climb: "+(max-min));clearances(e);repeat(e);
+ }
  @Test void longChainsUseNoRecursiveGraphTraversal(){
   assertTimeout(Duration.ofSeconds(15),()->{var e=new GLNodeEditor();GLNode previous=null;for(int i=0;i<1000;i++){var n=node(e,"N"+i,120,80);if(previous!=null)wire(e,previous,n);previous=n;}
    GLNodeAutoLayout.arrange(e);assertEquals(1000,e.getNodes().size());for(var edge:e.getConnections())assertTrue(edge.getOutput().getNode().getX()<edge.getInput().getNode().getX());repeat(e);
