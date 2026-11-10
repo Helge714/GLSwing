@@ -1,5 +1,9 @@
 # Changelog
 
+- Reuse built-in connection gradients across frames and skip complete offscreen node
+  subtrees with conservative socket/shadow bounds. Keep focused editors and crossing
+  cables available; preserve custom color-function evaluation. Covered by 0.2.0-SNAPSHOT.
+
 - Complete theme-dependent node measurement synchronously after child controls refresh.
   Restore saved node bounds above their content minimum while preserving larger user sizes.
   Add a protected post-theme hook; covered by 0.2.0-SNAPSHOT.

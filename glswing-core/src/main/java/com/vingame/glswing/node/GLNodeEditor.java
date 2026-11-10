@@ -977,9 +977,18 @@ public class GLNodeEditor extends GLContainer
 		GLTransform previous = context.getTransform();
 		try {
 			context.setTransform(viewTransform(previous));
+            var viewport=GLNodeViewport.of(getWidth(),getHeight(),panX,panY,zoom);
+            GLNode focused=null;
+            for(Object owner=getGLFocusOwner();owner instanceof GLContainer container;owner=container.getGLParent())
+                if(container instanceof GLNode node&&node.getGLParent()==this){focused=node;break;}
 			for (GLContainer child : getGLChildrenInPaintOrder()) {
-				if (child instanceof GLNode node && node.isMuted())
-					drawMutedBypasses(context, node);
+                if(child instanceof GLNode node){
+                    // Bypass curves belong to the editor and may extend beyond node bounds.
+                    if(node.isMuted())drawMutedBypasses(context,node);
+                    if(!node.isVisible()||node!=focused&&!viewport.includes(node)){
+                        com.vingame.glswing.ui.GLToolTipManager.leave(node);continue;
+                    }
+                }
 				child.renderComponent(context);
 			}
 			drawMarquee(context);
@@ -2002,7 +2011,7 @@ public class GLNodeEditor extends GLContainer
 						x1 - handle, y1, x1, y1, start, end,
 						getConnectionColorInterpolator(), GLContext2D.NO_PICK_ID);
 			} else {
-				Color[] colors = connectionCurveColors(points.length / 2,
+				Color[] colors = connectionCurves.colors(mouseTarget, points.length / 2,
 						start, end, getConnectionColorInterpolator());
 				context.drawPolyline(points, colors, GLContext2D.NO_PICK_ID);
 			}
@@ -2013,16 +2022,6 @@ public class GLNodeEditor extends GLContainer
             float x0,float y0,float c1x,float c1y,float c2x,float c2y,float x1,float y1,int minimumSegments) {
         return connectionCurves.points(context,connection,x0,y0,c1x,c1y,c2x,c2y,x1,y1,minimumSegments);
     }
-
-	private static Color[] connectionCurveColors(int count, Color start,
-			Color end, GLColorInterpolator interpolation) {
-		Color[] colors = new Color[count];
-		for (int index = 0; index < count; index++)
-			colors[index] = interpolation.interpolate(start, end,
-					index / (float) (count - 1));
-		return colors;
-	}
-
 
 
 	private GLStroke connectionStroke(float width, boolean dashed) {
