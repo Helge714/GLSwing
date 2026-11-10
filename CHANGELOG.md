@@ -1,5 +1,9 @@
 # Changelog
 
+- Complete theme-dependent node measurement synchronously after child controls refresh.
+  Restore saved node bounds above their content minimum while preserving larger user sizes.
+  Add a protected post-theme hook; covered by 0.2.0-SNAPSHOT.
+
 - Add reusable escaped Markdown HTML rendering and a themed retained Markdown view
   with tables, anchors and full-area link picking. Applications retain navigation policy.
 - Isolate code text operations, connection tessellation caching and workspace view

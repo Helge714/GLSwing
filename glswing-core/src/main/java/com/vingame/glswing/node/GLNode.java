@@ -65,6 +65,8 @@ public class GLNode extends GLContainer {
 	private GLMenuItem deleteNodeMenuItem;
 	private String title;
     private String defaultTitle, customTitle, titleSuffix="";
+	private float themeWidth,themeHeight;
+	private boolean automaticThemeWidth,automaticThemeHeight;
 	private GLNodeStyle localStyle;
 	private GLNodePortOrder portOrder = GLNodePortOrder.INPUTS_FIRST;
 	private GLNodeResizeMode resizeMode = GLNodeResizeMode.BOTH;
@@ -533,10 +535,22 @@ public class GLNode extends GLContainer {
 
 	@Override
 	protected void themeChanged() {
+        var before=getPreferredGLSize();
+        themeWidth=getWidth();themeHeight=getHeight();
+        automaticThemeWidth=themeWidth<=0||Math.abs(themeWidth-before.width())<.5f;
+        automaticThemeHeight=themeHeight<=0||Math.abs(themeHeight-before.height())<.5f;
 		updateRenderingOpacity();
 		if (localStyle == null)
 			styleChanged();
 	}
+
+    @Override protected void themeChangedAfterChildren(){
+        super.themeChangedAfterChildren();
+        updateMetricsAndLayout();
+        var preferred=getPreferredGLSize();
+        setSize(automaticThemeWidth&&Math.abs(getWidth()-themeWidth)<.5f?preferred.width():Math.max(getWidth(),preferred.width()),
+            automaticThemeHeight&&Math.abs(getHeight()-themeHeight)<.5f?preferred.height():Math.max(getHeight(),preferred.height()));
+    }
 
 	private void updateRenderingOpacity() {
 		float opacity = getGLTheme().values().getFloat(

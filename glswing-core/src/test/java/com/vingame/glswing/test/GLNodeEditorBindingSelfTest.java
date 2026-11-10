@@ -53,7 +53,7 @@ public final class GLNodeEditorBindingSelfTest {
 		editor.setGLHistoryManager(history);
 		int[] updates = { 0 };
 		GLNodeEditorViewState initialView = new GLNodeEditorViewState(Map.of(
-				sourceId, new GLNodeViewState(25, 35, 180, 120)));
+				sourceId, new GLNodeViewState(25, 35, 240, 120)));
 		try (GLNodeEditorBinding binding = new GLNodeEditorBinding(graph, types,
 				editor, (node, type) -> createView(type),
 				GLGraphCyclePolicy.ACYCLIC, initialView)) {
@@ -61,7 +61,7 @@ public final class GLNodeEditorBindingSelfTest {
 					"Initial graph was not projected");
 			GLNode sourceView = binding.findNodeView(sourceId).orElseThrow();
 			check(sourceView.getX() == 25 && sourceView.getY() == 35
-					&& sourceView.getWidth() == 180 && sourceView.getHeight() == 120,
+					&& sourceView.getWidth() == 240 && sourceView.getHeight() == 120,
 					"Initial editor view state was not restored");
 			binding.addValidationListener((changed, result) -> updates[0]++);
 			graph.edit("Set value", edit -> edit.setProperty(sourceId, "value",

@@ -19,6 +19,7 @@ class GLNodeInsertionTest {
         final GLNodeEditorBinding binding;
         final GLNodeGraphEditingSession session;
         Fixture(float targetX) {
+            editor.setGLTheme(editor.getGLTheme().withValues(editor.getGLTheme().values().with("node.minimumWidth","140")));
             types.register(new GLNodeTypeDescriptor("pass",GLNodePortDescriptor.input("in","signal",false,1),GLNodePortDescriptor.output("out","signal")));
             types.setInsertionPorts("pass",new GLNodeInsertionPorts("in","out"));
             graph.edit("Setup",e->{

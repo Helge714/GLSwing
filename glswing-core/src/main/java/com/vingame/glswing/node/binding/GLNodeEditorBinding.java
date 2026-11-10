@@ -309,13 +309,11 @@ public final class GLNodeEditorBinding implements AutoCloseable {
 		viewFactory.updateNode(view, node, type);
 		applyBuiltInState(view, node, type);
 		// Hide changes row metrics; restore persisted bounds after applying model presentation.
-		if (state != null && state.width() > 0 && state.height() > 0) {
-			if (growRebuiltViews.remove(node.id())) {
-				var preferred = view.getPreferredGLSize();
-				view.setSize(Math.max(state.width(), preferred.width()),
-						Math.max(state.height(), preferred.height()));
-			} else view.setSize(state.width(), state.height());
-		} else growRebuiltViews.remove(node.id());
+        var preferred=view.getPreferredGLSize();
+        float width=state!=null&&state.width()>0?state.width():view.getWidth();
+        float height=state!=null&&state.height()>0?state.height():view.getHeight();
+        view.setSize(Math.max(width,preferred.width()),Math.max(height,preferred.height()));
+        growRebuiltViews.remove(node.id());
 		return view;
 	}
 
@@ -436,7 +434,8 @@ public final class GLNodeEditorBinding implements AutoCloseable {
 		node.setLocation(state.x(), state.y());
         node.setCustomTitle(state.customTitle());
 		if (state.width() > 0 && state.height() > 0)
-			node.setSize(state.width(), state.height());
+			node.setSize(Math.max(state.width(),node.getPreferredGLSize().width()),
+                    Math.max(state.height(),node.getPreferredGLSize().height()));
 	}
 
 	private void checkOpen() {

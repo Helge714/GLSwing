@@ -1300,6 +1300,10 @@ public abstract class GLContainer implements GLParent, GLMouseTarget, Accessible
 	protected void themeChanged() {
 	}
 
+	/** Called synchronously after descendants have refreshed their theme-dependent metrics. */
+	protected void themeChangedAfterChildren() {
+	}
+
 	/** Called when the resolved inherited or local language changes. */
 	protected void localizerChanged() {
 	}
@@ -1322,6 +1326,7 @@ public abstract class GLContainer implements GLParent, GLMouseTarget, Accessible
 		themeChanged();
 		for (GLContainer child : glChildren.snapshot())
 			child.inheritedThemeChanged();
+		themeChangedAfterChildren();
 	}
 
 	final void inheritedLocalizerChanged() {
