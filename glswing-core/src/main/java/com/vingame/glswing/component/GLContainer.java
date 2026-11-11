@@ -33,6 +33,7 @@ import com.vingame.glswing.rendering.GLContext2D;
 import com.vingame.glswing.rendering.GLComposite;
 import com.vingame.glswing.rendering.GLDropShadowEffect;
 import com.vingame.glswing.rendering.GLFont;
+import com.vingame.glswing.rendering.GLComponentImageCapture;
 import com.vingame.glswing.rendering.GLLayerEffect;
 import com.vingame.glswing.rendering.GLRecording;
 import com.vingame.glswing.rendering.GLStroke;
@@ -704,6 +705,8 @@ public abstract class GLContainer implements GLParent, GLMouseTarget, Accessible
 	public final GLFont getGLFont(GLFontSpec specification) {
 		if (specification == null)
 			throw new IllegalArgumentException("Font specification must not be null");
+		GLFont captureFont = GLComponentImageCapture.resolveCaptureFont(specification);
+		if (captureFont != null) return captureFont;
 		GLParent parent = glParent;
 		return parent == null ? specification.measurementFont()
 				: parent.getGLFont(specification);

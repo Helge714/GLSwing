@@ -1,5 +1,9 @@
 # Changelog
 
+- Keep offscreen component captures on context-owned font textures. Repeated captures
+  retain their text without uploading or disposing the source surface fonts; component
+  parenting and geometry stay unchanged. Covered by 0.2.0-SNAPSHOT.
+
 - Reuse built-in connection gradients across frames and skip complete offscreen node
   subtrees with conservative socket/shadow bounds. Keep focused editors and crossing
   cables available; preserve custom color-function evaluation. Covered by 0.2.0-SNAPSHOT.

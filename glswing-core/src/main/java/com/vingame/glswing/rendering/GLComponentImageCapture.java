@@ -2,6 +2,9 @@ package com.vingame.glswing.rendering;
 
 import java.awt.image.BufferedImage;
 import java.nio.ByteBuffer;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import com.vingame.glswing.ui.GLFontSpec;
 import com.jogamp.opengl.*;
 import com.vingame.glswing.component.GLContainer;
 
@@ -9,6 +12,13 @@ import com.vingame.glswing.component.GLContainer;
  * Does not resize, clone or otherwise configure the component tree. */
 public final class GLComponentImageCapture {
     private GLComponentImageCapture() { }
+    private static final ThreadLocal<Map<GLFontSpec, GLFont>> CAPTURE_FONTS = new ThreadLocal<>();
+
+    /** Component font-resolution hook; returns null outside an isolated capture. */
+    public static GLFont resolveCaptureFont(GLFontSpec specification) {
+        Map<GLFontSpec, GLFont> fonts = CAPTURE_FONTS.get();
+        return fonts == null ? null : fonts.computeIfAbsent(specification, GLFontSpec::createFont);
+    }
     public static final class SizeLimitException extends IllegalArgumentException {
         private final int maximumSide;
         public SizeLimitException(int maximumSide) { super("GPU image size limit: " + maximumSide); this.maximumSide = maximumSide; }
@@ -38,13 +48,24 @@ public final class GLComponentImageCapture {
         var result=new BufferedImage[1];
         drawable.addGLEventListener(new GLEventListener(){
             GLRenderer2D renderer;
+            final Map<GLFontSpec, GLFont> fonts = new LinkedHashMap<>();
             public void init(GLAutoDrawable d){renderer=GLRenderer2D.create(d.getGL().getGL3());}
             public void reshape(GLAutoDrawable d,int x,int y,int width,int height){}
-            public void dispose(GLAutoDrawable d){if(renderer!=null)renderer.dispose(d.getGL().getGL3());}
+            public void dispose(GLAutoDrawable d){
+                var gl=d.getGL().getGL3();
+                try{if(renderer!=null)renderer.dispose(gl);}
+                finally{for(var font:fonts.values())font.dispose(gl);fonts.clear();}
+            }
             public void display(GLAutoDrawable d){
                 var gl=d.getGL().getGL3();gl.glViewport(0,0,w,h);gl.glClearColor(0,0,0,transparent?0:1);gl.glClear(GL.GL_COLOR_BUFFER_BIT);
-                var context=renderer.beginFrame(gl,width,height,Projection2D.TOP_LEFT_PIXELS.create(width,height));
-                try { view.renderComponent(context); } finally { renderer.endFrame(); }
+                Map<GLFontSpec, GLFont> previousFonts=CAPTURE_FONTS.get();
+                CAPTURE_FONTS.set(fonts);
+                try {
+                    var context=renderer.beginFrame(gl,width,height,Projection2D.TOP_LEFT_PIXELS.create(width,height));
+                    try { view.renderComponent(context); } finally { renderer.endFrame(); }
+                } finally {
+                    if(previousFonts==null)CAPTURE_FONTS.remove();else CAPTURE_FONTS.set(previousFonts);
+                }
                 var pixels=ByteBuffer.allocateDirect(w*h*4);gl.glPixelStorei(GL.GL_PACK_ALIGNMENT,1);gl.glReadPixels(0,0,w,h,GL.GL_RGBA,GL.GL_UNSIGNED_BYTE,pixels);
                 var image=new BufferedImage(w,h,transparent?BufferedImage.TYPE_INT_ARGB_PRE:BufferedImage.TYPE_INT_RGB);int[] data=new int[w*h];
                 for(int y=0;y<h;y++)for(int x=0;x<w;x++){int i=((h-y-1)*w+x)*4;data[y*w+x]=((pixels.get(i+3)&255)<<24)|((pixels.get(i)&255)<<16)|((pixels.get(i+1)&255)<<8)|(pixels.get(i+2)&255);}
