@@ -145,10 +145,18 @@ public final class GLFont {
 		PreparedAtlas prepared;
 		synchronized (PREPARED_ATLASES) {
 			prepared = PREPARED_ATLASES.get(key);
-			if (prepared == null) {
-				prepared = prepareAtlas(font, characters, missingGlyphCode,
-						maximumTextureSize[0]);
-				PREPARED_ATLASES.put(key, prepared);
+		}
+		if (prepared == null) {
+			// Expensive rasterization must not hold the shared cache lock: background
+			// preparation may run concurrently with a different UI/context font.
+			PreparedAtlas candidate = prepareAtlas(font, characters, missingGlyphCode,
+					maximumTextureSize[0]);
+			synchronized (PREPARED_ATLASES) {
+				prepared = PREPARED_ATLASES.get(key);
+				if (prepared == null) {
+					prepared = candidate;
+					PREPARED_ATLASES.put(key, prepared);
+				}
 			}
 		}
 		atlas = GLTexture.create(gl, prepared.image);

@@ -1,5 +1,8 @@
 # Changelog
 
+- Build font atlases outside the shared cache monitor so background font warming
+  does not stall unrelated render contexts. Texture ownership remains per context. Covered by 0.2.0-SNAPSHOT.
+
 - Keep offscreen component captures on context-owned font textures. Repeated captures
   retain their text without uploading or disposing the source surface fonts; component
   parenting and geometry stay unchanged. Covered by 0.2.0-SNAPSHOT.
