@@ -100,11 +100,13 @@ public final class UIQuadInstanceFormat {
 			throw new IllegalArgumentException(
 					"UI rectangle bounds must be finite and positive");
 		if (!Float.isFinite(radius) || radius < 0 || !Float.isFinite(strokeWidth)
-				|| strokeWidth <= 0)
+				|| strokeWidth < 0)
 			throw new IllegalArgumentException(
-					"UI radius and border width must be finite and positive");
+					"UI radius and border width must be finite and non-negative");
 		if (fillColor == null || borderColor == null || transform == null)
 			throw new IllegalArgumentException("UI colors and transform must not be null");
+        if (strokeWidth == 0)
+            return roundedRectangle(x, y, width, height, radius, 0, false, false, fillColor, transform);
 		float[] result = new float[FLOATS_PER_INSTANCE];
 		putGeometry(result, 0, x, y, width, height, transform);
 		putUv(result, 0, 0, 0, 1, 1);
@@ -128,6 +130,8 @@ public final class UIQuadInstanceFormat {
 			throw new IllegalArgumentException("UI corner radii must not be null");
 		float[] result = roundedRectangleWithBorder(x, y, width, height, 0,
 				strokeWidth, screenSpaceStroke, fillColor, borderColor, transform);
+        if (strokeWidth == 0)
+            return roundedRectangle(x, y, width, height, radii, fillColor, transform);
 		result[14] = MODE_ASYMMETRIC_ROUNDED_FILL_BORDER;
 		result[6] = radii.topLeft();
 		result[7] = radii.topRight();

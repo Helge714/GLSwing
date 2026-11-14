@@ -1,5 +1,9 @@
 # Changelog
 
+- Render zero-width combined UI borders as plain fills, preserving asymmetric
+  corners. Fix repeated render exceptions from borderless popup themes; invalid
+  negative/non-finite widths remain rejected. Covered by 0.2.0-SNAPSHOT.
+
 - Join flush slider side buttons to the center value area with straight inner
   edges and rounded outer corners. Preserve the shared slider interaction.
   Covered by 0.2.0-SNAPSHOT.
