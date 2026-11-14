@@ -1,5 +1,9 @@
 # Changelog
 
+- Show curve points and Bezier handles only while hovered or focused. Add fixed
+  point X positions/topology for phase editors while retaining handle shaping.
+  Covered by 0.2.0-SNAPSHOT.
+
 - Keep position-aware Arrange compact: rough positions guide branch ordering
   instead of creating global grid rows or extra signal columns. Restore nearby
   control-source placement and port-aware compaction. Covered by 0.2.0-SNAPSHOT.

@@ -16,7 +16,7 @@ public class GLCurveEditor extends GLControl {
     private Consumer<GLPopupMenu> contextMenuCustomizer=menu->{};
     public void setContextMenuCustomizer(Consumer<GLPopupMenu> customizer){contextMenuCustomizer=java.util.Objects.requireNonNull(customizer);}
     private Runnable beginEdit=()->{},endEdit=()->{};
-    private boolean preview,large,gesture;
+    private boolean preview,large,gesture,fixedPointPositions;
     private int selected=-1,dragHandle;
     private double zeroX=Double.NaN,zeroY=Double.NaN,marker=Double.NaN;
     public GLCurveEditor() { metrics(); setToolTipText("Double-click: add point · Drag: move · Shift: grid · Right-click: segment options · Delete: remove"); }
@@ -25,6 +25,13 @@ public class GLCurveEditor extends GLControl {
     public void setCurve(GLFunctionCurve value){if(!curve.equals(value)){curve=value;if(selected>=curve.points().size())selected=-1;invalidateRecording();}}
     public void setChangeListener(Consumer<GLFunctionCurve> listener){changed=listener;}
     public void setEditListeners(Runnable begin,Runnable end){beginEdit=begin;endEdit=end;}
+    /** Keep point X positions and topology fixed; Bezier handles remain editable. */
+    public void setFixedPointPositions(boolean value){fixedPointPositions=value;setToolTipText(value?"Drag: change level · Right-click: segment options":"Double-click: add point · Drag: move · Shift: grid · Right-click: segment options · Delete: remove");}
+    public boolean hasFixedPointPositions(){return fixedPointPositions;}
+    public boolean isEditingControlsVisible(){return !preview&&(isFocused()||gesture||getControlState()==GLControlState.HOVERED||getControlState()==GLControlState.PRESSED);}
+    @Override protected void controlMouseEntered(GLMouseEvent e){invalidateRecording();}
+    @Override protected void controlMouseExited(GLMouseEvent e){invalidateRecording();}
+    @Override protected void controlFocusChanged(boolean focused){if(!focused)finish();invalidateRecording();}
     public boolean isPreview(){return preview;}
     public void setPreview(boolean value){if(preview==value)return; finish();preview=value;setFocusable(!value);metrics();invalidateRecording();}
     public void setLarge(boolean value){large=value;metrics();}
@@ -56,7 +63,7 @@ public class GLCurveEditor extends GLControl {
             else {int steps=a.mode()==GLFunctionCurve.Mode.LINEAR?1:Math.max(8,(int)((b.x()-a.x())*getWidth()));
                 float x=px(a.x()),y=py(a.y());for(int n=1;n<=steps;n++){double t=a.x()+(b.x()-a.x())*n/steps;float xx=px(t),yy=py(curve.evaluate(t));c.drawLine(x,y,xx,yy,line);x=xx;y=yy;}}
         }
-        if(!preview){
+        if(isEditingControlsVisible()){
             if(selected>=0&&selected<pts.size()){
                 var p=pts.get(selected);
                 if(selected>0&&pts.get(selected-1).mode()==GLFunctionCurve.Mode.BEZIER)handle(c,p.x(),p.y(),p.inX(),p.inY(),handle);
@@ -71,7 +78,7 @@ public class GLCurveEditor extends GLControl {
     private boolean near(GLMouseEvent e,double x,double y){return Math.hypot(e.getLocalX()-px(x),e.getLocalY()-py(y))<=metric("hitRadius",7);}
     private int hit(GLMouseEvent e){for(int i=0;i<curve.points().size();i++){var p=curve.points().get(i);if(near(e,p.x(),p.y()))return i;}return -1;}
     private void start(){if(!gesture){gesture=true;beginEdit.run();}}
-    private void finish(){if(gesture){gesture=false;endEdit.run();}}
+    private void finish(){if(gesture){gesture=false;endEdit.run();invalidateRecording();}}
     private void change(GLFunctionCurve next){if(!curve.equals(next)){setCurve(next);changed.accept(next);}}
     private void edit(Runnable operation){start();try{operation.run();}finally{finish();}}
     @Override protected void controlMousePressed(GLMouseEvent e){
@@ -86,24 +93,25 @@ public class GLCurveEditor extends GLControl {
         if(dragHandle==0)selected=hit(e);
         if(selected>=0)start();invalidateRecording();e.consume();
     }
-    @Override protected void controlMouseClicked(GLMouseEvent e){if(!preview&&isEnabled()&&e.getButton()==MouseEvent.BUTTON1&&e.completesDoubleClick()&&hit(e)<0){edit(()->change(curve.insert(nx(e),ny(e))));e.consume();}}
+    @Override protected void controlMouseClicked(GLMouseEvent e){if(!preview&&!fixedPointPositions&&isEnabled()&&e.getButton()==MouseEvent.BUTTON1&&e.completesDoubleClick()&&hit(e)<0){edit(()->change(curve.insert(nx(e),ny(e))));e.consume();}}
     @Override protected void controlMouseDragged(GLMouseEvent e){
         if(!gesture||selected<0||preview||!isEnabled())return;
         double x=nx(e),y=ny(e);if((e.getModifiersEx()&InputEvent.SHIFT_DOWN_MASK)!=0){x=Math.rint(x*20)/20;y=Math.rint(y*20)/20;}
+        if(fixedPointPositions&&dragHandle==0)x=curve.points().get(selected).x();
         change(dragHandle==0?curve.move(selected,x,y):curve.handle(selected,dragHandle<0,x,y));e.consume();
     }
     @Override protected void controlMouseReleased(GLMouseEvent e){finish();}
     @Override protected void controlMouseCaptureLost(GLMouseEvent e){finish();}
     @Override protected void detached(GLParent p){finish();super.detached(p);}
-    @Override protected void controlKeyPressed(GLKeyEvent e){if(preview)return;if(e.getKeyCode()==KeyEvent.VK_DELETE||e.getKeyCode()==KeyEvent.VK_BACK_SPACE){edit(()->change(curve.remove(selected)));selected=-1;e.consume();}}
+    @Override protected void controlKeyPressed(GLKeyEvent e){if(preview||fixedPointPositions)return;if(e.getKeyCode()==KeyEvent.VK_DELETE||e.getKeyCode()==KeyEvent.VK_BACK_SPACE){edit(()->change(curve.remove(selected)));selected=-1;e.consume();}}
     private void menu(GLMouseEvent e){
         GLParent root=getGLParent();while(root instanceof GLContainer p&&p.getGLParent()!=null)root=p.getGLParent();if(root==null)return;
         var menu=new GLPopupMenu();
         for(var mode:GLFunctionCurve.Mode.values())menu.addItem(mode.name(),event->edit(()->change(curve.mode(selected,mode))));
         menu.addItem("Link / unlink handles",event->edit(()->change(curve.linked(selected,!curve.points().get(selected).linked()))));
-        menu.addItem("Delete point",event->edit(()->{change(curve.remove(selected));selected=-1;}));
+        menu.addItem("Delete point",event->edit(()->{change(curve.remove(selected));selected=-1;})).setEnabled(!fixedPointPositions);
         menu.addItem("Mirror left half",event->edit(()->change(curve.symmetric())))
-                .setEnabled(curve.points().stream().noneMatch(p->p.mode()==GLFunctionCurve.Mode.STEP)
+                .setEnabled(!fixedPointPositions&&curve.points().stream().noneMatch(p->p.mode()==GLFunctionCurve.Mode.STEP)
                         &&curve.points().stream().filter(p->p.x()<.5-.00011).count()<=31);
         menu.addItem("Reset curve",event->edit(()->{selected=-1;change(resetCurve);}));
         contextMenuCustomizer.accept(menu);
