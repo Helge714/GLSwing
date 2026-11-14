@@ -326,7 +326,13 @@ public final class GLNodeWorkspace extends GLContainer
 
 	public void setInspectorVisible(boolean visible) {
 		if (inspectorVisible == visible) return;
-		inspectorVisible = visible; layoutWorkspace();
+        float oldWidth=editor.getWidth(), oldHeight=editor.getHeight();
+        float panX=editor.getPanX(), panY=editor.getPanY(), zoom=editor.getZoom();
+        boolean preserveView=!restoreCameraPending && oldWidth>0 && oldHeight>0;
+        inspectorVisible = visible; layoutWorkspace();
+        if(preserveView)
+            editor.setPan(panX+(zoom-1)*(editor.getWidth()-oldWidth)*.5f,
+                    panY+(zoom-1)*(editor.getHeight()-oldHeight)*.5f);
 	}
 	public boolean isInspectorVisible() { return inspectorVisible; }
 	public void setInspectorWidth(float width) {

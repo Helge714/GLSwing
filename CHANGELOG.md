@@ -1,5 +1,8 @@
 # Changelog
 
+- Preserve graph screen placement when toggling the workspace inspector,
+  compensating for zoom-centered viewport resizing. Covered by 0.2.0-SNAPSHOT.
+
 - Reduce borderless round socket glyphs by a further five percent, retaining
   zoom-proportional sizing and unchanged hit areas. Covered by 0.2.0-SNAPSHOT.
 
