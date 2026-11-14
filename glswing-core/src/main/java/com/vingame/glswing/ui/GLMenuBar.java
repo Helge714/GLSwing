@@ -22,6 +22,9 @@ public final class GLMenuBar extends GLContainer implements GLPopupMenuListener 
 	private GLMenuBarStyle appliedStyle;
 	private GLMenuBarItem activeItem;
 
+    // Menu activation must not clear the editing target before the popup captures it.
+    @Override public boolean preservesKeyboardFocusOnPress() { return true; }
+
 	public GLMenuBar() {
 		updatePresentation();
 	}

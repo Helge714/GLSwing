@@ -1,5 +1,8 @@
 # Changelog
 
+- Preserve the prior keyboard target when clicking menu-bar entries, so closing
+  a menu restores application shortcuts. Covered by 0.2.0-SNAPSHOT.
+
 - Keep borderless round socket fills compact with a zoom-proportional inset;
   preserve their layout and picking bounds. Keep the inner event-port diamond
   visible independently of transparent outlines. Covered by 0.2.0-SNAPSHOT.
