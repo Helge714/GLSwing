@@ -183,15 +183,20 @@ public final class GLNodePort extends GLContainer {
 				context.drawPolygon(points, style.portBorder());
                 if(shape == Shape.DOUBLE_DIAMOND){
                     float inner=radius*Math.max(.15f,Math.min(.65f,getGLTheme().values().getFloat("node.portEventInnerScale",.36f)));
-                    context.fillPolygon(new float[]{x,y-inner,x+inner,y,x,y+inner,x-inner,y},style.portBorder());
+                    // The event marker conveys port type, independently of decorative outlines.
+                    Color marker = style.portBorder().getAlpha() == 0 ? style.background() : style.portBorder();
+                    context.fillPolygon(new float[]{x,y-inner,x+inner,y,x,y+inner,x-inner,y},marker);
                 }
 			} finally { context.setStroke(stroke); }
 			return;
 		}
         // An invisible screen-space inner border still eats into the fill at low zoom.
-        if (style.portBorder().getAlpha() == 0)
-            context.fillUIRoundRect(0, 0, getWidth(), getHeight(), diameter * .5f, fill);
-        else
+        if (style.portBorder().getAlpha() == 0) {
+            // Retain a compact silhouette with a world-space inset, independent of zoom.
+            float inset = Math.min(diameter * .5f, style.borderWidth() * .5f);
+            context.fillUIRoundRect(inset, inset, Math.max(0, getWidth() - inset * 2),
+                    Math.max(0, getHeight() - inset * 2), Math.max(0, diameter * .5f - inset), fill);
+        } else
             context.fillAndDrawUIRoundRect(0, 0, getWidth(), getHeight(),
                     diameter * .5f, Math.max(1, style.borderWidth()), fill,
                     style.portBorder(), GLStroke.WidthSpace.WORLD);

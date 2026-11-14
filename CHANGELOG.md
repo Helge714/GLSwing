@@ -1,5 +1,9 @@
 # Changelog
 
+- Keep borderless round socket fills compact with a zoom-proportional inset;
+  preserve their layout and picking bounds. Keep the inner event-port diamond
+  visible independently of transparent outlines. Covered by 0.2.0-SNAPSHOT.
+
 - Inherit connected scroll-viewport corner shapes, including straight shared edges.
   Keep round socket fills proportional at every zoom and support edge-to-edge
   node title backgrounds independently of text padding. Covered by 0.2.0-SNAPSHOT.
