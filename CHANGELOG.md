@@ -1,5 +1,9 @@
 # Changelog
 
+- Keep connected scroll-pane viewports flush with adjacent controls, suppressing
+  standalone padding and inner frames. Add optional visual-only diamond socket
+  scaling without changing round sockets or hit areas. Covered by 0.2.0-SNAPSHOT.
+
 - Build font atlases outside the shared cache monitor so background font warming
   does not stall unrelated render contexts. Texture ownership remains per context. Covered by 0.2.0-SNAPSHOT.
 

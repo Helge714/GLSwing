@@ -271,7 +271,9 @@ public final class GLScrollPane extends GLContainer {
 	}
 
 	private GLInsets contentInsets(GLScrollPaneStyle style) {
-		GLInsets padding = style.padding();
+		// Connected cells share their outer silhouette with adjacent controls.
+        if (getConnectedShape() != null) return new GLInsets(0, 0, 0, 0);
+        GLInsets padding = style.padding();
 		float border = layoutBorderWidth(style.borderWidth());
 		return new GLInsets(Math.max(padding.top(), border),
 				Math.max(padding.left(), border),
@@ -286,8 +288,12 @@ public final class GLScrollPane extends GLContainer {
 		return Math.max(0, radius - Math.min(horizontalInset, verticalInset));
 	}
 
+    private float viewportBorderWidth() {
+        return getConnectedShape() == null ? getGLStyle().viewportBorderWidth() : 0;
+    }
+
 	GLCornerRadii viewportContentCornerRadii() {
-		float border = Math.min(getGLStyle().viewportBorderWidth(),
+		float border = Math.min(viewportBorderWidth(),
 				Math.min(viewport.getWidth(), viewport.getHeight()) * 0.5f);
 		return inset(viewportBorderCornerRadii(), border);
 	}
@@ -358,7 +364,7 @@ public final class GLScrollPane extends GLContainer {
 				return;
 			GLScrollPaneStyle style = GLScrollPane.this.getGLStyle();
 			GLCornerRadii borderRadii = viewportBorderCornerRadii();
-			float border = Math.min(style.viewportBorderWidth(),
+			float border = Math.min(GLScrollPane.this.viewportBorderWidth(),
 					Math.min(getWidth(), getHeight()) * 0.5f);
 			float contentWidth = Math.max(0, getWidth() - border * 2);
 			float contentHeight = Math.max(0, getHeight() - border * 2);

@@ -576,3 +576,6 @@ node.portEventInnerScale=.36
 
 # Remote editor drivers
 driver.borderWidth=1.5
+
+# Visual-only scale; socket layout and picking bounds remain unchanged.
+@NUMBER node.portDiamondScale=1

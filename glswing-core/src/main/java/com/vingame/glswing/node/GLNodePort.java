@@ -172,7 +172,9 @@ public final class GLNodePort extends GLContainer {
 				? style.portHover() : getColor();
 		float diameter = Math.min(getWidth(), getHeight());
 		if (shape == Shape.DIAMOND || shape == Shape.DOUBLE_DIAMOND) {
-			float x = getWidth() / 2, y = getHeight() / 2, radius = diameter / 2 * 1.12f;
+			float scale = shape == Shape.DIAMOND
+                    ? Math.max(.1f, Math.min(1f, getGLTheme().values().getFloat("node.portDiamondScale", 1f))) : 1f;
+            float x = getWidth() / 2, y = getHeight() / 2, radius = diameter / 2 * 1.12f * scale;
 			float[] points = {x, y - radius, x + radius, y, x, y + radius, x - radius, y};
 			var stroke = context.getStroke();
 			try {

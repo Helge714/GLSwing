@@ -3,6 +3,20 @@ import static org.junit.jupiter.api.Assertions.*;
 import org.junit.jupiter.api.Test;
 import com.vingame.glswing.rendering.GLContext2D;
 class GLScrollPaneEmptyViewportTest {
+    @Test void connectedViewportFillsItsCellAndRestoresStandalonePadding(){
+        var pane=new GLScrollPane(new GLLabel("Content"));
+        pane.setGLTheme(GLThemeLoader.loadResource("/com/vingame/glswing/themes/default.gltheme"));
+        pane.setHorizontalScrollBarPolicy(GLScrollPane.ScrollBarPolicy.NEVER);
+        pane.setVerticalScrollBarPolicy(GLScrollPane.ScrollBarPolicy.NEVER);
+        var viewport=pane.getGLChildren().stream().filter(c->c.getClass().getSimpleName().equals("Viewport")).findFirst().orElseThrow();
+        Object owner=new Object();
+        pane.setConnectedShape(owner,new com.vingame.glswing.rendering.GLCornerRadii(0,0,0,0));
+        pane.setBounds(0,0,240,80);
+        assertEquals(0,viewport.getX());assertEquals(0,viewport.getY());
+        assertEquals(240,viewport.getWidth());assertEquals(80,viewport.getHeight());
+        pane.setConnectedShape(owner,null);pane.setBounds(0,0,241,81);
+        assertTrue(viewport.getX()>0);assertTrue(viewport.getY()>0);
+    }
     @Test void emptyViewportDoesNotSubmitInvalidHitGeometry()throws Exception{
         var pane=new GLScrollPane(new GLLabel("Content"));
         var viewport=pane.getGLChildren().stream().filter(c->c.getClass().getSimpleName().equals("Viewport")).findFirst().orElseThrow();
