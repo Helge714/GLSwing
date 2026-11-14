@@ -17,7 +17,8 @@ public class GLCurveEditor extends GLControl {
     public void setContextMenuCustomizer(Consumer<GLPopupMenu> customizer){contextMenuCustomizer=java.util.Objects.requireNonNull(customizer);}
     private Runnable beginEdit=()->{},endEdit=()->{};
     private boolean preview,large,gesture,fixedPointPositions;
-    private int selected=-1,dragHandle;
+    private int selected=-1,dragHandle,gridColumns=4;
+    private float plotPadding=Float.NaN;
     private double zeroX=Double.NaN,zeroY=Double.NaN,marker=Double.NaN;
     public GLCurveEditor() { metrics(); setToolTipText("Double-click: add point · Drag: move · Shift: grid · Right-click: segment options · Delete: remove"); }
     public GLFunctionCurve getCurve(){return curve;}
@@ -35,12 +36,15 @@ public class GLCurveEditor extends GLControl {
     public boolean isPreview(){return preview;}
     public void setPreview(boolean value){if(preview==value)return; finish();preview=value;setFocusable(!value);metrics();invalidateRecording();}
     public void setLarge(boolean value){large=value;metrics();}
+    public int getGridColumns(){return gridColumns;}
+    public void setGridColumns(int value){if(value<1||value>64)throw new IllegalArgumentException("Grid columns must be 1..64");if(gridColumns!=value){gridColumns=value;invalidateRecording();}}
+    public void setPlotPadding(float value){if(!Float.isFinite(value)||value<0)throw new IllegalArgumentException("Finite nonnegative plot padding required");if(Float.compare(plotPadding,value)!=0){plotPadding=value;invalidateRecording();}}
     public void setAxes(double x,double y){if(zeroX==x&&zeroY==y)return;zeroX=x;zeroY=y;invalidateRecording();}
-    public void setMarker(double x){if(marker==x)return;marker=x;invalidateRecording();}
+    public void setMarker(double x){if(Double.compare(marker,x)==0)return;marker=x;invalidateRecording();}
     private float metric(String name,float fallback){float v=getGLTheme().values().getFloat("curve."+name,fallback);return Float.isFinite(v)&&v>0?v:fallback;}
     private void metrics(){setIntrinsicPreferredGLSize(new GLSize(metric("width",160),metric(preview?"previewHeight":large?"inspectorHeight":"height",preview?36:large?200:120)));}
     @Override protected void themeChanged(){super.themeChanged();metrics();invalidateRecording();}
-    private float pad(){return Math.min(metric("padding",9),Math.min(getWidth(),getHeight())/4);}
+    private float pad(){return Math.min(Float.isNaN(plotPadding)?metric("padding",9):plotPadding,Math.min(getWidth(),getHeight())/4);}
     private float px(double x){return pad()+(float)x*Math.max(1,getWidth()-2*pad());}
     private float py(double y){return getHeight()-pad()-(float)y*Math.max(1,getHeight()-2*pad());}
     private double nx(GLMouseEvent e){return GLFunctionCurve.clamp((e.getLocalX()-pad())/Math.max(1,getWidth()-2*pad()),0,1);}
@@ -52,7 +56,10 @@ public class GLCurveEditor extends GLControl {
         c.fillUIRoundRect(0,0,getWidth(),getHeight(),style.cornerRadius(),color("background",style.background()));
         c.beginClip(0,0,getWidth(),getHeight());
         Color grid=color("grid",style.borderColor()),line=color("line",style.progressLightColor()),handle=color("handle",style.textColor());
-        if(!preview) for(int i=1;i<4;i++){c.drawLine(px(i/4.0),py(0),px(i/4.0),py(1),grid);c.drawLine(px(0),py(i/4.0),px(1),py(i/4.0),grid);}
+        if(!preview){
+            for(int i=1;i<gridColumns;i++)c.drawLine(px(i/(double)gridColumns),py(0),px(i/(double)gridColumns),py(1),grid);
+            for(int i=1;i<4;i++)c.drawLine(px(0),py(i/4.0),px(1),py(i/4.0),grid);
+        }
         if(zeroX>=0&&zeroX<=1)c.drawLine(px(zeroX),py(0),px(zeroX),py(1),handle);
         if(zeroY>=0&&zeroY<=1)c.drawLine(px(0),py(zeroY),px(1),py(zeroY),handle);
         if(marker>=0&&marker<=1)c.drawLine(px(marker),py(0),px(marker),py(1),getGLTheme().values().getColor("curve.marker"));
@@ -70,7 +77,12 @@ public class GLCurveEditor extends GLControl {
                 if(selected<pts.size()-1&&p.mode()==GLFunctionCurve.Mode.BEZIER)handle(c,p.x(),p.y(),p.outX(),p.outY(),handle);
             }
             float radius=metric("pointRadius",3);
-            for(int i=0;i<pts.size();i++){var p=pts.get(i);c.fillUIRoundRect(px(p.x())-radius,py(p.y())-radius,radius*2,radius*2,radius,i==selected?handle:line);}
+            for(int i=0;i<pts.size();i++){
+                var p=pts.get(i);var mode=i==pts.size()-1?pts.get(i-1).mode():p.mode();
+                float x=px(p.x()),y=py(p.y());Color fill=i==selected?handle:line;
+                if(mode==GLFunctionCurve.Mode.STEP)c.fillPolygon(new float[]{x,y-radius,x+radius,y,x,y+radius,x-radius,y},fill);
+                else c.fillUIRoundRect(x-radius,y-radius,radius*2,radius*2,mode==GLFunctionCurve.Mode.BEZIER?radius:0,fill);
+            }
         }
         c.endClip();
     }

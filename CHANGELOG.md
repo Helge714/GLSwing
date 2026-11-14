@@ -1,5 +1,9 @@
 # Changelog
 
+- Distinguish Bezier, linear and step curve points with circles, squares and
+  diamonds. Let phase editors set grid divisions and align the plot to its edges.
+  Covered by 0.2.0-SNAPSHOT.
+
 - Show curve points and Bezier handles only while hovered or focused. Add fixed
   point X positions/topology for phase editors while retaining handle shaping.
   Covered by 0.2.0-SNAPSHOT.

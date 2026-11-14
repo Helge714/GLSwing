@@ -35,6 +35,21 @@ class GLCurveEditorTest {
             editor.keyPressed(new com.vingame.glswing.input.GLKeyEvent(new java.awt.event.KeyEvent(new java.awt.Canvas(),java.awt.event.KeyEvent.KEY_PRESSED,0,0,java.awt.event.KeyEvent.VK_DELETE,'\u007f')));assertEquals(3,editor.getCurve().points().size());
         });
     }
+    @Test @org.junit.jupiter.api.condition.EnabledIfSystemProperty(named="glswing.test.gl",matches="true")
+    void pointGlyphsDistinguishModesIncludingTheFinalEndpoint()throws Exception{
+        javax.swing.SwingUtilities.invokeAndWait(()->{
+            for(var mode:GLFunctionCurve.Mode.values()){
+                var editor=new GLCurveEditor();editor.setBounds(0,0,200,120);
+                editor.setCurve(GLFunctionCurve.identity().insert(.5,.5).mode(0,mode).mode(1,mode));
+                var plain=com.vingame.glswing.rendering.GLComponentImageCapture.capture(editor,200,120,800,480,false);
+                editor.focusGained();var marked=com.vingame.glswing.rendering.GLComponentImageCapture.capture(editor,200,120,800,480,false);
+                assertEquals(mode==GLFunctionCurve.Mode.LINEAR,plain.getRGB(410,250)!=marked.getRGB(410,250),mode.name());
+                assertEquals(mode!=GLFunctionCurve.Mode.STEP,plain.getRGB(407,247)!=marked.getRGB(407,247),mode.name());
+                assertNotEquals(plain.getRGB(404,244),marked.getRGB(404,244),mode.name());
+                assertEquals(mode==GLFunctionCurve.Mode.LINEAR,plain.getRGB(774,46)!=marked.getRGB(774,46),"Final point: "+mode);
+            }
+        });
+    }
     @Test void stepSegmentsAndMonotoneBezierHandles(){
         var curve=GLFunctionCurve.identity().insert(.5,.75).mode(0,GLFunctionCurve.Mode.STEP);
         assertEquals(0,curve.evaluate(.499999));assertEquals(.75,curve.evaluate(.5));
