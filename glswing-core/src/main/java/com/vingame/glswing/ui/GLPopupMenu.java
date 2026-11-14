@@ -252,6 +252,19 @@ public class GLPopupMenu extends GLContainer {
 		return addItem(item);
 	}
 
+    /** Gives modal popup sessions first refusal, including when the old focus was a text editor. */
+    public static boolean handleOpenKeyPressed(GLParent host, java.awt.event.KeyEvent event) {
+        MenuSession current;
+        synchronized (ACTIVE) {
+            WeakReference<MenuSession> reference = ACTIVE.get(host);
+            current = reference == null ? null : reference.get();
+        }
+        if (current == null || current.closed || !current.rootMenu.outsideInputBlocked) return false;
+        if (event.getKeyCode() == java.awt.event.KeyEvent.VK_ESCAPE) current.close(true);
+        else activateOpenMnemonic(host, event.getKeyCode(), event.getModifiersEx());
+        event.consume();return true;
+    }
+
 	static boolean activateOpenMnemonic(GLParent host, int keyCode,
 			int actualModifiers) {
 		MenuSession current;

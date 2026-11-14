@@ -777,6 +777,10 @@ public abstract class GLContainer implements GLParent, GLMouseTarget, Accessible
 			parent.requestGLFocus(target);
 	}
 
+    @Override public final GLKeyboardManager getGLKeyboardManager() {
+        return glParent == null ? null : glParent.getGLKeyboardManager();
+    }
+
 	@Override
 	public final GLKeyTarget getGLFocusOwner() {
 		GLParent parent = glParent;

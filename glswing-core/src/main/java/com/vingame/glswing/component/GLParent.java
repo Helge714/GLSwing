@@ -92,6 +92,9 @@ public interface GLParent {
 	/** Nearest semantic input map inherited by children. */
 	GLInputMap getGLInputMap();
 
+    /** Window-owned command router, inherited by retained children. */
+    default GLKeyboardManager getGLKeyboardManager() { return null; }
+
 	void requestGLFocus(GLKeyTarget target);
 
 	/** Returns the lightweight control that currently owns keyboard focus. */

@@ -1,5 +1,10 @@
 # Changelog
 
+- Centralize command routing across panel and canvas hosts: retain focus-local
+  handling, allow declared hover commands and a configured default area, and
+  suppress fallback during text/exclusive input. Skip hidden/detached targets
+  and invoke shared ancestors at most once. Covered by 0.2.0-SNAPSHOT.
+
 - Preserve the prior keyboard target when clicking menu-bar entries, so closing
   a menu restores application shortcuts. Covered by 0.2.0-SNAPSHOT.
 

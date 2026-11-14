@@ -515,6 +515,9 @@ public abstract class GLSwingPanel extends GLJPanel
 		repaintColorOnly();
 	}
 
+    private final GLKeyboardManager keyboardManager = new GLKeyboardManager(this);
+    @Override public final GLKeyboardManager getGLKeyboardManager() { return keyboardManager; }
+
 	@Override
 	public final GLKeyTarget getGLFocusOwner() { return focusedTarget; }
 
@@ -1150,10 +1153,11 @@ public abstract class GLSwingPanel extends GLJPanel
 		addKeyListener(new KeyAdapter() {
 			@Override
 			public void keyPressed(KeyEvent event) {
+                if (com.vingame.glswing.ui.GLPopupMenu.handleOpenKeyPressed(GLSwingPanel.this,event)) return;
                 if(focusedTarget!=null && focusedTarget.isKeyboardInputExclusive()){dispatchKey(event,KeyDispatch.PRESSED);event.consume();return;}
 				GLInputMap resolvedInputMap = focusedTarget instanceof GLContainer container
 						? container.getGLInputMap() : inputMap;
-				if (GLMenuMnemonics.handleKeyPressed(GLSwingPanel.this, event,
+				if ((focusedTarget==null || !focusedTarget.blocksGlobalShortcuts()) && GLMenuMnemonics.handleKeyPressed(GLSwingPanel.this, event,
 						resolvedInputMap)) {
 					repaintColorOnly();
 					return;
@@ -1166,7 +1170,7 @@ public abstract class GLSwingPanel extends GLJPanel
 				}
 				GLHistoryManager history = focusedTarget instanceof GLContainer container
 						? container.getGLHistoryManager() : historyManager;
-				if (history != null && history.handleKeyPressed(event, resolvedInputMap)) {
+				if (history != null && (focusedTarget==null || !focusedTarget.blocksGlobalShortcuts()) && history.handleKeyPressed(event, resolvedInputMap)) {
 					repaintColorOnly();
 					return;
 				}
@@ -1198,50 +1202,22 @@ public abstract class GLSwingPanel extends GLJPanel
 		});
 	}
 
-	private void dispatchKey(KeyEvent event, KeyDispatch dispatch) {
-		GLKeyTarget target = focusedTarget;
-		if (target == null)
-			return;
-		if (!(target instanceof GLContainer container)
-				|| !belongsToPanel(container) || !target.isFocusTraversable()) {
-			requestGLFocus(null);
-			return;
-		}
-		com.vingame.glswing.input.GLKeyEvent glEvent =
-				new com.vingame.glswing.input.GLKeyEvent(event);
-		switch (dispatch) {
-		case PRESSED -> dispatchKeyPressed(target, glEvent);
-		case RELEASED -> target.keyReleased(glEvent);
-		case TYPED -> target.keyTyped(glEvent);
-		}
-		repaintColorOnly();
-	}
+    private void dispatchKey(KeyEvent event, KeyDispatch dispatch) {
+        GLKeyTarget target = focusedTarget;
+        var glEvent = new com.vingame.glswing.input.GLKeyEvent(event);
+        if (dispatch == KeyDispatch.PRESSED) {
+            this.getGLKeyboardManager().dispatchPressed(target, hoverPick.getTarget(), glEvent);
+        } else if (target instanceof GLContainer container && target.isFocusTraversable()
+                && belongsToPanel(container)) {
+            if (dispatch == KeyDispatch.RELEASED) target.keyReleased(glEvent);
+            else target.keyTyped(glEvent);
+        }
+        repaintColorOnly();
+    }
 
-	private static void dispatchKeyPressed(GLKeyTarget target,
-			com.vingame.glswing.input.GLKeyEvent event) {
-        if(target.isKeyboardInputExclusive()){target.keyPressed(event);event.consume();return;}
-		if (target instanceof GLContainer focused) {
-			for (GLParent parent = focused.getGLParent();
-					parent instanceof GLContainer ancestor;
-					parent = ancestor.getGLParent())
-				if (ancestor instanceof GLKeyPressCaptureTarget capture
-						&& capture.capturesKeyPress(event)) {
-					capture.keyPressed(event);
-					if (event.isConsumed()) return;
-				}
-		}
-		target.keyPressed(event);
-		if (event.isConsumed() || !(target instanceof GLContainer container))
-			return;
-		for (GLParent parent = container.getGLParent();
-				parent instanceof GLContainer ancestor;
-				parent = ancestor.getGLParent()) {
-			if (ancestor instanceof GLKeyTarget keyTarget)
-				keyTarget.keyPressed(event);
-			if (event.isConsumed())
-				return;
-		}
-	}
+    private static void dispatchKeyPressed(GLKeyTarget target, com.vingame.glswing.input.GLKeyEvent event) {
+        GLKeyboardManager.dispatchChain(target, event);
+    }
 
 	private void focusNext(boolean backwards) {
 		List<GLKeyTarget> targets = new ArrayList<>();

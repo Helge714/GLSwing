@@ -303,6 +303,9 @@ public abstract class GLSwingContainerCanvas extends GLSwingCanvas
 		repaintColorOnly();
 	}
 
+    private final GLKeyboardManager keyboardManager = new GLKeyboardManager(this);
+    @Override public final GLKeyboardManager getGLKeyboardManager() { return keyboardManager; }
+
 	@Override
 	public final GLKeyTarget getGLFocusOwner() { return focusedTarget; }
 
