@@ -1,5 +1,9 @@
 # Changelog
 
+- Join flush slider side buttons to the center value area with straight inner
+  edges and rounded outer corners. Preserve the shared slider interaction.
+  Covered by 0.2.0-SNAPSHOT.
+
 - Centralize command routing across panel and canvas hosts: retain focus-local
   handling, allow declared hover commands and a configured default area, and
   suppress fallback during text/exclusive input. Skip hidden/detached targets

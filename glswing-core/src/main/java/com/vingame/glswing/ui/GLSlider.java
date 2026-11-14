@@ -662,7 +662,8 @@ public class GLSlider extends GLControl {
 				Math.min(getWidth(), getHeight()) * 0.5f);
 		float outerRadius = Math.max(0,
 				Math.min(buttonHeight * 0.5f, effectiveSliderRadius - inset));
-		float innerRadius = Math.min(outerRadius, buttonWidth * 0.25f);
+		// Flush side buttons share straight seams with the central value area.
+        float innerRadius = inset > 0 ? Math.min(outerRadius, buttonWidth * 0.25f) : 0;
 		float topOuterRadius = (left ? sliderRadii.topLeft()
 				: sliderRadii.topRight()) > 0 ? outerRadius : 0;
 		float bottomOuterRadius = (left ? sliderRadii.bottomLeft()
