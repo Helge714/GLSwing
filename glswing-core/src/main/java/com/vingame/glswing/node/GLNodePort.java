@@ -188,9 +188,13 @@ public final class GLNodePort extends GLContainer {
 			} finally { context.setStroke(stroke); }
 			return;
 		}
-		context.fillAndDrawUIRoundRect(0, 0, getWidth(), getHeight(),
-				diameter * 0.5f, Math.max(1, style.borderWidth()), fill,
-				style.portBorder(), GLStroke.WidthSpace.SCREEN);
+        // An invisible screen-space inner border still eats into the fill at low zoom.
+        if (style.portBorder().getAlpha() == 0)
+            context.fillUIRoundRect(0, 0, getWidth(), getHeight(), diameter * .5f, fill);
+        else
+            context.fillAndDrawUIRoundRect(0, 0, getWidth(), getHeight(),
+                    diameter * .5f, Math.max(1, style.borderWidth()), fill,
+                    style.portBorder(), GLStroke.WidthSpace.WORLD);
 	}
 
 	@Override

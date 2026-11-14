@@ -1,5 +1,9 @@
 # Changelog
 
+- Inherit connected scroll-viewport corner shapes, including straight shared edges.
+  Keep round socket fills proportional at every zoom and support edge-to-edge
+  node title backgrounds independently of text padding. Covered by 0.2.0-SNAPSHOT.
+
 - Keep connected scroll-pane viewports flush with adjacent controls, suppressing
   standalone padding and inner frames. Add optional visual-only diamond socket
   scaling without changing round sockets or hit areas. Covered by 0.2.0-SNAPSHOT.

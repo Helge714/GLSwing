@@ -419,7 +419,7 @@ public class GLNode extends GLContainer {
 		context.fillUIRoundRect(0, 0, width, height,
 				style.cornerRadius(), style.background());
 
-		float border = style.borderWidth();
+		float border = Math.max(0, getGLTheme().values().getFloat("node.titleInset", style.borderWidth()));
 		float innerWidth = Math.max(0, width - border * 2);
 		float titleHeight = Math.min(style.titleHeight(),
 				Math.max(0, height - border));

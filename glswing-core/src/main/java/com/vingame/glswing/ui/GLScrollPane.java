@@ -299,19 +299,18 @@ public final class GLScrollPane extends GLContainer {
 	}
 
 	private GLCornerRadii viewportBorderCornerRadii() {
-		float radius = getGLStyle().cornerRadius();
-		float leftInset = viewport.getX();
-		float topInset = viewport.getY();
-		float rightInset = Math.max(0, getWidth()
-				- viewport.getX() - viewport.getWidth());
-		float bottomInset = Math.max(0, getHeight()
-				- viewport.getY() - viewport.getHeight());
-		return new GLCornerRadii(
-				innerCornerRadius(radius, leftInset, topInset),
-				innerCornerRadius(radius, rightInset, topInset),
-				innerCornerRadius(radius, rightInset, bottomInset),
-				innerCornerRadius(radius, leftInset, bottomInset));
-	}
+        float radius = getGLStyle().cornerRadius();
+        GLCornerRadii outer = getConnectedShape();
+        if (outer == null) outer = new GLCornerRadii(radius, radius, radius, radius);
+        float leftInset = viewport.getX(), topInset = viewport.getY();
+        float rightInset = Math.max(0, getWidth() - viewport.getX() - viewport.getWidth());
+        float bottomInset = Math.max(0, getHeight() - viewport.getY() - viewport.getHeight());
+        return new GLCornerRadii(
+                innerCornerRadius(outer.topLeft(), leftInset, topInset),
+                innerCornerRadius(outer.topRight(), rightInset, topInset),
+                innerCornerRadius(outer.bottomRight(), rightInset, bottomInset),
+                innerCornerRadius(outer.bottomLeft(), leftInset, bottomInset));
+    }
 
 	private static GLCornerRadii inset(GLCornerRadii radii, float amount) {
 		return new GLCornerRadii(
