@@ -1,5 +1,8 @@
 # Changelog
 
+- Reduce borderless round socket glyphs by a further five percent, retaining
+  zoom-proportional sizing and unchanged hit areas. Covered by 0.2.0-SNAPSHOT.
+
 - Render zero-width combined UI borders as plain fills, preserving asymmetric
   corners. Fix repeated render exceptions from borderless popup themes; invalid
   negative/non-finite widths remain rejected. Covered by 0.2.0-SNAPSHOT.

@@ -193,7 +193,9 @@ public final class GLNodePort extends GLContainer {
         // An invisible screen-space inner border still eats into the fill at low zoom.
         if (style.portBorder().getAlpha() == 0) {
             // Retain a compact silhouette with a world-space inset, independent of zoom.
-            float inset = Math.min(diameter * .5f, style.borderWidth() * .5f);
+            float borderInset = Math.min(diameter * .5f, style.borderWidth() * .5f);
+            float visibleDiameter = (diameter - borderInset * 2) * .95f;
+            float inset = (diameter - visibleDiameter) * .5f;
             context.fillUIRoundRect(inset, inset, Math.max(0, getWidth() - inset * 2),
                     Math.max(0, getHeight() - inset * 2), Math.max(0, diameter * .5f - inset), fill);
         } else
