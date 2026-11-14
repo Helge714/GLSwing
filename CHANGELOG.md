@@ -1,5 +1,9 @@
 # Changelog
 
+- Workspace Arrange retains rough user rows and columns while resolving overlaps
+  and respecting signal flow and group boundaries. The compact layout API remains
+  available. No document format change. Covered by 0.2.0-SNAPSHOT.
+
 - Preserve graph screen placement when toggling the workspace inspector,
   compensating for zoom-centered viewport resizing. Covered by 0.2.0-SNAPSHOT.
 

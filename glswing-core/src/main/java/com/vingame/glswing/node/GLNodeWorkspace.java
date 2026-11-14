@@ -673,7 +673,7 @@ public final class GLNodeWorkspace extends GLContainer
     public void arrangeAll() {
         if(binding==null||editor.getNodes().isEmpty())return;
         var document=documents.peekLast();var before=captureActiveViewState();
-        GLNodeAutoLayout.arrange(editor);var after=captureActiveViewState();
+        GLNodeAutoLayout.arrangePreservingOrder(editor);var after=captureActiveViewState();
         if(before.equals(after))return;
         document.viewState=after;persistDocumentAsset(document);
         if(history!=null)history.record("Arrange all nodes",()->restoreArrangement(document,before),()->restoreArrangement(document,after));

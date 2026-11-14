@@ -9,7 +9,12 @@ public final class GLNodeAutoLayout {
     private GLNodeAutoLayout() { }
 
     public static void arrange(GLNodeEditor editor) {
-        if (!editor.getNodes().isEmpty()) new Layout(editor).run();
+        if (!editor.getNodes().isEmpty()) new Layout(editor,false).run();
+    }
+
+    /** Align a user's rough rows/columns while retaining left-to-right signal flow. */
+    public static void arrangePreservingOrder(GLNodeEditor editor) {
+        if (!editor.getNodes().isEmpty()) new Layout(editor,true).run();
     }
 
     private static final class Vertex {
@@ -28,7 +33,8 @@ public final class GLNodeAutoLayout {
     private static final class Block {
         final List<Vertex> nodes=new ArrayList<>();
         final List<Link> in=new ArrayList<>(),out=new ArrayList<>();
-        int order,rank;
+        int order,rank,row;
+        double originalX,originalY;
         double x,y,w,h;
     }
     private record Link(Edge edge,Block a,Block b) {
@@ -64,7 +70,9 @@ public final class GLNodeAutoLayout {
         final List<Vertex> nodes=new ArrayList<>();
         final List<Component> components=new ArrayList<>();
         final double hg,vg,aspect,originX,originY;
-        Layout(GLNodeEditor editor) {
+        final boolean preserve;
+        Layout(GLNodeEditor editor,boolean preserve) {
+            this.preserve=preserve;
             hg=editor.getHorizontalNodeSpacing();vg=editor.getVerticalNodeSpacing();
             aspect=editor.getWidth()>0&&editor.getHeight()>0?Math.max(.5,Math.min(3,editor.getWidth()/editor.getHeight())):1.6;
             var byNode=new IdentityHashMap<GLNode,Vertex>();
@@ -124,6 +132,8 @@ public final class GLNodeAutoLayout {
                     for(var e:v.in)if(e.a.role==Role.NORMAL&&e.a.block==null){e.a.block=block;pending.push(e.a);}
                 }
                 block.nodes.sort(Comparator.comparingInt(v->v.order));block.order=block.nodes.get(0).order;
+                block.originalX=block.nodes.stream().mapToDouble(v->v.node.getX()).min().orElse(0);
+                block.originalY=block.nodes.stream().mapToDouble(v->v.node.getY()).min().orElse(0);
                 arrangeCycle(block);result.add(block);
             }
             result.sort(Comparator.comparingInt(b->b.order));return result;
@@ -161,13 +171,20 @@ public final class GLNodeAutoLayout {
             for(var v:c.nodes)for(var e:v.out)if(e.b.role==Role.NORMAL&&e.a.block!=e.b.block) {
                 var link=new Link(e,e.a.block,e.b.block);c.links.add(link);link.a.out.add(link);link.b.in.add(link);
             }
+            if(preserve)seedColumns(c);
             var degree=new HashMap<Block,Integer>();var ready=new PriorityQueue<Block>(Comparator.comparingInt(b->b.order));
             for(var b:c.blocks){degree.put(b,b.in.size());if(b.in.isEmpty())ready.add(b);}
             var order=new ArrayList<Block>();
             while(!ready.isEmpty()){var b=ready.remove();order.add(b);for(var e:b.out){e.b.rank=Math.max(e.b.rank,b.rank+1);if(degree.merge(e.b,-1,Integer::sum)==0)ready.add(e.b);}}
             // Move short modulation/source branches close to their first consumer.
-            for(int i=order.size()-1;i>=0;i--){var b=order.get(i);if(!b.out.isEmpty())b.rank=b.out.stream().mapToInt(e->e.b.rank-1).min().orElse(b.rank);}
+            for(int i=preserve?-1:order.size()-1;i>=0;i--){var b=order.get(i);if(!b.out.isEmpty())b.rank=b.out.stream().mapToInt(e->e.b.rank-1).min().orElse(b.rank);}
             var layers=new TreeMap<Integer,List<Block>>();for(var b:c.blocks)layers.computeIfAbsent(b.rank,k->new ArrayList<>()).add(b);c.layers.addAll(layers.values());
+            if(preserve){
+                seedRows(c);place(c);
+                c.w=c.blocks.stream().mapToDouble(b->b.x+b.w).max().orElse(0);
+                c.h=c.blocks.stream().mapToDouble(b->b.y+b.h).max().orElse(0);
+                return;
+            }
             place(c);var best=score(c);var bestOrder=copy(c.layers);
             for(int pass=0;pass<8;pass++) {
                 final boolean forward=pass%2==0;
@@ -190,7 +207,36 @@ public final class GLNodeAutoLayout {
             c.w=c.blocks.stream().mapToDouble(b->b.x+b.w).max().orElse(0);c.h=c.blocks.stream().mapToDouble(b->b.y+b.h).max().orElse(0);
         }
 
+        // Overlapping rough positions form bands; large empty distances are discarded.
+        void seedColumns(Component c) {
+            var sorted=new ArrayList<>(c.blocks);sorted.sort(Comparator.comparingDouble((Block b)->b.originalX).thenComparingInt(b->b.order));
+            Block anchor=null;int column=0;
+            for(var b:sorted){
+                if(anchor==null)anchor=b;
+                else if(b.originalX-anchor.originalX>=Math.max(1,Math.min(anchor.w,b.w)*.5)){column++;anchor=b;}
+                b.rank=column;
+            }
+        }
+        void seedRows(Component c) {
+            var sorted=new ArrayList<>(c.blocks);sorted.sort(Comparator.comparingDouble((Block b)->b.originalY).thenComparingDouble(b->b.originalX).thenComparingInt(b->b.order));
+            var occupied=new HashMap<Integer,BitSet>();Block anchor=null;int row=0;
+            for(var b:sorted){
+                if(anchor==null)anchor=b;
+                else if(b.originalY-anchor.originalY>=Math.max(1,Math.min(anchor.h,b.h)*.5)){row++;anchor=b;}
+                var used=occupied.computeIfAbsent(b.rank,k->new BitSet());b.row=used.nextClearBit(row);used.set(b.row);
+            }
+            for(var layer:c.layers)layer.sort(Comparator.comparingInt((Block b)->b.row).thenComparingInt(b->b.order));
+        }
         void place(Component c) {
+            if(preserve){
+                int count=c.blocks.stream().mapToInt(b->b.row).max().orElse(0)+1;
+                double[] heights=new double[count],tops=new double[count];
+                for(var b:c.blocks)heights[b.row]=Math.max(heights[b.row],b.h);
+                for(int i=1;i<count;i++)tops[i]=tops[i-1]+heights[i-1]+vg;
+                double left=0;
+                for(var layer:c.layers){double width=0;for(var b:layer){b.x=left;b.y=tops[b.row];width=Math.max(width,b.w);}left+=width+hg;}
+                return;
+            }
             double x=0;
             for(var layer:c.layers){double y=0,width=0;for(var b:layer){b.x=x;b.y=y;y+=b.h+vg;width=Math.max(width,b.w);}x+=width+hg;}
             for(int pass=0;pass<12;pass++) {
@@ -243,6 +289,7 @@ public final class GLNodeAutoLayout {
 
         void pack() {
             if(components.isEmpty())return;
+            if(preserve){packRows();return;}
             double area=components.stream().mapToDouble(c->(c.w+hg)*(c.h+vg)).sum();
             double widest=components.stream().mapToDouble(c->c.w).max().orElse(0),natural=Math.sqrt(area*aspect),best=Double.POSITIVE_INFINITY;
             double selected=widest;
@@ -255,6 +302,24 @@ public final class GLNodeAutoLayout {
             }
             shelf(selected);
         }
+        void packRows(){
+            components.sort(Comparator.comparingDouble((Component c)->originalY(c)).thenComparingDouble(c->originalX(c)).thenComparingInt(c->c.order));
+            var row=new ArrayList<Component>();Component anchor=null;double top=0;
+            for(var c:components){
+                if(anchor!=null&&(anchor.boundaryConnected||c.boundaryConnected||originalY(c)-originalY(anchor)>=Math.max(1,Math.min(originalHeight(anchor),originalHeight(c))*.5))){
+                    top=placeRow(row,top);row.clear();anchor=null;
+                }
+                if(anchor==null)anchor=c;row.add(c);
+            }
+            placeRow(row,top);
+        }
+        double placeRow(List<Component> row,double top){
+            row.sort(Comparator.comparingDouble((Component c)->originalX(c)).thenComparingInt(c->c.order));
+            double left=0,height=0;for(var c:row){c.x=left;c.y=top;left+=c.w+hg;height=Math.max(height,c.h);}return top+height+vg;
+        }
+        double originalX(Component c){return c.nodes.stream().mapToDouble(v->v.node.getX()).min().orElse(0);}
+        double originalY(Component c){return c.nodes.stream().mapToDouble(v->v.node.getY()).min().orElse(0);}
+        double originalHeight(Component c){return c.nodes.stream().mapToDouble(v->v.node.getY()+v.h).max().orElse(0)-originalY(c);}
         /** Bottom-left skyline packing also fills space beside taller components. */
         double[] shelf(double width) {
             var skyline=new ArrayList<Shelf>();skyline.add(new Shelf(0,width+hg,0));

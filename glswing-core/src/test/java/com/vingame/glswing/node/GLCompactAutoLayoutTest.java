@@ -20,6 +20,41 @@ class GLCompactAutoLayoutTest {
   }
  }
  private static void repeat(GLNodeEditor editor){var before=editor.getNodes().stream().map(GLNodeViewState::capture).toList();GLNodeAutoLayout.arrange(editor);assertEquals(before,editor.getNodes().stream().map(GLNodeViewState::capture).toList());}
+ private static void preserveRepeat(GLNodeEditor editor){var before=editor.getNodes().stream().map(GLNodeViewState::capture).toList();GLNodeAutoLayout.arrangePreservingOrder(editor);assertEquals(before,editor.getNodes().stream().map(GLNodeViewState::capture).toList());}
+ @Test void roughIndependentRowsAndColumnsSurviveRegardlessOfInsertionOrder(){
+  var e=new GLNodeEditor();var right=node(e,"Right",160,100);var below=node(e,"Below",140,80);var left=node(e,"Left",180,120);
+  right.setLocation(900,30);below.setLocation(60,800);left.setLocation(50,20);
+  GLNodeAutoLayout.arrangePreservingOrder(e);
+  assertEquals(left.getY(),right.getY());assertTrue(left.getX()<right.getX());assertTrue(below.getY()>left.getY()+left.getHeight());
+  clearances(e);preserveRepeat(e);
+  right.setLocation(left.getX()-600,left.getY());GLNodeAutoLayout.arrangePreservingOrder(e);
+  assertTrue(right.getX()<left.getX());clearances(e);preserveRepeat(e);
+ }
+ @Test void roughBranchOrderAndColumnsSurviveAndFlowStillWins(){
+  var e=new GLNodeEditor();var bottom=node(e,"Bottom",140,90);var top=node(e,"Top",150,120);var sink=node(e,"Sink",180,110);
+  bottom.setLocation(0,500);top.setLocation(0,0);sink.setLocation(600,0);wire(e,bottom,sink);wire(e,top,sink);
+  GLNodeAutoLayout.arrangePreservingOrder(e);assertTrue(top.getY()<bottom.getY());assertEquals(top.getX(),bottom.getX());assertTrue(sink.getX()>bottom.getX());clearances(e);preserveRepeat(e);
+  top.setLocation(sink.getX()+700,bottom.getY()+600);GLNodeAutoLayout.arrangePreservingOrder(e);
+  assertTrue(bottom.getY()<top.getY());assertTrue(sink.getX()>top.getX());clearances(e);preserveRepeat(e);
+ }
+ @Test void roughFeedbackAndMixedComponentSizesAreStable(){
+  var e=new GLNodeEditor();var a=node(e,"A",140,100);var b=node(e,"B",160,120);var c=node(e,"C",180,90);var loose=node(e,"Loose",110,80);
+  wire(e,a,b);wire(e,b,c);wire(e,c,a);a.setLocation(0,0);b.setLocation(300,0);c.setLocation(600,0);loose.setLocation(1200,0);
+  GLNodeAutoLayout.arrangePreservingOrder(e);clearances(e);preserveRepeat(e);assertTrue(loose.getX()>c.getX());
+ }
+ @Test void variedRoughGraphsRemainStableAndClear(){
+  var random=new Random(4817);
+  for(int trial=0;trial<40;trial++){
+   var e=new GLNodeEditor();var nodes=new ArrayList<GLNode>();
+   for(int i=0;i<18;i++){var n=node(e,"N"+i,100+random.nextInt(200),70+random.nextInt(200));n.setLocation(random.nextInt(5)*300,random.nextInt(5)*220);nodes.add(n);}
+   for(int i=0;i<18;i++)for(int j=i+1;j<18;j++)if(random.nextDouble()<.06)wire(e,nodes.get(i),nodes.get(j));
+   GLNodeAutoLayout.arrangePreservingOrder(e);clearances(e);preserveRepeat(e);
+  }
+ }
+ @Test void preservingOrderHandlesLargeLooseGraphsWithinABoundedTime(){
+  var e=new GLNodeEditor();for(int i=0;i<1000;i++){var n=node(e,"N"+i,120,80);n.setLocation((i%40)*300,(i/40)*200);}
+  assertTimeout(Duration.ofSeconds(10),()->GLNodeAutoLayout.arrangePreservingOrder(e));preserveRepeat(e);
+ }
  @Test void actualPortsAlignRatherThanNodeCenters(){
   var e=new GLNodeEditor();var a=node(e,"Tall",180,400);var b=node(e,"Short",140,100);wire(e,a,b);
   a.findPort("out").setBounds(174,310,12,12);b.findPort("in").setBounds(-6,22,12,12);
