@@ -33,7 +33,7 @@ public final class GLNodeAutoLayout {
     private static final class Block {
         final List<Vertex> nodes=new ArrayList<>();
         final List<Link> in=new ArrayList<>(),out=new ArrayList<>();
-        int order,rank,row;
+        int order,rank;
         double originalX,originalY;
         double x,y,w,h;
     }
@@ -171,16 +171,15 @@ public final class GLNodeAutoLayout {
             for(var v:c.nodes)for(var e:v.out)if(e.b.role==Role.NORMAL&&e.a.block!=e.b.block) {
                 var link=new Link(e,e.a.block,e.b.block);c.links.add(link);link.a.out.add(link);link.b.in.add(link);
             }
-            if(preserve)seedColumns(c);
             var degree=new HashMap<Block,Integer>();var ready=new PriorityQueue<Block>(Comparator.comparingInt(b->b.order));
             for(var b:c.blocks){degree.put(b,b.in.size());if(b.in.isEmpty())ready.add(b);}
             var order=new ArrayList<Block>();
             while(!ready.isEmpty()){var b=ready.remove();order.add(b);for(var e:b.out){e.b.rank=Math.max(e.b.rank,b.rank+1);if(degree.merge(e.b,-1,Integer::sum)==0)ready.add(e.b);}}
             // Move short modulation/source branches close to their first consumer.
-            for(int i=preserve?-1:order.size()-1;i>=0;i--){var b=order.get(i);if(!b.out.isEmpty())b.rank=b.out.stream().mapToInt(e->e.b.rank-1).min().orElse(b.rank);}
+            for(int i=order.size()-1;i>=0;i--){var b=order.get(i);if(!b.out.isEmpty())b.rank=b.out.stream().mapToInt(e->e.b.rank-1).min().orElse(b.rank);}
             var layers=new TreeMap<Integer,List<Block>>();for(var b:c.blocks)layers.computeIfAbsent(b.rank,k->new ArrayList<>()).add(b);c.layers.addAll(layers.values());
             if(preserve){
-                seedRows(c);place(c);
+                seedRows(c);place(c);compactX(c);
                 c.w=c.blocks.stream().mapToDouble(b->b.x+b.w).max().orElse(0);
                 c.h=c.blocks.stream().mapToDouble(b->b.y+b.h).max().orElse(0);
                 return;
@@ -207,36 +206,13 @@ public final class GLNodeAutoLayout {
             c.w=c.blocks.stream().mapToDouble(b->b.x+b.w).max().orElse(0);c.h=c.blocks.stream().mapToDouble(b->b.y+b.h).max().orElse(0);
         }
 
-        // Overlapping rough positions form bands; large empty distances are discarded.
-        void seedColumns(Component c) {
-            var sorted=new ArrayList<>(c.blocks);sorted.sort(Comparator.comparingDouble((Block b)->b.originalX).thenComparingInt(b->b.order));
-            Block anchor=null;int column=0;
-            for(var b:sorted){
-                if(anchor==null)anchor=b;
-                else if(b.originalX-anchor.originalX>=Math.max(1,Math.min(anchor.w,b.w)*.5)){column++;anchor=b;}
-                b.rank=column;
-            }
-        }
+        // Position is an ordering hint, not a global grid constraint. Separate
+        // ranks may reuse vertical space; original X must not create extra ranks.
         void seedRows(Component c) {
-            var sorted=new ArrayList<>(c.blocks);sorted.sort(Comparator.comparingDouble((Block b)->b.originalY).thenComparingDouble(b->b.originalX).thenComparingInt(b->b.order));
-            var occupied=new HashMap<Integer,BitSet>();Block anchor=null;int row=0;
-            for(var b:sorted){
-                if(anchor==null)anchor=b;
-                else if(b.originalY-anchor.originalY>=Math.max(1,Math.min(anchor.h,b.h)*.5)){row++;anchor=b;}
-                var used=occupied.computeIfAbsent(b.rank,k->new BitSet());b.row=used.nextClearBit(row);used.set(b.row);
-            }
-            for(var layer:c.layers)layer.sort(Comparator.comparingInt((Block b)->b.row).thenComparingInt(b->b.order));
+            for(var layer:c.layers)layer.sort(Comparator.comparingDouble((Block b)->b.originalY)
+                .thenComparingDouble(b->b.originalX).thenComparingInt(b->b.order));
         }
         void place(Component c) {
-            if(preserve){
-                int count=c.blocks.stream().mapToInt(b->b.row).max().orElse(0)+1;
-                double[] heights=new double[count],tops=new double[count];
-                for(var b:c.blocks)heights[b.row]=Math.max(heights[b.row],b.h);
-                for(int i=1;i<count;i++)tops[i]=tops[i-1]+heights[i-1]+vg;
-                double left=0;
-                for(var layer:c.layers){double width=0;for(var b:layer){b.x=left;b.y=tops[b.row];width=Math.max(width,b.w);}left+=width+hg;}
-                return;
-            }
             double x=0;
             for(var layer:c.layers){double y=0,width=0;for(var b:layer){b.x=x;b.y=y;y+=b.h+vg;width=Math.max(width,b.w);}x+=width+hg;}
             for(int pass=0;pass<12;pass++) {

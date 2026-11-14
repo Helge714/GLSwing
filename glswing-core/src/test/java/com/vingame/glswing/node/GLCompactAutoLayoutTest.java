@@ -51,6 +51,28 @@ class GLCompactAutoLayoutTest {
    GLNodeAutoLayout.arrangePreservingOrder(e);clearances(e);preserveRepeat(e);
   }
  }
+ @Test void preservingARoughDiagonalChainDoesNotCreateGlobalEmptyRows(){
+  var e=new GLNodeEditor();var nodes=new ArrayList<GLNode>();
+  for(int i=0;i<48;i++){var n=node(e,"Stage "+i,140,100);n.setLocation(i*240,i*170);nodes.add(n);if(i>0)wire(e,nodes.get(i-1),n);}
+  GLNodeAutoLayout.arrangePreservingOrder(e);
+  double height=nodes.stream().mapToDouble(n->n.getY()+n.getHeight()).max().orElseThrow()-nodes.stream().mapToDouble(GLNode::getY).min().orElseThrow();
+  assertTrue(height<200,"A chain must not inherit one empty global row per stage: "+height);clearances(e);preserveRepeat(e);
+ }
+ @Test void horizontalOffsetsDoNotTurnParallelBranchesIntoExtraSignalColumns(){
+  var e=new GLNodeEditor();var root=node(e,"Root",140,100);var sink=node(e,"Sink",140,100);root.setLocation(0,0);sink.setLocation(12000,0);
+  var branches=new ArrayList<GLNode>();
+  for(int i=0;i<32;i++){var n=node(e,"Branch "+i,140,100);n.setLocation(200+i*260,i*170);branches.add(n);wire(e,root,n);wire(e,n,sink);}
+  GLNodeAutoLayout.arrangePreservingOrder(e);
+  assertTrue(sink.getX()+sink.getWidth()-root.getX()<=3*140+2*e.getHorizontalNodeSpacing()+.02,"Parallel branches need three flow columns");
+  for(int i=1;i<branches.size();i++)assertTrue(branches.get(i-1).getY()<branches.get(i).getY());clearances(e);preserveRepeat(e);
+ }
+ @Test void positionAwareLayoutCompactsShortControlsAndMixedColumnWidths(){
+  var e=new GLNodeEditor();var a=node(e,"A",140,100);var b=node(e,"Wide",500,150);var c=node(e,"C",140,100);var sink=node(e,"Sink",140,100);var control=node(e,"Control",100,80);
+  a.setLocation(0,0);b.setLocation(300,30);c.setLocation(900,0);sink.setLocation(1200,0);control.setLocation(0,700);
+  wire(e,a,b);wire(e,b,c);wire(e,c,sink);wire(e,control,sink);
+  GLNodeAutoLayout.arrangePreservingOrder(e);
+  assertTrue(control.getX()>=c.getX()-.02);assertTrue(sink.getX()-control.getX()-control.getWidth()<=2*e.getHorizontalNodeSpacing());clearances(e);preserveRepeat(e);
+ }
  @Test void preservingOrderHandlesLargeLooseGraphsWithinABoundedTime(){
   var e=new GLNodeEditor();for(int i=0;i<1000;i++){var n=node(e,"N"+i,120,80);n.setLocation((i%40)*300,(i/40)*200);}
   assertTimeout(Duration.ofSeconds(10),()->GLNodeAutoLayout.arrangePreservingOrder(e));preserveRepeat(e);
