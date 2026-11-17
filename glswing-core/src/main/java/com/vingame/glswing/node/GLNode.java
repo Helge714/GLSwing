@@ -65,6 +65,8 @@ public class GLNode extends GLContainer {
 	private GLMenuItem deleteNodeMenuItem;
 	private String title;
     private String defaultTitle, customTitle, titleSuffix="";
+    private String titleBadge="";
+    private GLNodeConnectionStatus titleBadgeStatus=GLNodeConnectionStatus.NORMAL;
 	private float themeWidth,themeHeight;
 	private boolean automaticThemeWidth,automaticThemeHeight;
 	private GLNodeStyle localStyle;
@@ -142,6 +144,15 @@ public class GLNode extends GLContainer {
     }
     /** Non-editable presentation annotation, never included in the saved name. */
     public void setTitleSuffix(String suffix){titleSuffix=java.util.Objects.requireNonNull(suffix);refreshTitle();}
+    /** Transient trailing title badge; reserves its own space even for truncated titles. */
+    public void setTitleBadge(String text,GLNodeConnectionStatus status){
+        java.util.Objects.requireNonNull(text);java.util.Objects.requireNonNull(status);
+        if(titleBadge.equals(text)&&titleBadgeStatus==status)return;
+        titleBadge=text;titleBadgeStatus=status;layoutTitleEditor();invalidateRecording();
+    }
+    public String getTitleBadge(){return titleBadge;}
+    public GLNodeConnectionStatus getTitleBadgeStatus(){return titleBadgeStatus;}
+    private float titleBadgeWidth(){return titleBadge.isEmpty()?0:getGLStyle().titleFont().measurementFont().measureText(titleBadge)+getGLStyle().contentPadding().right()+4;}
     private void refreshTitle(){applyTitle((customTitle==null?defaultTitle:customTitle)+titleSuffix);}
     private void applyTitle(String title) {
 		title = requireTitle(title);
@@ -443,7 +454,7 @@ public class GLNode extends GLContainer {
 			GLFont font = getGLFont(style.titleFont());
 			float textX = style.contentPadding().left();
 			float available = Math.max(0,
-					width - style.contentPadding().horizontal());
+					width - style.contentPadding().horizontal() - titleBadgeWidth());
 			if (contentHidden) {
 				float hitSize = collapseChevronHitSize();
 				drawCollapseChevron(context, textX, hitSize,
@@ -466,6 +477,13 @@ public class GLNode extends GLContainer {
 			context.drawUIText(font, visibleTitle, textX, baseline,
 					style.titleText());
 		}
+        if(!titleBadge.isEmpty()){
+            GLFont font=getGLFont(style.titleFont());
+            float baseline=Math.max(font.getAscent(),(style.titleHeight()-font.getLineHeight())*.5f+font.getAscent());
+            java.awt.Color color=titleBadgeStatus==GLNodeConnectionStatus.NORMAL?style.titleText():getGLTheme().values().getColor(titleBadgeStatus==GLNodeConnectionStatus.ERROR?"nodeEditor.errorConnectionBorder":"nodeEditor.warningConnectionBorder");
+            context.drawUIText(font,titleBadge,Math.max(0,width-style.contentPadding().right()-font.measureText(titleBadge)),baseline,color);
+        }
+
 	}
 
 	@Override
@@ -984,7 +1002,7 @@ public class GLNode extends GLContainer {
 
 	private void layoutTitleEditor() {
 		GLNodeStyle style = getGLStyle();
-		titleEditor.setBounds(0, 0, getWidth(),
+		titleEditor.setBounds(0, 0, Math.max(0,getWidth()-titleBadgeWidth()),
 				Math.min(style.titleHeight() + style.borderWidth(), getHeight()));
 	}
 

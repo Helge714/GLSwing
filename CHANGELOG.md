@@ -1,5 +1,8 @@
 # Changelog
 
+- Add severity-colored trailing node title badges with reserved space, independent
+  of title truncation and renaming. Covered by 0.2.0-SNAPSHOT.
+
 - Exclude control characters such as Backspace from automatic code completion.
   Covered by 0.2.0-SNAPSHOT.
 
