@@ -605,6 +605,8 @@ public class GLCodeEditor extends GLTextArea {
 	public final void formatCode() {
 		Range range = commandRange();
 		String[] lines = getDocument().getText(range.start, range.end).split("\\n", -1);
+		String custom = language.formatSource(getDocument().getText(range.start, range.end), indentationSize);
+		if (custom != null) { applyCommand(range, custom); return; }
 		StringBuilder formatted = new StringBuilder();
 		int level = 0;
 		for (int index = 0; index < lines.length; index++) {
@@ -1346,6 +1348,8 @@ public class GLCodeEditor extends GLTextArea {
 			} else {
 				String indent = opensBlock
 						? outerIndent + " ".repeat(indentationSize) : outerIndent;
+				String custom = language.indentationAfter(getText(), caret, indentationSize);
+				if (custom != null) indent = custom;
 				replaceSelection("\n" + indent);
 			}
 			event.consume();
@@ -1401,7 +1405,8 @@ public class GLCodeEditor extends GLTextArea {
 			}
 		}
 		super.controlKeyTyped(event);
-		if (event.getKeyChar() == '.') requestCompletion('.');
+		if (event.getKeyChar() == '.' || language.supportsAutomaticCompletion()
+				&& Character.isJavaIdentifierPart(event.getKeyChar())) requestCompletion(event.getKeyChar());
 		else if (event.getKeyChar() == ',') requestSignatureHelp(',');
 		else if (event.getKeyChar() == ')') closeSignatureHelp();
 	}
@@ -1533,7 +1538,7 @@ public class GLCodeEditor extends GLTextArea {
 			int start = Math.max(rowStart, diagnostic.start());
 			int end = Math.min(rowEnd, diagnostic.end());
 			if (end <= start) continue;
-			float left = x + measureRange(rowStart, start);
+			float left = x + measureRange(rowStart, start) + inlineDecorationWidth(font, start);
 			float right = Math.max(left + 3, x + measureRange(rowStart, end));
 			float y = baseline + 2;
 			Color color = diagnosticColor(diagnostic);

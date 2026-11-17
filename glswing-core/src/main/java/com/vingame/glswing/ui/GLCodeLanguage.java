@@ -8,6 +8,12 @@ public interface GLCodeLanguage {
 	List<GLCodeToken> tokenize(String source);
 	default List<GLCodeDiagnostic> diagnose(String source) { return List.of(); }
 	default String lineCommentPrefix() { return "//"; }
+	/** Opt in to suggestions while typing identifiers, in addition to explicit completion. */
+	default boolean supportsAutomaticCompletion() { return false; }
+	/** Optional language-specific indentation for Enter; null uses the generic rules. */
+	default String indentationAfter(String source, int offset, int width) { return null; }
+	/** Optional language-specific formatter; null uses the generic formatter. */
+	default String formatSource(String source, int width) { return null; }
 	/** Whether the editor may offer its built-in document formatter. */
 	default boolean supportsFormatting() { return true; }
 	/** Whether line comment and uncomment commands are meaningful. */

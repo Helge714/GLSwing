@@ -1,5 +1,9 @@
 # Changelog
 
+- Let code languages opt into automatic identifier completion and provide their
+  own Enter indentation and formatter. Align diagnostic underlines after inline
+  parameter hints. Existing languages retain their defaults. Covered by 0.2.0-SNAPSHOT.
+
 - Distinguish Bezier, linear and step curve points with circles, squares and
   diamonds. Let phase editors set grid divisions and align the plot to its edges.
   Covered by 0.2.0-SNAPSHOT.
