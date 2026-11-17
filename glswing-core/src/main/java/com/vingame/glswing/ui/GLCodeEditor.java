@@ -2168,9 +2168,11 @@ public class GLCodeEditor extends GLTextArea {
 			if (common == null) common = name;
 			else if (!common.equals(name)) return;
 		}
-		GLCodeInlayHint hint = new GLCodeInlayHint(offset, common + ":");
+		offset = GLCodeTextSupport.argumentHintAnchor(getText(), offset);
+		final int anchor = offset;
+		GLCodeInlayHint hint = new GLCodeInlayHint(anchor, common + ":");
 		ArrayList<GLCodeInlayHint> provisional = new ArrayList<>(signatureInlayHints);
-		provisional.removeIf(value -> value.offset() == offset);
+		provisional.removeIf(value -> GLCodeTextSupport.argumentHintAnchor(getText(),value.offset()) == anchor);
 		provisional.add(hint);
 		provisional.sort(java.util.Comparator.comparingInt(GLCodeInlayHint::offset));
 		signatureInlayHints = List.copyOf(provisional);
@@ -2299,7 +2301,7 @@ public class GLCodeEditor extends GLTextArea {
 			signatureInlayHints = signatureInlayHints.stream()
 					.filter(value -> validSignatureHintAnchor(getText(), value.offset()))
 					.filter(value -> received.stream().noneMatch(provider ->
-							provider.offset() == value.offset()))
+							GLCodeTextSupport.argumentHintAnchor(getText(),provider.offset()) == GLCodeTextSupport.argumentHintAnchor(getText(),value.offset())))
 					.toList();
 			inlayHints = mergeInlayHints(received, signatureInlayHints);
 			invalidateRowLayout();
@@ -2307,15 +2309,17 @@ public class GLCodeEditor extends GLTextArea {
 		}));
 	}
 
-	private static List<GLCodeInlayHint> mergeInlayHints(List<GLCodeInlayHint> primary,
+	private List<GLCodeInlayHint> mergeInlayHints(List<GLCodeInlayHint> primary,
 			List<GLCodeInlayHint> additional) {
-		ArrayList<GLCodeInlayHint> merged = new ArrayList<>(primary);
-		for (GLCodeInlayHint hint : additional)
-			if (merged.stream().noneMatch(existing -> existing.offset() == hint.offset()))
-				merged.add(hint);
-		merged.sort(java.util.Comparator.comparingInt(GLCodeInlayHint::offset));
-		return List.copyOf(merged);
+		var merged = new java.util.LinkedHashMap<Integer,GLCodeInlayHint>();
+		java.util.stream.Stream.concat(primary.stream(),additional.stream()).forEach(hint -> {
+			int anchor=hint.kind()==GLCodeInlayHint.Kind.PARAMETER
+					?GLCodeTextSupport.argumentHintAnchor(getText(),hint.offset()):hint.offset();
+			merged.putIfAbsent(anchor,new GLCodeInlayHint(anchor,hint.label(),hint.kind()));
+		});
+		return merged.values().stream().sorted(java.util.Comparator.comparingInt(GLCodeInlayHint::offset)).toList();
 	}
+
 	@Override protected int nextInlineDecorationOffset(int startInclusive,
 			int endExclusive) {
 		if (!inlayHintsVisible || startInclusive >= endExclusive) return -1;

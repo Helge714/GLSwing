@@ -1,5 +1,9 @@
 # Changelog
 
+- Merge provisional/provider parameter hints at the same logical argument,
+  including intervening whitespace/comments. Draw title badges with contrasting
+  text and keep node minimum widths independent of title length. Covered by 0.2.0-SNAPSHOT.
+
 - Add severity-colored trailing node title badges with reserved space, independent
   of title truncation and renaming. Covered by 0.2.0-SNAPSHOT.
 

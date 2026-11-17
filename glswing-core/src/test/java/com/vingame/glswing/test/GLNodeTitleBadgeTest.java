@@ -4,6 +4,15 @@ import org.junit.jupiter.api.Test;
 import com.vingame.glswing.node.*;
 import com.vingame.glswing.ui.GLTextEditor;
 class GLNodeTitleBadgeTest {
+ @Test void titlesDoNotChangeMinimumWidthButContentDoes()throws Exception {
+  java.awt.EventQueue.invokeAndWait(()->{
+   var node=new GLNode("Short");float initial=node.getPreferredGLSize().width();
+   node.setCustomTitle("An extremely long custom title ".repeat(20));assertEquals(initial,node.getPreferredGLSize().width(),.01);
+   var content=new com.vingame.glswing.ui.GLLabel("Wide editor");content.setPreferredGLSize(new com.vingame.glswing.layout.GLSize(320,24));node.addContent(content);
+   float withContent=node.getPreferredGLSize().width();assertTrue(withContent>=320);
+   node.setCustomTitle("X");assertEquals(withContent,node.getPreferredGLSize().width(),.01);
+  });
+ }
  @Test void trailingBadgeReservesSpaceIndependentlyOfLongAndCustomTitles()throws Exception {
   java.awt.EventQueue.invokeAndWait(()->{
    var node=new GLNode("A very long title that cannot fit in this narrow node");node.setBounds(0,0,160,90);

@@ -152,7 +152,7 @@ public class GLNode extends GLContainer {
     }
     public String getTitleBadge(){return titleBadge;}
     public GLNodeConnectionStatus getTitleBadgeStatus(){return titleBadgeStatus;}
-    private float titleBadgeWidth(){return titleBadge.isEmpty()?0:getGLStyle().titleFont().measurementFont().measureText(titleBadge)+getGLStyle().contentPadding().right()+4;}
+    private float titleBadgeWidth(){return titleBadge.isEmpty()?0:getGLStyle().titleFont().measurementFont().measureText(titleBadge)+getGLStyle().contentPadding().right()+12;}
     private void refreshTitle(){applyTitle((customTitle==null?defaultTitle:customTitle)+titleSuffix);}
     private void applyTitle(String title) {
 		title = requireTitle(title);
@@ -481,7 +481,13 @@ public class GLNode extends GLContainer {
             GLFont font=getGLFont(style.titleFont());
             float baseline=Math.max(font.getAscent(),(style.titleHeight()-font.getLineHeight())*.5f+font.getAscent());
             java.awt.Color color=titleBadgeStatus==GLNodeConnectionStatus.NORMAL?style.titleText():getGLTheme().values().getColor(titleBadgeStatus==GLNodeConnectionStatus.ERROR?"nodeEditor.errorConnectionBorder":"nodeEditor.warningConnectionBorder");
-            context.drawUIText(font,titleBadge,Math.max(0,width-style.contentPadding().right()-font.measureText(titleBadge)),baseline,color);
+            float badgeWidth=font.measureText(titleBadge)+8;
+            float badgeHeight=Math.min(style.titleHeight()-4,font.getLineHeight()+2);
+            float badgeX=Math.max(0,width-style.contentPadding().right()-badgeWidth),badgeY=(style.titleHeight()-badgeHeight)*.5f;
+            java.awt.Color opaque=new java.awt.Color(color.getRed(),color.getGreen(),color.getBlue());
+            context.fillUIRoundRect(badgeX,badgeY,badgeWidth,badgeHeight,2,opaque);
+            java.awt.Color ink=(color.getRed()*299+color.getGreen()*587+color.getBlue()*114)>140000?java.awt.Color.BLACK:java.awt.Color.WHITE;
+            context.drawUIText(font,titleBadge,badgeX+4,baseline,ink);
         }
 
 	}
@@ -791,8 +797,7 @@ public class GLNode extends GLContainer {
 
 	private void updateMetricsAndLayout() {
 		GLNodeStyle style = getGLStyle();
-		GLFont font = getGLFont(style.titleFont());
-		float widest = font.measureText(title) + style.contentPadding().horizontal();
+		float widest = style.contentPadding().horizontal();
 		float rowsHeight = 0;
 		List<Entry> shown = shownEntries();
 		for (Entry entry : shown) {

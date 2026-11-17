@@ -62,6 +62,17 @@ final class GLCodeTextSupport {
 		default -> last;
 		};
 	}
+	/** Canonical argument position shared by provisional and provider parameter hints. */
+	static int argumentHintAnchor(String source,int offset) {
+		int at=Math.max(0,Math.min(offset,source.length()));
+		while(at<source.length()) {
+			if(Character.isWhitespace(source.charAt(at))){at++;continue;}
+			if(source.startsWith("//",at)){int end=source.indexOf('\n',at+2);at=end<0?source.length():end+1;continue;}
+			if(source.startsWith("/*",at)){int end=source.indexOf("*/",at+2);at=end<0?source.length():end+2;continue;}
+			break;
+		}
+		return at;
+	}
 	static boolean validSignatureHintAnchor(String source, int offset) {
 		if (offset < 0 || offset > source.length()) return false;
 		int previous = offset - 1;
