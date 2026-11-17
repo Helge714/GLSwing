@@ -1648,7 +1648,7 @@ public class GLCodeEditor extends GLTextArea {
 			int offset = positionAt(event.getLocalX(), event.getLocalY());
 			if (offset >= hover.start() && offset < hover.end()) return hover.contents();
 		}
-		return super.toolTipTextAt(event);
+		return getToolTipText();
 	}
 	@Override protected void controlMousePressed(com.vingame.glswing.input.GLMouseEvent event) {
 		if (inlineRename != null) cancelInlineRename();
