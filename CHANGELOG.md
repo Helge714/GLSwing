@@ -1,5 +1,7 @@
 # Changelog
 
+- Share the Find dialog and matching engine between text/code editors and Markdown views, including highlighted document matches; suppress Markdown component-name tooltips. Covered by 0.2.0-SNAPSHOT.
+
 
 - Code languages can add transient semantic bold/italic emphasis; drawing and caret geometry use the same styles without editing document formatting.
 

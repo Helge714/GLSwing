@@ -1,5 +1,7 @@
 package com.vingame.glswing.ui;
 
+import static com.vingame.glswing.ui.GLTextSearch.*;
+
 import java.awt.Color;
 import java.awt.EventQueue;
 import java.awt.Toolkit;
@@ -16,10 +18,8 @@ import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.function.BooleanSupplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.regex.PatternSyntaxException;
 
 import javax.swing.Timer;
 import javax.accessibility.AccessibleRole;
@@ -44,7 +44,7 @@ import com.vingame.glswing.rendering.GLFont;
 import com.vingame.glswing.rendering.GLStroke;
 
 /** Multiline GPU text editor with wrapping, selection, scrolling and local history. */
-public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
+public class GLTextArea extends GLControl implements GLEditingHistoryTarget, GLTextSearchTarget {
 	@Override public boolean blocksGlobalShortcuts() { return true; }
 
 	private GLTextDocument document;
@@ -359,6 +359,8 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 	public final boolean findPrevious(String query, GLTextSearchOptions options) {
 		return find(query, options, true);
 	}
+	/** Navigates the current query in either direction, with wraparound. */
+	@Override public final boolean findNext(boolean previous) { return find(searchQuery, searchOptions, previous); }
 	private boolean find(String query, GLTextSearchOptions options,
 			boolean backwards) {
 		Objects.requireNonNull(options, "Search options");
@@ -401,37 +403,6 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 		activeSearchMatch = -1;
 		invalidateRecording();
 		repaintGL();
-	}
-	private static SearchScan scanMatches(String source, String query,
-			GLTextSearchOptions options, BooleanSupplier cancelled) {
-		if (query.isEmpty()) return new SearchScan(List.of(), null);
-		Pattern pattern;
-		try {
-			int flags = options.matchCase() ? 0
-					: Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE;
-			pattern = Pattern.compile(options.regularExpression()
-					? query : Pattern.quote(query), flags);
-		} catch (PatternSyntaxException failure) {
-			return new SearchScan(List.of(), failure.getDescription());
-		}
-		List<SearchMatch> result = new ArrayList<>();
-		Matcher matcher = pattern.matcher(source);
-		while (matcher.find()) {
-			if (cancelled.getAsBoolean()) return new SearchScan(List.of(), null);
-			if (matcher.start() == matcher.end()) continue;
-			if (!options.wholeWord()
-					|| wholeWord(source, matcher.start(), matcher.end()))
-				result.add(new SearchMatch(matcher.start(), matcher.end()));
-		}
-		return new SearchScan(List.copyOf(result), null);
-	}
-	private static boolean wholeWord(String source, int start, int end) {
-		return (start == 0 || !isWordCharacter(source.codePointBefore(start)))
-				&& (end == source.length()
-						|| !isWordCharacter(source.codePointAt(end)));
-	}
-	private static boolean isWordCharacter(int codePoint) {
-		return Character.isLetterOrDigit(codePoint) || codePoint == '_';
 	}
 	private static int firstMatchAtOrAfter(List<SearchMatch> matches, int origin) {
 		if (matches.isEmpty()) return -1;
@@ -502,8 +473,6 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 			return null;
 		}
 	}
-	private record SearchMatch(int start, int end) { }
-	private record SearchScan(List<SearchMatch> matches, String error) { }
 	/** Opens the standard modeless Find or Find/Replace dialog for this editor. */
 	public final void showSearchDialog(boolean replaceVisible) {
 		if (searchPresenter != null) {
@@ -826,7 +795,8 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 	@Override protected void controlKeyPressed(GLKeyEvent event) {
 		boolean extend = getGLInputMap().hasModifiers(GLInputActions.TEXT_EXTEND_SELECTION, event.getModifiersEx());
 		boolean command = getGLInputMap().hasModifiers(GLInputActions.TEXT_COMMAND, event.getModifiersEx());
-		if (GLHistoryManager.isHistoryShortcut(event.getOriginalEvent(), getGLInputMap())) editingHistory.handleKeyPressed(event.getOriginalEvent(), getGLInputMap());
+		if (event.getKeyCode() == KeyEvent.VK_F3) findNext(event.getOriginalEvent().isShiftDown());
+		else if (GLHistoryManager.isHistoryShortcut(event.getOriginalEvent(), getGLInputMap())) editingHistory.handleKeyPressed(event.getOriginalEvent(), getGLInputMap());
 		else if (textActions.handleKeyPressed(event, getGLInputMap(), this)) return;
 		else if (getGLInputMap().matches(GLInputActions.TEXT_SELECT_ALL, event)) selectAll();
 		else if (getGLInputMap().matches(GLInputActions.TEXT_COPY, event)) copy();

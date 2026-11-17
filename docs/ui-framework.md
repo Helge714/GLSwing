@@ -11,6 +11,7 @@ see the [rendering guide](graphics-pipeline.md).
 ## Contents
 
 - [API map](#api-map)
+- [Shared Find](#shared-find)
 - [Coordinates and units](#coordinates-and-units)
 - [Minimal application](#minimal-application)
 - [Detailed guides](#detailed-guides)
@@ -38,6 +39,21 @@ see the [rendering guide](graphics-pipeline.md).
 | Localization | `GLLocalizer`, `GLUiKeys` | UTF-8 bundles, locale fallback, and overrides |
 | History | `GLHistoryManager`, `GLUndoableEdit` | Scoped undo, redo, transactions, and persisted-state tracking |
 | Node editing | `GLNodeEditor`, `GLNode`, `GLNodePort`, `GLNodeConnection` | Zoomable graphs, connections, and selection |
+
+## Shared Find
+
+`GLTextArea`, `GLCodeEditor` and `GLMarkdownView` use `GLTextSearchTarget` and
+`GLTextSearchDialog`. Their matching engine and `GLTextSearchOptions` are shared:
+case sensitivity, whole words, regex validation and wraparound navigation behave
+consistently. Read-only targets do not expose replacement controls. Enter/Down/F3
+advance; Up/Shift+Enter/Shift+F3 select the previous match.
+
+Use `GLTextSearchDialog.show(owner, target, false)` for any search surface, or
+`markdown.showSearchDialog(owner)` for the Markdown view's managed dialog.
+Markdown matches refer to rendered plain text, including styled spans, wrapped
+words, code and tables. Connect `setSearchMatchListener` to a surrounding
+`GLScrollPane.scrollRectToVisible` to reveal each active highlight. Replacing a
+Markdown document closes its search dialog and clears markers.
 
 ## Coordinates and units
 

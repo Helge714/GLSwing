@@ -9,15 +9,20 @@ import com.vingame.glswing.component.GLParent;
 import com.vingame.glswing.input.GLKeyEvent;
 import com.vingame.glswing.rendering.GLContext2D;
 
-/** Theme-aware Find and Replace dialog for multiline text and code editors. */
+/** Shared theme-aware Find and Replace dialog for searchable text, code and documents. */
 public final class GLTextSearchDialog {
 	private GLTextSearchDialog() { }
 
 	/** Opens a modeless dialog so selected matches remain visible in the editor. */
 	public static GLDialog show(GLParent owner, GLTextArea target,
 			boolean replaceVisible) {
+		return show(owner, (GLTextSearchTarget) target, replaceVisible);
+	}
+	/** Opens the same Find UI for any search surface; replacement requires an editable target. */
+	public static GLDialog show(GLParent owner, GLTextSearchTarget target, boolean replaceVisible) {
 		Objects.requireNonNull(owner, "Owner");
-		Objects.requireNonNull(target, "Target editor");
+		Objects.requireNonNull(target, "Search target");
+		final boolean allowReplace = replaceVisible && target.isEditable();
 		GLCheckBox matchCase = new GLCheckBox(owner.getGLLocalizer().text(
 				"glswing.text.matchCase"));
 		GLCheckBox wholeWord = new GLCheckBox(owner.getGLLocalizer().text(
@@ -30,13 +35,13 @@ public final class GLTextSearchDialog {
 		GLTextEditor find = new GLTextEditor(target.getSelectedText()) {
 			@Override protected void controlKeyPressed(GLKeyEvent event) {
 				GLTextSearchOptions options = options(matchCase, wholeWord, regex);
-				if (event.getKeyCode() == KeyEvent.VK_UP) {
+				if (event.getKeyCode() == KeyEvent.VK_UP || (event.getKeyCode() == KeyEvent.VK_F3 || event.getKeyCode() == KeyEvent.VK_ENTER) && event.getOriginalEvent().isShiftDown()) {
 					target.findPrevious(getText(), options);
 					submittedQuery[0] = getText();
 					submittedOptions[0] = options;
 					if (refresh[0] != null) refresh[0].run();
 					event.consume();
-				} else if (event.getKeyCode() == KeyEvent.VK_DOWN) {
+				} else if (event.getKeyCode() == KeyEvent.VK_DOWN || event.getKeyCode() == KeyEvent.VK_F3) {
 					target.findNext(getText(), options);
 					submittedQuery[0] = getText();
 					submittedOptions[0] = options;
@@ -63,7 +68,7 @@ public final class GLTextSearchDialog {
 		GLButton all = button(owner, "glswing.text.replaceAll");
 		GLButton close = button(owner, "glswing.text.close");
 		GLDialogButtonBar actions = new GLDialogButtonBar();
-		if (replaceVisible) actions.addButton(replace).addButton(all);
+		if (allowReplace) actions.addButton(replace).addButton(all);
 		actions.addButton(previous).addButton(next).addButton(close);
 		GLContainer content = new GLContainer() {
 			@Override protected void record(GLContext2D context) { }
@@ -74,7 +79,7 @@ public final class GLTextSearchDialog {
 				findLabel.setBounds(16, 18, 104, 28);
 				find.setBounds(fieldX, 18, fieldWidth, 28);
 				result.setBounds(width - resultWidth - 16, 18, resultWidth, 28);
-				if (replaceVisible) {
+				if (allowReplace) {
 					replacementLabel.setBounds(16, 58, 104, 28);
 					replacement.setBounds(fieldX, 58, fieldWidth, 28);
 					matchCase.setBounds(16, 98, optionWidth, 28);
@@ -90,14 +95,14 @@ public final class GLTextSearchDialog {
 			}
 		};
 		content.addGL(findLabel); content.addGL(find); content.addGL(result);
-		if (replaceVisible) { content.addGL(replacementLabel); content.addGL(replacement); }
+		if (allowReplace) { content.addGL(replacementLabel); content.addGL(replacement); }
 		content.addGL(matchCase); content.addGL(wholeWord); content.addGL(regex);
 		content.addGL(actions);
 		GLDialog dialog = new GLDialog(owner.getGLLocalizer().text(
-				"glswing.text.findTitle"), content);
+				allowReplace ? "glswing.text.findTitle" : "glswing.text.find"), content);
 		dialog.setDecoration(GLDialog.Decoration.THEMED);
 		dialog.setModality(GLDialog.Modality.MODELESS);
-		dialog.setSize(620, replaceVisible ? 220 : 180);
+		dialog.setSize(620, allowReplace ? 220 : 180);
 		dialog.setResizable(false);
 		refresh[0] = () -> {
 			int count = target.getSearchMatchCount();
