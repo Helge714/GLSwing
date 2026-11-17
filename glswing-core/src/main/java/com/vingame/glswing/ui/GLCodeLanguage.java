@@ -4,6 +4,8 @@ import java.util.List;
 
 /** Stateless syntax lexer and editing conventions for a code language. */
 public interface GLCodeLanguage {
+	/** Optional transient font emphasis keyed by semantic token modifier. Does not change document styles. */
+	default java.util.Map<String, GLTextStyle> semanticModifierStyles() { return java.util.Map.of(); }
 	String id();
 	List<GLCodeToken> tokenize(String source);
 	default List<GLCodeDiagnostic> diagnose(String source) { return List.of(); }

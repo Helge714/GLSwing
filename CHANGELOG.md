@@ -1,5 +1,8 @@
 # Changelog
 
+
+- Code languages can add transient semantic bold/italic emphasis; drawing and caret geometry use the same styles without editing document formatting.
+
 - Suppress component-name fallback tooltips in code editors; retain diagnostics,
   symbol help and explicitly configured tooltips. Covered by 0.2.0-SNAPSHOT.
 

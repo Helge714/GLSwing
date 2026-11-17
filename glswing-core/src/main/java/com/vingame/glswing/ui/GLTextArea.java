@@ -1381,6 +1381,7 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 					decoration = nextInlineDecorationOffset(start + 1, end);
 				}
 				if (decoration > start) end = Math.min(end, decoration);
+				end = Math.min(end, nextPresentedTextStyleBoundary(start, end));
 				int colorEnd = end;
 				Color partColor = presentedColor(start, color);
 				for (int offset = start + 1; offset < end; offset++)
@@ -1390,7 +1391,7 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 					}
 				String part = expand(document.getText(start, colorEnd));
 				float partX = x + rowAdvance(font, row, start, available);
-				GLFont partFont = font(run.style());
+				GLFont partFont = font(presentedTextStyle(start, run.style()));
 				context.drawUITextShadow(partFont, part, partX, baseline,
 						getGLTheme().textShadow("textEditor"));
 				context.drawUIText(partFont, part, partX, baseline, partColor);
@@ -1515,10 +1516,19 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget {
 				bounds[1] + localY * bounds[3] / getHeight() };
 	}
 	private String expand(String value) { return value.replace("\t", " ".repeat(tabSize)); }
+	/** Presentation-only emphasis, independent of stored rich text formatting. */
+	protected GLTextStyle presentedTextStyle(int offset, GLTextStyle stored) { return stored; }
+	/** First presentation style boundary strictly after offset, or end. */
+	protected int nextPresentedTextStyleBoundary(int offset, int end) { return end; }
 	protected final float measureRange(int start, int end) {
 		float width = 0;
-		for (GLTextDocument.StyleRun run : document.getStyleRuns(start, end))
-			width += font(run.style()).measureText(expand(document.getText(run.start(), run.end())));
+		for (GLTextDocument.StyleRun run : document.getStyleRuns(start, end)) {
+			for (int offset = run.start(); offset < run.end();) {
+				int next = Math.min(run.end(), nextPresentedTextStyleBoundary(offset, run.end()));
+				width += font(presentedTextStyle(offset, run.style())).measureText(expand(document.getText(offset, next)));
+				offset = next;
+			}
+		}
 		GLFont baseFont = font();
 		for (int offset = nextInlineDecorationOffset(start, end); offset >= start
 				&& offset < end; offset = nextInlineDecorationOffset(offset + 1, end))

@@ -347,7 +347,7 @@ public class GLCodeEditor extends GLTextArea {
 	public final GLCodeLanguage getLanguage() { return language; }
 	public final void setLanguage(GLCodeLanguage value) {
 		if (value == null) throw new IllegalArgumentException("Code language must not be null");
-		language = value; retokenize();
+		language = value; invalidateRowLayout(); retokenize();
 		if (coreDiagnosticsEnabled) validateSource();
 		if (automaticCodeIntelligence) installAutomaticCodeIntelligence();
 		else reopenDiagnosticProvider();
@@ -2259,6 +2259,7 @@ public class GLCodeEditor extends GLTextArea {
 					.toList();
 			semanticStatusListener.accept(
 					GLCodeSemanticStatus.completed(semanticTokens.size()));
+			if (!language.semanticModifierStyles().isEmpty()) invalidateRowLayout();
 			invalidateRecording();
 		}));
 	}
@@ -2421,6 +2422,38 @@ public class GLCodeEditor extends GLTextArea {
 			};
 		}
 		return fallback;
+	}
+	@Override protected GLTextStyle presentedTextStyle(int offset, GLTextStyle stored) {
+		if (language == null || language.semanticModifierStyles().isEmpty()) return stored;
+		var tokens = semanticTokens;
+		int low = 0, high = tokens.size() - 1;
+		while (low <= high) {
+			int middle = (low + high) >>> 1;
+			var token = tokens.get(middle);
+			if (offset < token.start()) high = middle - 1;
+			else if (offset >= token.end()) low = middle + 1;
+			else {
+				boolean bold = stored.bold(), italic = stored.italic();
+				for (String modifier : token.modifiers()) {
+					var style = language.semanticModifierStyles().get(modifier);
+					if (style != null) { bold |= style.bold(); italic |= style.italic(); }
+				}
+				return new GLTextStyle(bold, italic);
+			}
+		}
+		return stored;
+	}
+	@Override protected int nextPresentedTextStyleBoundary(int offset, int end) {
+		if (language == null || language.semanticModifierStyles().isEmpty()) return end;
+		var tokens = semanticTokens;
+		int low = 0, high = tokens.size();
+		while (low < high) {
+			int middle = (low + high) >>> 1;
+			if (tokens.get(middle).end() <= offset) low = middle + 1; else high = middle;
+		}
+		if (low == tokens.size()) return end;
+		var token = tokens.get(low);
+		return Math.min(end, token.start() > offset ? token.start() : token.end());
 	}
 	private Color semanticColor(GLCodeSemanticToken token) {
 		for (String modifier : token.modifiers().stream().sorted().toList()) {
