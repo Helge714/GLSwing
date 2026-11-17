@@ -1406,6 +1406,7 @@ public class GLCodeEditor extends GLTextArea {
 		}
 		super.controlKeyTyped(event);
 		if (event.getKeyChar() == '.' || language.supportsAutomaticCompletion()
+				&& !Character.isISOControl(event.getKeyChar())
 				&& Character.isJavaIdentifierPart(event.getKeyChar())) requestCompletion(event.getKeyChar());
 		else if (event.getKeyChar() == ',') requestSignatureHelp(',');
 		else if (event.getKeyChar() == ')') closeSignatureHelp();

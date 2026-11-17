@@ -32,6 +32,7 @@ class GLCodeEditorLanguageHooksTest {
    };
    var editor=new Editor(language);editor.configureDocument(URI.create("test:/formula"),language);
    editor.type('s');assertEquals(1,requests.get());
+   editor.type('\b');assertEquals(1,requests.get(),"Backspace is not an identifier completion trigger");
    editor.enter();assertEquals("s\n    ",editor.getText());
    editor.formatCode();assertEquals("formatted",editor.getText());editor.clearDiagnosticProvider();
   });

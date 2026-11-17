@@ -1,5 +1,8 @@
 # Changelog
 
+- Exclude control characters such as Backspace from automatic code completion.
+  Covered by 0.2.0-SNAPSHOT.
+
 - Let code languages opt into automatic identifier completion and provide their
   own Enter indentation and formatter. Align diagnostic underlines after inline
   parameter hints. Existing languages retain their defaults. Covered by 0.2.0-SNAPSHOT.
