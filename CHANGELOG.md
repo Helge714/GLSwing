@@ -1,5 +1,9 @@
 # Changelog
 
+- Preserve the visible world-space camera center when resizing a graph workspace,
+  including zoomed views and temporary zero-sized viewports. Inspector toggles keep
+  their existing screen-position policy. Covered by 0.2.0-SNAPSHOT.
+
 - Share the Find dialog and matching engine between text/code editors and Markdown views, including highlighted document matches; suppress Markdown component-name tooltips. Covered by 0.2.0-SNAPSHOT.
 
 

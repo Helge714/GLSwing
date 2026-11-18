@@ -470,9 +470,20 @@ public final class GLNodeWorkspace extends GLContainer
 		return true;
 	}
 
-	@Override protected void resized(float width, float height) {
-		layoutWorkspace();
-	}
+    private boolean viewportSized;
+    @Override protected void resized(float width, float height) {
+        // Pan is expressed relative to the viewport center. Keep its world point
+        // fixed when the window changes size; inspector toggles retain their
+        // separate policy of leaving nodes at the same screen coordinates.
+        float zoom = editor.getZoom();
+        float cameraX = editor.getWidth() * .5f - editor.getPanX() / zoom;
+        float cameraY = editor.getHeight() * .5f - editor.getPanY() / zoom;
+        boolean preserve = viewportSized && !restoreCameraPending;
+        layoutWorkspace();
+        if (preserve) editor.setPan(zoom * (editor.getWidth() * .5f - cameraX),
+                zoom * (editor.getHeight() * .5f - cameraY));
+        if (editor.getWidth() > 0 && editor.getHeight() > 0) viewportSized = true;
+    }
 
 	@Override protected void record(GLContext2D context) {
 		context.fillUIRoundRect(0, 0, getWidth(), getHeight(), 0,

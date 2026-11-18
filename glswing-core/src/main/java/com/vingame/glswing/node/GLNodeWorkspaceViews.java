@@ -10,6 +10,6 @@ final class GLNodeWorkspaceViews {
         Map<String,GLNodeViewState> auxiliary=new LinkedHashMap<>(previous==null?Map.of():previous.auxiliaryNodes());
         for(var node:nodes){String id=boundaryId.apply(node);if(id!=null)auxiliary.put(id,GLNodeViewState.capture(node));}
         return new GLNodeEditorViewState(projected.nodes(),auxiliary,
-            restoreCamera&&previous!=null?previous.camera():projected.camera());
+            (restoreCamera||projected.camera()==null)&&previous!=null?previous.camera():projected.camera());
     }
 }

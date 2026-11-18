@@ -13,6 +13,27 @@ class GLCameraLayoutRoutingTest {
   var codec=new GLNodeGraphDocumentCodec();var bytes=new java.io.ByteArrayOutputStream();codec.write(new GLNodeGraphDocument(asset,Map.of(),List.of()),bytes);
   assertEquals(state,codec.read(new java.io.ByteArrayInputStream(bytes.toByteArray()),codec.currentSchemaVersion()).root().viewState());
  }
+ @Test void windowResizePreservesTheWorldCameraAcrossZoomsAndTemporaryZeroSize()throws Exception{
+  javax.swing.SwingUtilities.invokeAndWait(()->{
+   for(float zoom:new float[]{.5f,1f,2f}){
+    var types=new GLNodeTypeRegistry();var registry=new com.vingame.glswing.node.composite.GLCompositeGraphRegistry();
+    try(var workspace=new GLNodeWorkspace(types,registry,new GLNodeCatalog(),(node,type)->new GLNode(type.id()),GLGraphCyclePolicy.DELAYED_FEEDBACK,new com.vingame.glswing.history.GLHistoryManager())){
+     workspace.setBounds(0,0,1000,700);workspace.editor().setZoom(zoom);
+     var camera=new GLNodeCameraState(-123.5f,456.25f);
+     var asset=new GLNodeGraphAsset("root",1,GLNodeGraphAssetKind.PROJECT,new GLNodeGraph().snapshot(),new GLNodeEditorViewState(Map.of(),Map.of(),camera));
+     workspace.openDocument("Resize",new GLNodeGraphDocument(asset,Map.of(),List.of()));
+     for(int[] size:new int[][]{{1600,900},{700,500},{0,0},{1200,800}}){
+      workspace.setBounds(0,0,size[0],size[1]);var editor=workspace.editor();
+      assertEquals(camera.x(),editor.getWidth()*.5f-editor.getPanX()/zoom,.001);
+      assertEquals(camera.y(),editor.getHeight()*.5f-editor.getPanY()/zoom,.001);
+      assertEquals(zoom,editor.getZoom());
+      assertEquals(asset.graph(),workspace.snapshotDocument().root().graph());
+      assertEquals(camera,workspace.snapshotDocument().root().viewState().camera());
+     }
+    }
+   }
+  });
+ }
  @Test void replacementMovesOnlyToAnEmptyCompatibleInput(){
   var editor=new GLNodeEditor();var source=new GLNode("Source");var other=new GLNode("Other");var target=new GLNode("Math");
   var first=source.addOutput("out",new GLLabel("Out"));var second=other.addOutput("out",new GLLabel("Out"));var a=target.addInput("a",new GLLabel("A"));var b=target.addInput("b",new GLLabel("B"));
