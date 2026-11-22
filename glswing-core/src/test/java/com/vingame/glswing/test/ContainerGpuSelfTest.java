@@ -43,6 +43,7 @@ public final class ContainerGpuSelfTest {
 			renderer = GLRenderer2D.create(gl);
 			testTree(gl, renderer);
 			testZOrder(gl, renderer);
+			testRendererReplacement(gl, renderer);
 			System.out.println("Container GPU self-test passed.");
 		} finally {
 			GL3 gl = drawable.getGL().getGL3();
@@ -52,6 +53,32 @@ public final class ContainerGpuSelfTest {
 			drawable.destroy();
 		}
 	}
+
+	private static void testRendererReplacement(GL3 gl, GLRenderer2D renderer) {
+        SolidContainer root = new SolidContainer(Color.RED);
+        SolidContainer child = new SolidContainer(Color.GREEN);
+        root.setBounds(0, 0, WIDTH, HEIGHT);
+        child.setBounds(20, 20, 40, 40);
+        root.addGL(child);
+        draw(gl, renderer, root);
+        draw(gl, renderer, root);
+        if (root.recordCalls != 1 || child.recordCalls != 1)
+            throw new AssertionError("Stable renderer must reuse recordings");
+        GLRenderer2D replacement = GLRenderer2D.create(gl);
+        try {
+            draw(gl, replacement, root);
+            draw(gl, replacement, root);
+            checkColor(gl, 25, 25, Color.GREEN, "replacement renderer child");
+            checkPick(replacement.readPickResult(gl, 25, 25), child, 5, 5);
+            if (root.recordCalls != 2 || child.recordCalls != 2)
+                throw new AssertionError("Renderer replacement must rebuild each recording once");
+        } finally {
+            replacement.dispose(gl);
+        }
+        draw(gl, renderer, root);
+        if (root.recordCalls != 3 || child.recordCalls != 3)
+            throw new AssertionError("Returning to an earlier renderer must rebuild recordings");
+    }
 
 	private static void testZOrder(GL3 gl, GLRenderer2D renderer) {
 		SolidContainer root = new SolidContainer(Color.BLACK);
@@ -114,11 +141,14 @@ public final class ContainerGpuSelfTest {
 	private static void draw(GL3 gl, GLRenderer2D renderer, GLContainer root) {
 		GLContext2D context = renderer.beginFrame(gl, WIDTH, HEIGHT,
 				Projection2D.TOP_LEFT_PIXELS.create(WIDTH, HEIGHT));
-		context.clear(Color.BLACK);
-		root.renderComponent(context);
-		if (!context.getTransform().isIdentity() || context.getMouseTarget() != null)
-			throw new AssertionError("Component rendering leaked context state");
-		renderer.endFrame();
+		try {
+			context.clear(Color.BLACK);
+			root.renderComponent(context);
+			if (!context.getTransform().isIdentity() || context.getMouseTarget() != null)
+				throw new AssertionError("Component rendering leaked context state");
+		} finally {
+			renderer.endFrame();
+		}
 	}
 
 	private static void checkPick(GLPickResult result, GLContainer target,

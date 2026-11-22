@@ -238,8 +238,7 @@ public abstract class GLContainer implements GLParent, GLMouseTarget, Accessible
 	}
 
 	private void ensureRecording(GLContext2D context) {
-		if (recordingCache.isDirty())
-			recordingCache.ensure(context, this::record);
+		recordingCache.ensure(context, this::record);
 	}
 
 	/** Marks only this node's cached visual geometry for lazy reconstruction. */

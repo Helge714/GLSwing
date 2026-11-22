@@ -35,6 +35,10 @@ public final class GLRecording {
 		return commands.isEmpty();
 	}
 
+	boolean belongsTo(GLRenderer2D renderer) {
+		return owner == renderer;
+	}
+
 	void replay(GLRenderer2D renderer) {
 		replay(renderer, null);
 	}

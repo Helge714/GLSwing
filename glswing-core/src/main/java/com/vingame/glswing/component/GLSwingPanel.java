@@ -1320,6 +1320,8 @@ public abstract class GLSwingPanel extends GLJPanel
 		gpuTimers.initialize(gl);
 		resetFrameStatistics();
 		initialize(gl);
+		// A recreated context has no reusable scene or picking buffers.
+		damageTracker.repaintAll(true);
 	}
 
 	@Override
@@ -1369,8 +1371,7 @@ public abstract class GLSwingPanel extends GLJPanel
 				context.setOutputMask(true, damage.rebuildPicking());
 				renderer.setRedrawBounds(damage.full() ? null : damage.bounds());
 				layoutSupport.ensure(logicalWidth, logicalHeight);
-				if (recordingCache.isDirty())
-					recordingCache.ensure(context, this::record);
+				recordingCache.ensure(context, this::record);
 				render(context);
 				glChildren.render(context);
 				renderer.endFrame();

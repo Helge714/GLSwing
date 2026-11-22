@@ -44,6 +44,11 @@ public final class GLContext2D {
 	private ContextState recordingOuterContextState;
 	private final List<ContextState> renderTargetContextStates = new ArrayList<>();
 
+	/** Whether a recording can be replayed by this context's renderer. */
+	public boolean canDraw(GLRecording recording) {
+		return recording != null && recording.belongsTo(renderer);
+	}
+
 	GLContext2D(GLRenderer2D renderer) {
 		this.renderer = renderer;
 	}

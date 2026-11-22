@@ -1,5 +1,9 @@
 # Changelog
 
+- Rebuild cached component/panel recordings when the renderer changes, including
+  OpenGL context recreation during monitor changes. Stable frames keep their cache.
+  Covered by 0.2.0-SNAPSHOT; renderer replacement GPU regression added.
+
 - Preserve the visible world-space camera center when resizing a graph workspace,
   including zoomed views and temporary zero-sized viewports. Inspector toggles keep
   their existing screen-position policy. Covered by 0.2.0-SNAPSHOT.

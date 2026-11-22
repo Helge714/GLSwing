@@ -60,3 +60,7 @@ diff checks, not a full build.
 
 - Markdown: `ui/GLMarkdown` renders escaped offline HTML; `ui/GLMarkdownView` owns themed layout, tables, anchors and link hit-testing. Text, code and Markdown share `GLTextSearchTarget`, the `GLTextSearch` matcher and `GLTextSearchDialog`; Markdown maps matches across spans/wrapping/tables and exposes scroll callbacks (`GLMarkdownSearchTest`). Applications own document discovery/navigation and caching policy. Tests: `GLMarkdownTest`; consumer presentation tests remain in EasyKnack.
 - External showcase assets live in `glswing-examples/resources`, deliberately outside the classpath.
+
+- Recording lifetime: `GLRecordingCache` validates renderer ownership before reuse;
+  canvas/panel context initialization invalidates scene/picking damage.
+  `ContainerGpuSelfTest` covers renderer replacement and stable-frame reuse.

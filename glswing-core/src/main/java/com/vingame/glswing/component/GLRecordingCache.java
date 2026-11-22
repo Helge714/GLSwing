@@ -15,7 +15,7 @@ final class GLRecordingCache {
 
 	void ensure(GLContext2D context, Consumer<GLContext2D> recorder) {
 		long targetVersion = version.get();
-		if (recording != null && recordedVersion == targetVersion)
+		if (recording != null && recordedVersion == targetVersion && context.canDraw(recording))
 			return;
 		context.beginRecording();
 		try {

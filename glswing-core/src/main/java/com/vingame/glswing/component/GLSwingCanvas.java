@@ -256,6 +256,8 @@ public abstract class GLSwingCanvas extends GLCanvas implements GLEventListener 
 			sceneFramebuffer = SceneFramebuffer.create(gl);
 		resetFrameStatistics();
 		initialize(gl);
+		// A recreated context has no reusable scene or picking buffers.
+		sceneInvalidated();
 	}
 
 	/** Called from resource workers; AWT repaint is safe to request off the EDT. */
