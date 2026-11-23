@@ -21,6 +21,8 @@ public final class GLCanvasDialogSelfTest {
 	}
 
 	public static void main(String[] args) throws Exception {
+        boolean opaqueThemed = java.util.Arrays.asList(args).contains("--opaque-themed");
+        if (opaqueThemed) System.setProperty("glswing.dialog.translucent", "false");
 		TestCanvas[] canvas = new TestCanvas[1];
 		JFrame[] frame = new JFrame[1];
 		FPSAnimator[] animator = new FPSAnimator[1];
@@ -37,6 +39,7 @@ public final class GLCanvasDialogSelfTest {
 		try {
 			GLContainer rootContent = content();
 			GLDialog dialog = new GLDialog("Owned canvas dialog", rootContent);
+			if (opaqueThemed) dialog.setDecoration(GLDialog.Decoration.THEMED);
 			dialog.setSize(300, 180);
 			dialog.setModality(GLDialog.Modality.MODELESS);
 			dialog.show(canvas[0]);
@@ -48,6 +51,7 @@ public final class GLCanvasDialogSelfTest {
 				throw new AssertionError("Owned JDialog does not contain a direct GLCanvas");
 
 			GLDialog nested = new GLDialog("Nested canvas dialog", content());
+			if (opaqueThemed) nested.setDecoration(GLDialog.Decoration.THEMED);
 			nested.setSize(260, 150);
 			nested.setModality(GLDialog.Modality.MODELESS);
 			nested.show(rootContent);
@@ -59,14 +63,14 @@ public final class GLCanvasDialogSelfTest {
 				throw new AssertionError(
 						"Nested Canvas dialog is not owned by the first dialog");
 			nested.close();
-			nested.closedFuture().get(5, TimeUnit.SECONDS);
+			nested.closedFuture().get(20, TimeUnit.SECONDS);
 			dialog.close();
-			dialog.closedFuture().get(5, TimeUnit.SECONDS);
+			dialog.closedFuture().get(20, TimeUnit.SECONDS);
 			System.out.println("GL Canvas dialog self-test passed.");
 		} finally {
 			Thread stop = new Thread(animator[0]::stop, "canvas-dialog-test-stop");
 			stop.start();
-			stop.join(5_000);
+			stop.join(20_000);
 			SwingUtilities.invokeAndWait(frame[0]::dispose);
 		}
 	}

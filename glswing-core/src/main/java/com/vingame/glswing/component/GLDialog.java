@@ -420,7 +420,16 @@ public final class GLDialog implements AutoCloseable {
 			return dialog != null && dialog.isShowing();
 		}
 	}
+	static boolean translucentDialogsEnabled(String osName, String override) {
+        if (override != null) return Boolean.parseBoolean(override);
+        return !osName.toLowerCase(java.util.Locale.ROOT).contains("linux");
+    }
+
 	private static boolean supportsPerPixelTranslucency() {
+        // X11/XWayland may advertise translucency while repeatedly clearing the
+        // composited GLJPanel. Prefer the existing opaque GLCanvas path there.
+        if (!translucentDialogsEnabled(System.getProperty("os.name", ""),
+                System.getProperty("glswing.dialog.translucent"))) return false;
 		try {return GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice()
 				.isWindowTranslucencySupported(WindowTranslucency.PERPIXEL_TRANSLUCENT);}
 		catch(java.awt.HeadlessException|SecurityException unsupported) {return false;}

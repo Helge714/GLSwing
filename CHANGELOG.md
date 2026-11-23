@@ -1,5 +1,9 @@
 # Changelog
 
+- Prefer opaque themed dialog surfaces on Linux to avoid the translucent
+  GLJPanel/compositor path; retain an explicit glswing.dialog.translucent override.
+  Hardware acceptance remains required. Covered by 0.2.0-SNAPSHOT.
+
 - Rebuild cached component/panel recordings when the renderer changes, including
   OpenGL context recreation during monitor changes. Stable frames keep their cache.
   Covered by 0.2.0-SNAPSHOT; renderer replacement GPU regression added.

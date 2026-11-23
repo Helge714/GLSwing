@@ -64,3 +64,7 @@ diff checks, not a full build.
 - Recording lifetime: `GLRecordingCache` validates renderer ownership before reuse;
   canvas/panel context initialization invalidates scene/picking damage.
   `ContainerGpuSelfTest` covers renderer replacement and stable-frame reuse.
+
+- Linux dialog surfaces: `GLDialog` defaults to the opaque Canvas path;
+  `GLDialogSurfacePolicyTest` covers platform/override selection. Actual XWayland
+  rendering requires target acceptance.
