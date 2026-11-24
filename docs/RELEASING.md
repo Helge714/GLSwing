@@ -30,7 +30,29 @@ a Central-ready bundle. Do not modify artifacts after signing.
 When done, use `git worktree remove <candidate>/source` before deleting the
 candidate directory. Keep the candidate ZIPs/evidence until release acceptance.
 
-## Before publication
+## GitHub SDK publication
+
+Maven Central is optional. To prepare a manual-use SDK from a reviewed candidate:
+
+```sh
+python scripts/package-sdk.py --candidate target/release-candidate-0.2.0 --output dist/github-release-0.2.0
+```
+
+The output must not exist. Candidate ZIP hashes are verified first. The SDK
+contains only the project's libraries, Sources/Javadoc JARs, Maven POMs, local
+installation scripts, redistribution inventory and per-file SHA-256 checksums.
+Third-party runtime libraries stay separate. The full matching source ZIP and
+archive checksums are retained beside the SDK. Neither packaging nor local
+installation uploads anything. No Sonatype account or PGP key is required for
+this local workflow. Public GitHub download visibility must be explicitly agreed;
+do not expose a private repository's old history merely to publish the SDK.
+
+Validate the PowerShell installer against a separate repository using its
+`-RepositoryPath` argument; the shell script supports `GLSWING_LOCAL_REPOSITORY`.
+GitHub release assets should be the SDK ZIP, matching source ZIP and SHA256SUMS.
+Do not replace the bytes of an existing published release.
+
+## Before Maven Central publication
 
 1. Review [the redistribution inventory](THIRD-PARTY.md), candidate evidence,
    source changes and release notes. Preserve matching sources and license files.

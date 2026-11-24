@@ -44,6 +44,20 @@ SNAPSHOTs until a release is explicitly published.
 
 ## Installation
 
+### GitHub SDK (no Sonatype account)
+
+Download and extract the release SDK ZIP. It includes the runtime libraries,
+Sources, Javadoc, POMs and a short manual-install guide. Run `install-local.ps1`
+in PowerShell or `sh install-local.sh` on Linux/macOS to register the libraries
+in your local Maven repository. Then use the version printed in the SDK's
+`VERSION` file in your dependency declaration. Maven resolves third-party
+dependencies normally; GLSwing itself does not need to be on Maven Central.
+
+Alternatively add the runtime JARs to your IDE's classpath and provide the
+dependencies declared by their POMs, including target-platform natives.
+The SDK README explains both options. These JARs are libraries, not applications.
+
+
 ### Build and install from source
 
 Clone the repository and install the library into the local Maven repository:
