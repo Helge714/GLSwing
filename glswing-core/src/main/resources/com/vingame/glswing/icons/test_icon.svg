@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Original GLSwing demo artwork, created for this project. SPDX-License-Identifier: Apache-2.0 -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <clipPath id="tile"><path d="M32 0H224Q256 0 256 32V224Q256 256 224 256H32Q0 256 0 224V32Q0 0 32 0Z"/></clipPath>
+    <linearGradient id="spectrum" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="256" y2="0">
+      <stop offset="0" stop-color="#193b53"/><stop offset="1" stop-color="#68dbb1"/>
+    </linearGradient>
+  </defs>
+  <g clip-path="url(#tile)">
+    <path fill="url(#spectrum)" d="M0 0H256V256H0Z"/>
+    <path fill="#f5faf7" d="M48 148C72 148 72 76 96 76S120 180 144 180S168 108 192 108L208 108V120H192C174 120 174 192 144 192S114 88 96 88S78 160 48 160Z"/>
+    <path fill="#f5faf7" fill-rule="evenodd" d="M112 24H144V56H112ZM120 32V48H136V32Z"/>
+  </g>
+</svg>

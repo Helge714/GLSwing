@@ -1,0 +1,195 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>io.github.helge714</groupId>
+    <artifactId>glswing-parent</artifactId>
+    <version>0.2.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+
+    <name>GLSwing Parent</name>
+    <description>GPU-accelerated 2D rendering and lightweight UI for Java</description>
+    <url>https://github.com/Helge714/GLSwing-Java</url>
+
+    <licenses>
+        <license>
+            <name>Apache License, Version 2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
+    <developers>
+        <developer>
+            <id>Helge714</id>
+            <name>Helge714</name>
+            <url>https://github.com/Helge714</url>
+            <roles>
+                <role>developer</role>
+            </roles>
+        </developer>
+    </developers>
+
+    <scm>
+        <connection>scm:git:https://github.com/Helge714/GLSwing-Java.git</connection>
+        <developerConnection>scm:git:ssh://git@github.com/Helge714/GLSwing-Java.git</developerConnection>
+        <url>https://github.com/Helge714/GLSwing-Java</url>
+        <tag>v0.1.0</tag>
+    </scm>
+
+    <issueManagement>
+        <system>GitHub Issues</system>
+        <url>https://github.com/Helge714/GLSwing-Java/issues</url>
+    </issueManagement>
+
+    <modules>
+        <module>glswing-core</module>
+        <module>glswing-lsp</module>
+        <module>glswing-filedialogs-swt</module>
+        <module>glswing-examples</module>
+        <module>glswing-consumer-smoke</module>
+    </modules>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+        <maven.compiler.release>17</maven.compiler.release>
+        <api.compatibility.previousGroupId>${project.groupId}</api.compatibility.previousGroupId>
+        <jogamp.version>2.6.0</jogamp.version>
+        <junit.version>5.11.4</junit.version>
+        <lsp4j.version>1.0.0</lsp4j.version>
+        <commons-compress.version>1.28.0</commons-compress.version>
+        <swt.version>3.130.0</swt.version>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.jogamp.gluegen</groupId>
+                <artifactId>gluegen-rt-main</artifactId>
+                <version>${jogamp.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.jogamp.jogl</groupId>
+                <artifactId>jogl-all-main</artifactId>
+                <version>${jogamp.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <profiles>
+        <profile>
+            <id>central</id>
+            <properties><central.skipUpload>true</central.skipUpload><central.skipPublishing>false</central.skipPublishing></properties>
+            <build><plugins>
+                <plugin>
+                    <groupId>org.sonatype.central</groupId><artifactId>central-publishing-maven-plugin</artifactId>
+                    <version>0.12.0</version><extensions>true</extensions>
+                    <configuration><publishingServerId>central</publishingServerId>
+                        <skipPublishing>${central.skipPublishing}</skipPublishing>
+                        <autoPublish>false</autoPublish><skipUpload>${central.skipUpload}</skipUpload>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId><artifactId>maven-gpg-plugin</artifactId><version>3.2.8</version>
+                    <executions><execution><id>sign-release</id><phase>verify</phase><goals><goal>sign</goal></goals></execution></executions>
+                </plugin>
+            </plugins></build>
+        </profile>
+    </profiles>
+    <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>3.13.0</version>
+                    <configuration>
+                        <release>${maven.compiler.release}</release>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-jar-plugin</artifactId>
+                    <version>3.4.2</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-source-plugin</artifactId>
+                    <version>3.3.1</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>3.5.2</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-javadoc-plugin</artifactId>
+                    <version>3.11.2</version>
+                    <configuration>
+                        <!-- GLSwing publishes automatic-module names but does not
+                             compile as a JPMS module. Keep Javadoc on the class path
+                             so package discovery works on current JDKs. -->
+                        <legacyMode>true</legacyMode>
+                        <doclint>none</doclint>
+                        <excludePackageNames>com.vingame.glswing.internal:com.vingame.glswing.rendering.internal:com.vingame.glswing.rendering.batch</excludePackageNames>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>com.github.siom79.japicmp</groupId>
+                    <artifactId>japicmp-maven-plugin</artifactId>
+                    <version>0.26.2</version>
+                    <configuration>
+                        <oldVersion>
+                            <dependency>
+                                <groupId>${api.compatibility.previousGroupId}</groupId>
+                                <artifactId>${project.artifactId}</artifactId>
+                                <version>${api.compatibility.previousVersion}</version>
+                                <type>jar</type>
+                            </dependency>
+                        </oldVersion>
+                        <newVersion>
+                            <file>
+                                <path>${project.build.directory}/${project.build.finalName}.jar</path>
+                            </file>
+                        </newVersion>
+                        <parameter>
+                            <accessModifier>public</accessModifier>
+                            <onlyModified>true</onlyModified>
+                            <includeSynthetic>false</includeSynthetic>
+                            <breakBuildOnBinaryIncompatibleModifications>true</breakBuildOnBinaryIncompatibleModifications>
+                            <breakBuildOnSourceIncompatibleModifications>true</breakBuildOnSourceIncompatibleModifications>
+                            <breakBuildIfCausedByExclusion>false</breakBuildIfCausedByExclusion>
+                            <excludes>
+                                <exclude>com.vingame.glswing.internal</exclude>
+                                <exclude>com.vingame.glswing.rendering.internal</exclude>
+                                <exclude>com.vingame.glswing.rendering.batch</exclude>
+                            </excludes>
+                            <markdownTitle>${project.name} API compatibility</markdownTitle>
+                        </parameter>
+                    </configuration>
+                    <executions>
+                        <execution>
+                            <id>compare-public-api</id>
+                            <phase>verify</phase>
+                            <goals><goal>cmp</goal></goals>
+                        </execution>
+                    </executions>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-install-plugin</artifactId>
+                    <version>3.1.3</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-invoker-plugin</artifactId>
+                    <version>3.9.1</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
+</project>

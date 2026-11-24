@@ -1,0 +1,342 @@
+package com.vingame.glswing.ui;
+
+import java.awt.Color;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.awt.event.KeyEvent;
+import java.awt.event.MouseEvent;
+import java.beans.PropertyChangeListener;
+import java.util.concurrent.CopyOnWriteArrayList;
+
+import javax.accessibility.AccessibleAction;
+import javax.accessibility.AccessibleRole;
+
+import com.vingame.glswing.input.GLKeyEvent;
+import com.vingame.glswing.input.GLInputActions;
+import com.vingame.glswing.input.GLMouseEvent;
+import com.vingame.glswing.layout.GLInsets;
+import com.vingame.glswing.layout.GLSize;
+import com.vingame.glswing.rendering.GLContext2D;
+import com.vingame.glswing.rendering.GLFont;
+import com.vingame.glswing.rendering.GLIcon;
+import com.vingame.glswing.rendering.GLRenderParameters;
+import com.vingame.glswing.rendering.GLStroke;
+
+/**
+ * Lightweight push button. Its geometry is recorded once; interaction states
+ * update replay parameters and therefore do not retriangulate the button.
+ */
+public class GLButton extends GLControl {
+	public static final float DEFAULT_HEIGHT = 22;
+
+	private final CopyOnWriteArrayList<ActionListener> actionListeners =
+			new CopyOnWriteArrayList<>();
+	private final GLRenderParameters backgroundParameters = new GLRenderParameters();
+	private final GLRenderParameters pressedGradientParameters = new GLRenderParameters();
+	private final GLRenderParameters focusParameters = new GLRenderParameters();
+	private final GLRenderParameters textParameters = new GLRenderParameters();
+	private String text;
+	private String actionCommand;
+	private GLIcon icon;
+	private GLIcon disabledIcon;
+	private GLAction action;
+	private final PropertyChangeListener actionListener = event -> applyAction();
+	private GLButtonStyle localStyle;
+	private GLButtonStyle appliedStyle;
+
+	public GLButton(String text) {
+		super(true);
+		this.text = requireText(text);
+		actionCommand = text;
+		updatePresentation(true);
+	}
+
+	public GLButton(GLAction action) {
+		this("");
+		setAction(action);
+	}
+
+	public final String getText() {
+		return text;
+	}
+
+	@Override
+	protected String defaultName() {
+		return text;
+	}
+	@Override protected AccessibleRole defaultAccessibleRole() {
+		return AccessibleRole.PUSH_BUTTON;
+	}
+	@Override protected int accessibleActionCount() { return 1; }
+	@Override protected String accessibleActionDescription(int index) {
+		return index == 0 ? AccessibleAction.CLICK : null;
+	}
+	@Override protected boolean performAccessibleAction(int index) {
+		if (index != 0 || !isEnabled()) return false;
+		doClick();
+		return true;
+	}
+
+	public final void setText(String text) {
+		text = requireText(text);
+		if (this.text.equals(text))
+			return;
+		String oldText = this.text;
+		this.text = text;
+		fireAccessibleNameChange(oldText, text);
+		if (actionCommand.equals(oldText))
+			actionCommand = text;
+		updatePresentation(true);
+	}
+
+	public final String getActionCommand() {
+		return actionCommand;
+	}
+
+	public final void setActionCommand(String actionCommand) {
+		if (actionCommand == null)
+			throw new IllegalArgumentException("Action command must not be null");
+		this.actionCommand = actionCommand;
+	}
+
+	public final GLIcon getIcon() { return icon; }
+	public final void setIcon(GLIcon icon) {
+		if (this.icon == icon) return;
+		this.icon = icon;
+		updatePresentation(true);
+	}
+	public final void clearIcon() { setIcon(null); }
+	public final GLIcon getDisabledIcon() { return disabledIcon; }
+	public final void setDisabledIcon(GLIcon icon) {
+		if (disabledIcon == icon) return;
+		disabledIcon = icon;
+		invalidateRecording();
+	}
+	public final void clearDisabledIcon() { setDisabledIcon(null); }
+
+	public final GLAction getAction() { return action; }
+	/** Binds presentation, availability and invocation to a shared action. */
+	public final void setAction(GLAction action) {
+		if (this.action == action) return;
+		if (this.action != null)
+			this.action.removePropertyChangeListener(actionListener);
+		this.action = action;
+		if (action != null) action.addPropertyChangeListener(actionListener);
+		applyAction();
+	}
+	public final void clearAction() { setAction(null); }
+
+	public final void addActionListener(ActionListener listener) {
+		if (listener == null)
+			throw new IllegalArgumentException("Action listener must not be null");
+		actionListeners.addIfAbsent(listener);
+	}
+
+	public final void removeActionListener(ActionListener listener) {
+		actionListeners.remove(listener);
+	}
+
+	public final ActionListener[] getActionListeners() {
+		return actionListeners.toArray(ActionListener[]::new);
+	}
+
+	public final void doClick() {
+		if (isEnabled())
+			fireActionPerformed();
+	}
+
+	public final void setGLStyle(GLButtonStyle style) {
+		if (style == null)
+			throw new IllegalArgumentException("Button style must not be null");
+		if (localStyle == style)
+			return;
+		localStyle = style;
+		updatePresentation(true);
+	}
+
+	public final void clearGLStyle() {
+		if (localStyle == null)
+			return;
+		localStyle = null;
+		updatePresentation(true);
+	}
+
+	public final GLButtonStyle getGLStyle() {
+		return localStyle != null ? localStyle : getGLTheme().buttonStyle();
+	}
+
+	@Override
+	protected void record(GLContext2D context) {
+		GLButtonStyle style = getGLStyle();
+		float width = getWidth();
+		float height = getHeight();
+		if (width <= 0 || height <= 0)
+			return;
+		float border = layoutBorderWidth(style.borderWidth());
+
+		context.withParameters(backgroundParameters, () -> {
+			if (border > 0)
+				context.fillAndDrawUIRoundRect(0, 0, width, height,
+						layoutCornerRadius(style.cornerRadius()), border, Color.WHITE,
+						style.borderColor(), GLStroke.WidthSpace.SCREEN);
+			else
+				context.fillUIRoundRect(0, 0, width, height,
+						layoutCornerRadius(style.cornerRadius()), Color.WHITE);
+		});
+		float gradientInset = border > 0 ? Math.min(border + 1,
+				Math.min(width, height) * 0.5f) : 0;
+		context.withParameters(pressedGradientParameters, () ->
+				context.fillUIVerticalGradientRoundRect(gradientInset, gradientInset,
+						Math.max(0.0001f, width - gradientInset * 2),
+						Math.max(0.0001f, height - gradientInset * 2),
+						Math.max(0, layoutCornerRadius(style.cornerRadius()) - gradientInset),
+						style.pressedLightColor(), style.pressedDarkColor()));
+
+		float focusInset = border;
+		if (isFocusable() && width > focusInset * 2 && height > focusInset * 2) {
+			context.withParameters(focusParameters, () ->
+					context.drawUIRoundRect(focusInset, focusInset,
+							width - focusInset * 2, height - focusInset * 2,
+							Math.max(0, layoutCornerRadius(style.cornerRadius()) - focusInset),
+							1.5f, Color.WHITE, GLStroke.WidthSpace.SCREEN));
+		}
+
+		GLIcon renderedIcon = !isEnabled() && disabledIcon != null ? disabledIcon : icon;
+		if (!text.isEmpty() || renderedIcon != null) {
+			GLFont font = getGLFont(style.font());
+			GLInsets padding = style.padding();
+			float iconSize = renderedIcon == null ? 0
+					: Math.min(18, Math.max(1, height - padding.vertical()));
+			float gap = renderedIcon != null && !text.isEmpty() ? 5 : 0;
+			String renderedText = GLTextFitter.ellipsize(font, text,
+					Math.max(0, width - padding.horizontal() - iconSize - gap));
+			float contentWidth = iconSize + gap + font.measureText(renderedText);
+			float textX = (width - contentWidth) * 0.5f + iconSize + gap;
+			float baselineY = (height - font.getLineHeight()) * 0.5f + font.getAscent();
+			if (renderedIcon != null)
+				context.drawUIIcon(renderedIcon, (width - contentWidth) * 0.5f,
+						(height - iconSize) * 0.5f, iconSize, iconSize,
+						style.text(getControlState()));
+			context.drawUITextShadow(font, renderedText, textX, baselineY,
+					getGLTheme().textShadow("button"));
+			context.withParameters(textParameters, () ->
+					context.drawUIText(font, renderedText, textX, baselineY, Color.WHITE));
+		}
+	}
+
+	@Override
+	protected void controlStateChanged(GLControlState oldState,
+			GLControlState newState) {
+		updateColors();
+	}
+
+	@Override protected String toolTipTextAt(GLMouseEvent event) {
+		String explicit = super.toolTipTextAt(event);
+		if (explicit != null) return explicit;
+		GLButtonStyle style = getGLStyle();
+		float iconWidth = icon == null ? 0
+				: Math.min(18, Math.max(1, getHeight() - style.padding().vertical()))
+						+ (text.isEmpty() ? 0 : 5);
+		return GLTextFitter.overflowToolTip(getGLFont(style.font()), text,
+				Math.max(0, getWidth() - style.padding().horizontal() - iconWidth));
+	}
+
+	@Override
+	protected void controlFocusChanged(boolean focused) {
+		focusParameters.setOpacity(focused ? 1 : 0);
+	}
+
+	@Override
+	protected void focusabilityChanged(boolean focusable) {
+		invalidateRecording();
+	}
+
+	@Override
+	protected void controlMouseClicked(GLMouseEvent event) {
+		if (isEnabled() && event.getButton() == MouseEvent.BUTTON1)
+			fireActionPerformed();
+	}
+
+	@Override
+	protected void controlKeyPressed(GLKeyEvent event) {
+		if (getGLInputMap().matches(GLInputActions.ACTIVATE, event)
+				&& !isKeyboardPressed()) {
+			setKeyboardPressed(true);
+			event.consume();
+		}
+	}
+
+	@Override
+	protected void controlKeyReleased(GLKeyEvent event) {
+		if (getGLInputMap().matches(GLInputActions.ACTIVATE, event)
+				&& isKeyboardPressed()) {
+			setKeyboardPressed(false);
+			fireActionPerformed();
+			event.consume();
+		}
+	}
+
+	@Override
+	protected void themeChanged() {
+		if (localStyle == null && !getGLStyle().equals(appliedStyle))
+			updatePresentation(true);
+	}
+
+	@Override protected void localizerChanged() { applyAction(); }
+
+	private void updatePresentation(boolean geometryChanged) {
+		GLButtonStyle style = getGLStyle();
+		appliedStyle = style;
+		GLFont font = measurementFont(style.font());
+		GLInsets padding = style.padding();
+		float iconWidth = icon == null ? 0
+				: Math.min(18, Math.max(1, style.height() - padding.vertical()))
+						+ (text.isEmpty() ? 0 : 5);
+		setIntrinsicPreferredGLSize(new GLSize(
+				font.measureText(text) + iconWidth + padding.horizontal(),
+				style.height()));
+		focusParameters.setColor(style.focusColor()).setOpacity(isFocused() ? 1 : 0);
+		updateColors();
+		if (geometryChanged)
+			invalidateRecording();
+	}
+
+	private void updateColors() {
+		GLButtonStyle style = getGLStyle();
+		GLControlState state = getControlState();
+		backgroundParameters.setColor(style.background(state));
+		pressedGradientParameters.setOpacity(
+				state == GLControlState.PRESSED ? 1 : 0);
+		textParameters.setColor(style.text(state));
+		repaintGL();
+	}
+
+	private GLFont measurementFont(GLFontSpec specification) {
+		return getGLParent() == null ? specification.measurementFont()
+				: getGLFont(specification);
+	}
+
+	private void fireActionPerformed() {
+		ActionEvent event = new ActionEvent(this, ActionEvent.ACTION_PERFORMED,
+				actionCommand, System.currentTimeMillis(), 0);
+		for (ActionListener listener : actionListeners)
+			listener.actionPerformed(event);
+		if (action != null) action.perform(this);
+	}
+
+	private void applyAction() {
+		if (action == null) return;
+		setText(action.resolvedText(getGLLocalizer()));
+		setActionCommand(action.id());
+		setToolTipText(action.resolvedShortDescription(getGLLocalizer()));
+		setIcon(action.icon());
+		setDisabledIcon(action.disabledIcon());
+		setEnabled(action.isEnabled());
+	}
+
+	private static String requireText(String text) {
+		if (text == null)
+			throw new IllegalArgumentException("Button text must not be null");
+		return text;
+	}
+}

@@ -1,0 +1,504 @@
+# Explicit GLSwing theme-property schema. No key-name or value heuristics are used.
+schema.name=GLSwing Core
+schema.version=1
+
+theme.name=TEXT, "Human-readable theme name.", fragment=meta
+theme.extends=PATH, "Inherited theme file or built-in preset.", fragment=meta
+theme.type=ENUM, "Role of the theme document.", values=colors|metrics|bundle, fragment=meta
+theme.colors=PATH, "Color fragment imported by a bundle.", fragment=meta
+theme.metrics=PATH, "Metrics fragment imported by a bundle.", fragment=meta
+theme.schema=PATH, "Schema file or directory imported by a bundle.", fragment=meta
+
+font.family=TEXT, "Value of the font.family theme property.", fragment=colors
+font.style=ENUM, "Value of the font.style theme property.", values=plain|bold|italic|bolditalic|bold_italic|bold-italic, fragment=colors
+font.size=NUMBER, "Value of the font.size theme property.", fragment=colors
+codeEditor.background=COLOR, "Value of the codeEditor.background theme property."
+codeEditor.text=COLOR, "Value of the codeEditor.text theme property."
+codeEditor.keyword=COLOR, "Value of the codeEditor.keyword theme property."
+codeEditor.string=COLOR, "Value of the codeEditor.string theme property."
+codeEditor.number=COLOR, "Value of the codeEditor.number theme property."
+codeEditor.comment=COLOR, "Value of the codeEditor.comment theme property."
+codeEditor.type=COLOR, "Value of the codeEditor.type theme property."
+codeEditor.navigationLink=COLOR, "Value of the codeEditor.navigationLink theme property."
+codeEditor.semantic.namespace=COLOR, "Value of the codeEditor.semantic.namespace theme property."
+codeEditor.semantic.type=COLOR, "Value of the codeEditor.semantic.type theme property."
+codeEditor.semantic.class=COLOR, "Value of the codeEditor.semantic.class theme property."
+codeEditor.semantic.class.abstract=COLOR, "Value of the codeEditor.semantic.class.abstract theme property."
+codeEditor.semantic.class.static=COLOR, "Value of the codeEditor.semantic.class.static theme property."
+codeEditor.semantic.enum=COLOR, "Value of the codeEditor.semantic.enum theme property."
+codeEditor.semantic.interface=COLOR, "Value of the codeEditor.semantic.interface theme property."
+codeEditor.semantic.struct=COLOR, "Value of the codeEditor.semantic.struct theme property."
+codeEditor.semantic.typeParameter=COLOR, "Value of the codeEditor.semantic.typeParameter theme property."
+codeEditor.semantic.parameter=COLOR, "Value of the codeEditor.semantic.parameter theme property."
+codeEditor.semantic.variable=COLOR, "Value of the codeEditor.semantic.variable theme property."
+codeEditor.semantic.variable.declaration=COLOR, "Value of the codeEditor.semantic.variable.declaration theme property."
+codeEditor.semantic.variable.readonly=COLOR, "Value of the codeEditor.semantic.variable.readonly theme property."
+codeEditor.semantic.variable.static=COLOR, "Value of the codeEditor.semantic.variable.static theme property."
+codeEditor.semantic.property=COLOR, "Value of the codeEditor.semantic.property theme property."
+codeEditor.semantic.property.readonly=COLOR, "Value of the codeEditor.semantic.property.readonly theme property."
+codeEditor.semantic.property.static=COLOR, "Value of the codeEditor.semantic.property.static theme property."
+codeEditor.semantic.enumMember=COLOR, "Value of the codeEditor.semantic.enumMember theme property."
+codeEditor.semantic.event=COLOR, "Value of the codeEditor.semantic.event theme property."
+codeEditor.semantic.function=COLOR, "Value of the codeEditor.semantic.function theme property."
+codeEditor.semantic.function.abstract=COLOR, "Value of the codeEditor.semantic.function.abstract theme property."
+codeEditor.semantic.function.declaration=COLOR, "Value of the codeEditor.semantic.function.declaration theme property."
+codeEditor.semantic.function.definition=COLOR, "Value of the codeEditor.semantic.function.definition theme property."
+codeEditor.semantic.function.static=COLOR, "Value of the codeEditor.semantic.function.static theme property."
+codeEditor.semantic.method=COLOR, "Value of the codeEditor.semantic.method theme property."
+codeEditor.semantic.method.abstract=COLOR, "Value of the codeEditor.semantic.method.abstract theme property."
+codeEditor.semantic.method.declaration=COLOR, "Value of the codeEditor.semantic.method.declaration theme property."
+codeEditor.semantic.method.definition=COLOR, "Value of the codeEditor.semantic.method.definition theme property."
+codeEditor.semantic.method.static=COLOR, "Value of the codeEditor.semantic.method.static theme property."
+codeEditor.semantic.macro=COLOR, "Value of the codeEditor.semantic.macro theme property."
+codeEditor.semantic.modifier=COLOR, "Value of the codeEditor.semantic.modifier theme property."
+codeEditor.semantic.regexp=COLOR, "Value of the codeEditor.semantic.regexp theme property."
+codeEditor.semantic.operator=COLOR, "Value of the codeEditor.semantic.operator theme property."
+codeEditor.semantic.decorator=COLOR, "Value of the codeEditor.semantic.decorator theme property."
+codeEditor.semantic.*.deprecated=COLOR, "Value of the codeEditor.semantic.*.deprecated theme property."
+textShadow.color=COLOR, "Value of the textShadow.color theme property."
+textShadow.on=BOOLEAN, "Value of the textShadow.on theme property."
+textShadow.offsetX=NUMBER, "Value of the textShadow.offsetX theme property."
+textShadow.offsetY=NUMBER, "Value of the textShadow.offsetY theme property."
+textShadow.softness=NUMBER, "Value of the textShadow.softness theme property."
+textShadow.offsetSpace=ENUM, "Value of the textShadow.offsetSpace theme property.", values=screen|local
+fileDialog.hiddenText=COLOR, "Value of the fileDialog.hiddenText theme property."
+fileDialog.hiddenItalic=BOOLEAN, "Value of the fileDialog.hiddenItalic theme property."
+fileDialog.background=COLOR, "File-dialog content background."
+fileDialog.footer.background=COLOR, "File-dialog footer background."
+fileDialog.header.background=COLOR, "File-list header background."
+fileDialog.header.borderColor=COLOR, "File-list header border color."
+fileDialog.row.background=COLOR, "File-list row background."
+fileDialog.selectionColor=COLOR, "File-list selection outline color."
+fileDialog.commandBar.background=COLOR, "File-dialog command-bar background."
+fileDialog.commandBar.borderColor=COLOR, "File-dialog command-bar border color."
+fileDialog.commandBar.cornerRadius=NUMBER, "File-dialog command-bar corner radius.", min=0
+state.normal=COLOR, "Value of the state.normal theme property."
+state.hover=COLOR, "Value of the state.hover theme property."
+state.pressed=COLOR, "Value of the state.pressed theme property."
+state.disabled=COLOR, "Value of the state.disabled theme property."
+button.pressedLight=COLOR, "Value of the button.pressedLight theme property."
+button.pressedDark=COLOR, "Value of the button.pressedDark theme property."
+label.text=COLOR, "Value of the label.text theme property."
+label.padding=INSETS, "Value of the label.padding theme property."
+checkBox.boxSize=NUMBER, "Value of the checkBox.boxSize theme property."
+checkBox.gap=NUMBER, "Value of the checkBox.gap theme property."
+checkBox.checkStrokeWidth=NUMBER, "Value of the checkBox.checkStrokeWidth theme property."
+checkBox.padding=INSETS, "Value of the checkBox.padding theme property."
+slider.hover=COLOR, "Value of the slider.hover theme property."
+slider.pressed=COLOR, "Value of the slider.pressed theme property."
+slider.progressLight=COLOR, "Value of the slider.progressLight theme property."
+slider.progressDark=COLOR, "Value of the slider.progressDark theme property."
+slider.focusProgressLight=COLOR, "Value of the slider.focusProgressLight theme property."
+slider.focusProgressDark=COLOR, "Value of the slider.focusProgressDark theme property."
+slider.arrowBackground=COLOR, "Value of the slider.arrowBackground theme property."
+slider.arrowHover=COLOR, "Value of the slider.arrowHover theme property."
+slider.arrowPressed=COLOR, "Value of the slider.arrowPressed theme property."
+slider.arrowDisabled=COLOR, "Value of the slider.arrowDisabled theme property."
+slider.arrow=COLOR, "Value of the slider.arrow theme property."
+slider.arrowTextDisabled=COLOR, "Value of the slider.arrowTextDisabled theme property."
+slider.preferredWidth=NUMBER, "Value of the slider.preferredWidth theme property."
+slider.arrowButtonWidth=NUMBER, "Value of the slider.arrowButtonWidth theme property."
+slider.arrowInset=NUMBER, "Value of the slider.arrowInset theme property."
+slider.arrowStrokeWidth=NUMBER, "Value of the slider.arrowStrokeWidth theme property."
+numberSpinner.height=NUMBER, "Value of the numberSpinner.height theme property."
+numberSpinner.preferredWidth=NUMBER, "Value of the numberSpinner.preferredWidth theme property."
+numberSpinner.buttonWidth=NUMBER, "Value of the numberSpinner.buttonWidth theme property."
+numberSpinner.arrowStrokeWidth=NUMBER, "Value of the numberSpinner.arrowStrokeWidth theme property."
+numberSpinner.cornerRadius=NUMBER, "Value of the numberSpinner.cornerRadius theme property."
+numberSpinner.borderWidth=NUMBER, "Value of the numberSpinner.borderWidth theme property."
+numberSpinner.padding=INSETS, "Value of the numberSpinner.padding theme property."
+textEditor.background=COLOR, "Value of the textEditor.background theme property."
+textEditor.text=COLOR, "Value of the textEditor.text theme property."
+textEditor.textDisabled=COLOR, "Value of the textEditor.textDisabled theme property."
+textEditor.selection=COLOR, "Value of the textEditor.selection theme property."
+textEditor.searchMatch=COLOR, "Background used for inactive text-search matches."
+textEditor.searchActiveMatch=COLOR, "Background used for the active text-search match."
+textEditor.caret=COLOR, "Value of the textEditor.caret theme property."
+textEditor.border=COLOR, "Value of the textEditor.border theme property."
+textEditor.focus=COLOR, "Value of the textEditor.focus theme property."
+textEditor.invalid=COLOR, "Value of the textEditor.invalid theme property."
+textEditor.cornerRadius=NUMBER, "Value of the textEditor.cornerRadius theme property."
+textEditor.height=NUMBER, "Value of the textEditor.height theme property."
+textEditor.preferredWidth=NUMBER, "Value of the textEditor.preferredWidth theme property."
+textEditor.overflowFadeWidth=NUMBER, "Value of the textEditor.overflowFadeWidth theme property."
+textEditor.padding=INSETS, "Value of the textEditor.padding theme property."
+menu.background=COLOR, "Value of the menu.background theme property."
+menu.hover=COLOR, "Value of the menu.hover theme property."
+menu.pressed=COLOR, "Value of the menu.pressed theme property."
+menu.text=COLOR, "Value of the menu.text theme property."
+menu.textDisabled=COLOR, "Value of the menu.textDisabled theme property."
+menu.accelerator=COLOR, "Value of the menu.accelerator theme property."
+menu.border=COLOR, "Value of the menu.border theme property."
+menu.separator=COLOR, "Value of the menu.separator theme property."
+menu.arrow=COLOR, "Value of the menu.arrow theme property."
+menu.cornerRadius=NUMBER, "Value of the menu.cornerRadius theme property."
+menu.borderWidth=NUMBER, "Menu border width.", min=0
+menu.itemCornerRadius=NUMBER, "Value of the menu.itemCornerRadius theme property."
+menu.itemHeight=NUMBER, "Value of the menu.itemHeight theme property."
+menu.separatorHeight=NUMBER, "Value of the menu.separatorHeight theme property."
+menu.minimumWidth=NUMBER, "Value of the menu.minimumWidth theme property."
+menu.itemHorizontalPadding=NUMBER, "Value of the menu.itemHorizontalPadding theme property."
+menu.columnGap=NUMBER, "Value of the menu.columnGap theme property."
+menu.padding=INSETS, "Value of the menu.padding theme property."
+menu.shadow.color=COLOR, "Value of the menu.shadow.color theme property."
+menu.shadow.softness=NUMBER, "Value of the menu.shadow.softness theme property."
+menu.shadow.offsetX=NUMBER, "Value of the menu.shadow.offsetX theme property."
+menu.shadow.offsetY=NUMBER, "Value of the menu.shadow.offsetY theme property."
+menuBar.background=COLOR, "Value of the menuBar.background theme property."
+menuBar.text=COLOR, "Value of the menuBar.text theme property."
+menuBar.textDisabled=COLOR, "Value of the menuBar.textDisabled theme property."
+menuBar.hover=COLOR, "Value of the menuBar.hover theme property."
+menuBar.pressed=COLOR, "Value of the menuBar.pressed theme property."
+menuBar.active=COLOR, "Value of the menuBar.active theme property."
+menuBar.border=COLOR, "Value of the menuBar.border theme property."
+menuBar.height=NUMBER, "Value of the menuBar.height theme property."
+menuBar.itemHorizontalPadding=NUMBER, "Value of the menuBar.itemHorizontalPadding theme property."
+menuBar.itemGap=NUMBER, "Value of the menuBar.itemGap theme property."
+menuBar.cornerRadius=NUMBER, "Value of the menuBar.cornerRadius theme property."
+menuBar.borderWidth=NUMBER, "Menu-bar border width.", min=0
+comboBox.text=COLOR, "Value of the comboBox.text theme property."
+comboBox.arrow=COLOR, "Value of the comboBox.arrow theme property."
+comboBox.pressedLight=COLOR, "Value of the comboBox.pressedLight theme property."
+comboBox.pressedDark=COLOR, "Value of the comboBox.pressedDark theme property."
+comboBox.cornerRadius=NUMBER, "Value of the comboBox.cornerRadius theme property."
+comboBox.minimumWidth=NUMBER, "Value of the comboBox.minimumWidth theme property."
+comboBox.arrowAreaWidth=NUMBER, "Value of the comboBox.arrowAreaWidth theme property."
+comboBox.arrowStrokeWidth=NUMBER, "Value of the comboBox.arrowStrokeWidth theme property."
+comboBox.padding=INSETS, "Value of the comboBox.padding theme property."
+scrollBar.track=COLOR, "Value of the scrollBar.track theme property."
+scrollBar.thumb=COLOR, "Value of the scrollBar.thumb theme property."
+scrollBar.thumbHover=COLOR, "Value of the scrollBar.thumbHover theme property."
+scrollBar.thumbPressed=COLOR, "Value of the scrollBar.thumbPressed theme property."
+scrollBar.thumbDisabled=COLOR, "Value of the scrollBar.thumbDisabled theme property."
+scrollBar.thickness=NUMBER, "Value of the scrollBar.thickness theme property."
+scrollBar.minimumThumbLength=NUMBER, "Value of the scrollBar.minimumThumbLength theme property."
+scrollBar.trackPadding=NUMBER, "Value of the scrollBar.trackPadding theme property."
+scrollBar.cornerRadius=NUMBER, "Value of the scrollBar.cornerRadius theme property."
+scrollPane.background=COLOR, "Value of the scrollPane.background theme property."
+scrollPane.border=COLOR, "Value of the scrollPane.border theme property."
+scrollPane.borderWidth=NUMBER, "Value of the scrollPane.borderWidth theme property."
+scrollPane.cornerRadius=NUMBER, "Value of the scrollPane.cornerRadius theme property."
+scrollPane.scrollBarGap=NUMBER, "Value of the scrollPane.scrollBarGap theme property."
+scrollPane.padding=INSETS, "Value of the scrollPane.padding theme property."
+scrollPane.viewportBorder=COLOR, "Value of the scrollPane.viewportBorder theme property."
+scrollPane.viewportBorderWidth=NUMBER, "Value of the scrollPane.viewportBorderWidth theme property."
+list.background=COLOR, "Value of the list.background theme property."
+list.rowBackground=COLOR, "Value of the list.rowBackground theme property."
+list.rowHoverBackground=COLOR, "Value of the list.rowHoverBackground theme property."
+list.rowPressedBackground=COLOR, "Value of the list.rowPressedBackground theme property."
+list.selectionBackground=COLOR, "Value of the list.selectionBackground theme property."
+list.selectionInactiveBackground=COLOR, "Value of the list.selectionInactiveBackground theme property."
+list.text=COLOR, "Value of the list.text theme property."
+list.selectedText=COLOR, "Value of the list.selectedText theme property."
+list.textDisabled=COLOR, "Value of the list.textDisabled theme property."
+list.border=COLOR, "Value of the list.border theme property."
+list.focus=COLOR, "Value of the list.focus theme property."
+list.cornerRadius=NUMBER, "Value of the list.cornerRadius theme property."
+list.borderWidth=NUMBER, "Value of the list.borderWidth theme property."
+list.rowHeight=NUMBER, "Value of the list.rowHeight theme property."
+list.preferredWidth=NUMBER, "Value of the list.preferredWidth theme property."
+list.cellPadding=INSETS, "Value of the list.cellPadding theme property."
+tree.indent=NUMBER, "Value of the tree.indent theme property."
+tree.disclosureSize=NUMBER, "Value of the tree.disclosureSize theme property."
+tree.disclosureHover=COLOR, "Value of the tree.disclosureHover theme property."
+tree.disclosurePressed=COLOR, "Value of the tree.disclosurePressed theme property."
+tree.disclosureCornerRadius=NUMBER, "Value of the tree.disclosureCornerRadius theme property."
+tree.iconSize=NUMBER, "Value of the tree.iconSize theme property."
+tree.iconGap=NUMBER, "Value of the tree.iconGap theme property."
+tabbedPane.background=COLOR, "Value of the tabbedPane.background theme property."
+tabbedPane.tabBarBackground=COLOR, "Value of the tabbedPane.tabBarBackground theme property."
+tabbedPane.tab=COLOR, "Value of the tabbedPane.tab theme property."
+tabbedPane.tabHover=COLOR, "Value of the tabbedPane.tabHover theme property."
+tabbedPane.tabPressed=COLOR, "Value of the tabbedPane.tabPressed theme property."
+tabbedPane.tabSelected=COLOR, "Value of the tabbedPane.tabSelected theme property."
+tabbedPane.tabDisabled=COLOR, "Value of the tabbedPane.tabDisabled theme property."
+tabbedPane.text=COLOR, "Value of the tabbedPane.text theme property."
+tabbedPane.textDisabled=COLOR, "Value of the tabbedPane.textDisabled theme property."
+tabbedPane.border=COLOR, "Value of the tabbedPane.border theme property."
+tabbedPane.borderWidth=NUMBER, "Value of the tabbedPane.borderWidth theme property."
+tabbedPane.cornerRadius=NUMBER, "Value of the tabbedPane.cornerRadius theme property."
+tabbedPane.tabHeight=NUMBER, "Value of the tabbedPane.tabHeight theme property."
+tabbedPane.minimumTabWidth=NUMBER, "Value of the tabbedPane.minimumTabWidth theme property."
+tabbedPane.maximumTabWidth=NUMBER, "Value of the tabbedPane.maximumTabWidth theme property."
+tabbedPane.tabGap=NUMBER, "Value of the tabbedPane.tabGap theme property."
+tabbedPane.tabHorizontalPadding=NUMBER, "Value of the tabbedPane.tabHorizontalPadding theme property."
+tabbedPane.contentPadding=INSETS, "Value of the tabbedPane.contentPadding theme property."
+nodeEditor.background=COLOR, "Value of the nodeEditor.background theme property."
+nodeEditor.gridVisible=BOOLEAN, "Value of the nodeEditor.gridVisible theme property."
+nodeEditor.gridMinor=COLOR, "Value of the nodeEditor.gridMinor theme property."
+nodeEditor.gridMajor=COLOR, "Value of the nodeEditor.gridMajor theme property."
+nodeEditor.gridSpacing=NUMBER, "Value of the nodeEditor.gridSpacing theme property."
+nodeEditor.gridMajorInterval=NUMBER, "Value of the nodeEditor.gridMajorInterval theme property."
+nodeEditor.gridLineWidth=NUMBER, "Value of the nodeEditor.gridLineWidth theme property."
+nodeEditor.connectionSnapDistance=NUMBER, "Value of the nodeEditor.connectionSnapDistance theme property."
+nodeEditor.connectionCurveTolerance=NUMBER, "Value of the nodeEditor.connectionCurveTolerance theme property."
+nodeEditor.connectionHandleFactor=NUMBER, "Value of the nodeEditor.connectionHandleFactor theme property."
+nodeEditor.minimumConnectionHandleLength=NUMBER, "Value of the nodeEditor.minimumConnectionHandleLength theme property."
+nodeEditor.connectionDashLength=NUMBER, "Length of reference connection dashes.", min=1
+nodeEditor.connectionDashGap=NUMBER, "Gap between reference connection dashes.", min=1
+nodeEditor.connectionWidth=NUMBER, "Value of the nodeEditor.connectionWidth theme property."
+nodeEditor.connectionBorder=COLOR, "Value of the nodeEditor.connectionBorder theme property."
+nodeEditor.selectedConnectionBorder=COLOR, "Value of the nodeEditor.selectedConnectionBorder theme property."
+nodeEditor.warningConnectionBorder=COLOR, "Outer border for node connections carrying a warning diagnostic."
+nodeEditor.errorConnectionBorder=COLOR, "Outer border for node connections carrying an error diagnostic."
+nodeEditor.connectionBorderWidth=NUMBER, "Value of the nodeEditor.connectionBorderWidth theme property."
+nodeEditor.connectionColorInterpolation=ENUM, "Color space used to interpolate node connections.", values=srgb|linear_rgb|oklab, fragment=colors
+nodeEditor.marqueeFill=COLOR, "Value of the nodeEditor.marqueeFill theme property."
+nodeEditor.marqueeBorder=COLOR, "Value of the nodeEditor.marqueeBorder theme property."
+nodeEditor.marqueeBorderWidth=NUMBER, "Value of the nodeEditor.marqueeBorderWidth theme property."
+codeEditor.overviewRulerWidth=NUMBER, "Value of the codeEditor.overviewRulerWidth theme property."
+codeEditor.overviewRulerGap=NUMBER, "Value of the codeEditor.overviewRulerGap theme property."
+codeEditor.overviewMarkerHeight=NUMBER, "Value of the codeEditor.overviewMarkerHeight theme property."
+codeEditor.overviewRulerBackground=COLOR, "Value of the codeEditor.overviewRulerBackground theme property."
+codeEditor.colorPreviewSize=NUMBER, "Value of the codeEditor.colorPreviewSize theme property."
+codeEditor.colorPreviewGap=NUMBER, "Value of the codeEditor.colorPreviewGap theme property."
+codeEditor.colorPreviewBorder=COLOR, "Value of the codeEditor.colorPreviewBorder theme property."
+codeEditor.colorPreviewCheckerLight=COLOR, "Value of the codeEditor.colorPreviewCheckerLight theme property."
+codeEditor.colorPreviewCheckerDark=COLOR, "Value of the codeEditor.colorPreviewCheckerDark theme property."
+codeEditor.inlay.background=COLOR, "Value of the codeEditor.inlay.background theme property."
+codeEditor.inlay.border=COLOR, "Value of the codeEditor.inlay.border theme property."
+codeEditor.inlay.text=COLOR, "Value of the codeEditor.inlay.text theme property."
+codeEditor.inlay.fontScale=NUMBER, "Value of the codeEditor.inlay.fontScale theme property."
+codeEditor.inlay.padding=NUMBER, "Value of the codeEditor.inlay.padding theme property."
+codeEditor.inlay.gap=NUMBER, "Value of the codeEditor.inlay.gap theme property."
+codeEditor.inlay.radius=NUMBER, "Value of the codeEditor.inlay.radius theme property."
+codeEditor.inlay.borderWidth=NUMBER, "Value of the codeEditor.inlay.borderWidth theme property."
+node.background=COLOR, "Value of the node.background theme property."
+node.titleBackground=COLOR, "Value of the node.titleBackground theme property."
+node.titleGradientLight=COLOR, "Value of the node.titleGradientLight theme property."
+node.titleGradientDark=COLOR, "Value of the node.titleGradientDark theme property."
+node.titleText=COLOR, "Value of the node.titleText theme property."
+node.collapseChevron=COLOR, "Chevron color for collapsed nodes."
+node.collapseChevronHover=COLOR, "Chevron color while its expansion target is hovered."
+node.border=COLOR, "Value of the node.border theme property."
+node.selectedBorder=COLOR, "Value of the node.selectedBorder theme property."
+node.activeSelectedBorder=COLOR, "Value of the node.activeSelectedBorder theme property."
+node.shadow=COLOR, "Value of the node.shadow theme property."
+node.inputPort=COLOR, "Value of the node.inputPort theme property."
+node.outputPort=COLOR, "Value of the node.outputPort theme property."
+node.portBorder=COLOR, "Value of the node.portBorder theme property."
+node.portHover=COLOR, "Value of the node.portHover theme property."
+node.cornerRadius=NUMBER, "Value of the node.cornerRadius theme property."
+node.borderWidth=NUMBER, "Value of the node.borderWidth theme property."
+node.titleHeight=NUMBER, "Value of the node.titleHeight theme property."
+node.collapseChevronSize=NUMBER, "Visual size of the collapsed-node Chevron.", min=3, max=64
+node.collapseChevronHitSize=NUMBER, "Width reserved for the collapsed-node Chevron and its pointer target.", min=12, max=96
+node.collapseChevronWidth=NUMBER, "Screen-space stroke width of the collapsed-node Chevron.", min=0.5, max=16
+node.shadowSoftness=NUMBER, "Value of the node.shadowSoftness theme property."
+node.shadowOffsetX=NUMBER, "Value of the node.shadowOffsetX theme property."
+node.shadowOffsetY=NUMBER, "Value of the node.shadowOffsetY theme property."
+node.portRadius=NUMBER, "Value of the node.portRadius theme property."
+node.rowGap=NUMBER, "Value of the node.rowGap theme property."
+node.minimumWidth=NUMBER, "Value of the node.minimumWidth theme property."
+node.resizeHandleSize=NUMBER, "Value of the node.resizeHandleSize theme property."
+node.contentPadding=INSETS, "Value of the node.contentPadding theme property."
+node.mutedBypass=COLOR, "Color of the internal input-to-output bypass shown on muted nodes."
+node.mutedBypassWidth=NUMBER, "Screen-space width of muted-node bypass lines.", min=0.1, max=32
+node.opacity=NUMBER, "Opacity of ordinary node views.", min=0, max=1
+node.mutedOpacity=NUMBER, "Opacity of muted node views.", min=0, max=1
+dialog.cornerRadius=NUMBER, "Value of the dialog.cornerRadius theme property."
+dialog.titleBar.height=NUMBER, "Value of the dialog.titleBar.height theme property."
+dialog.titleBar.background=COLOR, "Value of the dialog.titleBar.background theme property."
+dialog.titleBar.text=COLOR, "Value of the dialog.titleBar.text theme property."
+dialog.titleBar.border=COLOR, "Value of the dialog.titleBar.border theme property."
+dialog.titleBar.borderWidth=NUMBER, "Value of the dialog.titleBar.borderWidth theme property."
+dialog.close.text=COLOR, "Value of the dialog.close.text theme property."
+dialog.close.activeText=COLOR, "Value of the dialog.close.activeText theme property."
+dialog.close.hover=COLOR, "Value of the dialog.close.hover theme property."
+dialog.close.pressed=COLOR, "Value of the dialog.close.pressed theme property."
+dialog.border=COLOR, "Value of the dialog.border theme property."
+dialog.borderWidth=NUMBER, "Value of the dialog.borderWidth theme property."
+dialog.shadow.color=COLOR, "Value of the dialog.shadow.color theme property."
+dialog.shadow.softness=NUMBER, "Value of the dialog.shadow.softness theme property."
+dialog.shadow.offsetX=NUMBER, "Value of the dialog.shadow.offsetX theme property."
+dialog.shadow.offsetY=NUMBER, "Value of the dialog.shadow.offsetY theme property."
+layoutGroup.focusBorder=COLOR, "Value of the layoutGroup.focusBorder theme property."
+layoutGroup.border=COLOR, "Layout-group border color."
+
+# Optional standard overrides
+button.cornerRadius=NUMBER, "Button corner radius.", min=0
+button.borderWidth=NUMBER, "Button border width.", min=0
+button.height=NUMBER, "Button height.", min=0
+button.padding=INSETS, "Button content insets.", min=0
+checkBox.cornerRadius=NUMBER, "Checkbox corner radius.", min=0
+checkBox.borderWidth=NUMBER, "Checkbox border width.", min=0
+slider.cornerRadius=NUMBER, "Slider corner radius.", min=0
+slider.borderWidth=NUMBER, "Slider border width.", min=0
+slider.height=NUMBER, "Slider height.", min=0
+slider.padding=INSETS, "Slider content insets.", min=0
+textEditor.borderWidth=NUMBER, "Text-editor border width.", min=0
+comboBox.borderWidth=NUMBER, "ComboBox border width.", min=0
+comboBox.height=NUMBER, "ComboBox height.", min=0
+layoutGroup.borderWidth=NUMBER, "Layout-group border width.", min=0
+layoutGroup.cornerRadius=NUMBER, "Layout-group corner radius.", min=0
+button.background=COLOR, "Optional color override for button.background."
+button.border=COLOR, "Optional color override for button.border."
+button.disabled=COLOR, "Optional color override for button.disabled."
+button.focus=COLOR, "Optional color override for button.focus."
+button.hover=COLOR, "Optional color override for button.hover."
+button.text=COLOR, "Optional color override for button.text."
+button.textDisabled=COLOR, "Optional color override for button.textDisabled."
+checkBox.background=COLOR, "Optional color override for checkBox.background."
+checkBox.border=COLOR, "Optional color override for checkBox.border."
+checkBox.check=COLOR, "Optional color override for checkBox.check."
+checkBox.checkDisabled=COLOR, "Optional color override for checkBox.checkDisabled."
+checkBox.disabled=COLOR, "Optional color override for checkBox.disabled."
+checkBox.focus=COLOR, "Optional color override for checkBox.focus."
+checkBox.hover=COLOR, "Optional color override for checkBox.hover."
+checkBox.pressed=COLOR, "Optional color override for checkBox.pressed."
+checkBox.text=COLOR, "Optional color override for checkBox.text."
+checkBox.textDisabled=COLOR, "Optional color override for checkBox.textDisabled."
+comboBox.background=COLOR, "Optional color override for comboBox.background."
+comboBox.border=COLOR, "Optional color override for comboBox.border."
+comboBox.disabled=COLOR, "Optional color override for comboBox.disabled."
+comboBox.hover=COLOR, "Optional color override for comboBox.hover."
+comboBox.pressed=COLOR, "Optional color override for comboBox.pressed."
+comboBox.textDisabled=COLOR, "Optional color override for comboBox.textDisabled."
+slider.background=COLOR, "Optional color override for slider.background."
+slider.border=COLOR, "Optional color override for slider.border."
+slider.disabled=COLOR, "Optional color override for slider.disabled."
+slider.text=COLOR, "Optional color override for slider.text."
+slider.textDisabled=COLOR, "Optional color override for slider.textDisabled."
+font.source=PATH, "Font source for font.", fragment=colors
+font.regular=PATH, "Regular font source for font.", fragment=colors
+font.bold=PATH, "Bold font source for font.", fragment=colors
+font.italic=PATH, "Italic font source for font.", fragment=colors
+font.boldItalic=PATH, "Bold italic font source for font.", fragment=colors
+label.font.family=TEXT, "Font family for label.font.", fragment=colors
+label.font.style=ENUM, "Font style for label.font.", values=plain|bold|italic|bolditalic|bold_italic|bold-italic, fragment=colors
+label.font.size=NUMBER, "Font size for label.font.", min=0, fragment=colors
+label.font.source=PATH, "Font source for label.font.", fragment=colors
+label.font.regular=PATH, "Regular font source for label.font.", fragment=colors
+label.font.bold=PATH, "Bold font source for label.font.", fragment=colors
+label.font.italic=PATH, "Italic font source for label.font.", fragment=colors
+label.font.boldItalic=PATH, "Bold italic font source for label.font.", fragment=colors
+button.font.family=TEXT, "Font family for button.font.", fragment=colors
+button.font.style=ENUM, "Font style for button.font.", values=plain|bold|italic|bolditalic|bold_italic|bold-italic, fragment=colors
+button.font.size=NUMBER, "Font size for button.font.", min=0, fragment=colors
+button.font.source=PATH, "Font source for button.font.", fragment=colors
+button.font.regular=PATH, "Regular font source for button.font.", fragment=colors
+button.font.bold=PATH, "Bold font source for button.font.", fragment=colors
+button.font.italic=PATH, "Italic font source for button.font.", fragment=colors
+button.font.boldItalic=PATH, "Bold italic font source for button.font.", fragment=colors
+checkBox.font.family=TEXT, "Font family for checkBox.font.", fragment=colors
+checkBox.font.style=ENUM, "Font style for checkBox.font.", values=plain|bold|italic|bolditalic|bold_italic|bold-italic, fragment=colors
+checkBox.font.size=NUMBER, "Font size for checkBox.font.", min=0, fragment=colors
+checkBox.font.source=PATH, "Font source for checkBox.font.", fragment=colors
+checkBox.font.regular=PATH, "Regular font source for checkBox.font.", fragment=colors
+checkBox.font.bold=PATH, "Bold font source for checkBox.font.", fragment=colors
+checkBox.font.italic=PATH, "Italic font source for checkBox.font.", fragment=colors
+checkBox.font.boldItalic=PATH, "Bold italic font source for checkBox.font.", fragment=colors
+slider.font.family=TEXT, "Font family for slider.font.", fragment=colors
+slider.font.style=ENUM, "Font style for slider.font.", values=plain|bold|italic|bolditalic|bold_italic|bold-italic, fragment=colors
+slider.font.size=NUMBER, "Font size for slider.font.", min=0, fragment=colors
+slider.font.source=PATH, "Font source for slider.font.", fragment=colors
+slider.font.regular=PATH, "Regular font source for slider.font.", fragment=colors
+slider.font.bold=PATH, "Bold font source for slider.font.", fragment=colors
+slider.font.italic=PATH, "Italic font source for slider.font.", fragment=colors
+slider.font.boldItalic=PATH, "Bold italic font source for slider.font.", fragment=colors
+textEditor.font.family=TEXT, "Font family for textEditor.font.", fragment=colors
+textEditor.font.style=ENUM, "Font style for textEditor.font.", values=plain|bold|italic|bolditalic|bold_italic|bold-italic, fragment=colors
+textEditor.font.size=NUMBER, "Font size for textEditor.font.", min=0, fragment=colors
+textEditor.font.source=PATH, "Font source for textEditor.font.", fragment=colors
+textEditor.font.regular=PATH, "Regular font source for textEditor.font.", fragment=colors
+textEditor.font.bold=PATH, "Bold font source for textEditor.font.", fragment=colors
+textEditor.font.italic=PATH, "Italic font source for textEditor.font.", fragment=colors
+textEditor.font.boldItalic=PATH, "Bold italic font source for textEditor.font.", fragment=colors
+menu.font.family=TEXT, "Font family for menu.font.", fragment=colors
+menu.font.style=ENUM, "Font style for menu.font.", values=plain|bold|italic|bolditalic|bold_italic|bold-italic, fragment=colors
+menu.font.size=NUMBER, "Font size for menu.font.", min=0, fragment=colors
+menu.font.source=PATH, "Font source for menu.font.", fragment=colors
+menu.font.regular=PATH, "Regular font source for menu.font.", fragment=colors
+menu.font.bold=PATH, "Bold font source for menu.font.", fragment=colors
+menu.font.italic=PATH, "Italic font source for menu.font.", fragment=colors
+menu.font.boldItalic=PATH, "Bold italic font source for menu.font.", fragment=colors
+menuBar.font.family=TEXT, "Font family for menuBar.font.", fragment=colors
+menuBar.font.style=ENUM, "Font style for menuBar.font.", values=plain|bold|italic|bolditalic|bold_italic|bold-italic, fragment=colors
+menuBar.font.size=NUMBER, "Font size for menuBar.font.", min=0, fragment=colors
+menuBar.font.source=PATH, "Font source for menuBar.font.", fragment=colors
+menuBar.font.regular=PATH, "Regular font source for menuBar.font.", fragment=colors
+menuBar.font.bold=PATH, "Bold font source for menuBar.font.", fragment=colors
+menuBar.font.italic=PATH, "Italic font source for menuBar.font.", fragment=colors
+menuBar.font.boldItalic=PATH, "Bold italic font source for menuBar.font.", fragment=colors
+comboBox.font.family=TEXT, "Font family for comboBox.font.", fragment=colors
+comboBox.font.style=ENUM, "Font style for comboBox.font.", values=plain|bold|italic|bolditalic|bold_italic|bold-italic, fragment=colors
+comboBox.font.size=NUMBER, "Font size for comboBox.font.", min=0, fragment=colors
+comboBox.font.source=PATH, "Font source for comboBox.font.", fragment=colors
+comboBox.font.regular=PATH, "Regular font source for comboBox.font.", fragment=colors
+comboBox.font.bold=PATH, "Bold font source for comboBox.font.", fragment=colors
+comboBox.font.italic=PATH, "Italic font source for comboBox.font.", fragment=colors
+comboBox.font.boldItalic=PATH, "Bold italic font source for comboBox.font.", fragment=colors
+
+# Per-control text-shadow overrides
+label.textShadow.on=BOOLEAN, "Whether label text shadows are enabled."
+label.textShadow.color=COLOR, "Label text-shadow color."
+label.textShadow.offsetX=NUMBER, "Label text-shadow horizontal offset."
+label.textShadow.offsetY=NUMBER, "Label text-shadow vertical offset."
+label.textShadow.softness=NUMBER, "Label text-shadow softness.", min=0
+label.textShadow.offsetSpace=ENUM, "Label text-shadow coordinate space.", values=screen|local
+button.textShadow.on=BOOLEAN, "Whether button text shadows are enabled."
+button.textShadow.color=COLOR, "Button text-shadow color."
+button.textShadow.offsetX=NUMBER, "Button text-shadow horizontal offset."
+button.textShadow.offsetY=NUMBER, "Button text-shadow vertical offset."
+button.textShadow.softness=NUMBER, "Button text-shadow softness.", min=0
+button.textShadow.offsetSpace=ENUM, "Button text-shadow coordinate space.", values=screen|local
+checkBox.textShadow.on=BOOLEAN, "Whether checkbox text shadows are enabled."
+checkBox.textShadow.color=COLOR, "Checkbox text-shadow color."
+checkBox.textShadow.offsetX=NUMBER, "Checkbox text-shadow horizontal offset."
+checkBox.textShadow.offsetY=NUMBER, "Checkbox text-shadow vertical offset."
+checkBox.textShadow.softness=NUMBER, "Checkbox text-shadow softness.", min=0
+checkBox.textShadow.offsetSpace=ENUM, "Checkbox text-shadow coordinate space.", values=screen|local
+slider.textShadow.on=BOOLEAN, "Whether slider text shadows are enabled."
+slider.textShadow.color=COLOR, "Slider text-shadow color."
+slider.textShadow.offsetX=NUMBER, "Slider text-shadow horizontal offset."
+slider.textShadow.offsetY=NUMBER, "Slider text-shadow vertical offset."
+slider.textShadow.softness=NUMBER, "Slider text-shadow softness.", min=0
+slider.textShadow.offsetSpace=ENUM, "Slider text-shadow coordinate space.", values=screen|local
+textEditor.textShadow.on=BOOLEAN, "Whether editor text shadows are enabled."
+textEditor.textShadow.color=COLOR, "Editor text-shadow color."
+textEditor.textShadow.offsetX=NUMBER, "Editor text-shadow horizontal offset."
+textEditor.textShadow.offsetY=NUMBER, "Editor text-shadow vertical offset."
+textEditor.textShadow.softness=NUMBER, "Editor text-shadow softness.", min=0
+textEditor.textShadow.offsetSpace=ENUM, "Editor text-shadow coordinate space.", values=screen|local
+menu.textShadow.on=BOOLEAN, "Whether menu text shadows are enabled."
+menu.textShadow.color=COLOR, "Menu text-shadow color."
+menu.textShadow.offsetX=NUMBER, "Menu text-shadow horizontal offset."
+menu.textShadow.offsetY=NUMBER, "Menu text-shadow vertical offset."
+menu.textShadow.softness=NUMBER, "Menu text-shadow softness.", min=0
+menu.textShadow.offsetSpace=ENUM, "Menu text-shadow coordinate space.", values=screen|local
+menuBar.textShadow.on=BOOLEAN, "Whether menu-bar text shadows are enabled."
+menuBar.textShadow.color=COLOR, "Menu-bar text-shadow color."
+menuBar.textShadow.offsetX=NUMBER, "Menu-bar text-shadow horizontal offset."
+menuBar.textShadow.offsetY=NUMBER, "Menu-bar text-shadow vertical offset."
+menuBar.textShadow.softness=NUMBER, "Menu-bar text-shadow softness.", min=0
+menuBar.textShadow.offsetSpace=ENUM, "Menu-bar text-shadow coordinate space.", values=screen|local
+comboBox.textShadow.on=BOOLEAN, "Whether ComboBox text shadows are enabled."
+comboBox.textShadow.color=COLOR, "ComboBox text-shadow color."
+comboBox.textShadow.offsetX=NUMBER, "ComboBox text-shadow horizontal offset."
+comboBox.textShadow.offsetY=NUMBER, "ComboBox text-shadow vertical offset."
+comboBox.textShadow.softness=NUMBER, "ComboBox text-shadow softness.", min=0
+comboBox.textShadow.offsetSpace=ENUM, "ComboBox text-shadow coordinate space.", values=screen|local
+nodeEditor.horizontalNodeSpacing=NUMBER, "Horizontal edge-to-edge spacing for insertion and automatic arrangement."
+nodeEditor.verticalNodeSpacing=NUMBER, "Vertical edge-to-edge spacing for automatic arrangement."
+
+curve.width=NUMBER, "Preferred standalone curve editor width."
+curve.height=NUMBER, "Expanded curve editor height."
+curve.previewHeight=NUMBER, "Read-only curve preview height."
+curve.inspectorHeight=NUMBER, "Large curve editor height in the inspector."
+curve.padding=NUMBER, "Inset around normalized curve coordinates."
+curve.pointRadius=NUMBER, "Curve anchor radius."
+curve.hitRadius=NUMBER, "Curve anchor and handle picking radius."
+curve.background=COLOR, "Curve background color."
+curve.grid=COLOR, "Curve grid color."
+curve.line=COLOR, "Curve line and anchor color."
+curve.handle=COLOR, "Selected point, axis and handle color."
+curve.marker=COLOR, "Curve position marker color."
+
+tooltip.shadow.color=COLOR, "Tooltip shadow color; inherits the popup shadow by default."
+tooltip.shadow.softness=NUMBER, "Tooltip shadow softness; inherits the popup shadow by default."
+tooltip.shadow.offsetX=NUMBER, "Tooltip shadow offsetX; inherits the popup shadow by default."
+tooltip.shadow.offsetY=NUMBER, "Tooltip shadow offsetY; inherits the popup shadow by default."
+
+node.portEventInnerScale=NUMBER, "Inner diamond radius relative to event port radius (0.15 to 0.65)."
+
+driver.borderWidth=NUMBER, "Screen-space width of an external-driver control indicator."

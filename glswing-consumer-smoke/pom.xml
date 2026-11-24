@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.github.helge714</groupId>
+        <artifactId>glswing-parent</artifactId>
+        <version>0.2.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>glswing-consumer-smoke</artifactId>
+    <packaging>pom</packaging>
+
+    <name>GLSwing Consumer Smoke Test</name>
+    <description>Verifies the packaged GLSwing artifacts from an isolated Maven project</description>
+
+    <properties>
+        <central.skipPublishing>true</central.skipPublishing>
+        <consumer.repository>${project.build.directory}/consumer-repository</consumer.repository>
+    </properties>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-install-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>install-parent-for-consumer</id>
+                        <phase>prepare-package</phase>
+                        <goals><goal>install-file</goal></goals>
+                        <configuration>
+                            <file>${maven.multiModuleProjectDirectory}/pom.xml</file>
+                            <pomFile>${maven.multiModuleProjectDirectory}/pom.xml</pomFile>
+                            <packaging>pom</packaging>
+                            <localRepositoryPath>${consumer.repository}</localRepositoryPath>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>install-core-for-consumer</id>
+                        <phase>prepare-package</phase>
+                        <goals><goal>install-file</goal></goals>
+                        <configuration>
+                            <file>${maven.multiModuleProjectDirectory}/glswing-core/target/glswing-${project.version}.jar</file>
+                            <pomFile>${maven.multiModuleProjectDirectory}/glswing-core/pom.xml</pomFile>
+                            <localRepositoryPath>${consumer.repository}</localRepositoryPath>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>install-lsp-for-consumer</id>
+                        <phase>prepare-package</phase>
+                        <goals><goal>install-file</goal></goals>
+                        <configuration>
+                            <file>${maven.multiModuleProjectDirectory}/glswing-lsp/target/glswing-lsp-${project.version}.jar</file>
+                            <pomFile>${maven.multiModuleProjectDirectory}/glswing-lsp/pom.xml</pomFile>
+                            <localRepositoryPath>${consumer.repository}</localRepositoryPath>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>install-swt-for-consumer</id>
+                        <phase>prepare-package</phase>
+                        <goals><goal>install-file</goal></goals>
+                        <configuration>
+                            <file>${maven.multiModuleProjectDirectory}/glswing-filedialogs-swt/target/glswing-filedialogs-swt-${project.version}.jar</file>
+                            <pomFile>${maven.multiModuleProjectDirectory}/glswing-filedialogs-swt/pom.xml</pomFile>
+                            <localRepositoryPath>${consumer.repository}</localRepositoryPath>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-invoker-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>verify-packaged-consumer</id>
+                        <phase>verify</phase>
+                        <goals><goal>run</goal></goals>
+                        <configuration>
+                            <filterProperties><glswingVersion>${project.version}</glswingVersion></filterProperties>
+                            <projectsDirectory>${project.basedir}/src/it</projectsDirectory>
+                            <cloneProjectsTo>${project.build.directory}/consumer-projects</cloneProjectsTo>
+                            <localRepositoryPath>${consumer.repository}</localRepositoryPath>
+                            <goals><goal>clean</goal><goal>verify</goal></goals>
+                            <streamLogs>true</streamLogs>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>
