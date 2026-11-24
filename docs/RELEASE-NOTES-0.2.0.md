@@ -1,4 +1,4 @@
-# GLSwing 0.2.0 — release candidate
+# GLSwing 0.2.0
 
 **Maven coordinate migration:** the group is now `io.github.helge714` instead
 of `com.vingame`. Update dependency groupIds for the parent and all library
@@ -27,6 +27,7 @@ worktree. The comparison is useful regression evidence, not proof of compatibili
 with the Git tag or every historical 0.1.0 build. No new binary-compatibility
 guarantee or document-format change is introduced by this release preparation.
 
-This is a local, unsigned candidate. Central namespace verification, signing and
-explicit publication remain outstanding. A live external JDT language-server
+This is a local, unsigned GitHub SDK release. Maven Central is not used; install
+the SDK locally or add the JARs directly. Central verification/signing is optional
+and remains unconfigured. A live external JDT language-server
 integration test is opt-in and was not run; its unit tests were run.

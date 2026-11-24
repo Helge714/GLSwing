@@ -11,7 +11,7 @@
 
     <name>GLSwing Parent</name>
     <description>GPU-accelerated 2D rendering and lightweight UI for Java</description>
-    <url>https://github.com/Helge97/GLSwingNext</url>
+    <url>https://github.com/Helge714/GLSwing-Java</url>
 
     <licenses>
         <license>
@@ -23,9 +23,9 @@
 
     <developers>
         <developer>
-            <id>Helge97</id>
-            <name>Helge97</name>
-            <url>https://github.com/Helge97</url>
+            <id>Helge714</id>
+            <name>Helge714</name>
+            <url>https://github.com/Helge714</url>
             <roles>
                 <role>developer</role>
             </roles>
@@ -33,15 +33,15 @@
     </developers>
 
     <scm>
-        <connection>scm:git:https://github.com/Helge97/GLSwingNext.git</connection>
-        <developerConnection>scm:git:ssh://git@github.com/Helge97/GLSwingNext.git</developerConnection>
-        <url>https://github.com/Helge97/GLSwingNext</url>
+        <connection>scm:git:https://github.com/Helge714/GLSwing-Java.git</connection>
+        <developerConnection>scm:git:ssh://git@github.com/Helge714/GLSwing-Java.git</developerConnection>
+        <url>https://github.com/Helge714/GLSwing-Java</url>
         <tag>v0.1.0</tag>
     </scm>
 
     <issueManagement>
         <system>GitHub Issues</system>
-        <url>https://github.com/Helge97/GLSwingNext/issues</url>
+        <url>https://github.com/Helge714/GLSwing-Java/issues</url>
     </issueManagement>
 
     <modules>

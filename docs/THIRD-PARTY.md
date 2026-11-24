@@ -12,8 +12,9 @@ root license. Core resources contain shaders, themes, translations and fifteen
 SVG icons under the repository license. The old foreign `test_icon.svg` had
 no recorded provenance/license and was replaced with original geometric demo
 artwork during this preparation; its old bytes are not part of the candidate.
-Historical Git commits still contain the old image and are outside this
-current-tree artifact audit. The review found no separately credited
+The public repository retains the development history with the foreign image
+blob removed from all published branches and tags. A private local backup and
+the previous private GitHub repository are outside this distribution. The review found no separately credited
 third-party code/license headers in the three library modules. This source scan
 does not independently establish authorship of each icon or algorithm; imported
 material must retain its original notices if subsequently identified.
