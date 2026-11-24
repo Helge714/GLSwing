@@ -1984,7 +1984,7 @@ public class GLNodeEditor extends GLContainer
 			if (mouseTarget == null)
 				context.drawPolyline(points, border, GLContext2D.NO_PICK_ID);
 			else
-				context.drawPolyline(points, border, mouseTarget);
+				drawConnectionHitBorder(context, points, border, mouseTarget);
 			context.setStroke(connectionStroke(width, dashed));
 			float firstThirdX = x0 + (x1 - x0) / 3;
 			float firstThirdY = y0 + (y1 - y0) / 3;
@@ -2004,7 +2004,7 @@ public class GLNodeEditor extends GLContainer
 						x1 - handle, y1, x1, y1, border,
 						GLContext2D.NO_PICK_ID);
 			else
-				context.drawPolyline(points, border, mouseTarget);
+				drawConnectionHitBorder(context, points, border, mouseTarget);
 			context.setStroke(connectionStroke(width, dashed));
 			if (mouseTarget == null) {
 				context.drawCubicBezier(x0, y0, x0 + handle, y0,
@@ -2023,6 +2023,22 @@ public class GLNodeEditor extends GLContainer
         return connectionCurves.points(context,connection,x0,y0,c1x,c1y,c2x,c2y,x1,y1,minimumSegments);
     }
 
+
+    private void drawConnectionHitBorder(GLContext2D context, float[] points,
+            Color border, GLNodeConnection target) {
+        if (border.getAlpha() != 0) {
+            context.drawPolyline(points, border, target);
+            return;
+        }
+        // Transparent decoration must not remove the wire's mouse target.
+        boolean color = context.isColorRenderingEnabled();
+        try {
+            context.setColorRenderingEnabled(false);
+            context.drawPolyline(points, Color.WHITE, target);
+        } finally {
+            context.setColorRenderingEnabled(color);
+        }
+    }
 
 	private GLStroke connectionStroke(float width, boolean dashed) {
 		GLStroke stroke = new GLStroke(width).withCap(dashed ? GLStroke.Cap.BUTT : GLStroke.Cap.ROUND)

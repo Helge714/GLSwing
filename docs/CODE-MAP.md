@@ -68,3 +68,7 @@ diff checks, not a full build.
 - Linux dialog surfaces: `GLDialog` defaults to the opaque Canvas path;
   `GLDialogSurfacePolicyTest` covers platform/override selection. Actual XWayland
   rendering requires target acceptance.
+
+- Connection hit borders: `GLNodeEditor.drawConnectionHitBorder` writes a pick-only
+  stroke when the visible border is transparent; the color mask is restored.
+  Consumer GPU regression: EasyKnack `ConnectionPickingTest` (all bundled themes).

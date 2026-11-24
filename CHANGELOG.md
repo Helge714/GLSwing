@@ -1,5 +1,9 @@
 # Changelog
 
+- Keep connection picking independent of transparent border decoration, for
+  straight and curved wires. Invisible hit borders preserve selection and deletion
+  without changing rendered colors. Covered by 0.2.0-SNAPSHOT.
+
 - Prefer opaque themed dialog surfaces on Linux to avoid the translucent
   GLJPanel/compositor path; retain an explicit glswing.dialog.translucent override.
   Hardware acceptance remains required. Covered by 0.2.0-SNAPSHOT.
