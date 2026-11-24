@@ -11,6 +11,9 @@ public class ColorFBO extends FBO {
 		this.height = height;
 		this.samples = samples;
 		int[] ids = new int[1];
+		int[] previous = new int[2];
+		gl.glGetIntegerv(GL2GL3.GL_READ_FRAMEBUFFER_BINDING, previous, 0);
+		gl.glGetIntegerv(GL2GL3.GL_DRAW_FRAMEBUFFER_BINDING, previous, 1);
 
 		// Framebuffer
 		gl.glGenFramebuffers(1, ids, 0);
@@ -56,16 +59,7 @@ public class ColorFBO extends FBO {
 		}
 
 		// Unbind
-		gl.glBindFramebuffer(GL2GL3.GL_FRAMEBUFFER, 0);
-	}
-
-	public void dispose(GL2GL3 gl) {
-		int[] ids = new int[1];
-		ids[0] = textureId;
-		gl.glDeleteTextures(1, ids, 0);
-		ids[0] = rboId;
-		gl.glDeleteRenderbuffers(1, ids, 0);
-		ids[0] = fboId;
-		gl.glDeleteFramebuffers(1, ids, 0);
+		gl.glBindFramebuffer(GL2GL3.GL_READ_FRAMEBUFFER, previous[0]);
+		gl.glBindFramebuffer(GL2GL3.GL_DRAW_FRAMEBUFFER, previous[1]);
 	}
 }

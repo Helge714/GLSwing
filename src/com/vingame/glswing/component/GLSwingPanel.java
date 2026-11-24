@@ -24,6 +24,7 @@ public abstract class GLSwingPanel extends GLJPanel implements GLEventListener {
 	private static final long serialVersionUID = -3675783971669171273L;
 
 	protected BatchManager batchManager = new BatchManager();
+	private final FPSAnimator animator;
 
 	public int lastID;
 
@@ -35,7 +36,8 @@ public abstract class GLSwingPanel extends GLJPanel implements GLEventListener {
 	public GLSwingPanel() {
 		super(createGLCapabilities());
 		addGLEventListener(this);
-		new FPSAnimator(this, 60).start();
+		animator = new FPSAnimator(this, 60, true);
+		animator.start();
 
 		addMouseMotionListener(new MouseMotionAdapter() {
 
@@ -63,7 +65,9 @@ public abstract class GLSwingPanel extends GLJPanel implements GLEventListener {
 	public void init(GLAutoDrawable drawable) {
 		GL2 gl = drawable.getGL().getGL2();
 		gl.glClearColor(1f, 1f, 1f, 1f);
-		batchManager.init(gl, getWidth(), getHeight());
+		int width = Math.max(1, drawable.getSurfaceWidth());
+		int height = Math.max(1, drawable.getSurfaceHeight());
+		batchManager.init(gl, width, height);
 
 		GLProgram blitProg = GLProgram.createDefault("blit.vert", "blit.frag");
 		blitProgram = GLShaderUtil.createProgram(gl, blitProg.vert, blitProg.frag);
@@ -85,6 +89,14 @@ public abstract class GLSwingPanel extends GLJPanel implements GLEventListener {
 	public void dispose(GLAutoDrawable drawable) {
 		GL2 gl = drawable.getGL().getGL2();
 		batchManager.dispose(gl);
+		if (quadVbo != 0) {
+			gl.glDeleteBuffers(1, new int[] { quadVbo }, 0);
+			quadVbo = 0;
+		}
+		if (blitProgram != 0) {
+			gl.glDeleteProgram(blitProgram);
+			blitProgram = 0;
+		}
 	}
 
 	@Override
@@ -98,7 +110,11 @@ public abstract class GLSwingPanel extends GLJPanel implements GLEventListener {
 		context.flush();
 
 		if (mousePos != null) {
-			lastID = batchManager.idBuffer.readIdAt(gl, mousePos.x, mousePos.y);
+			float scaleX = drawable.getSurfaceWidth() / (float) Math.max(1, getWidth());
+			float scaleY = drawable.getSurfaceHeight() / (float) Math.max(1, getHeight());
+			int surfaceX = Math.round(mousePos.x * scaleX);
+			int surfaceY = Math.round(mousePos.y * scaleY);
+			lastID = batchManager.idBuffer.readIdAt(gl, surfaceX, surfaceY);
 //			System.out.println("Picked ID: " + lastID);
 		}
 	}
@@ -109,5 +125,13 @@ public abstract class GLSwingPanel extends GLJPanel implements GLEventListener {
 	public void reshape(GLAutoDrawable drawable, int x, int y, int width, int height) {
 		GL2 gl = drawable.getGL().getGL2();
 		gl.glViewport(0, 0, width, height);
+		batchManager.resize(gl, width, height);
+	}
+
+	@Override
+	public void removeNotify() {
+		if (animator.isStarted())
+			animator.stop();
+		super.removeNotify();
 	}
 }

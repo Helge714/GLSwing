@@ -59,6 +59,8 @@ public class BatchManager {
 	public GL2 gl;
 
 	public void init(GL2 gl, int width, int height) {
+		width = Math.max(1, width);
+		height = Math.max(1, height);
 		idBuffer.init(gl, width, height, 8);
 
 		// init shaders
@@ -113,6 +115,18 @@ public class BatchManager {
 			gl.glDeleteProgram(programID);
 		textureCache.clear();
 		programCache.clear();
+		gl.glDeleteBuffers(3, new int[] { meshVbo, meshIbo, idVbo }, 0);
+		meshVbo = meshIbo = idVbo = 0;
+		idBuffer.dispose(gl);
+	}
+
+	public void resize(GL2 gl, int width, int height) {
+		if (width <= 0 || height <= 0 || (idBuffer.width == width && idBuffer.height == height))
+			return;
+		flush();
+		idBuffer.dispose(gl);
+		idBuffer.init(gl, width, height, 1);
+		gl.glViewport(0, 0, width, height);
 	}
 
 	public void begin(GL2 gl) {
@@ -168,7 +182,10 @@ public class BatchManager {
 
 	public void drawFBO(FBO fbo, float[] uv, float[] geom, float[] cs, int ID) {
 		switchBatch(Type.TEXTURE);
-		drawTexture(fbo.getResolvedTexture(gl), uv, geom, cs, ID);
+		textureBatch.textureId = fbo.getResolvedTexture(gl);
+		textureBatch.addQuad(geom, uv, cs, ID);
+		flush();
+//		drawTexture(fbo.getResolvedTexture(gl), uv, geom, cs, ID);
 	}
 
 	public void drawLine(float[] geom, boolean closed, float[] cs, int ID) {
@@ -348,16 +365,13 @@ public class BatchManager {
 	public void flush() {
 		switch (activeType) {
 		case TEXTURE:
-			textureBatch.flush(gl, projection.projection, meshVbo, meshIbo, idVbo, colorRendering, idRendering);
-			drawCalls++;
+			drawCalls += textureBatch.flush(gl, projection.projection, meshVbo, meshIbo, idVbo, colorRendering, idRendering);
 			break;
 		case FILLED:
-			filledBatch.flush(gl, projection.projection, meshVbo, meshIbo, idVbo, colorRendering, idRendering);
-			drawCalls++;
+			drawCalls += filledBatch.flush(gl, projection.projection, meshVbo, meshIbo, idVbo, colorRendering, idRendering);
 			break;
 		case LINE:
-			lineBatch.flush(gl, projection.projection, meshVbo, meshIbo, idVbo, colorRendering, idRendering);
-			drawCalls++;
+			drawCalls += lineBatch.flush(gl, projection.projection, meshVbo, meshIbo, idVbo, colorRendering, idRendering);
 			break;
 		case NONE:
 			break;
@@ -368,6 +382,8 @@ public class BatchManager {
 	}
 
 	public int getOrUploadProgram(GL2 context, GLProgram program) {
+		if (program == null)
+			return 0;
 		Integer prog = programCache.get(program);
 		if (prog != null)
 			return prog;

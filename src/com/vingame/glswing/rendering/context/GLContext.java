@@ -36,11 +36,11 @@ public class GLContext {
 
 	public void drawPolygon(float[] pts, boolean closed, Color c, int id) {
 		setColor(c);
-		drawPolygon(pts, closed, 0);
+		drawPolygon(pts, closed, id);
 	}
 
 	public void drawPolygon(float[] pts, boolean closed, int id) {
-		manager.drawLine(pts, closed, colorToRGBA(color), id);
+		manager.drawLine(pts, closed, colorToRGBA(color != null ? color : Color.BLACK), id);
 	}
 
 	// TODO vertexColor
@@ -197,8 +197,8 @@ public class GLContext {
 		manager.setStroke(stroke);
 	}
 
-	public void getStroke() {
-		manager.getStroke();
+	public GLStroke getStroke() {
+		return manager.getStroke();
 	}
 
 	public void ortho(float width, float height) {
@@ -251,6 +251,7 @@ public class GLContext {
 	
 	public void clearProjection() {
 		projection = GLProjection.DEFAULT_PROJECTION;
+		manager.setProjection(projection);
 	}
 
 	public void setProjection(GLProjection projection) {
@@ -327,11 +328,11 @@ public class GLContext {
 		return manager.getFBO();
 	}
 
-	public void enableFBO(FBO fbo) {
+	public void bindFBO(FBO fbo) {
 		manager.setFBO(fbo);
 	}
 
-	public void disableFBO() {
+	public void unbindFBO() {
 		manager.setFBO(null);
 	}
 

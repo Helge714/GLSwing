@@ -1,7 +1,6 @@
 package com.vingame.glswing.rendering;
 
 import com.jogamp.opengl.GL;
-import com.jogamp.opengl.GL2;
 import com.jogamp.opengl.GL2GL3;
 import com.jogamp.opengl.GLException;
 
@@ -15,20 +14,27 @@ public abstract class FBO {
 	
 	private int resolveFboId = 0;
 	private int resolveTexId = 0;
+	private int previousReadFramebufferId = 0;
+	private int previousDrawFramebufferId = 0;
+	private final int[] previousViewport = new int[4];
 
 	public abstract void init(GL2GL3 gl, int w, int h, int samples);
 
-	public void bind(GL2 gl) {
+	public void bind(GL2GL3 gl) {
+		int[] binding = new int[1];
+		gl.glGetIntegerv(GL2GL3.GL_READ_FRAMEBUFFER_BINDING, binding, 0);
+		previousReadFramebufferId = binding[0];
+		gl.glGetIntegerv(GL2GL3.GL_DRAW_FRAMEBUFFER_BINDING, binding, 0);
+		previousDrawFramebufferId = binding[0];
+		gl.glGetIntegerv(GL.GL_VIEWPORT, previousViewport, 0);
 		gl.glBindFramebuffer(GL.GL_FRAMEBUFFER, fboId);
 		gl.glViewport(0, 0, width, height);
 	}
 
-	public void unbind(GL2 gl) {
-		gl.glBindFramebuffer(GL.GL_FRAMEBUFFER, 0);
-	}
-
-	public int getTextureId() {
-		return textureId;
+	public void unbind(GL2GL3 gl) {
+		gl.glBindFramebuffer(GL2GL3.GL_READ_FRAMEBUFFER, previousReadFramebufferId);
+		gl.glBindFramebuffer(GL2GL3.GL_DRAW_FRAMEBUFFER, previousDrawFramebufferId);
+		gl.glViewport(previousViewport[0], previousViewport[1], previousViewport[2], previousViewport[3]);
 	}
 
 	public int getFramebufferId() {
@@ -40,6 +46,9 @@ public abstract class FBO {
 	    if (samples <= 1) {
 	        return textureId;
 	    }
+	    int[] previous = new int[2];
+	    gl.glGetIntegerv(GL2GL3.GL_READ_FRAMEBUFFER_BINDING, previous, 0);
+	    gl.glGetIntegerv(GL2GL3.GL_DRAW_FRAMEBUFFER_BINDING, previous, 1);
 
 	    // Falls noch kein Resolve-FBO existiert, anlegen
 	    if (resolveFboId == 0) {
@@ -82,7 +91,8 @@ public abstract class FBO {
 	                         GL2GL3.GL_COLOR_BUFFER_BIT,
 	                         GL2GL3.GL_NEAREST);
 
-	    gl.glBindFramebuffer(GL2GL3.GL_FRAMEBUFFER, 0);
+	    gl.glBindFramebuffer(GL2GL3.GL_READ_FRAMEBUFFER, previous[0]);
+	    gl.glBindFramebuffer(GL2GL3.GL_DRAW_FRAMEBUFFER, previous[1]);
 
 	    // Die fertige "normale" Textur zurückgeben
 	    return resolveTexId;
@@ -92,21 +102,21 @@ public abstract class FBO {
 	    int[] ids = new int[1];
 
 	    // normale Color-Textur
-	    if (textureId != 0) {
+	    if (textureId > 0) {
 	        ids[0] = textureId;
 	        gl.glDeleteTextures(1, ids, 0);
 	        textureId = 0;
 	    }
 
 	    // Depth/Stencil-Renderbuffer
-	    if (rboId != 0) {
+	    if (rboId > 0) {
 	        ids[0] = rboId;
 	        gl.glDeleteRenderbuffers(1, ids, 0);
 	        rboId = 0;
 	    }
 
 	    // Haupt-FBO
-	    if (fboId != 0) {
+	    if (fboId > 0) {
 	        ids[0] = fboId;
 	        gl.glDeleteFramebuffers(1, ids, 0);
 	        fboId = 0;

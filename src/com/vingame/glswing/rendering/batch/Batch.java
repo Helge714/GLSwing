@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.TreeMap;
 
+import com.jogamp.opengl.GL;
 import com.jogamp.opengl.GL2;
 
 abstract class Batch {
@@ -126,6 +127,11 @@ abstract class Batch {
 			setProgram(gl, null);
 			if (manager.currentFBO != null)
 				manager.currentFBO.unbind(gl);
+
+			// The color pass flips these buffers for reading. Put their positions back
+			// at the written end so the ID pass can flip and read the same data again.
+			vertexBuffer.position(vertexBuffer.limit());
+			indexBuffer.position(indexBuffer.limit());
 		}
 		if (idRendering && vertexCount > 0) {
 			manager.idBuffer.bind(gl);

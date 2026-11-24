@@ -10,6 +10,10 @@ public class IdFBO extends FBO {
 	public void init(GL2GL3 gl, int w, int h, int samples) {
 		this.width = w;
 		this.height = h;
+		this.samples = 1;
+		int[] previous = new int[2];
+		gl.glGetIntegerv(GL2GL3.GL_READ_FRAMEBUFFER_BINDING, previous, 0);
+		gl.glGetIntegerv(GL2GL3.GL_DRAW_FRAMEBUFFER_BINDING, previous, 1);
 
 		// ---- Framebuffer erzeugen ----
 		int[] fbo = new int[1];
@@ -50,18 +54,21 @@ public class IdFBO extends FBO {
 		}
 
 		// ---- Cleanup ----
-		gl.glBindFramebuffer(GL.GL_FRAMEBUFFER, 0);
+		gl.glBindFramebuffer(GL2GL3.GL_READ_FRAMEBUFFER, previous[0]);
+		gl.glBindFramebuffer(GL2GL3.GL_DRAW_FRAMEBUFFER, previous[1]);
 		gl.glBindRenderbuffer(GL.GL_RENDERBUFFER, 0);
 	}
 
 	public int readIdAt(GL2 gl, int x, int y) {
-		gl.glBindFramebuffer(GL.GL_FRAMEBUFFER, fboId);
+		if (x < 0 || y < 0 || x >= width || y >= height)
+			return 0;
+		bind(gl);
 		gl.glReadBuffer(GL.GL_COLOR_ATTACHMENT0);
 
 		int[] pixel = new int[1];
-		gl.glReadPixels(x, height - y, 1, 1, GL2GL3.GL_RED_INTEGER, GL.GL_UNSIGNED_INT, java.nio.IntBuffer.wrap(pixel));
+		gl.glReadPixels(x, height - 1 - y, 1, 1, GL2GL3.GL_RED_INTEGER, GL.GL_UNSIGNED_INT, java.nio.IntBuffer.wrap(pixel));
 
-		gl.glBindFramebuffer(GL.GL_FRAMEBUFFER, 0);
+		unbind(gl);
 		return pixel[0];
 	}
 }
