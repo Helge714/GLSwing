@@ -6,12 +6,12 @@
 
     <groupId>io.github.helge714</groupId>
     <artifactId>glswing-parent</artifactId>
-    <version>0.2.0-SNAPSHOT</version>
+    <version>0.2.0</version>
     <packaging>pom</packaging>
 
     <name>GLSwing Parent</name>
     <description>GPU-accelerated 2D rendering and lightweight UI for Java</description>
-    <url>https://github.com/Helge714/GLSwing-Java</url>
+    <url>https://github.com/Helge714/GLSwing</url>
 
     <licenses>
         <license>
@@ -33,15 +33,15 @@
     </developers>
 
     <scm>
-        <connection>scm:git:https://github.com/Helge714/GLSwing-Java.git</connection>
-        <developerConnection>scm:git:ssh://git@github.com/Helge714/GLSwing-Java.git</developerConnection>
-        <url>https://github.com/Helge714/GLSwing-Java</url>
-        <tag>v0.1.0</tag>
+        <connection>scm:git:https://github.com/Helge714/GLSwing.git</connection>
+        <developerConnection>scm:git:ssh://git@github.com/Helge714/GLSwing.git</developerConnection>
+        <url>https://github.com/Helge714/GLSwing</url>
+        <tag>v0.2.0</tag>
     </scm>
 
     <issueManagement>
         <system>GitHub Issues</system>
-        <url>https://github.com/Helge714/GLSwing-Java/issues</url>
+        <url>https://github.com/Helge714/GLSwing/issues</url>
     </issueManagement>
 
     <modules>

@@ -8,7 +8,7 @@ layer effects, and a node-editor toolkit.
 The library can run as a standalone OpenGL application, inside a conventional
 `JFrame`, or as an OpenGL-backed component in an existing Swing interface.
 
-> **Project status:** The next release is GLSwing 0.2.0 (currently 0.2.0-SNAPSHOT). The library is
+> **Project status:** GLSwing 0.2.0 is an early-access release. The library is
 > usable, but its API may change between releases while the public surface is
 > refined.
 
@@ -78,7 +78,7 @@ Then add GLSwing to the application POM:
 <dependency>
     <groupId>io.github.helge714</groupId>
     <artifactId>glswing</artifactId>
-    <version>0.2.0-SNAPSHOT</version>
+    <version>0.2.0</version>
 </dependency>
 ```
 
@@ -87,15 +87,15 @@ transitive Maven dependencies. No manually managed `jogamp-fat.jar` is needed.
 
 ### Use the locally built JAR directly
 
-`glswing-0.2.0-SNAPSHOT.jar` is the runtime library and can be added to a Java project's
+`glswing-0.2.0.jar` is the runtime library and can be added to a Java project's
 classpath like any other JAR. When Maven is not used, the JOGL and GlueGen
 runtime JARs, including the native JARs for the target platform, must also be
 present.
 
 The optional artifacts improve IDE integration:
 
-- `glswing-0.2.0-SNAPSHOT-sources.jar` provides navigable source code;
-- `glswing-0.2.0-SNAPSHOT-javadoc.jar` provides offline API documentation.
+- `glswing-0.2.0-sources.jar` provides navigable source code;
+- `glswing-0.2.0-javadoc.jar` provides offline API documentation.
 
 Language Server Protocol support is kept in a separate optional artifact so
 applications that do not embed a code editor do not carry its dependencies:
@@ -104,7 +104,7 @@ applications that do not embed a code editor do not carry its dependencies:
 <dependency>
     <groupId>io.github.helge714</groupId>
     <artifactId>glswing-lsp</artifactId>
-    <version>0.2.0-SNAPSHOT</version>
+    <version>0.2.0</version>
 </dependency>
 ```
 

@@ -50,7 +50,7 @@ Paths below are relative to
 - `docs/node-wire-insertion.md`: node insertion behavior.
 - `docs/ui-framework.md`, `docs/graphics-pipeline.md`: deeper UI/rendering references.
 - `docs/application-services.md`: reusable application services.
-- Release identity: the public repository is `Helge714/GLSwing-Java`; historical foreign demo artwork was removed before publication. Private backups are not release inputs.
+- Release identity: the public repository is `Helge714/GLSwing`; historical foreign demo artwork was removed before publication. Private backups are not release inputs.
 - `scripts/package-sdk.py`: manual GitHub SDK packaging, local PowerShell/POSIX installers and checksum manifests; no third-party runtime bundles or uploads.
 - `scripts/prepare-release.py`, `docs/RELEASING.md`, `docs/THIRD-PARTY.md`: isolated release candidates, publication setup and redistribution inventory.
 - `CHANGELOG.md`: public changes; `TODO.md`: pending work; `AGENTS.md`: working agreements.
