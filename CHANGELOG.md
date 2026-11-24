@@ -1,5 +1,14 @@
 # Changelog
 
+- Replace the uncredited foreign SVG demo image with original project artwork.
+  Include Apache-2.0 license text in both optional runtime modules and provide
+  the native-dialog module Javadoc artifact. Add isolated unsigned candidate
+  packaging and opt-in Central publishing configuration.
+
+- Refresh the built-in Reset name action after inherited or explicit language
+  changes, including menus created before attachment. Applications no longer need
+  to translate this Core-owned item themselves. Covered by 0.2.0-SNAPSHOT.
+
 - Keep connection picking independent of transparent border decoration, for
   straight and curved wires. Invisible hit borders preserve selection and deletion
   without changing rendered colors. Covered by 0.2.0-SNAPSHOT.

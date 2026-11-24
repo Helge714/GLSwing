@@ -16,8 +16,8 @@ public final class GLSvgDocumentSelfTest {
 
 	public static void main(String[] args) {
 		GLSvgDocument icon = GLSvgDocument.loadResource(ICON_RESOURCE);
-		assertNear("icon viewBox width", 3872.97f, icon.getViewBoxWidth());
-		assertNear("icon viewBox height", 3872.97f, icon.getViewBoxHeight());
+		assertNear("icon viewBox width", 256f, icon.getViewBoxWidth());
+		assertNear("icon viewBox height", 256f, icon.getViewBoxHeight());
 		if (icon.getShapeCount() != 3)
 			throw new AssertionError("Expected three compiled icon shapes, got "
 					+ icon.getShapeCount());

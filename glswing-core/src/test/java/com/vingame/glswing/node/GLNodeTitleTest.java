@@ -9,6 +9,17 @@ import com.vingame.glswing.node.binding.*;
 import com.vingame.glswing.node.document.*;
 import com.vingame.glswing.node.model.*;
 class GLNodeTitleTest {
+ @Test void resetNameFollowsInheritedAndExplicitLanguageAfterEarlyMenuCreation(){
+  var node=new GLNode("Default");var menu=node.getContextMenu();var reset=menu.getItems().get(1);
+  assertEquals("Reset name",reset.getText());
+  var parent=new GLNodeEditor();parent.setGLLocalizer(com.vingame.glswing.ui.GLLocalizer.GERMAN);parent.addNode(node,0,0);
+  assertSame(menu,node.getContextMenu());assertEquals("Namen zurücksetzen",reset.getText());
+  node.setGLLocalizer(com.vingame.glswing.ui.GLLocalizer.ENGLISH);assertEquals("Reset name",reset.getText());
+  node.clearGLLocalizer();assertEquals("Namen zurücksetzen",reset.getText());
+  node.setCustomTitle("Custom");reset.doClick();assertNull(node.getCustomTitle());assertEquals("Default",node.getTitle());
+  parent.setGLLocalizer(com.vingame.glswing.ui.GLLocalizer.ENGLISH);assertEquals("Reset name",reset.getText());
+ }
+
  @Test void resettingTitleUsesCurrentDefaultAndIsUndoable(){
   var node=new GLNode("Original");var history=new GLHistoryManager();node.setGLHistoryManager(history);node.setCustomTitle("Custom");node.setDefaultTitle("Translated");
   node.resetTitle();assertNull(node.getCustomTitle());assertEquals("Translated",node.getTitle());assertTrue(history.undo());assertEquals("Custom",node.getTitle());assertTrue(history.redo());assertEquals("Translated",node.getTitle());

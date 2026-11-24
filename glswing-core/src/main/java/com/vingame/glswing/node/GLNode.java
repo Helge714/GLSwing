@@ -56,6 +56,7 @@ public class GLNode extends GLContainer {
 	private final GLTextEditor titleEditor;
 	private GLPopupMenu contextMenu;
 	private GLMenuItem editTitleMenuItem;
+	private GLMenuItem resetTitleMenuItem;
 	private GLMenuItem copyMenuItem;
 	private GLMenuItem cutMenuItem;
 	private GLMenuItem duplicateMenuItem;
@@ -1039,7 +1040,7 @@ public class GLNode extends GLContainer {
 		editTitleMenuItem = contextMenu.addItem(
 				getGLLocalizer().text(GLUiKeys.NODE_EDIT_TITLE),
 				event -> editTitle());
-		contextMenu.addItem(getGLLocalizer().text("glswing.node.resetTitle"),event->resetTitle());
+		resetTitleMenuItem = contextMenu.addItem(getGLLocalizer().text(GLUiKeys.NODE_RESET_TITLE), event -> resetTitle());
         contextMenu.addSeparator();
 		copyMenuItem = contextMenu.addItem(getGLLocalizer().text(GLUiKeys.NODE_COPY),
 				event -> invokeEditingAction(GLNodeEditingActions::copy));
@@ -1063,6 +1064,8 @@ public class GLNode extends GLContainer {
 	}
 
 	private void updateContextMenuText() {
+		if (resetTitleMenuItem != null)
+			resetTitleMenuItem.setText(getGLLocalizer().text(GLUiKeys.NODE_RESET_TITLE));
 		if (editTitleMenuItem != null)
 			editTitleMenuItem.setText(
 					getGLLocalizer().text(GLUiKeys.NODE_EDIT_TITLE));

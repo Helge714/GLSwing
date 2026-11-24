@@ -40,6 +40,7 @@ public final class GLUiKeys {
 	public static final String TAB_CLOSE_OTHERS = "glswing.tab.closeOthers";
 	public static final String TAB_REOPEN_CLOSED = "glswing.tab.reopenClosed";
 	public static final String TREE_RENAME = "glswing.tree.rename";
+	public static final String NODE_RESET_TITLE = "glswing.node.resetTitle";
 	public static final String NODE_EDIT_TITLE = "glswing.node.editTitle";
 	public static final String NODE_DELETE = "glswing.node.delete";
 	public static final String NODE_DELETE_MULTIPLE =

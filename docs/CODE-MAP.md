@@ -50,6 +50,7 @@ Paths below are relative to
 - `docs/node-wire-insertion.md`: node insertion behavior.
 - `docs/ui-framework.md`, `docs/graphics-pipeline.md`: deeper UI/rendering references.
 - `docs/application-services.md`: reusable application services.
+- `scripts/prepare-release.py`, `docs/RELEASING.md`, `docs/THIRD-PARTY.md`: isolated release candidates, publication setup and redistribution inventory.
 - `CHANGELOG.md`: public changes; `TODO.md`: pending work; `AGENTS.md`: working agreements.
 - `target/` directories: generated output, not authoritative source.
 
@@ -68,6 +69,10 @@ diff checks, not a full build.
 - Linux dialog surfaces: `GLDialog` defaults to the opaque Canvas path;
   `GLDialogSurfacePolicyTest` covers platform/override selection. Actual XWayland
   rendering requires target acceptance.
+
+- Built-in node reset-name localization: `GLNode.updateContextMenuText`,
+  `GLUiKeys.NODE_RESET_TITLE`; early-menu/inherited-language regression in
+  `GLNodeTitleTest`.
 
 - Connection hit borders: `GLNodeEditor.drawConnectionHitBorder` writes a pick-only
   stroke when the visible border is transparent; the color mask is restored.

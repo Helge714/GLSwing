@@ -17,6 +17,7 @@
     <description>Verifies the packaged GLSwing artifacts from an isolated Maven project</description>
 
     <properties>
+        <central.skipPublishing>true</central.skipPublishing>
         <consumer.repository>${project.build.directory}/consumer-repository</consumer.repository>
     </properties>
 
