@@ -15,17 +15,17 @@
 
     <dependencies>
         <dependency>
-            <groupId>com.vingame</groupId>
+            <groupId>io.github.helge714</groupId>
             <artifactId>glswing</artifactId>
             <version>@glswingVersion@</version>
         </dependency>
         <dependency>
-            <groupId>com.vingame</groupId>
+            <groupId>io.github.helge714</groupId>
             <artifactId>glswing-lsp</artifactId>
             <version>@glswingVersion@</version>
         </dependency>
         <dependency>
-            <groupId>com.vingame</groupId>
+            <groupId>io.github.helge714</groupId>
             <artifactId>glswing-filedialogs-swt</artifactId>
             <version>@glswingVersion@</version>
         </dependency>

@@ -14,7 +14,9 @@ Python 3.9+ and Maven 3.9.11 available:
 python scripts/prepare-release.py --output target/release-candidate-0.2.0
 ```
 
-Use `--maven /path/to/mvn` or `--offline` when appropriate. Output must not
+Use `--maven /path/to/mvn` or `--offline` when appropriate (a new isolated
+consumer repository needs online dependency resolution). To compare the locally
+installed old coordinates, add `--api-baseline 0.1.0 --api-baseline-group com.vingame`. Output must not
 exist. The script creates a detached Git worktree, derives the release version
 from the parent POM, transforms the reactor POMs there, builds and runs the Core
 GPU tests and isolated Maven consumer, checks runtime JAR licenses/content,
@@ -32,9 +34,9 @@ candidate directory. Keep the candidate ZIPs/evidence until release acceptance.
 
 1. Review [the redistribution inventory](THIRD-PARTY.md), candidate evidence,
    source changes and release notes. Preserve matching sources and license files.
-2. Verify the Central namespace for `com.vingame`; the build does not establish
-   domain ownership. If unavailable, decide and update all Maven coordinates
-   consistently before producing the final artifacts. Java package names can stay.
+2. Verify `io.github.helge714` in the Central Portal through the owning GitHub
+   account. This replaces the historical Maven group `com.vingame`; Java package
+   names and automatic module names remain unchanged. No domain ownership is assumed.
 3. Update README installation examples to the final released version only when
    that version is actually available. Review API/document compatibility since
    0.1.0; 0.x minor releases may break APIs. Do not advertise 0.2.0 as a drop-in

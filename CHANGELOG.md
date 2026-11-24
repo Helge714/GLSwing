@@ -1,5 +1,9 @@
 # Changelog
 
+- Move Maven publication coordinates from com.vingame to io.github.helge714.
+  Consumers must update dependency groupIds; Java packages and automatic module
+  names stay unchanged. The 0.2.0 minor release covers this build-contract change.
+
 - Replace the uncredited foreign SVG demo image with original project artwork.
   Include Apache-2.0 license text in both optional runtime modules and provide
   the native-dialog module Javadoc artifact. Add isolated unsigned candidate

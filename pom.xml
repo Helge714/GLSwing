@@ -4,7 +4,7 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.vingame</groupId>
+    <groupId>io.github.helge714</groupId>
     <artifactId>glswing-parent</artifactId>
     <version>0.2.0-SNAPSHOT</version>
     <packaging>pom</packaging>
@@ -56,6 +56,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <maven.compiler.release>17</maven.compiler.release>
+        <api.compatibility.previousGroupId>${project.groupId}</api.compatibility.previousGroupId>
         <jogamp.version>2.6.0</jogamp.version>
         <junit.version>5.11.4</junit.version>
         <lsp4j.version>1.0.0</lsp4j.version>
@@ -144,7 +145,7 @@
                     <configuration>
                         <oldVersion>
                             <dependency>
-                                <groupId>${project.groupId}</groupId>
+                                <groupId>${api.compatibility.previousGroupId}</groupId>
                                 <artifactId>${project.artifactId}</artifactId>
                                 <version>${api.compatibility.previousVersion}</version>
                                 <type>jar</type>

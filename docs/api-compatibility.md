@@ -19,9 +19,9 @@ after `0.1.0`.
 Public and protected types and members in the following artifacts form the
 supported API unless their package is listed as an implementation package:
 
-- `com.vingame:glswing`
-- `com.vingame:glswing-lsp`
-- `com.vingame:glswing-filedialogs-swt`
+- `io.github.helge714:glswing`
+- `io.github.helge714:glswing-lsp`
+- `io.github.helge714:glswing-filedialogs-swt`
 
 Generated Javadoc is the member-level reference. The conceptual guides describe
 object relationships, lifecycle rules, configuration formats, and recommended
@@ -62,7 +62,7 @@ Build the current source and compare it with a published predecessor:
 
 ```bash
 ./mvnw -Papi-compatibility \
-  -Dapi.compatibility.previousVersion=0.1.0 \
+  -Dapi.compatibility.previousVersion=0.1.0 -Dapi.compatibility.previousGroupId=com.vingame \
   verify
 ```
 
@@ -70,7 +70,7 @@ On Windows:
 
 ```powershell
 .\mvnw.cmd -Papi-compatibility `
-  -Dapi.compatibility.previousVersion=0.1.0 `
+  -Dapi.compatibility.previousVersion=0.1.0 -Dapi.compatibility.previousGroupId=com.vingame `
   verify
 ```
 

@@ -62,7 +62,7 @@ Then add GLSwing to the application POM:
 
 ```xml
 <dependency>
-    <groupId>com.vingame</groupId>
+    <groupId>io.github.helge714</groupId>
     <artifactId>glswing</artifactId>
     <version>0.2.0-SNAPSHOT</version>
 </dependency>
@@ -88,7 +88,7 @@ applications that do not embed a code editor do not carry its dependencies:
 
 ```xml
 <dependency>
-    <groupId>com.vingame</groupId>
+    <groupId>io.github.helge714</groupId>
     <artifactId>glswing-lsp</artifactId>
     <version>0.2.0-SNAPSHOT</version>
 </dependency>

@@ -26,6 +26,7 @@ def main():
     parser.add_argument('--maven', default='mvn')
     parser.add_argument('--offline', action='store_true')
     parser.add_argument('--api-baseline', help='Optional installed predecessor version for japicmp')
+    parser.add_argument('--api-baseline-group', help='Previous Maven groupId before coordinate migration')
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     pom = ET.parse(root / 'pom.xml').getroot()
@@ -61,6 +62,8 @@ def main():
     if args.api_baseline:
         comparison = [args.maven, '-B', '-Papi-compatibility', '-pl', ','.join(MODULES),
                       f'-Dapi.compatibility.previousVersion={args.api_baseline}', 'japicmp:cmp']
+        if args.api_baseline_group:
+            comparison.insert(1, f'-Dapi.compatibility.previousGroupId={args.api_baseline_group}')
         if args.offline:
             comparison.insert(1, '-o')
         with (output / 'api-comparison.log').open('w', encoding='utf-8') as log:
@@ -118,6 +121,7 @@ def main():
                 'versionTransformation': f'{development} -> {version}; SCM tag metadata only',
                 'tests': test_totals, 'externalConsumer': 'Maven invoker verify in build.log',
                 'apiBaseline': args.api_baseline,
+                'apiBaselineGroup': args.api_baseline_group or group,
                 'runtimeDependenciesBundled': False,
                 'artifacts': {p.relative_to(output).as_posix(): sha(p) for p in sorted(output.glob('*.zip'))},
                 'remaining': ['Confirm Central namespace ownership', 'Configure signing key and Portal token',

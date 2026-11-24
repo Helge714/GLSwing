@@ -1,5 +1,10 @@
 # GLSwing 0.2.0 — release candidate
 
+**Maven coordinate migration:** the group is now `io.github.helge714` instead
+of `com.vingame`. Update dependency groupIds for the parent and all library
+modules. Java imports and automatic module names remain `com.vingame.glswing`.
+No relocation of old published artifacts is claimed.
+
 - Shared keyboard command routing across focus, hovered containers and a default
   command target; shared Find UI for text, code and Markdown.
 - More compact graph arrangement, preserved camera position on resize and
