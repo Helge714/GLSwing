@@ -177,15 +177,15 @@ public final class GLNodeEditorBinding implements AutoCloseable {
 	}
 
 	/**
-	 * Grows projected nodes whose current bounds no longer contain their
-	 * preferred content. Existing larger user-defined dimensions are preserved.
+	 * Fits non-resizable axes to content and grows resizable axes when needed.
+	 * Existing larger user-defined dimensions on resizable axes are preserved.
 	 */
 	public void ensureViewsFitContent() {
 		checkOpen();
 		for (GLNode node : nodeViews.values()) {
 			var preferred = node.getPreferredGLSize();
-			float width = Math.max(node.getWidth(), preferred.width());
-			float height = Math.max(node.getHeight(), preferred.height());
+            float width = restoredAxis(node.getWidth(), preferred.width(), node.getResizeMode().allowsHorizontal());
+            float height = restoredAxis(node.getHeight(), preferred.height(), node.getResizeMode().allowsVertical());
 			if (width != node.getWidth() || height != node.getHeight())
 				node.setSize(width, height);
 		}
@@ -234,6 +234,7 @@ public final class GLNodeEditorBinding implements AutoCloseable {
 				GLNodeTypeDescriptor type = types.find(node.typeId()).orElse(null);
 				GLNode existing = nodeViews.get(node.id());
                 GLNode previous = existing;
+                var previousPreferred = existing == null ? null : existing.getPreferredGLSize();
 				if (type == null) {
 					if (existing != null) removeNodeView(node.id());
 					index++;
@@ -252,7 +253,7 @@ public final class GLNodeEditorBinding implements AutoCloseable {
 					existing = null;
 				}
 				try {
-					if (existing == null) existing = addNodeView(node, type, index, previous);
+					if (existing == null) existing = addNodeView(node, type, index, previous, previousPreferred);
 					else {
 						viewFactory.updateNode(existing, node, type);
 						applyBuiltInState(existing, node, type);
@@ -290,7 +291,7 @@ public final class GLNodeEditorBinding implements AutoCloseable {
     }
 
 	private GLNode addNodeView(GLGraphNode node, GLNodeTypeDescriptor type,
-			int index, GLNode previous) {
+			int index, GLNode previous, com.vingame.glswing.layout.GLSize previousPreferred) {
 		GLNode view = viewFactory.createNode(node, type);
 		if (view == null)
 			throw new IllegalStateException("Node view factory returned null for "
@@ -312,7 +313,12 @@ public final class GLNodeEditorBinding implements AutoCloseable {
         var preferred=view.getPreferredGLSize();
         float width=state!=null&&state.width()>0?state.width():view.getWidth();
         float height=state!=null&&state.height()>0?state.height():view.getHeight();
-        view.setSize(Math.max(width,preferred.width()),Math.max(height,preferred.height()));
+        if (previous != null && previousPreferred != null) {
+            if (Math.abs(previous.getWidth()-previousPreferred.width()) < .5f) width=preferred.width();
+            if (Math.abs(previous.getHeight()-previousPreferred.height()) < .5f) height=preferred.height();
+        }
+        view.setSize(restoredAxis(width,preferred.width(),view.getResizeMode().allowsHorizontal()),
+            restoredAxis(height,preferred.height(),view.getResizeMode().allowsVertical()));
         growRebuiltViews.remove(node.id());
 		return view;
 	}
@@ -434,9 +440,13 @@ public final class GLNodeEditorBinding implements AutoCloseable {
 		node.setLocation(state.x(), state.y());
         node.setCustomTitle(state.customTitle());
 		if (state.width() > 0 && state.height() > 0)
-			node.setSize(Math.max(state.width(),node.getPreferredGLSize().width()),
-                    Math.max(state.height(),node.getPreferredGLSize().height()));
+            node.setSize(restoredAxis(state.width(),node.getPreferredGLSize().width(),node.getResizeMode().allowsHorizontal()),
+                restoredAxis(state.height(),node.getPreferredGLSize().height(),node.getResizeMode().allowsVertical()));
 	}
+
+    private static float restoredAxis(float stored,float preferred,boolean resizable) {
+        return resizable ? Math.max(stored,preferred) : preferred;
+    }
 
 	private void checkOpen() {
 		if (closed) throw new IllegalStateException("Node-editor binding is closed");

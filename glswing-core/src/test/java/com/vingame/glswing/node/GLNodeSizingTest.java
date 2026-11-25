@@ -42,4 +42,31 @@ class GLNodeSizingTest {
             }
         });
     }
+    @Test void removedRowsShrinkAutomaticAxesButKeepManualResize()throws Exception {
+        SwingUtilities.invokeAndWait(()->{
+            for(var mode:new GLNodeResizeMode[]{GLNodeResizeMode.HORIZONTAL,GLNodeResizeMode.BOTH}) {
+                var graph=new GLNodeGraph();var id=GLNodeId.random();var types=new GLNodeTypeRegistry();
+                types.register(new GLNodeTypeDescriptor("dynamic",java.util.stream.IntStream.range(0,4).mapToObj(i->GLNodePortDescriptor.output("out"+i,"number")).toList()));
+                graph.edit("Create",e->e.addNode(new GLGraphNode(id,"dynamic")));var editor=new GLNodeEditor();
+                var factory=new GLNodeViewFactory(){
+                    public GLNode createNode(GLGraphNode model,GLNodeTypeDescriptor type){
+                        var n=new GLNode("Group");n.setResizeMode(mode);for(var p:type.ports())n.addOutput(p.id(),new GLLabel(p.id()));return n;
+                    }
+                    public boolean isViewCurrent(GLNode view,GLGraphNode model,GLNodeTypeDescriptor type){return view.getPorts().size()==type.ports().size();}
+                };
+                GLNodeEditorViewState saved;
+                try(var binding=new GLNodeEditorBinding(graph,types,editor,factory,GLGraphCyclePolicy.ACYCLIC)) {
+                    var n=binding.findNodeView(id).orElseThrow();float height=n.getHeight();n.setSize(600,height);saved=binding.captureViewState();
+                    types.replace(new GLNodeTypeDescriptor("dynamic",GLNodePortDescriptor.output("out0","number")));binding.refresh();n=binding.findNodeView(id).orElseThrow();
+                    assertEquals(600,n.getWidth());assertTrue(n.getHeight()<height);assertEquals(n.getPreferredGLSize().height(),n.getHeight(),.01);
+                    if(mode==GLNodeResizeMode.HORIZONTAL){binding.applyViewState(saved);assertEquals(n.getPreferredGLSize().height(),n.getHeight(),.01);}
+                    else {n.setSize(600,500);types.replace(new GLNodeTypeDescriptor("dynamic"));binding.refresh();assertEquals(500,binding.findNodeView(id).orElseThrow().getHeight());}
+                }
+                if(mode==GLNodeResizeMode.HORIZONTAL)try(var reopened=new GLNodeEditorBinding(graph,types,new GLNodeEditor(),factory,GLGraphCyclePolicy.ACYCLIC,saved)) {
+                    var n=reopened.findNodeView(id).orElseThrow();assertEquals(600,n.getWidth());assertEquals(n.getPreferredGLSize().height(),n.getHeight(),.01);
+                }
+            }
+        });
+    }
+
 }

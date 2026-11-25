@@ -2,6 +2,10 @@
 
 ## 0.3.0-SNAPSHOT
 
+- Repack automatic node dimensions when rows/ports are removed or rebuilt.
+  Restored group views fit their non-resizable height while retaining manual
+  widths; vertically resizable analysis views retain their custom heights.
+
 - Keep recorded color/picking toggles independent of the other output mask.
   Socket recordings created during color-only hover repaints remain pickable
   after resize-edge hover; Canvas press/cursor and cached-GPU regressions cover it.
