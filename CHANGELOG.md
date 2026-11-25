@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.0-SNAPSHOT
+
+- Extend node socket picking horizontally without changing port layout or vertical
+  hit bounds. Hovered and connection-candidate sockets use an accent outline;
+  configure `node.portHitPaddingX` and `node.portFocusBorder` in themes. Hidden
+  sockets no longer remain connection snap targets.
+
+
 - Move Maven publication coordinates from com.vingame to io.github.helge714.
   Consumers must update dependency groupIds; Java packages and automatic module
   names stay unchanged. The 0.2.0 minor release covers this build-contract change.

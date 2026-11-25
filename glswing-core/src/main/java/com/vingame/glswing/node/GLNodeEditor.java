@@ -1533,6 +1533,7 @@ public class GLNodeEditor extends GLContainer
 			List<GLNodePort> ports = node.getPorts();
 			for (int portIndex = ports.size() - 1; portIndex >= 0; portIndex--) {
 				GLNodePort port = ports.get(portIndex);
+                if (!port.isVisible() || !port.isSocketVisible()) continue;
 				float[] bounds = port.getLastRenderedScreenBounds();
 				if (bounds == null || bounds[2] <= 0 || bounds[3] <= 0)
 					continue;
@@ -1540,7 +1541,7 @@ public class GLNodeEditor extends GLContainer
 				float centerY = bounds[1] + bounds[3] * 0.5f;
 				float distance = (float) Math.hypot(screenX - centerX,
 						screenY - centerY);
-				float hitRadius = Math.max(bounds[2], bounds[3]) * 0.5f
+				float hitRadius = bounds[3] * 0.5f
 						+ getConnectionSnapDistance();
 				if (distance <= hitRadius && distance < nearestDistance
 						&& canConnect(fixedGesturePort, port)) {
