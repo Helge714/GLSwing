@@ -2,6 +2,9 @@
 
 ## 0.3.0-SNAPSHOT
 
+- Preserve enclosing group input/output bindings and mapped parameters when
+  extracting a nested group, including boundary-only wires and Undo/Redo.
+
 - Extend node socket picking horizontally without changing port layout or vertical
   hit bounds. Hovered and connection-candidate sockets use an accent outline;
   configure `node.portHitPaddingX` and `node.portFocusBorder` in themes. Hidden

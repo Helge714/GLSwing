@@ -234,33 +234,46 @@ public final class GLNodeGraphEditingSession {
 	public GLCompositeExtraction.Result extractSelection(String assetId,
 			String nodeTypeId, String displayName, String category,
 			GLCompositeGraphRegistry composites, GLNodeCatalog catalog) {
+        return extractSelection(assetId,nodeTypeId,displayName,category,composites,catalog,null);
+    }
+    public GLCompositeExtraction.Result extractSelection(String assetId, String nodeTypeId,
+            String displayName, String category, GLCompositeGraphRegistry composites, GLNodeCatalog catalog,
+            String enclosingAssetId) {
 		if (displayName == null || displayName.isBlank() || category == null
 				|| category.isBlank() || composites == null || catalog == null)
 			throw new IllegalArgumentException("Composite registration metadata required");
 		Set<GLNodeId> selection = selectedIds();
 		GLNodeGraphSnapshot beforeGraph = binding.graph().snapshot();
 		GLNodeEditorViewState beforeView = binding.captureViewState();
+        var enclosing=enclosingAssetId==null?null:composites.findAsset(enclosingAssetId).orElseThrow();
 		GLCompositeExtraction.Result result = GLCompositeExtraction.extract(beforeGraph,
-				beforeView, selection, binding.types(), assetId, nodeTypeId);
+				beforeView, selection, binding.types(), assetId, nodeTypeId,enclosing==null?null:enclosing.compositeDescriptor());
+        var afterEnclosing=enclosing==null?null:new com.vingame.glswing.node.document.GLNodeGraphAsset(
+            enclosing.id(),enclosing.version(),enclosing.kind(),result.graph(),result.viewState(),enclosing.metadata(),result.remapEnclosing(enclosing.compositeDescriptor()));
 		GLNodeCatalogEntry catalogEntry = new GLNodeCatalogEntry(
 				result.asset().compositeDescriptor().nodeType(), displayName, category,
 				Map.of(), "composite", "group");
 		register(result, composites, catalog, catalogEntry);
 		try {
+            if(afterEnclosing!=null)composites.replaceAsset(afterEnclosing);
 			binding.graph().replace("Extract composite", result.graph());
 			binding.applyViewState(result.viewState());
 			binding.refresh();
 		} catch (RuntimeException failure) {
+            if(enclosing!=null)composites.replaceAsset(enclosing);
+            binding.graph().replace("Restore extraction",beforeGraph);
 			unregister(result, composites, catalog);
 			throw failure;
 		}
 		GLNodeGraphSnapshot afterGraph = binding.graph().snapshot();
 		if (history != null) history.record("Extract composite", () -> {
+            if(enclosing!=null)composites.replaceAsset(enclosing);
 			restore("Undo extract composite", beforeGraph, beforeView);
 			unregister(result, composites, catalog);
 			if (!binding.isClosed()) binding.refresh();
 		}, () -> {
 			register(result, composites, catalog, catalogEntry);
+            if(afterEnclosing!=null)composites.replaceAsset(afterEnclosing);
 			restore("Redo extract composite", afterGraph, result.viewState());
 			if (!binding.isClosed()) binding.refresh();
 		});

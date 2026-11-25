@@ -637,7 +637,7 @@ public final class GLNodeWorkspace extends GLContainer
 						? null : extractionSupplier.get();
 				if (request == null) return;
 				var result = editing.extractSelection(request.assetId(), request.nodeTypeId(),
-						request.displayName(), request.category(), composites, catalog);
+						request.displayName(), request.category(), composites, catalog, currentAssetId());
 				embeddedAssetIds.add(result.asset().id());
 			}
 		});
