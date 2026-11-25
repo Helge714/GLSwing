@@ -32,6 +32,7 @@ public final class GLNodeAutoLayout {
     private record Edge(Vertex a,Vertex b,double ax,double ay,double bx,double by) { }
     private static final class Block {
         final List<Vertex> nodes=new ArrayList<>();
+        List<Vertex> flowOrder=List.of();
         final List<Link> in=new ArrayList<>(),out=new ArrayList<>();
         int order,rank;
         double originalX,originalY;
@@ -55,10 +56,13 @@ public final class GLNodeAutoLayout {
         Component(List<Vertex> nodes,List<Block> blocks) {
             this.nodes=nodes;this.blocks=blocks;order=nodes.stream().mapToInt(v->v.order).min().orElse(0);
             boundaryConnected=nodes.stream().anyMatch(v->v.in.stream().anyMatch(e->e.a.role!=Role.NORMAL)||v.out.stream().anyMatch(e->e.b.role!=Role.NORMAL));
-            boundaryOrder=nodes.stream().flatMap(v->v.in.stream()).filter(e->e.a.role==Role.INPUT_BOUNDARY)
-                .mapToDouble(e->e.ay).min().orElseGet(()->nodes.stream().flatMap(v->v.out.stream())
-                    .filter(e->e.b.role==Role.OUTPUT_BOUNDARY).mapToDouble(e->e.by).min().orElse(Double.POSITIVE_INFINITY));
+            boundaryOrder=boundaryOrder(nodes,Role.INPUT_BOUNDARY).orElseGet(()->boundaryOrder(nodes,Role.OUTPUT_BOUNDARY).orElse(Double.POSITIVE_INFINITY));
         }
+    }
+    private static OptionalDouble boundaryOrder(List<Vertex> nodes,Role side) {
+        return nodes.stream().flatMapToDouble(v->java.util.stream.DoubleStream.concat(
+            v.in.stream().filter(e->e.a.role==side).mapToDouble(e->e.ay),
+            v.out.stream().filter(e->e.b.role==side).mapToDouble(e->e.by))).min();
     }
     private record Visit(Vertex node,Iterator<Edge> edges) { }
     private record Shelf(double start,double end,double height) { }
@@ -82,10 +86,9 @@ public final class GLNodeAutoLayout {
             for(var wire:editor.getConnections()) {
                 var a=byNode.get(wire.getOutput().getNode());var b=byNode.get(wire.getInput().getNode());
                 if(a==null||b==null)continue;
-                boolean reversed=a.node.isMirrored() && b.node.isMirrored();
-                var edge=reversed
-                    ? new Edge(b,a,wire.getInput().getCenterXInNode(),wire.getInput().getCenterYInNode(),wire.getOutput().getCenterXInNode(),wire.getOutput().getCenterYInNode())
-                    : new Edge(a,b,wire.getOutput().getCenterXInNode(),wire.getOutput().getCenterYInNode(),wire.getInput().getCenterXInNode(),wire.getInput().getCenterYInNode());
+                // Keep graph direction intact for semantic SCC detection.
+                var edge=new Edge(a,b,wire.getOutput().getCenterXInNode(),wire.getOutput().getCenterYInNode(),
+                    wire.getInput().getCenterXInNode(),wire.getInput().getCenterYInNode());
                 edge.a.out.add(edge);edge.b.in.add(edge);
             }
         }
@@ -143,19 +146,20 @@ public final class GLNodeAutoLayout {
 
         /** A feedback region stays contiguous; return vertices occupy a lower lane. */
         void arrangeCycle(Block block) {
-            if(block.nodes.size()==1){var v=block.nodes.get(0);block.w=v.w;block.h=v.h;return;}
+            if(block.nodes.size()==1){block.flowOrder=List.copyOf(block.nodes);var v=block.nodes.get(0);block.w=v.w;block.h=v.h;return;}
             var remaining=new LinkedHashSet<>(block.nodes);var ordered=new ArrayList<Vertex>();var degree=new HashMap<Vertex,Integer>();
             for(var v:remaining)degree.put(v,(int)v.in.stream().filter(e->e.a!=v&&e.a.block==block).count());
             while(!remaining.isEmpty()) {
                 var next=remaining.stream().filter(v->degree.get(v)==0).findFirst().orElseGet(()->remaining.stream()
                     .max(Comparator.comparingInt((Vertex v)->(v.in.stream().anyMatch(e->e.a.block!=block)?1000000:0)
-                        +(int)v.out.stream().filter(e->remaining.contains(e.b)&&e.b!=v).count()-degree.get(v))
+                        +(v.node.isMirrored()?0:10000)+(int)v.out.stream().filter(e->remaining.contains(e.b)&&e.b!=v).count()-degree.get(v))
                         .thenComparingInt(v->-v.order)).orElseThrow());
                 remaining.remove(next);ordered.add(next);for(var e:next.out)if(remaining.contains(e.b))degree.merge(e.b,-1,Integer::sum);
             }
+            block.flowOrder=List.copyOf(ordered);
             var index=new HashMap<Vertex,Integer>();for(int i=0;i<ordered.size();i++)index.put(ordered.get(i),i);
             var returns=new HashSet<Vertex>();
-            for(var v:ordered)if(v.node.isMirrored() || v.out.stream().anyMatch(e->e.b!=v&&e.b.block==block&&index.get(e.b)<index.get(v)))returns.add(v);
+            for(var v:ordered)if(v.out.stream().anyMatch(e->e.b!=v&&e.b.block==block&&index.get(e.b)<index.get(v)))returns.add(v);
             double x=0,minY=0,bottom=0;
             for(var v:ordered) {
                 v.lx=x;x+=v.w+hg;
@@ -175,6 +179,7 @@ public final class GLNodeAutoLayout {
             for(var v:c.nodes)for(var e:v.out)if(e.b.role==Role.NORMAL&&e.a.block!=e.b.block) {
                 var link=new Link(e,e.a.block,e.b.block);c.links.add(link);link.a.out.add(link);link.b.in.add(link);
             }
+            if(c.nodes.stream().anyMatch(v->v.node.isMirrored())){arrangePortSides(c);return;}
             var degree=new HashMap<Block,Integer>();var ready=new PriorityQueue<Block>(Comparator.comparingInt(b->b.order));
             for(var b:c.blocks){degree.put(b,b.in.size());if(b.in.isEmpty())ready.add(b);}
             var order=new ArrayList<Block>();
@@ -208,6 +213,25 @@ public final class GLNodeAutoLayout {
             }
             place(c);compactX(c);
             c.w=c.blocks.stream().mapToDouble(b->b.x+b.w).max().orElse(0);c.h=c.blocks.stream().mapToDouble(b->b.y+b.h).max().orElse(0);
+        }
+
+        /** Semantic feedback regions remain contiguous even when physical flow reverses. */
+        void arrangePortSides(Component c) {
+            var degree=new HashMap<Block,Integer>();var ready=new PriorityQueue<Block>(Comparator.comparingInt(b->b.order));
+            for(var block:c.blocks){degree.put(block,block.in.size());if(block.in.isEmpty())ready.add(block);}
+            var ordered=new ArrayList<Vertex>();
+            while(!ready.isEmpty()) {
+                var block=ready.remove();ordered.addAll(block.flowOrder);
+                for(var link:block.out)if(degree.merge(link.b,-1,Integer::sum)==0)ready.add(link.b);
+            }
+            var wires=new ArrayList<GLNodePortLayout.Wire>();
+            for(var v:c.nodes)for(var edge:v.out)if(edge.b.role==Role.NORMAL)
+                wires.add(new GLNodePortLayout.Wire(edge.a.node,edge.b.node,edge.ax,edge.ay,edge.bx,edge.by));
+            var positions=GLNodePortLayout.arrange(ordered.stream().map(v->v.node).toList(),wires,hg,vg);
+            for(var block:c.blocks){block.x=0;block.y=0;}
+            for(var v:c.nodes){var p=positions.get(v.node);v.lx=p.x();v.ly=p.y();}
+            c.w=c.nodes.stream().mapToDouble(v->v.lx+v.w).max().orElse(0);
+            c.h=c.nodes.stream().mapToDouble(v->v.ly+v.h).max().orElse(0);
         }
 
         // Position is an ordering hint, not a global grid constraint. Separate
@@ -340,8 +364,9 @@ public final class GLNodeAutoLayout {
         void placeBoundaries(Role role,double x) {
             var boundary=nodes.stream().filter(v->v.role==role).toList();double bottom=0;
             for(var v:boundary) {
-                double[] targets=(role==Role.INPUT_BOUNDARY?v.out:v.in).stream()
-                    .mapToDouble(e->role==Role.INPUT_BOUNDARY?e.b.y+e.by-e.ay:e.a.y+e.ay-e.by).toArray();
+                double[] targets=java.util.stream.DoubleStream.concat(
+                    v.out.stream().mapToDouble(e->e.b.y+e.by-e.ay),
+                    v.in.stream().mapToDouble(e->e.a.y+e.ay-e.by)).toArray();
                 v.x=x;v.y=Math.max(bottom,median(targets,0));bottom=v.y+v.h+vg;
             }
         }

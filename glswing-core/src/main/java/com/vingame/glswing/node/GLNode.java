@@ -490,6 +490,18 @@ public class GLNode extends GLContainer {
                 context.drawUIRoundRect(textX,y+size*.25f,size*.75f,size*.75f,1,1,style.titleText());
                 textX+=size+5;available=Math.max(0,available-size-5);
             }
+            if(mirrored){
+                float size=Math.min(16,style.titleHeight()*.55f),y=(style.titleHeight()-size)*.5f;
+                var color=getGLTheme().values().getColor("node.mirrorIndicator",style.titleText());
+                var stroke=context.getStroke();
+                try {
+                    context.setStroke(new GLStroke(1).withWidthSpace(GLStroke.WidthSpace.SCREEN));
+                    context.drawPolyline(new float[]{textX+size*.5f,y,textX+size*.5f,y+size},color);
+                    context.drawPolygon(new float[]{textX,y+size*.15f,textX+size*.35f,y+size*.5f,textX,y+size*.85f},color);
+                    context.drawPolygon(new float[]{textX+size,y+size*.15f,textX+size*.65f,y+size*.5f,textX+size,y+size*.85f},color);
+                } finally {context.setStroke(stroke);}
+                textX+=size+5;available=Math.max(0,available-size-5);
+            }
 			String visibleTitle = GLTextFitter.ellipsize(font, title, available);
 			float baseline = Math.max(font.getAscent(),
 					(style.titleHeight() - font.getLineHeight()) * 0.5f

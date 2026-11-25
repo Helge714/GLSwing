@@ -2,6 +2,12 @@
 
 ## 0.3.0-SNAPSHOT
 
+- Lay out mixed mirrored feedback paths using physical port sides without
+  reversing semantic edges or losing feedback regions. Same-side ports form
+  compact vertical turns; retain stable spacing and an atomic Arrange Undo.
+- Mark mirrored nodes with a themed vector reflection icon beside the title,
+  including collapsed nodes and group instances.
+
 - Add view-only mirrored nodes: inputs right / outputs left, localized context
   actions and Inspector, selection-wide Undo, mirrored curve tangents and layout.
   Preserve orientation through copy, grouping, navigation and document schema 11.
