@@ -495,10 +495,10 @@ public class GLNode extends GLContainer {
                 var color=getGLTheme().values().getColor("node.mirrorIndicator",style.titleText());
                 var stroke=context.getStroke();
                 try {
-                    context.setStroke(new GLStroke(1).withWidthSpace(GLStroke.WidthSpace.SCREEN));
+                    context.setStroke(new GLStroke(1));
+                    context.drawUIRoundRect(textX,y+size*.125f,size*.375f,size*.75f,1,1,color);
+                    context.drawUIRoundRect(textX+size*.625f,y+size*.125f,size*.375f,size*.75f,1,1,color);
                     context.drawPolyline(new float[]{textX+size*.5f,y,textX+size*.5f,y+size},color);
-                    context.drawPolygon(new float[]{textX,y+size*.15f,textX+size*.35f,y+size*.5f,textX,y+size*.85f},color);
-                    context.drawPolygon(new float[]{textX+size,y+size*.15f,textX+size*.65f,y+size*.5f,textX+size,y+size*.85f},color);
                 } finally {context.setStroke(stroke);}
                 textX+=size+5;available=Math.max(0,available-size-5);
             }

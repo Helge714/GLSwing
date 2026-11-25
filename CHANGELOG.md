@@ -2,6 +2,9 @@
 
 ## 0.3.0-SNAPSHOT
 
+- Match the mirror title indicator to the rounded outline style, scale and
+  stroke of the adjacent group indicator.
+
 - Lay out mixed mirrored feedback paths using physical port sides without
   reversing semantic edges or losing feedback regions. Same-side ports form
   compact vertical turns; retain stable spacing and an atomic Arrange Undo.
