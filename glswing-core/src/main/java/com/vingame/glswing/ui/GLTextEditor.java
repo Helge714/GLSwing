@@ -566,6 +566,17 @@ public class GLTextEditor extends GLControl implements GLEditingHistoryTarget {
 		selecting = false;
 	}
 
+    @Override protected void controlMouseClicked(GLMouseEvent event) {
+        if(!isEnabled() || event.getButton()!=MouseEvent.BUTTON1 || !event.hasLocalPosition())return;
+        int count=event.getClickCount();
+        if(count>=3)selectAll();
+        else if(count==2) {
+            var range=GLTextSelectionRanges.word(text,positionAt(event.getLocalX()));
+            moveCaret(range.start(),false);moveCaret(range.end(),true);
+        } else return;
+        event.consume();
+    }
+
 	@Override
 	protected void controlKeyPressed(GLKeyEvent event) {
 		boolean extend = getGLInputMap().hasModifiers(

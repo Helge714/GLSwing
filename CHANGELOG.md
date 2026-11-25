@@ -2,6 +2,10 @@
 
 ## 0.3.0-SNAPSHOT
 
+- Share Unicode word selection across plain text fields and text areas.
+  Double-click selects a word, triple-click the line (whole single-line field),
+  and four or more clicks the document. Code identifier selection stays intact.
+
 - Match the mirror title indicator to the rounded outline style, scale and
   stroke of the adjacent group indicator.
 
