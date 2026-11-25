@@ -2,6 +2,10 @@
 
 ## 0.3.0-SNAPSHOT
 
+- Keep recorded color/picking toggles independent of the other output mask.
+  Socket recordings created during color-only hover repaints remain pickable
+  after resize-edge hover; Canvas press/cursor and cached-GPU regressions cover it.
+
 - Preserve enclosing group input/output bindings and mapped parameters when
   extracting a nested group, including boundary-only wires and Undo/Redo. Publish
   remapped enclosing interfaces before projecting unpacked nodes, so boundary

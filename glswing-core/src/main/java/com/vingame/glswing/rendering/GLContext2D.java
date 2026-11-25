@@ -518,7 +518,7 @@ public final class GLContext2D {
 	}
 
 	public void setColorRenderingEnabled(boolean enabled) {
-		setOutputMask(enabled, isPickingRenderingEnabled());
+		executeAndRecord(renderer -> renderer.setOutputMask(enabled, renderer.isPickingRenderingEnabled()));
 	}
 
 	public boolean isColorRenderingEnabled() {
@@ -526,7 +526,7 @@ public final class GLContext2D {
 	}
 
 	public void setPickingRenderingEnabled(boolean enabled) {
-		setOutputMask(isColorRenderingEnabled(), enabled);
+		executeAndRecord(renderer -> renderer.setOutputMask(renderer.isColorRenderingEnabled(), enabled));
 	}
 
 	public boolean isPickingRenderingEnabled() {

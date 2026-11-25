@@ -22,6 +22,11 @@ class GLNodePortPickingTest {
             gl.glViewport(0,0,200,160);
             for(var shape:GLNodePort.Shape.values())for(float zoom:new float[]{.5f,1,2}) {
                 var port=GLNodePort.input("in");port.setShape(shape);port.setBounds(0,0,10,10);
+                // Simulate a color-only hover repaint creating the cached recording.
+                var colorOnly=renderer.beginFrame(gl,200,160,Projection2D.TOP_LEFT_PIXELS.create(200,160));
+                colorOnly.setPickingRenderingEnabled(false);
+                colorOnly.setTransform(new GLTransform().translate(80,60).scale(zoom,zoom));
+                port.renderComponent(colorOnly);assertFalse(colorOnly.isPickingRenderingEnabled());renderer.endFrame();
                 for(boolean hover:new boolean[]{false,true}) {
                     if(hover)port.mouseEntered(new GLMouseEvent(new MouseEvent(new Canvas(),MouseEvent.MOUSE_ENTERED,0,0,80,60,0,false),renderer.readPickResult(gl,80,60),0,0));
                     var frame=renderer.beginFrame(gl,200,160,Projection2D.TOP_LEFT_PIXELS.create(200,160));
