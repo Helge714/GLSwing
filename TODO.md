@@ -9,10 +9,7 @@ Items are removed when completed or intentionally rejected.
   the existing Core theme value `node.portHitPaddingX` (currently 8 world units).
   Keep editor picking above socket padding and vertical resize boundaries clear;
   consider a screen-space option and validate behavior across zoom levels.
-- Consider per-node mirrored flow (inputs right, outputs left) for feedback
-  layouts. Persist orientation in view state with Undo, context-menu and inspector
-  actions. Adapt socket/label alignment, curve tangents, insertion/reconnection
-  gestures, boundary nodes and automatic layout without changing graph semantics.
+
 
 ## Data views
 

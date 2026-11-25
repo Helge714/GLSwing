@@ -619,6 +619,9 @@ public final class GLNodeWorkspace extends GLContainer
 				return editing.beginMoveSelection(x, y);
 			}
 			@Override public void delete() { editing.removeSelection(); }
+            @Override public boolean canMirror() { return !editor.getSelectedNodes().isEmpty(); }
+            @Override public void setSelectedMirrored(boolean value) { GLNodeWorkspace.this.setSelectedMirrored(value); }
+            @Override public void toggleMirrored() { setSelectedMirrored(editor.getSelectedNodes().stream().anyMatch(n -> !n.isMirrored())); }
 			@Override public void toggleHidden() { editing.toggleHiddenSelection(); }
 			@Override public void toggleMuted() { editing.toggleMutedSelection(); }
 			@Override public void requestNodeCreation(float x, float y,
@@ -690,16 +693,28 @@ public final class GLNodeWorkspace extends GLContainer
         document.viewState=after;persistDocumentAsset(document);
         if(history!=null)history.record("Arrange all nodes",()->restoreArrangement(document,before),()->restoreArrangement(document,after));
     }
+    /** A single view-only history edit; graph values and signal direction stay unchanged. */
+    public void setSelectedMirrored(boolean mirrored) {
+        if (binding == null || editor.getSelectedNodes().isEmpty()) return;
+        var document=documents.peekLast();var before=captureActiveViewState();
+        for (var node:editor.getSelectedNodes()) node.setMirrored(mirrored);
+        var after=captureActiveViewState();
+        if(before.equals(after))return;
+        restoreArrangement(document,after);
+        if(history!=null)history.record("Mirror nodes",()->restoreArrangement(document,before),()->restoreArrangement(document,after));
+        changeListener.run();
+    }
     private void restoreArrangement(Document document,GLNodeEditorViewState state) {
         document.viewState=state;
         if(documents.peekLast()==document&&binding!=null){
             binding.applyViewState(state);
             for(var n:editor.getNodes())if(n instanceof BoundaryNode boundary){
                 var b=state.auxiliaryNodes().get(boundary.direction==GLPortDirection.INPUT?BOUNDARY_INPUT_VIEW:BOUNDARY_OUTPUT_VIEW);
-                if(b!=null)n.setBounds(b.x(),b.y(),b.width(),b.height());
+                if(b!=null){n.setBounds(b.x(),b.y(),b.width(),b.height());n.setMirrored(b.mirrored());}
             }
         }
         persistDocumentAsset(document);
+        if(propertyInspector!=null)propertyInspector.refresh();
     }
     private void showCreationMenu(float x, float y, float screenX, float screenY) {
 		GLParent host = rootParent();
@@ -799,7 +814,9 @@ public final class GLNodeWorkspace extends GLContainer
 		var inputBoundary = addBoundaryNode(descriptor, GLPortDirection.INPUT, inputX, inputY);
         if (previousInput == null && storedInput == null)
             inputBoundary.setLocation(minX - inputBoundary.getWidth() - gap, inputY);
-		addBoundaryNode(descriptor, GLPortDirection.OUTPUT, outputX, outputY);
+        inputBoundary.setMirrored(previousInput != null ? previousInput.isMirrored() : storedInput != null && storedInput.mirrored());
+        var outputBoundary=addBoundaryNode(descriptor, GLPortDirection.OUTPUT, outputX, outputY);
+        outputBoundary.setMirrored(previousOutput != null ? previousOutput.isMirrored() : storedOutput != null && storedOutput.mirrored());
 		} finally { rebuildingBoundaries = false; }
 	}
 
@@ -886,7 +903,7 @@ public final class GLNodeWorkspace extends GLContainer
             for(var wire:editor.getConnections())if(wire.getOutput().getNode()==next)pending.add(wire.getInput().getNode());
         }
         var beforeBounds=new LinkedHashMap<>(current.nodes());var bounds=beforeBounds.get(id);
-        beforeBounds.put(id,new GLNodeViewState(startX,startY,bounds.width(),bounds.height(),bounds.customTitle()));
+        beforeBounds.put(id,new GLNodeViewState(startX,startY,bounds.width(),bounds.height(),bounds.customTitle(),bounds.mirrored()));
         var start=current.withNodes(beforeBounds);
         if(!start.equals(current))history.record("Move node",()->restoreArrangement(document,start),()->restoreArrangement(document,current));
         try(var transaction=history.beginTransaction("Insert node into group connection")){
@@ -895,9 +912,12 @@ public final class GLNodeWorkspace extends GLContainer
             var descriptor=composites.findAsset(document.assetId).orElseThrow().compositeDescriptor();
             GLCompositeInterfaceTransactions.replacePorts(composites,types,document.assetId,descriptor.portMappings().stream().map(p->p.publicPort().id().equals(mapping.publicPort().id())?replacement:p).toList(),history,"Reconnect group boundary");
             float gap=editor.getHorizontalNodeSpacing();var from=edge.getOutput().getNode();var to=edge.getInput().getNode();
-            float x=Math.max(from.getX()+from.getWidth()+gap,node.getX());node.setLocation(x,node.getY());
-            float shift=Math.max(0,x+node.getWidth()+gap-to.getX());
-            if(shift>0){float threshold=to.getX();for(var n:downstream)if(n.getX()>=threshold)n.setLocation(n.getX()+shift,n.getY());}
+            int flow=from.isMirrored()?-1:1;
+            float fromX=flow==1?from.getX():-from.getX()-from.getWidth(),toX=flow==1?to.getX():-to.getX()-to.getWidth();
+            float axisX=Math.max(fromX+from.getWidth()+gap,flow==1?node.getX():-node.getX()-node.getWidth());
+            node.setLocation(flow==1?axisX:-axisX-node.getWidth(),node.getY());
+            float shift=Math.max(0,axisX+node.getWidth()+gap-toX);
+            if(shift>0)for(var n:downstream)if((flow==1?n.getX():-n.getX()-n.getWidth())>=toX)n.setLocation(n.getX()+flow*shift,n.getY());
             var placed=captureActiveViewState();history.record("Make room",()->restoreArrangement(document,current),()->restoreArrangement(document,placed));
         }
         return true;

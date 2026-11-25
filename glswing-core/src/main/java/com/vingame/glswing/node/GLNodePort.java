@@ -83,6 +83,10 @@ public final class GLNodePort extends GLContainer {
 	public String getId() { return id; }
 	public Direction getDirection() { return direction; }
 	public GLNode getNode() { return node; }
+    /** Outward curve tangent, independent of semantic input/output direction. */
+    public int getOutwardSign() {
+        return (direction == Direction.OUTPUT) != (node != null && node.isMirrored()) ? 1 : -1;
+    }
 	public float getCenterXInNode() { return getX() + getWidth() * 0.5f; }
 	public float getCenterYInNode() { return getY() + getHeight() * 0.5f; }
 

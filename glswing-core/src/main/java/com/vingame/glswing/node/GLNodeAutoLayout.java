@@ -26,7 +26,7 @@ public final class GLNodeAutoLayout {
         Block block;
         double x,y,lx,ly;
         Vertex(GLNode node,int order) {
-            this.node=node;this.order=order;w=node.getWidth();h=node.getHeight();role=node.getAutoLayoutRole();
+            this.node=node;this.order=order;w=node.getWidth();h=node.getHeight();role=node.isMirrored() ? switch(node.getAutoLayoutRole()){case INPUT_BOUNDARY -> Role.OUTPUT_BOUNDARY;case OUTPUT_BOUNDARY -> Role.INPUT_BOUNDARY;case NORMAL -> Role.NORMAL;} : node.getAutoLayoutRole();
         }
     }
     private record Edge(Vertex a,Vertex b,double ax,double ay,double bx,double by) { }
@@ -82,9 +82,11 @@ public final class GLNodeAutoLayout {
             for(var wire:editor.getConnections()) {
                 var a=byNode.get(wire.getOutput().getNode());var b=byNode.get(wire.getInput().getNode());
                 if(a==null||b==null)continue;
-                var edge=new Edge(a,b,wire.getOutput().getCenterXInNode(),wire.getOutput().getCenterYInNode(),
-                    wire.getInput().getCenterXInNode(),wire.getInput().getCenterYInNode());
-                a.out.add(edge);b.in.add(edge);
+                boolean reversed=a.node.isMirrored() && b.node.isMirrored();
+                var edge=reversed
+                    ? new Edge(b,a,wire.getInput().getCenterXInNode(),wire.getInput().getCenterYInNode(),wire.getOutput().getCenterXInNode(),wire.getOutput().getCenterYInNode())
+                    : new Edge(a,b,wire.getOutput().getCenterXInNode(),wire.getOutput().getCenterYInNode(),wire.getInput().getCenterXInNode(),wire.getInput().getCenterYInNode());
+                edge.a.out.add(edge);edge.b.in.add(edge);
             }
         }
         void run() {
@@ -153,7 +155,7 @@ public final class GLNodeAutoLayout {
             }
             var index=new HashMap<Vertex,Integer>();for(int i=0;i<ordered.size();i++)index.put(ordered.get(i),i);
             var returns=new HashSet<Vertex>();
-            for(var v:ordered)if(v.out.stream().anyMatch(e->e.b!=v&&e.b.block==block&&index.get(e.b)<index.get(v)))returns.add(v);
+            for(var v:ordered)if(v.node.isMirrored() || v.out.stream().anyMatch(e->e.b!=v&&e.b.block==block&&index.get(e.b)<index.get(v)))returns.add(v);
             double x=0,minY=0,bottom=0;
             for(var v:ordered) {
                 v.lx=x;x+=v.w+hg;
@@ -164,6 +166,8 @@ public final class GLNodeAutoLayout {
                 }
             }
             for(var v:ordered)v.ly=returns.contains(v)?bottom-minY+vg:v.ly-minY;
+            double top=ordered.stream().mapToDouble(v->v.ly).min().orElse(0);
+            for(var v:ordered)v.ly-=top;
             block.w=x-hg;block.h=ordered.stream().mapToDouble(v->v.ly+v.h).max().orElse(0);
         }
 

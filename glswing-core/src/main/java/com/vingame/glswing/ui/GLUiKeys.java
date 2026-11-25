@@ -55,7 +55,10 @@ public final class GLUiKeys {
 			"glswing.node.extractComposite";
 	public static final String NODE_HIDE = "glswing.node.hide";
 	public static final String NODE_UNHIDE = "glswing.node.unhide";
-	public static final String NODE_MUTE = "glswing.node.mute";
+	public static final String NODE_MIRROR = "glswing.node.mirror";
+    public static final String NODE_UNMIRROR = "glswing.node.unmirror";
+    public static final String NODE_MIRRORED = "glswing.node.mirrored";
+    public static final String NODE_MUTE = "glswing.node.mute";
 	public static final String NODE_UNMUTE = "glswing.node.unmute";
 	public static final String NODE_COMPOSITE_INTERFACE =
 			"glswing.node.composite.interface";

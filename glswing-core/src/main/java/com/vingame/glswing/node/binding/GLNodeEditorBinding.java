@@ -302,7 +302,7 @@ public final class GLNodeEditorBinding implements AutoCloseable {
 		float x = state == null ? 40 + index % 4 * 260 : state.x();
 		float y = state == null ? 40 + index / 4 * 180 : state.y();
 		editor.addNode(view, x, y);
-        if(state!=null)view.setCustomTitle(state.customTitle());
+        if(state!=null){view.setCustomTitle(state.customTitle());view.setMirrored(state.mirrored());}
 
 		nodeViews.put(node.id(), view);
 		nodeIds.put(view, node.id());
@@ -439,6 +439,7 @@ public final class GLNodeEditorBinding implements AutoCloseable {
 		}
 		node.setLocation(state.x(), state.y());
         node.setCustomTitle(state.customTitle());
+        node.setMirrored(state.mirrored());
 		if (state.width() > 0 && state.height() > 0)
             node.setSize(restoredAxis(state.width(),node.getPreferredGLSize().width(),true),
                 restoredAxis(state.height(),node.getPreferredGLSize().height(),!node.isHeightFittedToContent()));

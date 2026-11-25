@@ -2,6 +2,11 @@
 
 ## 0.3.0-SNAPSHOT
 
+- Add view-only mirrored nodes: inputs right / outputs left, localized context
+  actions and Inspector, selection-wide Undo, mirrored curve tangents and layout.
+  Preserve orientation through copy, grouping, navigation and document schema 11.
+  Older schemas load normally; older readers cannot open newly saved schema 11.
+
 - Give embedded editors picking priority over expanded socket hit areas while
   retaining unclipped outward connection targets.
 

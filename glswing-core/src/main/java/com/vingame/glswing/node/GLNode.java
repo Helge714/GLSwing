@@ -71,6 +71,8 @@ public class GLNode extends GLContainer {
 	private float themeWidth,themeHeight;
 	private boolean automaticThemeWidth,automaticThemeHeight;
     private boolean heightFittedToContent;
+    private boolean mirrored;
+    private GLMenuItem mirrorMenuItem;
 	private GLNodeStyle localStyle;
 	private GLNodePortOrder portOrder = GLNodePortOrder.INPUTS_FIRST;
 	private GLNodeResizeMode resizeMode = GLNodeResizeMode.BOTH;
@@ -217,6 +219,18 @@ public class GLNode extends GLContainer {
 
     /** Enable for row-based views such as groups whose height follows their public ports. */
     public void setHeightFittedToContent(boolean fitted) { heightFittedToContent = fitted; }
+
+    /** View-only horizontal flow: mirrored inputs face right and outputs left. */
+    public boolean isMirrored() { return mirrored; }
+    public void setMirrored(boolean value) {
+        if (mirrored == value) return;
+        mirrored = value;
+        layoutEntries();
+        invalidateRecording();
+        updateContextMenuText();
+        if (getGLParent() instanceof GLNodeEditor editor) editor.repaintAndRebuildPicking(editor);
+        else repaintAndRebuildPicking(this);
+    }
 
 	public GLNodeResizeMode getResizeMode() {
 		return resizeMode;
@@ -808,6 +822,10 @@ public class GLNode extends GLContainer {
 		float rowsHeight = 0;
 		List<Entry> shown = shownEntries();
 		for (Entry entry : shown) {
+            if (entry.content instanceof GLLabel label && (entry.input != null ^ entry.output != null))
+                label.setAlignment((entry.output != null) != mirrored ? GLLabel.Alignment.RIGHT : GLLabel.Alignment.LEFT);
+            if (entry.connectedLabel != null)
+                entry.connectedLabel.setAlignment(mirrored ? GLLabel.Alignment.RIGHT : GLLabel.Alignment.LEFT);
 			GLSize preferred = rowPreferredSize(entry);
 			widest = Math.max(widest,
 					preferred.width() + style.contentPadding().horizontal());
@@ -839,6 +857,10 @@ public class GLNode extends GLContainer {
 		for (Entry entry : shown) growTotal += entry.verticalGrow;
 		float extra = Math.max(0, getHeight() - computedMinimumHeight);
 		for (Entry entry : shown) {
+            if (entry.content instanceof GLLabel label && (entry.input != null ^ entry.output != null))
+                label.setAlignment((entry.output != null) != mirrored ? GLLabel.Alignment.RIGHT : GLLabel.Alignment.LEFT);
+            if (entry.connectedLabel != null)
+                entry.connectedLabel.setAlignment(mirrored ? GLLabel.Alignment.RIGHT : GLLabel.Alignment.LEFT);
 			GLSize preferred = rowPreferredSize(entry);
 			float rowHeight = preferred.height() + (growTotal > 0 ? extra * entry.verticalGrow / growTotal : 0);
 			entry.content.setBounds(contentX, y, contentWidth, rowHeight);
@@ -850,10 +872,10 @@ public class GLNode extends GLContainer {
                     ? entry.portAnchor.getY() + entry.portAnchor.getHeight() * .5f : rowHeight * .5f;
             float portY = y + center - diameter * .5f;
 			if (entry.input != null)
-				entry.input.setBounds(-style.portRadius(), portY,
+				entry.input.setBounds((mirrored ? getWidth() : 0) - style.portRadius(), portY,
 						diameter, diameter);
 			if (entry.output != null)
-				entry.output.setBounds(getWidth() - style.portRadius(), portY,
+				entry.output.setBounds((mirrored ? 0 : getWidth()) - style.portRadius(), portY,
 						diameter, diameter);
 			y += rowHeight + style.rowGap();
 		}
@@ -1059,6 +1081,8 @@ public class GLNode extends GLContainer {
 				getGLLocalizer().text(GLUiKeys.NODE_EXTRACT_COMPOSITE),
 				event -> invokeEditingAction(GLNodeEditingActions::extractComposite));
 		contextMenu.addSeparator();
+        mirrorMenuItem = contextMenu.addItem(getGLLocalizer().text(GLUiKeys.NODE_MIRROR),
+            event -> invokeEditingAction(GLNodeEditingActions::toggleMirrored));
 		hideMenuItem = contextMenu.addItem(getGLLocalizer().text(GLUiKeys.NODE_HIDE),
 				event -> invokeEditingAction(GLNodeEditingActions::toggleHidden));
 		muteMenuItem = contextMenu.addItem(getGLLocalizer().text(GLUiKeys.NODE_MUTE),
@@ -1084,6 +1108,8 @@ public class GLNode extends GLContainer {
 				getGLLocalizer().text(GLUiKeys.NODE_DUPLICATE));
 		if (extractCompositeMenuItem != null) extractCompositeMenuItem.setText(
 				getGLLocalizer().text(GLUiKeys.NODE_EXTRACT_COMPOSITE));
+        if (mirrorMenuItem != null) mirrorMenuItem.setText(getGLLocalizer().text(
+            mirrored ? GLUiKeys.NODE_UNMIRROR : GLUiKeys.NODE_MIRROR));
 		if (hideMenuItem != null) hideMenuItem.setText(getGLLocalizer().text(
 				contentHidden ? GLUiKeys.NODE_UNHIDE : GLUiKeys.NODE_HIDE));
 		if (muteMenuItem != null) muteMenuItem.setText(getGLLocalizer().text(
@@ -1154,6 +1180,7 @@ public class GLNode extends GLContainer {
 		extractCompositeMenuItem.setEnabled(actions != null
 				&& actions.canExtractComposite());
 		hideMenuItem.setEnabled(actions != null && actions.canToggleHidden());
+        mirrorMenuItem.setEnabled(actions != null && actions.canMirror());
 		muteMenuItem.setEnabled(actions != null && actions.canToggleMuted());
 		deleteNodeMenuItem.setEnabled(actions == null || actions.canDelete());
 		menu.show(host, event.getScreenX(), event.getScreenY());

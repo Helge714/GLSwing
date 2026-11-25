@@ -68,12 +68,19 @@ public final class GLNodePropertyInspector extends GLContainer
 		removeAllGL();
 		rows.clear();
 		List<GLGraphNode> selected = selectedModels().stream().map(presentationModel).toList();
-		if (selected.isEmpty()) {
+		if (selected.isEmpty() && binding.editor().getSelectedNodes().isEmpty()) {
 			addGL(empty);
 			resized(getWidth(), getHeight());
 			return;
 		}
-		Map<String, GLNodePropertyDescriptor> common = commonProperties(selected);
+        var actions=binding.editor().getEditingActions();
+        if(actions!=null && actions.canMirror()) {
+            var mirror=new GLCheckBox(getGLLocalizer().text(com.vingame.glswing.ui.GLUiKeys.NODE_MIRRORED));
+            mirror.setSelected(binding.editor().getSelectedNodes().stream().allMatch(GLNode::isMirrored));
+            mirror.addActionListener(event -> actions.setSelectedMirrored(mirror.isSelected()));
+            rows.add(new Row(null,mirror,null));addGL(mirror);
+        }
+		Map<String, GLNodePropertyDescriptor> common = selected.isEmpty() ? Map.of() : commonProperties(selected);
 		for (GLNodePropertyDescriptor descriptor : common.values()) {
 			GLContainer control = createControl(descriptor, selected);
 			if (control == null) continue;
