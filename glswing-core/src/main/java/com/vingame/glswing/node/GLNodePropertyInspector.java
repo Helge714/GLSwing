@@ -75,7 +75,9 @@ public final class GLNodePropertyInspector extends GLContainer
 		}
         var actions=binding.editor().getEditingActions();
         if(actions!=null && actions.canMirror()) {
-            var mirror=new GLCheckBox(getGLLocalizer().text(com.vingame.glswing.ui.GLUiKeys.NODE_MIRRORED));
+            var mirror=new GLCheckBox(com.vingame.glswing.ui.GLAction.builder("glswing.node.mirrored")
+                .textKey(com.vingame.glswing.ui.GLUiKeys.NODE_MIRRORED).build());
+            mirror.setHistoryEnabled(false);
             mirror.setSelected(binding.editor().getSelectedNodes().stream().allMatch(GLNode::isMirrored));
             mirror.addActionListener(event -> actions.setSelectedMirrored(mirror.isSelected()));
             rows.add(new Row(null,mirror,null));addGL(mirror);
