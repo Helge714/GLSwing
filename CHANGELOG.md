@@ -3,7 +3,9 @@
 ## 0.3.0-SNAPSHOT
 
 - Preserve enclosing group input/output bindings and mapped parameters when
-  extracting a nested group, including boundary-only wires and Undo/Redo.
+  extracting a nested group, including boundary-only wires and Undo/Redo. Publish
+  remapped enclosing interfaces before projecting unpacked nodes, so boundary
+  synchronization cannot overwrite valid bindings during restoration.
 
 - Extend node socket picking horizontally without changing port layout or vertical
   hit bounds. Hovered and connection-candidate sockets use an accent outline;

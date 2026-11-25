@@ -670,8 +670,9 @@ public final class GLNodeWorkspace extends GLContainer
         synchronizingAsset=true;
         try {
             document.viewState=view;document.selection=selection;
-            document.graph.replace("Ungroup",graph);
+            // Publish remapped endpoints before graph projection consults the interface.
             if(parent!=null)composites.replaceAsset(parent);
+            document.graph.replace("Ungroup",graph);
             if(documents.peekLast()==document&&binding!=null){
                 binding.refresh();binding.applyViewState(view);refreshRegisteredInterface();
                 editor.setSelectedNodes(selection.stream().map(binding::findNodeView).flatMap(java.util.Optional::stream).toList());
