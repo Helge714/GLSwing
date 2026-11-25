@@ -3,7 +3,7 @@
 ## 0.3.0-SNAPSHOT
 
 - Repack automatic node dimensions when rows/ports are removed or rebuilt.
-  Restored group views fit their non-resizable height while retaining manual
+  Restored group views explicitly fit height to content while retaining manual
   widths; vertically resizable analysis views retain their custom heights.
 
 - Keep recorded color/picking toggles independent of the other output mask.

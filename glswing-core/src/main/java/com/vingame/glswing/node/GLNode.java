@@ -70,6 +70,7 @@ public class GLNode extends GLContainer {
     private GLNodeConnectionStatus titleBadgeStatus=GLNodeConnectionStatus.NORMAL;
 	private float themeWidth,themeHeight;
 	private boolean automaticThemeWidth,automaticThemeHeight;
+    private boolean heightFittedToContent;
 	private GLNodeStyle localStyle;
 	private GLNodePortOrder portOrder = GLNodePortOrder.INPUTS_FIRST;
 	private GLNodeResizeMode resizeMode = GLNodeResizeMode.BOTH;
@@ -210,6 +211,12 @@ public class GLNode extends GLContainer {
 		requestGLFocus(titleEditor);
 		titleEditor.selectAll();
 	}
+
+    /** Whether graph bindings always fit height to content rather than restore saved height. */
+    public boolean isHeightFittedToContent() { return heightFittedToContent; }
+
+    /** Enable for row-based views such as groups whose height follows their public ports. */
+    public void setHeightFittedToContent(boolean fitted) { heightFittedToContent = fitted; }
 
 	public GLNodeResizeMode getResizeMode() {
 		return resizeMode;

@@ -177,15 +177,15 @@ public final class GLNodeEditorBinding implements AutoCloseable {
 	}
 
 	/**
-	 * Fits non-resizable axes to content and grows resizable axes when needed.
-	 * Existing larger user-defined dimensions on resizable axes are preserved.
+	 * Fits explicitly automatic height to content and grows other dimensions when needed.
+	 * Existing larger user-defined dimensions are otherwise preserved.
 	 */
 	public void ensureViewsFitContent() {
 		checkOpen();
 		for (GLNode node : nodeViews.values()) {
 			var preferred = node.getPreferredGLSize();
-            float width = restoredAxis(node.getWidth(), preferred.width(), node.getResizeMode().allowsHorizontal());
-            float height = restoredAxis(node.getHeight(), preferred.height(), node.getResizeMode().allowsVertical());
+            float width = restoredAxis(node.getWidth(), preferred.width(), true);
+            float height = restoredAxis(node.getHeight(), preferred.height(), !node.isHeightFittedToContent());
 			if (width != node.getWidth() || height != node.getHeight())
 				node.setSize(width, height);
 		}
@@ -317,8 +317,8 @@ public final class GLNodeEditorBinding implements AutoCloseable {
             if (Math.abs(previous.getWidth()-previousPreferred.width()) < .5f) width=preferred.width();
             if (Math.abs(previous.getHeight()-previousPreferred.height()) < .5f) height=preferred.height();
         }
-        view.setSize(restoredAxis(width,preferred.width(),view.getResizeMode().allowsHorizontal()),
-            restoredAxis(height,preferred.height(),view.getResizeMode().allowsVertical()));
+        view.setSize(restoredAxis(width,preferred.width(),true),
+            restoredAxis(height,preferred.height(),!view.isHeightFittedToContent()));
         growRebuiltViews.remove(node.id());
 		return view;
 	}
@@ -440,8 +440,8 @@ public final class GLNodeEditorBinding implements AutoCloseable {
 		node.setLocation(state.x(), state.y());
         node.setCustomTitle(state.customTitle());
 		if (state.width() > 0 && state.height() > 0)
-            node.setSize(restoredAxis(state.width(),node.getPreferredGLSize().width(),node.getResizeMode().allowsHorizontal()),
-                restoredAxis(state.height(),node.getPreferredGLSize().height(),node.getResizeMode().allowsVertical()));
+            node.setSize(restoredAxis(state.width(),node.getPreferredGLSize().width(),true),
+                restoredAxis(state.height(),node.getPreferredGLSize().height(),!node.isHeightFittedToContent()));
 	}
 
     private static float restoredAxis(float stored,float preferred,boolean resizable) {

@@ -50,7 +50,7 @@ class GLNodeSizingTest {
                 graph.edit("Create",e->e.addNode(new GLGraphNode(id,"dynamic")));var editor=new GLNodeEditor();
                 var factory=new GLNodeViewFactory(){
                     public GLNode createNode(GLGraphNode model,GLNodeTypeDescriptor type){
-                        var n=new GLNode("Group");n.setResizeMode(mode);for(var p:type.ports())n.addOutput(p.id(),new GLLabel(p.id()));return n;
+                        var n=new GLNode("Group");n.setResizeMode(mode);n.setHeightFittedToContent(mode==GLNodeResizeMode.HORIZONTAL);for(var p:type.ports())n.addOutput(p.id(),new GLLabel(p.id()));return n;
                     }
                     public boolean isViewCurrent(GLNode view,GLGraphNode model,GLNodeTypeDescriptor type){return view.getPorts().size()==type.ports().size();}
                 };
