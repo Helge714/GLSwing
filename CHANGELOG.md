@@ -2,6 +2,9 @@
 
 ## 0.3.0-SNAPSHOT
 
+- Give embedded editors picking priority over expanded socket hit areas while
+  retaining unclipped outward connection targets.
+
 - Repack automatic node dimensions when rows/ports are removed or rebuilt.
   Restored group views explicitly fit height to content while retaining manual
   widths; vertically resizable analysis views retain their custom heights.

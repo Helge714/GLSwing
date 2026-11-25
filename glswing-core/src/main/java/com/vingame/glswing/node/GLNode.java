@@ -504,27 +504,26 @@ public class GLNode extends GLContainer {
 	protected void renderChildren(GLContext2D context) {
 		if (getWidth() <= 0 || getHeight() <= 0)
 			return;
-		List<GLContainer> paintOrder = getGLChildrenInPaintOrder();
-		context.beginClip(0, 0, getWidth(), getHeight());
-		try {
-			for (GLContainer child : paintOrder)
-				if (!(child instanceof GLNodePort) && isPresentedChild(child))
-					child.renderComponent(context);
-		} finally {
-			context.endClip();
-		}
+        List<GLContainer> paintOrder = getGLChildrenInPaintOrder();
+        GLNodeStyle style = getGLStyle();
+        if (style.borderWidth() > 0 || diagnosticStatus != GLNodeConnectionStatus.NORMAL)
+            context.drawUIRoundRect(0, 0, getWidth(), getHeight(),
+                style.cornerRadius(), diagnosticStatus == GLNodeConnectionStatus.NORMAL ? style.borderWidth() : Math.max(2, style.borderWidth()),
+                diagnosticStatus != GLNodeConnectionStatus.NORMAL ? diagnosticColor() : activeSelected ? style.activeSelectedBorder()
+                    : selected ? style.selectedBorder() : style.border(), GLStroke.WidthSpace.SCREEN);
 
-		GLNodeStyle style = getGLStyle();
-		if (style.borderWidth() > 0 || diagnosticStatus!=GLNodeConnectionStatus.NORMAL)
-			context.drawUIRoundRect(0, 0, getWidth(), getHeight(),
-					style.cornerRadius(), diagnosticStatus==GLNodeConnectionStatus.NORMAL?style.borderWidth():Math.max(2,style.borderWidth()),
-					diagnosticStatus!=GLNodeConnectionStatus.NORMAL?diagnosticColor():activeSelected ? style.activeSelectedBorder()
-							: selected ? style.selectedBorder() : style.border(),
-					GLStroke.WidthSpace.SCREEN);
+        // Expanded socket targets sit behind editors; their outward area stays
+        // unclipped so starting/reconnecting wires remains easy at the node edge.
+        for (GLContainer child : paintOrder)
+            if (child instanceof GLNodePort)
+                child.renderComponent(context);
+        context.beginClip(0, 0, getWidth(), getHeight());
+        try {
+            for (GLContainer child : paintOrder)
+                if (!(child instanceof GLNodePort) && isPresentedChild(child))
+                    child.renderComponent(context);
+        } finally { context.endClip(); }
 
-		for (GLContainer child : paintOrder)
-			if (child instanceof GLNodePort)
-				child.renderComponent(context);
 	}
 
 	@Override

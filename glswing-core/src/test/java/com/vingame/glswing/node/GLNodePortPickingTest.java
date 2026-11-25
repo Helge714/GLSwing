@@ -13,6 +13,35 @@ import java.nio.ByteBuffer;
 
 class GLNodePortPickingTest {
     @Test @EnabledIfSystemProperty(named="glswing.test.gl", matches="true")
+    void editorsWinSocketPaddingOverlapsAndOutwardSocketsRemainPickable() {
+        var profile=GLProfile.get(GLProfile.GL3);var caps=new GLCapabilities(profile);caps.setOnscreen(false);
+        var drawable=GLDrawableFactory.getFactory(profile).createOffscreenAutoDrawable(null,caps,null,400,240);
+        drawable.display();drawable.getContext().makeCurrent();var gl=drawable.getGL().getGL3();
+        var renderer=GLRenderer2D.create(gl);
+        try {
+            gl.glViewport(0,0,400,240);
+            for(boolean output:new boolean[]{false,true})for(float zoom:new float[]{.5f,1,1.5f}) {
+                var node=new GLNode("Picking");var slider=new com.vingame.glswing.ui.GLSlider("Value",.5){};
+                var port=output?node.addOutput("out",slider):node.addInput("in",slider);node.setSize(180,100);
+                var warmup=renderer.beginFrame(gl,400,240,Projection2D.TOP_LEFT_PIXELS.create(400,240));
+                node.renderComponent(warmup);renderer.endFrame();
+                float x=output?port.getX()-2:port.getX()+port.getWidth()+2;
+                slider.setBounds(output?x-100:x,port.getY(),100,20);
+                // Prime caches with a color-only repaint before replaying both outputs.
+                for(boolean colorOnly:new boolean[]{true,false}) {
+                    var frame=renderer.beginFrame(gl,400,240,Projection2D.TOP_LEFT_PIXELS.create(400,240));
+                    frame.clear(Color.BLACK);frame.setPickingRenderingEnabled(!colorOnly);
+                    frame.setTransform(new GLTransform().translate(60,40).scale(zoom,zoom));node.renderComponent(frame);
+                    assertTrue(frame.isColorRenderingEnabled());assertEquals(!colorOnly,frame.isPickingRenderingEnabled());renderer.endFrame();
+                }
+                float overlap=output?port.getX()-5:port.getX()+port.getWidth()+3;
+                assertSame(slider,renderer.readPickResult(gl,Math.round(60+overlap*zoom),Math.round(40+(port.getY()+port.getHeight()*.5f)*zoom)).getTarget(), "output="+output+" zoom="+zoom+" slider="+slider.getX()+","+slider.getY()+","+slider.getWidth()+","+slider.getHeight()+" socket="+port.getX()+","+port.getY()+" overlap="+overlap);
+                float outside=output?port.getX()+port.getWidth()+3:port.getX()-3;
+                assertSame(port,renderer.readPickResult(gl,Math.round(60+outside*zoom),Math.round(40+(port.getY()+port.getHeight()*.5f)*zoom)).getTarget());
+            }
+        } finally {renderer.dispose(gl);drawable.getContext().release();drawable.destroy();}
+    }
+    @Test @EnabledIfSystemProperty(named="glswing.test.gl", matches="true")
     void horizontalHitAreaPreservesVerticalEdgesAndFocusUsesAccent() {
         var profile=GLProfile.get(GLProfile.GL3);var caps=new GLCapabilities(profile);caps.setOnscreen(false);
         var drawable=GLDrawableFactory.getFactory(profile).createOffscreenAutoDrawable(null,caps,null,200,160);
