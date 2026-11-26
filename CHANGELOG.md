@@ -1,6 +1,8 @@
 # Changelog
 
-## 0.3.0-SNAPSHOT
+## 0.3.1-SNAPSHOT
+
+## 0.3.0 - 2026-11-26
 
 - Project the latest graph state when earlier listeners normalize a property
   through nested edits. Reopened workspaces no longer replay stale node/port

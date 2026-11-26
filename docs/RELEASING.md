@@ -1,7 +1,7 @@
 # Releasing GLSwing
 
-The Maven parent owns the version. Development stays on `0.2.0-SNAPSHOT`;
-the next intended release is `0.2.0`. The Core, LSP and SWT library artifacts
+The Maven parent owns the version. The latest public SDK is `0.3.0`;
+development continues at `0.3.1-SNAPSHOT`. The Core, LSP and SWT library artifacts
 and their parent POM are published together. Examples and consumer tests are
 source material, not Central library artifacts. EasyKnack is independently versioned.
 

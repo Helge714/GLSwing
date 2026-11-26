@@ -78,7 +78,7 @@ Then add GLSwing to the application POM:
 <dependency>
     <groupId>io.github.helge714</groupId>
     <artifactId>glswing</artifactId>
-    <version>0.2.0</version>
+    <version>0.3.0</version>
 </dependency>
 ```
 
@@ -104,7 +104,7 @@ applications that do not embed a code editor do not carry its dependencies:
 <dependency>
     <groupId>io.github.helge714</groupId>
     <artifactId>glswing-lsp</artifactId>
-    <version>0.2.0</version>
+    <version>0.3.0</version>
 </dependency>
 ```
 
