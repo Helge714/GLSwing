@@ -67,8 +67,10 @@ public final class GLNodeEditorBinding implements AutoCloseable {
 	private final Set<GLNodeId> growRebuiltViews = new LinkedHashSet<>();
 	private final CopyOnWriteArrayList<ValidationListener> validationListeners =
 			new CopyOnWriteArrayList<>();
+    // Earlier listeners may normalize via a nested edit before this notification
+    // reaches us. Project the current graph, never the superseded event snapshot.
 	private final GLNodeGraph.Listener graphListener = (source, change) ->
-			synchronize(change.after());
+			synchronize(source.snapshot());
 	private final GLNodeEditorListener editorListener = new EditorListener();
 	private GLGraphCyclePolicy cyclePolicy;
 	private GLNodeGraphValidationResult validationResult;

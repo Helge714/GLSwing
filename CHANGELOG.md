@@ -2,6 +2,10 @@
 
 ## 0.3.0-SNAPSHOT
 
+- Project the latest graph state when earlier listeners normalize a property
+  through nested edits. Reopened workspaces no longer replay stale node/port
+  contracts after a successful normalization.
+
 - Share Unicode word selection across plain text fields and text areas.
   Double-click selects a word, triple-click the line (whole single-line field),
   and four or more clicks the document. Code identifier selection stays intact.
