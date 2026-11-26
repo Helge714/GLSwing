@@ -69,6 +69,7 @@ public final class GLNodePort extends GLContainer {
 		this.direction = direction;
 		maximumConnections = direction == Direction.INPUT ? 1 : Integer.MAX_VALUE;
 		setIntrinsicPreferredGLSize(new GLSize(10, 10));
+        updateHitOverflow();
 	}
 
 	public static GLNodePort input(String id) {
@@ -82,6 +83,10 @@ public final class GLNodePort extends GLContainer {
 	public String getId() { return id; }
 	public Direction getDirection() { return direction; }
 	public GLNode getNode() { return node; }
+    /** Outward curve tangent, independent of semantic input/output direction. */
+    public int getOutwardSign() {
+        return (direction == Direction.OUTPUT) != (node != null && node.isMirrored()) ? 1 : -1;
+    }
 	public float getCenterXInNode() { return getX() + getWidth() * 0.5f; }
 	public float getCenterYInNode() { return getY() + getHeight() * 0.5f; }
 
@@ -168,6 +173,15 @@ public final class GLNodePort extends GLContainer {
 	@Override
 	protected void record(GLContext2D context) {
 		GLNodeStyle style = style();
+        boolean focused = hovered || connectionCandidate;
+        Color border = focused ? getGLTheme().values().getColor("node.portFocusBorder",
+            getGLTheme().values().getColor("palette.accent", getGLTheme().buttonStyle().focusColor())) : style.portBorder();
+        float padding = hitPadding();
+        boolean colorRendering = context.isColorRenderingEnabled();
+        try {
+            context.setColorRenderingEnabled(false);
+            context.fillRect(-padding, 0, getWidth() + 2 * padding, getHeight(), Color.WHITE);
+        } finally { context.setColorRenderingEnabled(colorRendering); }
 		Color fill = hovered || connectionCandidate
 				? style.portHover() : getColor();
 		float diameter = Math.min(getWidth(), getHeight());
@@ -180,7 +194,7 @@ public final class GLNodePort extends GLContainer {
 			try {
 				context.fillPolygon(points, fill);
 				context.setStroke(new GLStroke(Math.max(1, style.borderWidth())).withWidthSpace(GLStroke.WidthSpace.SCREEN));
-				context.drawPolygon(points, style.portBorder());
+				context.drawPolygon(points, border);
                 if(shape == Shape.DOUBLE_DIAMOND){
                     float inner=radius*Math.max(.15f,Math.min(.65f,getGLTheme().values().getFloat("node.portEventInnerScale",.36f)));
                     // The event marker conveys port type, independently of decorative outlines.
@@ -191,7 +205,7 @@ public final class GLNodePort extends GLContainer {
 			return;
 		}
         // An invisible screen-space inner border still eats into the fill at low zoom.
-        if (style.portBorder().getAlpha() == 0) {
+        if (border.getAlpha() == 0) {
             // Retain a compact silhouette with a world-space inset, independent of zoom.
             float borderInset = Math.min(diameter * .5f, style.borderWidth() * .5f);
             float visibleDiameter = (diameter - borderInset * 2) * .95f;
@@ -201,7 +215,7 @@ public final class GLNodePort extends GLContainer {
         } else
             context.fillAndDrawUIRoundRect(0, 0, getWidth(), getHeight(),
                     diameter * .5f, Math.max(1, style.borderWidth()), fill,
-                    style.portBorder(), GLStroke.WidthSpace.WORLD);
+                    border, GLStroke.WidthSpace.SCREEN);
 	}
 
 	@Override
@@ -264,8 +278,8 @@ public final class GLNodePort extends GLContainer {
 
 	@Override
 	protected void themeChanged() {
-		if (localColor == null)
-			invalidateRecording();
+        updateHitOverflow();
+        invalidateRecording();
 	}
 
 	void attachTo(GLNode owner) {
@@ -291,6 +305,15 @@ public final class GLNodePort extends GLContainer {
 		if (node != null)
 			node.inputPresentationChanged(this);
 	}
+
+    private float hitPadding() {
+        float value = getGLTheme().values().getFloat("node.portHitPaddingX", 8);
+        return Float.isFinite(value) ? Math.max(0, value) : 8;
+    }
+    private void updateHitOverflow() {
+        float padding = hitPadding();
+        setVisualOverflow(new com.vingame.glswing.layout.GLInsets(0, padding, 0, padding));
+    }
 
 	private GLNodeStyle style() {
 		return node == null ? GLNodeStyle.fromTheme(getGLTheme())

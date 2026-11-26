@@ -71,7 +71,7 @@ public final class GLNodeGraphDocumentCodec
 	@Override public Class<GLNodeGraphDocument> contentType() {
 		return GLNodeGraphDocument.class;
 	}
-	@Override public int currentSchemaVersion() { return 10; }
+	@Override public int currentSchemaVersion() { return 11; }
 	@Override public Set<String> fileExtensions() { return Set.of("glgraph"); }
 	@Override public boolean supportsSchemaVersion(int version) {
 		return version >= 1 && version <= currentSchemaVersion();
@@ -369,6 +369,7 @@ public final class GLNodeGraphDocumentCodec
 			output.writeFloat(value.width()); output.writeFloat(value.height());
             output.writeBoolean(value.customTitle()!=null);
             if(value.customTitle()!=null)writeString(output,value.customTitle());
+            output.writeBoolean(value.mirrored());
 		}
 		writeCount(output, state.auxiliaryNodes().size(), "auxiliary node view");
 		for (Map.Entry<String, GLNodeViewState> entry
@@ -379,6 +380,7 @@ public final class GLNodeGraphDocumentCodec
 			output.writeFloat(value.width()); output.writeFloat(value.height());
             output.writeBoolean(value.customTitle()!=null);
             if(value.customTitle()!=null)writeString(output,value.customTitle());
+            output.writeBoolean(value.mirrored());
 		}
         output.writeBoolean(state.camera()!=null);
         if(state.camera()!=null){output.writeFloat(state.camera().x());output.writeFloat(state.camera().y());}
@@ -393,7 +395,7 @@ public final class GLNodeGraphDocumentCodec
 			GLNodeId id = new GLNodeId(readUuid(input));
 			GLNodeViewState state = new GLNodeViewState(input.readFloat(),
 					input.readFloat(), input.readFloat(), input.readFloat(),
-                    schemaVersion>=9&&input.readBoolean()?readString(input):null);
+                    schemaVersion>=9&&input.readBoolean()?readString(input):null, schemaVersion>=11&&input.readBoolean());
 			if (values.putIfAbsent(id, state) != null)
 				throw new GLDocumentFormatException("Duplicate node view: " + id);
 		}
@@ -404,7 +406,7 @@ public final class GLNodeGraphDocumentCodec
 				String id = readString(input);
 				GLNodeViewState state = new GLNodeViewState(input.readFloat(),
 						input.readFloat(), input.readFloat(), input.readFloat(),
-                    schemaVersion>=9&&input.readBoolean()?readString(input):null);
+                    schemaVersion>=9&&input.readBoolean()?readString(input):null, schemaVersion>=11&&input.readBoolean());
 				if (auxiliary.putIfAbsent(id, state) != null)
 					throw new GLDocumentFormatException(
 							"Duplicate auxiliary node view: " + id);

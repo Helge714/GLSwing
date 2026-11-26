@@ -1,5 +1,51 @@
 # Changelog
 
+## 0.3.0-SNAPSHOT
+
+- Project the latest graph state when earlier listeners normalize a property
+  through nested edits. Reopened workspaces no longer replay stale node/port
+  contracts after a successful normalization.
+
+- Share Unicode word selection across plain text fields and text areas.
+  Double-click selects a word, triple-click the line (whole single-line field),
+  and four or more clicks the document. Code identifier selection stays intact.
+
+- Match the mirror title indicator to the rounded outline style, scale and
+  stroke of the adjacent group indicator.
+
+- Lay out mixed mirrored feedback paths using physical port sides without
+  reversing semantic edges or losing feedback regions. Same-side ports form
+  compact vertical turns; retain stable spacing and an atomic Arrange Undo.
+- Mark mirrored nodes with a themed vector reflection icon beside the title,
+  including collapsed nodes and group instances.
+
+- Add view-only mirrored nodes: inputs right / outputs left, localized context
+  actions and Inspector, selection-wide Undo, mirrored curve tangents and layout.
+  Preserve orientation through copy, grouping, navigation and document schema 11.
+  Older schemas load normally; older readers cannot open newly saved schema 11.
+
+- Give embedded editors picking priority over expanded socket hit areas while
+  retaining unclipped outward connection targets.
+
+- Repack automatic node dimensions when rows/ports are removed or rebuilt.
+  Restored group views explicitly fit height to content while retaining manual
+  widths; vertically resizable analysis views retain their custom heights.
+
+- Keep recorded color/picking toggles independent of the other output mask.
+  Socket recordings created during color-only hover repaints remain pickable
+  after resize-edge hover; Canvas press/cursor and cached-GPU regressions cover it.
+
+- Preserve enclosing group input/output bindings and mapped parameters when
+  extracting a nested group, including boundary-only wires and Undo/Redo. Publish
+  remapped enclosing interfaces before projecting unpacked nodes, so boundary
+  synchronization cannot overwrite valid bindings during restoration.
+
+- Extend node socket picking horizontally without changing port layout or vertical
+  hit bounds. Hovered and connection-candidate sockets use an accent outline;
+  configure `node.portHitPaddingX` and `node.portFocusBorder` in themes. Hidden
+  sockets no longer remain connection snap targets.
+
+
 - Move Maven publication coordinates from com.vingame to io.github.helge714.
   Consumers must update dependency groupIds; Java packages and automatic module
   names stay unchanged. The 0.2.0 minor release covers this build-contract change.

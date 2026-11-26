@@ -60,7 +60,12 @@ public class GLCheckBox extends GLControl {
 		setAction(action);
 	}
 
-	public final String getText() {
+	/** Disable widget-owned Undo when the host records a complete model/view edit. */
+    public final void setHistoryEnabled(boolean enabled) { historyEnabled = enabled; }
+    public final boolean isHistoryEnabled() { return historyEnabled; }
+    private boolean historyEnabled = true;
+
+    public final String getText() {
 		return text;
 	}
 
@@ -317,7 +322,7 @@ public class GLCheckBox extends GLControl {
 		boolean after = selected;
 		fireActionPerformed();
 		var manager = getGLHistoryManager();
-		if (manager != null && before != after)
+		if (historyEnabled && manager != null && before != after)
 			manager.record("Toggle checkbox",
 					() -> applySelectionAndFire(before),
 					() -> applySelectionAndFire(after));

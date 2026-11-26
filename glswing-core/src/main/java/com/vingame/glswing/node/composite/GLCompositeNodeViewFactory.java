@@ -57,6 +57,7 @@ public final class GLCompositeNodeViewFactory implements GLNodeViewFactory {
 				portOrder);
 		view.setPortOrder(portOrder);
 		view.setResizeMode(GLNodeResizeMode.HORIZONTAL);
+        view.setHeightFittedToContent(true);
 		for (GLCompositePortMapping mapping : orderedMappings(descriptor)) {
 			var port = mapping.publicPort();
 			if (port.direction() == GLPortDirection.OUTPUT) {

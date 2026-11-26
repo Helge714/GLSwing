@@ -770,11 +770,19 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget, GLT
 				? GLPointerCursor.DEFAULT : GLPointerCursor.TEXT);
 	}
 	@Override protected void controlMouseReleased(GLMouseEvent event) { selecting = false; draggingScrollBar = false; columnAnchor = null; }
-	@Override protected void controlMouseClicked(GLMouseEvent event) {
-		if (event.getButton() == MouseEvent.BUTTON1 && event.completesDoubleClick()
-				&& event.hasLocalPosition())
-			selectWordAt(positionAt(event.getLocalX(), event.getLocalY()));
-	}
+    @Override protected void controlMouseClicked(GLMouseEvent event) {
+        if(!isEnabled() || event.getButton()!=MouseEvent.BUTTON1 || !event.hasLocalPosition()
+                || (event.getModifiersEx() & InputEvent.ALT_DOWN_MASK)!=0)return;
+        int count=event.getClickCount();
+        if(count>=4)selectAll();
+        else if(count==3) {
+            int line=document.getLineOfOffset(positionAt(event.getLocalX(),event.getLocalY()));
+            select(document.getLineStart(line),Math.min(document.length(),document.getLineEnd(line)+1));
+        } else if(count==2)selectWordAt(positionAt(event.getLocalX(),event.getLocalY()));
+        else return;
+        event.consume();
+    }
+
 	@Override protected void controlMouseEntered(GLMouseEvent event) {
 		pointerController = event.getPointerController();
 		controlMouseMoved(event);
@@ -1083,19 +1091,11 @@ public class GLTextArea extends GLControl implements GLEditingHistoryTarget, GLT
 		int result = words.preceding(Math.max(0, offset));
 		return result == BreakIterator.DONE ? 0 : result;
 	}
-	protected void selectWordAt(int offset) {
-		String text = document.getText();
-		if (text.isEmpty()) return;
-		int probe = Math.min(offset, text.length() - 1);
-		BreakIterator words = BreakIterator.getWordInstance(Locale.getDefault());
-		words.setText(text);
-		int start = words.preceding(probe + 1);
-		int end = words.following(probe);
-		if (start == BreakIterator.DONE) start = 0;
-		if (end == BreakIterator.DONE) end = text.length();
-		if (start < end && Character.isLetterOrDigit(text.codePointAt(start)))
-			select(start, end);
-	}
+    protected void selectWordAt(int offset) {
+        var range=GLTextSelectionRanges.word(document.getText(),offset);
+        select(range.start(),range.end());
+    }
+
 	private int nextWord(int offset) {
 		BreakIterator words = BreakIterator.getWordInstance(Locale.getDefault());
 		words.setText(document.getText());

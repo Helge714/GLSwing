@@ -9,6 +9,10 @@ public interface GLNodeEditingActions {
 	default boolean canExtractComposite() { return canCopy(); }
 	default boolean canDelete() { return true; }
 	default void arrangeAll() { }
+    default boolean canMirror() { return false; }
+    default void setSelectedMirrored(boolean mirrored) { }
+    default void toggleMirrored() { }
+
 	default boolean canExclude() { return false; }
 	default void exclude() { }
 	default boolean canToggleHidden() { return true; }

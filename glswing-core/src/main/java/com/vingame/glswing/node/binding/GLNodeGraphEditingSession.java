@@ -111,6 +111,10 @@ public final class GLNodeGraphEditingSession {
                 && binding.findNodeView(edge.input().nodeId()).isPresent();
     }
 
+    private static float flowX(GLNodeViewState state,int flow) {
+        return flow==1 ? state.x() : -state.x()-state.width();
+    }
+
     /** Splits one wire and makes room in one history entry, including the preceding drag. */
     public boolean insertIntoConnection(GLNodeId nodeId, GLNodeConnectionId connectionId, float startX, float startY) {
         return insertIntoConnection(nodeId,connectionId,startX,startY,true);
@@ -121,18 +125,20 @@ public final class GLNodeGraphEditingSession {
         var currentView = binding.captureViewState();
         var beforeBounds = new LinkedHashMap<>(currentView.nodes());
         var node = beforeBounds.get(nodeId);
-        beforeBounds.put(nodeId, new GLNodeViewState(startX,startY,node.width(),node.height(),node.customTitle()));
+        beforeBounds.put(nodeId, new GLNodeViewState(startX,startY,node.width(),node.height(),node.customTitle(),node.mirrored()));
         var beforeView = currentView.withNodes(beforeBounds);
         var edge = beforeGraph.findConnection(connectionId).orElseThrow();
         var from = currentView.nodes().get(edge.output().nodeId());
         var to = currentView.nodes().get(edge.input().nodeId());
         float gap = binding.editor().getHorizontalNodeSpacing();
-        float left = from.x()+from.width()+gap;
-        float right = to.x()-gap-node.width();
-        float x = right >= left ? Math.max(left,Math.min(node.x(),right)) : left;
-        float shift = Math.max(0,x+node.width()+gap-to.x());
+        int flow=from.mirrored() ? -1 : 1;
+        float left = flowX(from,flow)+from.width()+gap;
+        float right = flowX(to,flow)-gap-node.width();
+        float axisX = right >= left ? Math.max(left,Math.min(flowX(node,flow),right)) : left;
+        float x = flow==1 ? axisX : -axisX-node.width();
+        float shift = Math.max(0,axisX+node.width()+gap-flowX(to,flow));
         var afterBounds = new LinkedHashMap<>(currentView.nodes());
-        afterBounds.put(nodeId,new GLNodeViewState(x,node.y(),node.width(),node.height(),node.customTitle()));
+        afterBounds.put(nodeId,new GLNodeViewState(x,node.y(),node.width(),node.height(),node.customTitle(),node.mirrored()));
         if (shift > 0) {
             var visited = new LinkedHashSet<GLNodeId>();
             var pending = new java.util.ArrayDeque<GLNodeId>();
@@ -141,8 +147,8 @@ public final class GLNodeGraphEditingSession {
                 var id = pending.removeFirst();
                 if (id.equals(edge.output().nodeId()) || id.equals(nodeId) || !visited.add(id)) continue;
                 var bounds = currentView.nodes().get(id);
-                if (bounds != null && bounds.x() >= to.x())
-                    afterBounds.put(id,new GLNodeViewState(bounds.x()+shift,bounds.y(),bounds.width(),bounds.height(),bounds.customTitle()));
+                if (bounds != null && flowX(bounds,flow) >= flowX(to,flow))
+                    afterBounds.put(id,new GLNodeViewState(bounds.x()+flow*shift,bounds.y(),bounds.width(),bounds.height(),bounds.customTitle(),bounds.mirrored()));
                 for (var c : beforeGraph.connections()) {
                     if (c.input().nodeId().equals(id)) pending.add(c.output().nodeId());
                     if (c.output().nodeId().equals(id)) pending.add(c.input().nodeId());
@@ -234,33 +240,46 @@ public final class GLNodeGraphEditingSession {
 	public GLCompositeExtraction.Result extractSelection(String assetId,
 			String nodeTypeId, String displayName, String category,
 			GLCompositeGraphRegistry composites, GLNodeCatalog catalog) {
+        return extractSelection(assetId,nodeTypeId,displayName,category,composites,catalog,null);
+    }
+    public GLCompositeExtraction.Result extractSelection(String assetId, String nodeTypeId,
+            String displayName, String category, GLCompositeGraphRegistry composites, GLNodeCatalog catalog,
+            String enclosingAssetId) {
 		if (displayName == null || displayName.isBlank() || category == null
 				|| category.isBlank() || composites == null || catalog == null)
 			throw new IllegalArgumentException("Composite registration metadata required");
 		Set<GLNodeId> selection = selectedIds();
 		GLNodeGraphSnapshot beforeGraph = binding.graph().snapshot();
 		GLNodeEditorViewState beforeView = binding.captureViewState();
+        var enclosing=enclosingAssetId==null?null:composites.findAsset(enclosingAssetId).orElseThrow();
 		GLCompositeExtraction.Result result = GLCompositeExtraction.extract(beforeGraph,
-				beforeView, selection, binding.types(), assetId, nodeTypeId);
+				beforeView, selection, binding.types(), assetId, nodeTypeId,enclosing==null?null:enclosing.compositeDescriptor());
+        var afterEnclosing=enclosing==null?null:new com.vingame.glswing.node.document.GLNodeGraphAsset(
+            enclosing.id(),enclosing.version(),enclosing.kind(),result.graph(),result.viewState(),enclosing.metadata(),result.remapEnclosing(enclosing.compositeDescriptor()));
 		GLNodeCatalogEntry catalogEntry = new GLNodeCatalogEntry(
 				result.asset().compositeDescriptor().nodeType(), displayName, category,
 				Map.of(), "composite", "group");
 		register(result, composites, catalog, catalogEntry);
 		try {
+            if(afterEnclosing!=null)composites.replaceAsset(afterEnclosing);
 			binding.graph().replace("Extract composite", result.graph());
 			binding.applyViewState(result.viewState());
 			binding.refresh();
 		} catch (RuntimeException failure) {
+            if(enclosing!=null)composites.replaceAsset(enclosing);
+            binding.graph().replace("Restore extraction",beforeGraph);
 			unregister(result, composites, catalog);
 			throw failure;
 		}
 		GLNodeGraphSnapshot afterGraph = binding.graph().snapshot();
 		if (history != null) history.record("Extract composite", () -> {
+            if(enclosing!=null)composites.replaceAsset(enclosing);
 			restore("Undo extract composite", beforeGraph, beforeView);
 			unregister(result, composites, catalog);
 			if (!binding.isClosed()) binding.refresh();
 		}, () -> {
 			register(result, composites, catalog, catalogEntry);
+            if(afterEnclosing!=null)composites.replaceAsset(afterEnclosing);
 			restore("Redo extract composite", afterGraph, result.viewState());
 			if (!binding.isClosed()) binding.refresh();
 		});
@@ -309,20 +328,21 @@ public final class GLNodeGraphEditingSession {
         var targetId=leaving.get(0).input().nodeId();
         var source=view.nodes().get(sourceId); var target=view.nodes().get(targetId);
         if (source==null || target==null || graph.connections().stream().filter(e->e.output().nodeId().equals(sourceId)).count()!=1) return;
+        int flow=source.mirrored() ? -1 : 1;
         float gap=binding.editor().getHorizontalNodeSpacing();
         for (var id:removed) {
             var bounds=view.nodes().get(id);
-            if (bounds==null || bounds.x()<source.x()+source.width() || bounds.x()+bounds.width()>target.x()) return;
+            if (bounds==null || flowX(bounds,flow)<flowX(source,flow)+source.width() || flowX(bounds,flow)+bounds.width()>flowX(target,flow)) return;
         }
-        float shift=target.x()-source.x()-source.width()-gap;
+        float shift=flowX(target,flow)-flowX(source,flow)-source.width()-gap;
         if (shift<=0) return;
         var chain=new LinkedHashSet<GLNodeId>();
         var current=targetId;
-        float previousX=target.x()-1;
+        float previousX=flowX(target,flow)-1;
         while (true) {
             var bounds=positions.get(current);
-            if (bounds==null || bounds.x()<=previousX || !chain.add(current)) return;
-            previousX=bounds.x();
+            if (bounds==null || flowX(bounds,flow)<=previousX || !chain.add(current)) return;
+            previousX=flowX(bounds,flow);
             final var id=current;
             if (graph.connections().stream().filter(e->e.input().nodeId().equals(id)).count()!=1) return;
             var outgoing=graph.connections().stream().filter(e->e.output().nodeId().equals(id)).toList();
@@ -333,7 +353,7 @@ public final class GLNodeGraphEditingSession {
         // Leave the layout intact if closing the gap would collide with another branch.
         for (var id:chain) {
             var b=positions.get(id);
-            var moved=new java.awt.geom.Rectangle2D.Float(b.x()-shift,b.y(),b.width(),b.height());
+            var moved=new java.awt.geom.Rectangle2D.Float(b.x()-flow*shift,b.y(),b.width(),b.height());
             for (var other:positions.entrySet()) if (!chain.contains(other.getKey())) {
                 var o=other.getValue();
                 if (moved.intersects(o.x(),o.y(),o.width(),o.height())) return;
@@ -341,7 +361,7 @@ public final class GLNodeGraphEditingSession {
         }
         for (var id:chain) {
             var b=positions.get(id);
-            positions.put(id,new GLNodeViewState(b.x()-shift,b.y(),b.width(),b.height(),b.customTitle()));
+            positions.put(id,new GLNodeViewState(b.x()-flow*shift,b.y(),b.width(),b.height(),b.customTitle(),b.mirrored()));
         }
     }
 
@@ -416,7 +436,7 @@ public final class GLNodeGraphEditingSession {
 		for (Map.Entry<GLNodeId, GLNodeId> entry : ids.entrySet()) {
 			GLNodeViewState source = fragment.viewStates().get(entry.getKey());
 			nextViews.put(entry.getValue(), new GLNodeViewState(source.x() + dx,
-					source.y() + dy, source.width(), source.height(),source.customTitle()));
+					source.y() + dy, source.width(), source.height(),source.customTitle(),source.mirrored()));
 		}
 		graph.edit(name, edit -> {
 			for (GLGraphNode node : fragment.nodes())

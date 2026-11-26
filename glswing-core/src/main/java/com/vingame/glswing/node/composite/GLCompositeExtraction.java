@@ -31,6 +31,19 @@ public final class GLCompositeExtraction {
 			if (asset == null || compositeNode == null || graph == null || viewState == null)
 				throw new IllegalArgumentException("Complete composite extraction required");
 		}
+        /** Rebind the containing group's public ports and property mappings to the new instance. */
+        public GLCompositeNodeDescriptor remapEnclosing(GLCompositeNodeDescriptor parent) {
+            var child=asset.compositeDescriptor();var selected=asset.graph().nodesById().keySet();
+            var ports=parent.portMappings().stream().map(p->p.withEndpoints(p.internalEndpoints().stream().map(e->{
+                if(!selected.contains(e.nodeId()))return e;
+                var exposed=child.portMappings().stream().filter(c->c.publicPort().direction()==p.publicPort().direction()
+                    &&c.internalEndpoints().contains(e)).findFirst().orElseThrow();
+                return new GLNodeEndpoint(compositeNode.id(),exposed.publicPort().id());
+            }).distinct().toList())).toList();
+            var mappings=parent.propertyMappings().stream().map(m->selected.contains(m.internalNodeId())
+                ?new GLCompositePropertyMapping(m.publicPropertyId(),compositeNode.id(),m.publicPropertyId()):m).distinct().toList();
+            return new GLCompositeNodeDescriptor(parent.nodeTypeId(),parent.assetId(),parent.minimumAssetVersion(),ports,parent.properties(),mappings);
+        }
 		public GLNodeGraphDocument standaloneDocument() {
 			return new GLNodeGraphDocument(asset);
 		}
@@ -73,6 +86,35 @@ public final class GLCompositeExtraction {
 					});
 		visiting.remove(source.id());
 	}
+
+    /** Include enclosing boundary bindings, which are not ordinary graph wires. */
+    public static Result extract(GLNodeGraphSnapshot source, GLNodeEditorViewState viewState,
+            Set<GLNodeId> selection, GLNodeTypeRegistry types, String assetId, String nodeTypeId,
+            GLCompositeNodeDescriptor enclosing) {
+        if(enclosing==null)return extract(source,viewState,selection,types,assetId,nodeTypeId);
+        var nodes=new ArrayList<>(source.nodes());var wires=new ArrayList<>(source.connections());
+        var virtual=new LinkedHashSet<GLNodeId>();
+        for(var port:enclosing.portMappings())for(var target:port.internalEndpoints()) {
+            if(!selection.contains(target.nodeId()))continue;
+            var id=GLNodeId.random();virtual.add(id);nodes.add(new GLGraphNode(id,"composite.extraction.boundary"));
+            var endpoint=new GLNodeEndpoint(id,"boundary");
+            wires.add(new GLGraphConnection(com.vingame.glswing.node.model.GLNodeConnectionId.random(),
+                port.publicPort().direction()==GLPortDirection.INPUT?endpoint:target,
+                port.publicPort().direction()==GLPortDirection.INPUT?target:endpoint));
+        }
+        var result=extract(new GLNodeGraphSnapshot(source.graphId(),source.revision(),nodes,wires),
+            viewState,selection,types,assetId,nodeTypeId);
+        var child=result.asset();var descriptor=child.compositeDescriptor();
+        var properties=enclosing.properties().stream().filter(p->enclosing.propertyMappings().stream()
+            .anyMatch(m->m.publicPropertyId().equals(p.id())&&selection.contains(m.internalNodeId()))).toList();
+        var mappings=enclosing.propertyMappings().stream().filter(m->selection.contains(m.internalNodeId())).toList();
+        child=new GLNodeGraphAsset(child.id(),child.version(),child.kind(),child.graph(),child.viewState(),child.metadata(),
+            new GLCompositeNodeDescriptor(descriptor.nodeTypeId(),descriptor.assetId(),descriptor.minimumAssetVersion(),descriptor.portMappings(),properties,mappings));
+        var graph=result.graph();
+        graph=new GLNodeGraphSnapshot(graph.graphId(),graph.revision(),graph.nodes().stream().filter(n->!virtual.contains(n.id())).toList(),
+            graph.connections().stream().filter(w->!virtual.contains(w.input().nodeId())&&!virtual.contains(w.output().nodeId())).toList());
+        return new Result(child,result.compositeNode(),graph,result.viewState());
+    }
 
 	public static Result extract(GLNodeGraphSnapshot source,
 			GLNodeEditorViewState viewState, Set<GLNodeId> selection,

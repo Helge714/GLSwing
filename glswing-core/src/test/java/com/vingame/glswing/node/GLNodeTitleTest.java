@@ -44,6 +44,6 @@ class GLNodeTitleTest {
   assertEquals("Größe ü",state.customTitle());var graph=new GLNodeGraph();var id=GLNodeId.random();graph.edit("Node",e->e.addNode(new GLGraphNode(id,"test.node",Map.of())));
   var document=new GLNodeGraphDocument(new GLNodeGraphAsset("test.root",1,GLNodeGraphAssetKind.PROJECT,graph.snapshot(),new GLNodeEditorViewState(Map.of(id,state))));
   var codec=new GLNodeGraphDocumentCodec();var bytes=new ByteArrayOutputStream();codec.write(document,bytes);var restored=codec.read(new ByteArrayInputStream(bytes.toByteArray()),codec.currentSchemaVersion());
-  assertEquals(state,restored.root().viewState().nodes().get(id));assertEquals(10,codec.currentSchemaVersion());
+  assertEquals(state,restored.root().viewState().nodes().get(id));assertEquals(11,codec.currentSchemaVersion());
  }
 }
